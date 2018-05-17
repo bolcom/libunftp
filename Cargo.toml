@@ -1,0 +1,6 @@
+[package]
+name = "firetrap"
+version = "0.1.0"
+authors = ["Koen Wilde <koen@chillheid.nl>"]
+
+[dependencies]
