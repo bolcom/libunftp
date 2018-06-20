@@ -155,8 +155,9 @@ mod tests {
     }
 
     #[test]
-    fn pars_user_cmd_lowercase() {
-        let input = b"user Dolores\r\n";
+    // According to RFC 959, verbs should be interpreted without regards to case
+    fn pars_user_cmd_mixed_case() {
+        let input = b"uSeR Dolores\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
