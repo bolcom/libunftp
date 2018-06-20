@@ -49,7 +49,14 @@ fn parse_token<'b>(bytes: &'b [u8]) -> Result<&'b str> {
             None => return Ok(&std::str::from_utf8(bytes)?[..pos]),
         };
 
-        if *b == b' ' || *b == b'\r' || *b == b'\n' {
+        if *b == b'\r' {
+            match iter.next() {
+                Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+                _ => return Err(Error::InvalidEOL),
+            }
+        }
+
+        if *b == b' ' || *b == b'\n' {
             return Ok(&std::str::from_utf8(bytes)?[..pos]);
         }
 
@@ -70,10 +77,17 @@ fn parse_to_eol<'b>(bytes: &'b [u8]) -> Result<&'b str> {
     loop {
         let b = match iter.next() {
             Some(b) => b,
-            None => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+            _ => return Err(Error::InvalidEOL),
         };
 
-        if *b == b'\r' || *b == b'\n' {
+        if *b == b'\r' {
+            match iter.next() {
+                Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+                _ => return Err(Error::InvalidEOL),
+            }
+        }
+
+        if *b == b'\n' {
             return Ok(&std::str::from_utf8(bytes)?[..pos]);
         }
 
@@ -97,6 +111,8 @@ pub enum Error {
     InvalidCommand,
     // Invalid UTF8 character in string
     InvalidUTF8,
+    // Invalid end-of-line character
+    InvalidEOL,
 }
 
 impl Error {
@@ -104,6 +120,7 @@ impl Error {
         match *self {
             Error::InvalidCommand   => "Invalid command",
             Error::InvalidUTF8      => "Invalid UTF8 character in string",
+            Error::InvalidEOL       => "Invalid end-of-line character (should be `\r\n` or `\n`)",
         }
     }
 }
@@ -150,6 +167,20 @@ mod tests {
     fn parse_user_cmd_nl(){
         let input = b"USER Dolores\n";
         assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores"});
+    }
+
+    #[test]
+    // Although we accept requests ending in only '\n', we won't accept requests ending only in '\r'
+    fn parse_user_cmd_cr() {
+        let input = b"USER Dolores\r";
+        assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
+    }
+
+    #[test]
+    // We should fail if the request does not end in '\n' or '\r'
+    fn parse_user_cmd_no_eol() {
+        let input = b"USER Dolores";
+        assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
     }
 
     #[test]
