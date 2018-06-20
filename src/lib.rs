@@ -7,6 +7,9 @@ pub enum Command <'u> {
     },
     Pass {
         password: &'u str,
+    },
+    Acct {
+        account: &'u str,
     }
 }
 
@@ -27,6 +30,12 @@ impl <'u> Command <'u> {
                     password: password,
                 }
             }
+            "ACCT" => {
+                let account = parse_to_eol(&buf[token.len() + 1..])?;
+                Command::Acct{
+                    account: account,
+                }
+            }
             _ => return Err(Error::InvalidCommand),
         };
 
@@ -38,6 +47,7 @@ impl <'u> Command <'u> {
 
 /// Try to parse a buffer of bytes, upto a ' ' or end of line, into a `&str`. We keep to D. J.
 /// [Bernstein's recommendation](https://cr.yp.to/ftp.html) to allow a EOL of '\r\n' or '\n'.
+// TODO: Return a Result<Option<&str>>, so the absence of a parameter can be detected
 fn parse_token<'b>(bytes: &'b [u8]) -> Result<&'b str> {
     let mut pos = 0;
     let mut iter = bytes.iter();
@@ -206,4 +216,19 @@ mod tests {
         let input = b"PASS s3cr#t p@S$w0rd\r\n";
         assert_eq!(Command::parse(input).unwrap(), Command::Pass{password: "s3cr#t p@S$w0rd"});
     }
+
+    #[test]
+    fn parse_acct() {
+        let input = b"ACCT Teddy\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Acct{account: "Teddy"});
+    }
+
+    /*
+    #[test]
+    // TODO: Implement (return Result<Option<T>> from `parse_token` and friends)
+    fn parse_acct_no_account() {
+        let input = b"ACCT \r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+    */
 }
