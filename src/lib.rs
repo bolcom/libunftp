@@ -36,9 +36,8 @@ impl <'u> Command <'u> {
     }
 }
 
-/// Try to parse a buffer of bytes, upto a ' ' or end of line, into a `&str`.
-// TODO: RFC959 says we should accept multiple command in one go, until the 'Telnet end-of-line
-// code', which is not necessarily '\r\n'
+/// Try to parse a buffer of bytes, upto a ' ' or end of line, into a `&str`. We keep to D. J.
+/// [Bernstein's recommendation](https://cr.yp.to/ftp.html) to allow a EOL of '\r\n' or '\n'.
 fn parse_token<'b>(bytes: &'b [u8]) -> Result<&'b str> {
     let mut pos = 0;
     let mut iter = bytes.iter();
@@ -180,6 +179,13 @@ mod tests {
     fn parse_user_cmd_no_eol() {
         let input = b"USER Dolores";
         assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
+    }
+
+    #[test]
+    // We should skip only one space after a token, to allow for tokens starting with a space.
+    fn parse_user_cmd_double_space(){
+        let input = b"USER  Dolores\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::User{username: " Dolores"});
     }
 
     #[test]
