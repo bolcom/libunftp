@@ -12,7 +12,6 @@ pub enum Command <'u> {
 
 impl <'u> Command <'u> {
     pub fn parse(buf: &'u [u8]) -> Result<Command> {
-        //let buf = buf.trim_right();
         let token = parse_token(buf)?;
 
         let cmd = match token {
