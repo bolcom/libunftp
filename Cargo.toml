@@ -4,4 +4,8 @@ version = "0.1.0"
 authors = ["Koen Wilde <koen@chillheid.nl>"]
 
 [dependencies]
+futures = "0.1"
 tokio = "0.1"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+bytes = "0.4"
