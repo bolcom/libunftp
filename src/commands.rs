@@ -123,6 +123,8 @@ pub enum Error {
     InvalidUTF8,
     // Invalid end-of-line character
     InvalidEOL,
+    // Generic IO error
+    IO,
 }
 
 impl Error {
@@ -131,6 +133,7 @@ impl Error {
             Error::InvalidCommand   => "Invalid command",
             Error::InvalidUTF8      => "Invalid UTF8 character in string",
             Error::InvalidEOL       => "Invalid end-of-line character (should be `\r\n` or `\n`)",
+            Error::IO               => "Some generic IO error (TODO: specify :P)",
         }
     }
 }
@@ -150,6 +153,12 @@ impl std::error::Error for Error {
 impl From<std::str::Utf8Error> for Error {
     fn from(_err: std::str::Utf8Error) -> Error {
         Error::InvalidUTF8
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(_err: std::io::Error) -> Error {
+        Error::IO
     }
 }
 

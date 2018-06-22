@@ -6,6 +6,8 @@ extern crate tokio_io;
 extern crate tokio_codec;
 extern crate bytes;
 
+use std::marker::PhantomData;
+
 use self::futures::prelude::*;
 
 use self::tokio::net::TcpListener;
@@ -15,27 +17,29 @@ use self::bytes::{BytesMut, BufMut};
 
 use commands;
 
-pub struct FTPCodec {
+pub struct FTPCodec<'a, T: 'a> {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
-    // is the next index to examine. The next time `decode` is called with `abcde\n`, the moethod
-    // will only look at `de\n` before returning.
+    // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
+    // look at `de\n` before returning.
     next_index: usize,
+    phantom: PhantomData<&'a T>,
 }
 
-impl FTPCodec {
+impl<'a, T> FTPCodec<'a, T> {
     fn new() -> Self {
         FTPCodec {
             next_index: 0,
+            phantom: PhantomData,
         }
     }
 }
 
-impl Decoder for FTPCodec {
-    type Item = String;
+impl<'a, T> Decoder for FTPCodec<'a, T> {
+    type Item = Box<BytesMut>;
     type Error = std::io::Error;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<String>, std::io::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Box<BytesMut>>, std::io::Error> {
         // Look for a byte with the value '\n' in buf. Start searching from the search start index
         if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
             // Found a '\n' in the buffer.
@@ -48,17 +52,12 @@ impl Decoder for FTPCodec {
             // `split_to` is called will now start at this index.
             let line = buf.split_to(newline_index + 1);
 
-            // Trim the '\n' from the buffer because it's part of the protocol, not the data.
-            //let line = &line[..line.len() - 1];
-
-            // Convert the bytes to a string and panic if the bytes are not valid utf-8.
-            let line = std::str::from_utf8(&line).expect("invalid utf8 data");
-
             // Set the search start index back to 0
             self.next_index = 0;
 
             // Return Ok(Some(...)) to signal that a full frame has been produced.
-            Ok(Some(line.to_string()))
+            //let copy = line.clone();
+            Ok(Some(Box::new(line)))
         } else {
             // '\n' not found in the string
 
@@ -72,23 +71,17 @@ impl Decoder for FTPCodec {
     }
 }
 
-impl Encoder for FTPCodec {
-    type Item = String;
+impl<'a, T> Encoder for FTPCodec<'a, T> {
+    type Item = &'a [u8];
     type Error = std::io::Error;
 
-    fn encode(&mut self, line: String, buf: &mut BytesMut) -> Result<(), std::io::Error> {
+    fn encode(&mut self, response: &[u8], buf: &mut BytesMut) -> Result<(), std::io::Error> {
         // It's important to reserve the amount of space needed. The `bytes` API does not grow the
         // buffers implicitly. Reserve the length of the string + 1 for the '\n'.
-        buf.reserve(line.len() + 1);
+        buf.reserve(response.len());
 
-        // String implements IntoBuf, a trait used by the `bytes` API to work with types that can
-        // be expressed as a sequence of bytes.
-        buf.put(line);
+        buf.put(response);
 
-        // Put the '\n' in the buffer.
-        buf.put_u8(b'\n');
-
-        // Return ok to signal that no error occured.
         Ok(())
     }
 }
@@ -98,10 +91,10 @@ pub fn listen() {
     let listener = TcpListener::bind(&addr).unwrap();
 
     let server = listener.incoming().for_each(|socket| {
-        let codec = FTPCodec::new();
+        let codec: FTPCodec<()> = FTPCodec::new();
         let framed_socket = codec.framed(socket);
         framed_socket.for_each(|frame| {
-            let command = commands::Command::parse(&frame.as_bytes());
+            let command = commands::Command::parse(&frame);
             match command {
                 Ok(cmd) => println!("got command {:?}", cmd),
                 Err(e) => println!("failed to parse command: {:?}", e),
