@@ -86,8 +86,9 @@ impl<'a, T> Encoder for FTPCodec<'a, T> {
     }
 }
 
-pub fn listen() {
-    let addr = "127.0.0.1:8080".parse().unwrap();
+// TODO: See if we can accept a `ToSocketAddrs` trait
+pub fn listen(addr: &str) {
+    let addr = addr.parse().unwrap();
     let listener = TcpListener::bind(&addr).unwrap();
 
     let server = listener.incoming().for_each(|socket| {
