@@ -1,6 +1,7 @@
 extern crate firetrap;
 
 pub fn main() {
-    println!("Starting ftp server");
-    firetrap::server::listen("127.0.0.1:8080");
+    let addr = "127.0.0.1:8080";
+    println!("Starting ftp server on {}", addr);
+    firetrap::server::listen(addr);
 }

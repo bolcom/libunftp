@@ -9,11 +9,15 @@ extern crate bytes;
 use std::marker::PhantomData;
 
 use self::futures::prelude::*;
+use self::futures::Sink;
 
 use self::tokio::net::TcpListener;
 use self::tokio_codec::{Encoder, Decoder};
 
 use self::bytes::{BytesMut, BufMut};
+
+use auth;
+use auth::Authenticator;
 
 use commands;
 
@@ -32,6 +36,58 @@ impl<'a, T> FTPCodec<'a, T> {
             next_index: 0,
             phantom: PhantomData,
         }
+    }
+
+}
+
+pub struct CommandHandler<'a> {
+    username: Option<String>,
+    password: Option<String>,
+    authenticator: &'a (Authenticator + Send + Sync),
+}
+
+impl<'a> CommandHandler<'a> {
+    fn new() -> Self {
+        CommandHandler {
+            authenticator: &auth::AnonymousAuthenticator{},
+            username: None,
+            password: None,
+        }
+    }
+
+    fn authenticate(&self) -> Result<bool, ()> {
+        if self.username.is_none() {
+            return Err(());
+        }
+
+        if self.password.is_none() {
+            return Err(());
+        }
+        let user = self.username.as_ref().map_or("", |x| x.as_ref());
+        let pass = self.password.as_ref().map_or("", |x| x.as_ref());
+        self.authenticator.authenticate(user, pass)
+    }
+
+    fn handle_command(&mut self, cmd: &commands::Command) -> Result<BytesMut, ()> {
+        let mut response = BytesMut::from(&b""[..]);
+        match cmd {
+            commands::Command::User{username} => self.username = Some(username.to_string()),
+            commands::Command::Pass{password} => {
+                self.password = Some(password.to_string());
+                let user: &str = self.username.as_ref().map_or("", |x| x.as_ref());
+                match self.authenticate()? {
+                    //true => println!("welcome, {}", user),
+                    true => {
+                        let response_bytes = format!("Welcome, {}", user).as_bytes();
+                        response.reserve(response_bytes.len());
+                        response.put(response_bytes);
+                    },
+                    false => println!("imposter!"),
+                }
+            },
+            _ => println!("unimplemented cmd"),
+        }
+        Ok(response)
     }
 }
 
@@ -92,12 +148,18 @@ pub fn listen(addr: &str) {
     let listener = TcpListener::bind(&addr).unwrap();
 
     let server = listener.incoming().for_each(|socket| {
+        let mut handler = CommandHandler::new();
         let codec: FTPCodec<()> = FTPCodec::new();
         let framed_socket = codec.framed(socket);
-        framed_socket.for_each(|frame| {
+        framed_socket.for_each(move |frame| {
             let command = commands::Command::parse(&frame);
             match command {
-                Ok(cmd) => println!("got command {:?}", cmd),
+                Ok(cmd) => {
+                    println!("got command {:?}", cmd);
+                    handler.handle_command(&cmd).unwrap();
+                    let mut response = [1,2,3];
+                    frame.send_all(response.iter());
+                },
                 Err(e) => println!("failed to parse command: {:?}", e),
             };
             Ok(())
