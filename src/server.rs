@@ -88,18 +88,29 @@ impl Encoder for FTPCodec {
 
 fn process(socket: TcpStream) {
     let codec = FTPCodec::new();
-    let mut handler = CommandHandler::new();
+    let mut session = Session::new();
     let respond = move |command| {
         let response = match command {
             Command::User{username} => {
+                // TODO: Don't unwrap here
                 let user = std::str::from_utf8(&username).unwrap();
-                handler.username = Some(user.to_string());
-                format!("user! {:?}\n", username)
+                session.username = Some(user.to_string());
+                format!("331 Password Required\r\n")
             },
-            _ => format!("unimplemented command! Current username is {:?}\n", handler.username),
+            Command::Pass{password} => {
+                // TODO: Don't unwrap here
+                let pass = std::str::from_utf8(&password).unwrap();
+                match session.authenticate(pass) {
+                    Ok(true) => format!("230 User logged in, proceed\r\n"),
+                    Ok(false) => format!("530 Still not sure who you really are...\r\n"),
+                    Err(_) => format!("530 Something went wrong when trying to authenticate you....\r\n"),
+                }
+            }
+            _ => format!("unimplemented command! Current username is {:?}\n", session.username),
         };
         Box::new(future::ok(response))
     };
+
     let (sink, stream) = codec.framed(socket).split();
 
     let task = sink.send_all(stream.and_then(respond))
@@ -114,32 +125,32 @@ fn process(socket: TcpStream) {
     tokio::spawn(task);
 }
 
-pub struct CommandHandler<'a> {
+pub struct Session<'a> {
     username: Option<String>,
-    password: Option<String>,
     authenticator: &'a (Authenticator + Send + Sync),
+    is_authenticated: bool,
 }
 
-impl<'a> CommandHandler<'a> {
+impl<'a> Session<'a> {
     fn new() -> Self {
-        CommandHandler {
+        Session {
             authenticator: &auth::AnonymousAuthenticator{},
             username: None,
-            password: None,
+            is_authenticated: false,
         }
     }
 
-    fn authenticate(&self) -> Result<bool, ()> {
-        if self.username.is_none() {
-            return Err(());
-        }
+    fn authenticate(&mut self, password: &str) -> Result<bool, ()> {
+        let user = match &self.username {
+            Some(username) => username,
+            None => return Err(()),
+        };
 
-        if self.password.is_none() {
-            return Err(());
+        let res = self.authenticator.authenticate(&user, password);
+        if res == Ok(true) {
+            self.is_authenticated = true;
         }
-        let user = self.username.as_ref().map_or("", |x| x.as_ref());
-        let pass = self.password.as_ref().map_or("", |x| x.as_ref());
-        self.authenticator.authenticate(user, pass)
+        res
     }
 
 }
@@ -152,7 +163,8 @@ pub fn listen(addr: &str) {
     tokio::run({
         listener.incoming()
             .map_err(|e| println!("Failed to accept socket: {:?}", e))
-            .for_each(|socket| {
+            .for_each(|mut socket| {
+                socket.write_all(b"220 Welcome to firetrap\r\n").unwrap();
                 process(socket);
                 Ok(())
             })
