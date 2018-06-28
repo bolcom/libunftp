@@ -6,8 +6,6 @@ extern crate tokio_io;
 extern crate tokio_codec;
 extern crate bytes;
 
-use std::marker::PhantomData;
-
 use self::futures::prelude::*;
 use self::futures::Sink;
 
@@ -23,25 +21,23 @@ use auth::Authenticator;
 use commands;
 use commands::Command;
 
-pub struct FTPCodec<'a, T: 'a> {
+pub struct FTPCodec {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
     // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
     // look at `de\n` before returning.
     next_index: usize,
-    phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T> FTPCodec<'a, T> {
+impl FTPCodec {
     fn new() -> Self {
         FTPCodec {
             next_index: 0,
-            phantom: PhantomData,
         }
     }
 }
 
-impl<'a, T> Decoder for FTPCodec<'a, T> {
+impl Decoder for FTPCodec {
     type Item = Command;
     type Error = commands::Error;
 
@@ -79,7 +75,7 @@ impl<'a, T> Decoder for FTPCodec<'a, T> {
     }
 }
 
-impl<'a, T> Encoder for FTPCodec<'a, T> {
+impl Encoder for FTPCodec {
     type Item = String;
     type Error = commands::Error;
 
@@ -91,7 +87,7 @@ impl<'a, T> Encoder for FTPCodec<'a, T> {
 }
 
 fn process(socket: TcpStream) {
-    let codec: FTPCodec<()> = FTPCodec::new();
+    let codec = FTPCodec::new();
     let mut handler = CommandHandler::new();
     let respond = move |command| {
         let response = match command {
