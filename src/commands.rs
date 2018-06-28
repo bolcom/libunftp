@@ -19,7 +19,6 @@ pub enum Command {
 
 impl Command {
     pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
-        //let token = parse_token(buf)?;
         let vec = buf.into().to_vec();
         let mut iter = vec.splitn(2, |&b| b == b' ');
         let cmd_token = iter.next().unwrap();
@@ -27,21 +26,18 @@ impl Command {
 
         let cmd = match cmd_token {
             b"USER" => {
-                //let username = parse_to_eol(&buf[token.len() + 1..])?;
                 let username = parse_to_eol(cmd_params)?;
                 Command::User{
                     username: username,
                 }
             },
             b"PASS" => {
-                //let password = parse_to_eol(&buf[token.len() + 1..])?;
                 let password = parse_to_eol(cmd_params)?;
                 Command::Pass{
                     password: password,
                 }
             }
             b"ACCT" => {
-                //let account = parse_to_eol(&buf[token.len() + 1..])?;
                 let account = parse_to_eol(cmd_params)?;
                 Command::Acct{
                     account: account,
@@ -50,51 +46,11 @@ impl Command {
             _ => return Err(Error::InvalidCommand),
         };
 
-        // Make sure we're at the end of the command
-
         Ok(cmd)
     }
 }
 
-/*
-/// Try to parse a buffer of bytes, upto a ' ' or end of line, into a `&str`. We keep to D. J.
-/// [Bernstein's recommendation](https://cr.yp.to/ftp.html) to allow a EOL of '\r\n' or '\n'.
-// TODO: Return a Result<Option<&str>>, so the absence of a parameter can be detected
-fn parse_token<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
-    let mut pos = 0;
-    let mut iter = bytes.as_ref().iter();
-    loop {
-        let b = match iter.next() {
-            Some(b) => b,
-            //None => return Ok(&std::str::from_utf8(bytes)?[..pos]),
-            None => return Ok(bytes.into().split_to(pos)),
-        };
-
-        if *b == b'\r' {
-            match iter.next() {
-                //Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
-                Some(b'\n') => return Ok(bytes.into().split_to(pos)),
-                _ => return Err(Error::InvalidEOL),
-            }
-        }
-
-        if *b == b' ' || *b == b'\n' {
-            //return Ok(&std::str::from_utf8(bytes)?[..pos]);
-            return Ok(bytes.into().split_to(pos));
-        }
-
-        if !is_valid_token_char(*b) {
-            return Err(Error::InvalidCommand);
-        }
-
-        // TODO: Check for overflow (and (thus) making sure we end)
-        pos += 1;
-    }
-}
-*/
-
 /// Try to parse a buffer of bytes, upto end of line into a `&str`.
-// TODO: DRY-up duplication between `parse_to_eol()` and `parse_token()`
 fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     let mut pos = 0;
     let mut bytes: Bytes = bytes.into();

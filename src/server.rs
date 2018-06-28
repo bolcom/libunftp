@@ -42,34 +42,13 @@ impl Decoder for FTPCodec {
     type Error = commands::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, commands::Error> {
-        // Look for a byte with the value '\n' in buf. Start searching from the search start index
         if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
-            // Found a '\n' in the buffer.
-
-            // The index of the '\n' is at the sum of the start position + the offset found,
             let newline_index = newline_offset + self.next_index;
-
-            // Split the buffer at the index of the '\n' + 1 to include the '\n'. `split_to`
-            // returns a new buffer with the contents up to the index. The buffer on which
-            // `split_to` is called will now start at this index.
             let line = buf.split_to(newline_index + 1);
-
-            // Set the search start index back to 0
             self.next_index = 0;
-
-            // Return Ok(Some(...)) to signal that a full frame has been produced.
-            //let copy = line.clone();
-            //Ok(Some(line))
-
             Ok(Some(Command::parse(line)?))
         } else {
-            // '\n' not found in the string
-
-            // Tell the next call to start searching after the current length of the buffer since
-            // all of it was scanned and no '\n' was found.
             self.next_index = buf.len();
-
-            // Ok(None) signifies that more data is needed to produce a full frame.
             Ok(None)
         }
     }
