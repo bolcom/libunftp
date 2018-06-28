@@ -1,39 +1,48 @@
 extern crate std;
+extern crate bytes;
 
 use std::{fmt,result};
+use self::bytes::{Bytes};
 
 #[derive(Debug, PartialEq)]
-pub enum Command <'u> {
+pub enum Command {
     User {
-        username: &'u str,
+        username: Bytes,
     },
     Pass {
-        password: &'u str,
+        password: Bytes,
     },
     Acct {
-        account: &'u str,
+        account: Bytes,
     }
 }
 
-impl <'u> Command <'u> {
-    pub fn parse(buf: &'u [u8]) -> Result<Command> {
-        let token = parse_token(buf)?;
+impl Command {
+    pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
+        //let token = parse_token(buf)?;
+        let vec = buf.into().to_vec();
+        let mut iter = vec.splitn(2, |&b| b == b' ');
+        let cmd_token = iter.next().unwrap();
+        let cmd_params = iter.next().unwrap_or(&[]);
 
-        let cmd = match token {
-            "USER" => {
-                let username = parse_to_eol(&buf[token.len() + 1..])?;
+        let cmd = match cmd_token {
+            b"USER" => {
+                //let username = parse_to_eol(&buf[token.len() + 1..])?;
+                let username = parse_to_eol(cmd_params)?;
                 Command::User{
                     username: username,
                 }
             },
-            "PASS" => {
-                let password = parse_to_eol(&buf[token.len() + 1..])?;
+            b"PASS" => {
+                //let password = parse_to_eol(&buf[token.len() + 1..])?;
+                let password = parse_to_eol(cmd_params)?;
                 Command::Pass{
                     password: password,
                 }
             }
-            "ACCT" => {
-                let account = parse_to_eol(&buf[token.len() + 1..])?;
+            b"ACCT" => {
+                //let account = parse_to_eol(&buf[token.len() + 1..])?;
+                let account = parse_to_eol(cmd_params)?;
                 Command::Acct{
                     account: account,
                 }
@@ -47,27 +56,31 @@ impl <'u> Command <'u> {
     }
 }
 
+/*
 /// Try to parse a buffer of bytes, upto a ' ' or end of line, into a `&str`. We keep to D. J.
 /// [Bernstein's recommendation](https://cr.yp.to/ftp.html) to allow a EOL of '\r\n' or '\n'.
 // TODO: Return a Result<Option<&str>>, so the absence of a parameter can be detected
-fn parse_token<'b>(bytes: &'b [u8]) -> Result<&'b str> {
+fn parse_token<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     let mut pos = 0;
-    let mut iter = bytes.iter();
+    let mut iter = bytes.as_ref().iter();
     loop {
         let b = match iter.next() {
             Some(b) => b,
-            None => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+            //None => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+            None => return Ok(bytes.into().split_to(pos)),
         };
 
         if *b == b'\r' {
             match iter.next() {
-                Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+                //Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+                Some(b'\n') => return Ok(bytes.into().split_to(pos)),
                 _ => return Err(Error::InvalidEOL),
             }
         }
 
         if *b == b' ' || *b == b'\n' {
-            return Ok(&std::str::from_utf8(bytes)?[..pos]);
+            //return Ok(&std::str::from_utf8(bytes)?[..pos]);
+            return Ok(bytes.into().split_to(pos));
         }
 
         if !is_valid_token_char(*b) {
@@ -78,12 +91,16 @@ fn parse_token<'b>(bytes: &'b [u8]) -> Result<&'b str> {
         pos += 1;
     }
 }
+*/
 
 /// Try to parse a buffer of bytes, upto end of line into a `&str`.
 // TODO: DRY-up duplication between `parse_to_eol()` and `parse_token()`
-fn parse_to_eol<'b>(bytes: &'b [u8]) -> Result<&'b str> {
+fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     let mut pos = 0;
-    let mut iter = bytes.iter();
+    let mut bytes: Bytes = bytes.into();
+    let copy = bytes.clone();
+    let mut iter = copy.as_ref().iter();
+
     loop {
         let b = match iter.next() {
             Some(b) => b,
@@ -92,13 +109,13 @@ fn parse_to_eol<'b>(bytes: &'b [u8]) -> Result<&'b str> {
 
         if *b == b'\r' {
             match iter.next() {
-                Some(b'\n') => return Ok(&std::str::from_utf8(bytes)?[..pos]),
+                Some(b'\n') => return Ok(bytes.split_to(pos)),
                 _ => return Err(Error::InvalidEOL),
             }
         }
 
         if *b == b'\n' {
-            return Ok(&std::str::from_utf8(bytes)?[..pos]);
+            return Ok(bytes.split_to(pos));
         }
 
         if !is_valid_token_char(*b) {
@@ -171,67 +188,67 @@ mod tests {
 
     #[test]
     fn parse_user_cmd_crnl() {
-        let input = b"USER Dolores\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores"});
+        let input = "USER Dolores\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores".into()});
     }
 
     #[test]
     // According to RFC 959, verbs should be interpreted without regards to case
     fn pars_user_cmd_mixed_case() {
-        let input = b"uSeR Dolores\r\n";
+        let input = "uSeR Dolores\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
     #[test]
     // Not all clients include the (actually mandatory) '\r'
     fn parse_user_cmd_nl(){
-        let input = b"USER Dolores\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores"});
+        let input = "USER Dolores\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores".into()});
     }
 
     #[test]
     // Although we accept requests ending in only '\n', we won't accept requests ending only in '\r'
     fn parse_user_cmd_cr() {
-        let input = b"USER Dolores\r";
+        let input = "USER Dolores\r";
         assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
     }
 
     #[test]
     // We should fail if the request does not end in '\n' or '\r'
     fn parse_user_cmd_no_eol() {
-        let input = b"USER Dolores";
+        let input = "USER Dolores";
         assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
     }
 
     #[test]
     // We should skip only one space after a token, to allow for tokens starting with a space.
     fn parse_user_cmd_double_space(){
-        let input = b"USER  Dolores\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::User{username: " Dolores"});
+        let input = "USER  Dolores\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::User{username: " Dolores".into()});
     }
 
     #[test]
     fn parse_user_cmd_whitespace() {
-        let input = b"USER Dolores Abernathy\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores Abernathy"});
+        let input = "USER Dolores Abernathy\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::User{username: "Dolores Abernathy".into()});
     }
 
     #[test]
     fn parse_pass_cmd_crnl() {
-        let input = b"PASS s3cr3t\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::Pass{password: "s3cr3t"});
+        let input = "PASS s3cr3t\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Pass{password: "s3cr3t".into()});
     }
 
     #[test]
     fn parse_pass_cmd_whitespace() {
-        let input = b"PASS s3cr#t p@S$w0rd\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::Pass{password: "s3cr#t p@S$w0rd"});
+        let input = "PASS s3cr#t p@S$w0rd\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Pass{password: "s3cr#t p@S$w0rd".into()});
     }
 
     #[test]
     fn parse_acct() {
-        let input = b"ACCT Teddy\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::Acct{account: "Teddy"});
+        let input = "ACCT Teddy\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Acct{account: "Teddy".into()});
     }
 
     /*

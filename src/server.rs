@@ -11,7 +11,8 @@ use std::marker::PhantomData;
 use self::futures::prelude::*;
 use self::futures::Sink;
 
-use self::tokio::net::TcpListener;
+use self::tokio::prelude::*;
+use self::tokio::net::{TcpListener, TcpStream};
 use self::tokio_codec::{Encoder, Decoder};
 
 use self::bytes::{BytesMut, BufMut};
@@ -20,6 +21,7 @@ use auth;
 use auth::Authenticator;
 
 use commands;
+use commands::Command;
 
 pub struct FTPCodec<'a, T: 'a> {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
@@ -37,7 +39,83 @@ impl<'a, T> FTPCodec<'a, T> {
             phantom: PhantomData,
         }
     }
+}
 
+impl<'a, T> Decoder for FTPCodec<'a, T> {
+    type Item = Command;
+    type Error = commands::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, commands::Error> {
+        // Look for a byte with the value '\n' in buf. Start searching from the search start index
+        if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
+            // Found a '\n' in the buffer.
+
+            // The index of the '\n' is at the sum of the start position + the offset found,
+            let newline_index = newline_offset + self.next_index;
+
+            // Split the buffer at the index of the '\n' + 1 to include the '\n'. `split_to`
+            // returns a new buffer with the contents up to the index. The buffer on which
+            // `split_to` is called will now start at this index.
+            let line = buf.split_to(newline_index + 1);
+
+            // Set the search start index back to 0
+            self.next_index = 0;
+
+            // Return Ok(Some(...)) to signal that a full frame has been produced.
+            //let copy = line.clone();
+            //Ok(Some(line))
+
+            Ok(Some(Command::parse(line)?))
+        } else {
+            // '\n' not found in the string
+
+            // Tell the next call to start searching after the current length of the buffer since
+            // all of it was scanned and no '\n' was found.
+            self.next_index = buf.len();
+
+            // Ok(None) signifies that more data is needed to produce a full frame.
+            Ok(None)
+        }
+    }
+}
+
+impl<'a, T> Encoder for FTPCodec<'a, T> {
+    type Item = String;
+    type Error = commands::Error;
+
+    fn encode(&mut self, response: String, buf: &mut BytesMut) -> Result<(), commands::Error> {
+        buf.reserve(response.len());
+        buf.put(response);
+        Ok(())
+    }
+}
+
+fn process(socket: TcpStream) {
+    let codec: FTPCodec<()> = FTPCodec::new();
+    let mut handler = CommandHandler::new();
+    let respond = move |command| {
+        let response = match command {
+            Command::User{username} => {
+                let user = std::str::from_utf8(&username).unwrap();
+                handler.username = Some(user.to_string());
+                format!("user! {:?}\n", username)
+            },
+            _ => format!("unimplemented command! Current username is {:?}\n", handler.username),
+        };
+        Box::new(future::ok(response))
+    };
+    let (sink, stream) = codec.framed(socket).split();
+
+    let task = sink.send_all(stream.and_then(respond))
+        .then(|res| {
+            if let Err(e) = res {
+                println!("Failed to process connection: {:?}", e);
+            }
+
+            Ok(())
+        });
+
+    tokio::spawn(task);
 }
 
 pub struct CommandHandler<'a> {
@@ -68,78 +146,6 @@ impl<'a> CommandHandler<'a> {
         self.authenticator.authenticate(user, pass)
     }
 
-    fn handle_command(&mut self, cmd: &commands::Command) -> Result<BytesMut, ()> {
-        let mut response = BytesMut::from(&b""[..]);
-        match cmd {
-            commands::Command::User{username} => self.username = Some(username.to_string()),
-            commands::Command::Pass{password} => {
-                self.password = Some(password.to_string());
-                let user: &str = self.username.as_ref().map_or("", |x| x.as_ref());
-                match self.authenticate()? {
-                    //true => println!("welcome, {}", user),
-                    true => {
-                        let response_bytes = format!("Welcome, {}", user).as_bytes();
-                        response.reserve(response_bytes.len());
-                        response.put(response_bytes);
-                    },
-                    false => println!("imposter!"),
-                }
-            },
-            _ => println!("unimplemented cmd"),
-        }
-        Ok(response)
-    }
-}
-
-impl<'a, T> Decoder for FTPCodec<'a, T> {
-    type Item = Box<BytesMut>;
-    type Error = std::io::Error;
-
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Box<BytesMut>>, std::io::Error> {
-        // Look for a byte with the value '\n' in buf. Start searching from the search start index
-        if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
-            // Found a '\n' in the buffer.
-
-            // The index of the '\n' is at the sum of the start position + the offset found,
-            let newline_index = newline_offset + self.next_index;
-
-            // Split the buffer at the index of the '\n' + 1 to include the '\n'. `split_to`
-            // returns a new buffer with the contents up to the index. The buffer on which
-            // `split_to` is called will now start at this index.
-            let line = buf.split_to(newline_index + 1);
-
-            // Set the search start index back to 0
-            self.next_index = 0;
-
-            // Return Ok(Some(...)) to signal that a full frame has been produced.
-            //let copy = line.clone();
-            Ok(Some(Box::new(line)))
-        } else {
-            // '\n' not found in the string
-
-            // Tell the next call to start searching after the current length of the buffer since
-            // all of it was scanned and no '\n' was found.
-            self.next_index = buf.len();
-
-            // Ok(None) signifies that more data is needed to produce a full frame.
-            Ok(None)
-        }
-    }
-}
-
-impl<'a, T> Encoder for FTPCodec<'a, T> {
-    type Item = &'a [u8];
-    type Error = std::io::Error;
-
-    fn encode(&mut self, response: &[u8], buf: &mut BytesMut) -> Result<(), std::io::Error> {
-        // It's important to reserve the amount of space needed. The `bytes` API does not grow the
-        // buffers implicitly. Reserve the length of the string + 1 for the '\n'.
-        buf.reserve(response.len());
-
-        buf.put(response);
-
-        Ok(())
-    }
 }
 
 // TODO: See if we can accept a `ToSocketAddrs` trait
@@ -147,25 +153,12 @@ pub fn listen(addr: &str) {
     let addr = addr.parse().unwrap();
     let listener = TcpListener::bind(&addr).unwrap();
 
-    let server = listener.incoming().for_each(|socket| {
-        let mut handler = CommandHandler::new();
-        let codec: FTPCodec<()> = FTPCodec::new();
-        let framed_socket = codec.framed(socket);
-        framed_socket.for_each(move |frame| {
-            let command = commands::Command::parse(&frame);
-            match command {
-                Ok(cmd) => {
-                    println!("got command {:?}", cmd);
-                    handler.handle_command(&cmd).unwrap();
-                    let mut response = [1,2,3];
-                    frame.send_all(response.iter());
-                },
-                Err(e) => println!("failed to parse command: {:?}", e),
-            };
-            Ok(())
-        })
-    })
-    .map_err(|err| println!("got some error: {:?}", err));
-
-    tokio::run(server);
+    tokio::run({
+        listener.incoming()
+            .map_err(|e| println!("Failed to accept socket: {:?}", e))
+            .for_each(|socket| {
+                process(socket);
+                Ok(())
+            })
+    });
 }
