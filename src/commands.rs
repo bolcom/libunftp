@@ -14,13 +14,14 @@ pub enum Command {
     },
     Acct {
         account: Bytes,
-    }
+    },
+    Syst,
 }
 
 impl Command {
     pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
         let vec = buf.into().to_vec();
-        let mut iter = vec.splitn(2, |&b| b == b' ');
+        let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
         let cmd_token = iter.next().unwrap();
         let cmd_params = iter.next().unwrap_or(&[]);
 
@@ -43,6 +44,7 @@ impl Command {
                     account: account,
                 }
             }
+            b"SYST" => Command::Syst,
             _ => return Err(Error::InvalidCommand),
         };
 

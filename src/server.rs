@@ -85,7 +85,12 @@ fn process(socket: TcpStream) {
                     Err(_) => format!("530 Something went wrong when trying to authenticate you....\r\n"),
                 }
             }
-            _ => format!("unimplemented command! Current username is {:?}\n", session.username),
+            // This response is kind of like the User-Agent in http: very much mis-used to gauge
+            // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
+            // `UNIX Type: L8` for greatest compatibility.
+            Command::Syst => format!("215 UNIX Type: L8\r\n"),
+            Command::Acct{account: _} => format!("530 I don't know accounting man\r\n"),
+            //_ => format!("unimplemented command! Current username is {:?}\n", session.username),
         };
         Box::new(future::ok(response))
     };
