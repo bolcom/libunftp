@@ -90,6 +90,7 @@ fn process(socket: TcpStream) {
             // `UNIX Type: L8` for greatest compatibility.
             Command::Syst => format!("215 UNIX Type: L8\r\n"),
             Command::Acct{account: _} => format!("530 I don't know accounting man\r\n"),
+            Command::Type => format!("200 I'm always in binary mode, dude...\r\n"),
             //_ => format!("unimplemented command! Current username is {:?}\n", session.username),
         };
         Box::new(future::ok(response))

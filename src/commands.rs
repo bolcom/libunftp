@@ -16,6 +16,7 @@ pub enum Command {
         account: Bytes,
     },
     Syst,
+    Type,
 }
 
 impl Command {
@@ -45,6 +46,11 @@ impl Command {
                 }
             }
             b"SYST" => Command::Syst,
+            b"TYPE" => {
+                // We don't care about text format conversion, so we'll ignore the params and we're
+                // just always in binary mode.
+                Command::Type
+            },
             _ => return Err(Error::InvalidCommand),
         };
 
