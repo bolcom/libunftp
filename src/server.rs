@@ -91,8 +91,9 @@ fn process(socket: TcpStream) {
     };
 
     let (sink, stream) = codec.framed(socket).split();
-
-    let task = sink.send_all(stream.and_then(respond))
+    let task = sink.send("220 greeting\r\n".to_string())
+        .and_then(|sink| sink.flush())
+        .and_then(|sink| sink.send_all(stream.and_then(respond)))
         .then(|res| {
             if let Err(e) = res {
                 println!("Failed to process connection: {:?}", e);
@@ -142,8 +143,7 @@ pub fn listen(addr: &str) {
     tokio::run({
         listener.incoming()
             .map_err(|e| println!("Failed to accept socket: {:?}", e))
-            .for_each(|mut socket| {
-                socket.write_all(b"220 Welcome to firetrap\r\n").unwrap();
+            .for_each(|socket| {
                 process(socket);
                 Ok(())
             })
