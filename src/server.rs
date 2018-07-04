@@ -91,7 +91,12 @@ fn process(socket: TcpStream) {
             Command::Syst => format!("215 UNIX Type: L8\r\n"),
             Command::Acct{account: _} => format!("530 I don't know accounting man\r\n"),
             Command::Type => format!("200 I'm always in binary mode, dude...\r\n"),
-            //_ => format!("unimplemented command! Current username is {:?}\n", session.username),
+            Command::Stru{structure} => {
+                match structure {
+                    commands::StruParam::File => format!("200 We're in File structure mode\r\n"),
+                    _ => format!("504 Only File structure is supported\r\n"),
+                }
+            },
         };
         Box::new(future::ok(response))
     };

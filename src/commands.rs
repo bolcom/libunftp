@@ -5,6 +5,13 @@ use std::{fmt,result};
 use self::bytes::{Bytes};
 
 #[derive(Debug, PartialEq)]
+pub enum StruParam {
+    File,
+    Record,
+    Page,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Command {
     User {
         username: Bytes,
@@ -17,6 +24,9 @@ pub enum Command {
     },
     Syst,
     Type,
+    Stru {
+        structure: StruParam,
+    },
 }
 
 impl Command {
@@ -26,6 +36,7 @@ impl Command {
         let cmd_token = iter.next().unwrap();
         let cmd_params = iter.next().unwrap_or(&[]);
 
+        // TODO: Make command parsing case insensitive
         let cmd = match cmd_token {
             b"USER" => {
                 let username = parse_to_eol(cmd_params)?;
@@ -50,6 +61,18 @@ impl Command {
                 // We don't care about text format conversion, so we'll ignore the params and we're
                 // just always in binary mode.
                 Command::Type
+            },
+            b"STRU" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() > 1 {
+                    return Err(Error::InvalidCommand);
+                }
+                match params.first() {
+                    Some(b'F') => Command::Stru{structure: StruParam::File},
+                    Some(b'R') => Command::Stru{structure: StruParam::Record},
+                    Some(b'P') => Command::Stru{structure: StruParam::Page},
+                    _ => return Err(Error::InvalidCommand),
+                }
             },
             _ => return Err(Error::InvalidCommand),
         };
@@ -213,6 +236,36 @@ mod tests {
     fn parse_acct() {
         let input = "ACCT Teddy\r\n";
         assert_eq!(Command::parse(input).unwrap(), Command::Acct{account: "Teddy".into()});
+    }
+
+    #[test]
+    fn parse_stru_no_params() {
+        let input = "STRU\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_stru_f() {
+        let input = "STRU F\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru{structure: StruParam::File});
+    }
+
+    #[test]
+    fn parse_stru_r() {
+        let input = "STRU R\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru{structure: StruParam::Record});
+    }
+
+    #[test]
+    fn parse_stru_p() {
+        let input = "STRU P\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru{structure: StruParam::Page});
+    }
+
+    #[test]
+    fn parse_stru_garbage() {
+        let input = "STRU FSK\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
     /*
