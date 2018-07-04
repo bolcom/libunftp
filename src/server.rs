@@ -103,6 +103,7 @@ fn process(socket: TcpStream) {
                     _ => format!("504 Only Stream transfer mode is supported\r\n"),
                 }
             },
+            Command::Help => format!("214 We haven't implemented a useful HELP command, sorry\r\n"),
         };
         Box::new(future::ok(response))
     };

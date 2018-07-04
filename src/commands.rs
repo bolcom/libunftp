@@ -38,7 +38,8 @@ pub enum Command {
     },
     Mode {
         mode: ModeParam,
-    }
+    },
+    Help,
 }
 
 impl Command {
@@ -98,6 +99,7 @@ impl Command {
                     _ => return Err(Error::InvalidCommand),
                 }
             },
+            b"HELP" => Command::Help,
             _ => return Err(Error::InvalidCommand),
         };
 
@@ -326,6 +328,15 @@ mod tests {
 
         let input = "MODE S D\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_help() {
+        let input = "HELP\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Help);
+
+        let input = "HELP bla\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Help);
     }
 
     /*
