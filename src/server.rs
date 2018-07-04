@@ -105,6 +105,7 @@ fn process(socket: TcpStream) {
             },
             Command::Help => format!("214 We haven't implemented a useful HELP command, sorry\r\n"),
             Command::Noop => format!("200 Successfully did nothing\r\n"),
+            Command::Pasv => unimplemented!(),
         };
         Box::new(future::ok(response))
     };

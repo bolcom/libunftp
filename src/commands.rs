@@ -41,6 +41,7 @@ pub enum Command {
     },
     Help,
     Noop,
+    Pasv,
 }
 
 impl Command {
@@ -108,6 +109,13 @@ impl Command {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Noop
+            },
+            b"PASV" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() > 0 {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Pasv
             },
             _ => return Err(Error::InvalidCommand),
         };
@@ -354,6 +362,15 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Noop);
 
         let input = "NOOP bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_pasv() {
+        let input = "PASV\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Pasv);
+
+        let input = "PASV bla\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
