@@ -97,6 +97,12 @@ fn process(socket: TcpStream) {
                     _ => format!("504 Only File structure is supported\r\n"),
                 }
             },
+            Command::Mode{mode} => {
+                match mode {
+                    commands::ModeParam::Stream => format!("200 Using Stream transfer mode\r\n"),
+                    _ => format!("504 Only Stream transfer mode is supported\r\n"),
+                }
+            },
         };
         Box::new(future::ok(response))
     };

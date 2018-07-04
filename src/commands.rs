@@ -4,11 +4,20 @@ extern crate bytes;
 use std::{fmt,result};
 use self::bytes::{Bytes};
 
+// Unforunately Rust doesn't support anonymous enums for now, so we'll have to do with explict
+// comman parameter enums for the commands that take mutualy exclusive parameters.
 #[derive(Debug, PartialEq)]
 pub enum StruParam {
     File,
     Record,
     Page,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ModeParam {
+    Stream,
+    Block,
+    Compressed,
 }
 
 #[derive(Debug, PartialEq)]
@@ -27,6 +36,9 @@ pub enum Command {
     Stru {
         structure: StruParam,
     },
+    Mode {
+        mode: ModeParam,
+    }
 }
 
 impl Command {
@@ -71,6 +83,18 @@ impl Command {
                     Some(b'F') => Command::Stru{structure: StruParam::File},
                     Some(b'R') => Command::Stru{structure: StruParam::Record},
                     Some(b'P') => Command::Stru{structure: StruParam::Page},
+                    _ => return Err(Error::InvalidCommand),
+                }
+            },
+            b"MODE" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() > 1 {
+                    return Err(Error::InvalidCommand);
+                }
+                match params.first() {
+                    Some(b'S') => Command::Mode{mode: ModeParam::Stream},
+                    Some(b'B') => Command::Mode{mode: ModeParam::Block},
+                    Some(b'C') => Command::Mode{mode: ModeParam::Compressed},
                     _ => return Err(Error::InvalidCommand),
                 }
             },
@@ -265,6 +289,42 @@ mod tests {
     #[test]
     fn parse_stru_garbage() {
         let input = "STRU FSK\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "STRU F lskdjf\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "STRU\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_mode_s() {
+        let input = "MODE S\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode{mode: ModeParam::Stream});
+    }
+
+    #[test]
+    fn parse_mode_b() {
+        let input = "MODE B\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode{mode: ModeParam::Block});
+    }
+
+    #[test]
+    fn parse_mode_c() {
+        let input = "MODE C\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode{mode: ModeParam::Compressed});
+    }
+
+    #[test]
+    fn parse_mode_garbage() {
+        let input = "MODE SKDJF\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "MODE\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "MODE S D\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
