@@ -40,6 +40,7 @@ pub enum Command {
         mode: ModeParam,
     },
     Help,
+    Noop,
 }
 
 impl Command {
@@ -100,6 +101,14 @@ impl Command {
                 }
             },
             b"HELP" => Command::Help,
+            b"NOOP" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() > 0 {
+                    // NOOP params are prohibited
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Noop
+            },
             _ => return Err(Error::InvalidCommand),
         };
 
@@ -339,6 +348,15 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Help);
     }
 
+    #[test]
+    fn parse_noop() {
+        let input = "NOOP\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Noop);
+
+        let input = "NOOP bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
     /*
     #[test]
     // TODO: Implement (return Result<Option<T>> from `parse_token` and friends)
@@ -348,4 +366,3 @@ mod tests {
     }
     */
 }
-
