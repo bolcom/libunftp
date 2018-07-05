@@ -120,7 +120,7 @@ impl Command {
             },
             b"PORT" => {
                 let params = parse_to_eol(cmd_params)?;
-                if params.len() != 1 {
+                if params.len() == 0 {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Port
