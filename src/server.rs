@@ -106,6 +106,7 @@ fn process(socket: TcpStream) {
             Command::Help => format!("214 We haven't implemented a useful HELP command, sorry\r\n"),
             Command::Noop => format!("200 Successfully did nothing\r\n"),
             Command::Pasv => unimplemented!(),
+            Command::Port => format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n"),
         };
         Box::new(future::ok(response))
     };

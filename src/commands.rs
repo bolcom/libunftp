@@ -42,6 +42,7 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
+    Port,
 }
 
 impl Command {
@@ -116,6 +117,13 @@ impl Command {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Pasv
+            },
+            b"PORT" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() != 1 {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Port
             },
             _ => return Err(Error::InvalidCommand),
         };
@@ -372,6 +380,15 @@ mod tests {
 
         let input = "PASV bla\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_port() {
+        let input = "PORT\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
+        assert_eq!(Command::parse(input).unwrap(), Command::Port);
     }
 
     /*
