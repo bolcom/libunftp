@@ -1,8 +1,14 @@
 extern crate std;
+extern crate bytes;
 
 use std::{fmt,result};
+use std::fs::File;
 use self::std::path::{Path,PathBuf};
 use self::std::time::SystemTime;
+
+use std::io::prelude::*;
+
+use self::bytes::Bytes;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -16,6 +22,9 @@ pub trait Metadata {
 pub trait StorageBackend {
     /// Returns the `Metadata` for a file
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
+
+    /// Returns the content of a file
+    fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes>;
 }
 
 pub struct FileSystem {
@@ -38,6 +47,15 @@ impl StorageBackend for FileSystem {
         let full_path = self.root.join(path);
         let attr = std::fs::metadata(full_path)?;
         Ok(Box::new(attr))
+    }
+
+    fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes> {
+        let full_path = self.root.join(path);
+        let mut f = File::open(full_path)?;
+        // TODO: Try to do this zero-copy
+        let mut buffer = Vec::new();
+        f.read_to_end(&mut buffer)?;
+        Ok(Bytes::from(buffer))
     }
 }
 
@@ -113,5 +131,20 @@ mod tests {
         assert_eq!(meta.is_file(), my_meta.is_file());
         assert_eq!(meta.len(), my_meta.len());
         assert_eq!(meta.modified().unwrap(), my_meta.modified().unwrap());
+    }
+
+    #[test]
+    fn test_fs_get() {
+        let root = std::env::temp_dir();
+
+        let mut file = tempfile::NamedTempFile::new_in(&root).unwrap();
+        let path = file.path().to_owned();
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+
+        let filename = path.file_name().unwrap();
+        let fs = FileSystem::new(&root);
+        let my_content = fs.get(filename).unwrap();
+        assert_eq!(content, my_content);
     }
 }
