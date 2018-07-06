@@ -8,7 +8,7 @@ macro_rules! start_server {
     ( $( $addr:expr ),+ ) => {
         $(
         thread::spawn(move || {
-            let server = firetrap::Server::new();
+            let server = firetrap::Server::with_root(std::env::temp_dir());
             server.listen($addr.clone());
         });
 

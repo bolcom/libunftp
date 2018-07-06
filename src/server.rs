@@ -101,9 +101,21 @@ pub struct Server<S>
 }
 
 impl Server<storage::Filesystem> {
-    pub fn new() -> Self {
+    pub fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
         Server {
-            storage: Arc::new(storage::Filesystem::new("/tmp")),
+            storage: Arc::new(storage::Filesystem::new(path)),
+            greeting: "Welcome to the firetrap FTP server",
+            authenticator: &auth::AnonymousAuthenticator{},
+            runtime: tokio::runtime::Runtime::new().unwrap(),
+        }
+    }
+
+}
+
+impl<S> Server<S> where S: 'static + StorageBackend + Sync + Send {
+    pub fn new(s: S) -> Self {
+        Server {
+            storage: Arc::new(s),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
             runtime: tokio::runtime::Runtime::new().unwrap(),
