@@ -14,3 +14,4 @@ bytes = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
+ftp = "3"
