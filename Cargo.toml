@@ -9,3 +9,6 @@ tokio = "0.1"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 bytes = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
