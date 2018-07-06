@@ -90,6 +90,7 @@ impl Session {
     }
 }
 
+/// An instance of a FTP server
 pub struct Server<S>
     where S: storage::StorageBackend
 {
