@@ -26,7 +26,9 @@ use storage::StorageBackend;
 use commands;
 use commands::Command;
 
-pub struct FTPCodec {
+// FTPCodec implements tokio's `Decoder` and `Encoder` traits, that we'll use to decode FTP
+// commands and encode their responses.
+struct FTPCodec {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
     // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
@@ -46,6 +48,8 @@ impl Decoder for FTPCodec {
     type Item = Command;
     type Error = commands::Error;
 
+    // Here we decode the incoming bytes into a meaningful command. We'll split on newlines, and
+    // parse the resulting line using `Command::parse()`. This method will be called by tokio.
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, commands::Error> {
         if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
             let newline_index = newline_offset + self.next_index;
@@ -63,6 +67,7 @@ impl Encoder for FTPCodec {
     type Item = String;
     type Error = commands::Error;
 
+    // Here we encode the outgoing response, nothing special going on.
     fn encode(&mut self, response: String, buf: &mut BytesMut) -> Result<(), commands::Error> {
         buf.reserve(response.len());
         buf.put(response);
@@ -70,8 +75,8 @@ impl Encoder for FTPCodec {
     }
 }
 
-
-pub struct Session {
+// This is where we keep the state for a ftp session.
+struct Session {
     username: Option<String>,
     is_authenticated: bool,
 }
