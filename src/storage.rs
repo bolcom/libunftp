@@ -8,19 +8,7 @@ pub trait Metadata {
     fn len(&self) -> u64;
     fn is_dir(&self) -> bool;
     fn is_file(&self) -> bool;
-    /*
-    fn permissions(&self) -> Box<MetadataExt>;
-    fn modified(&self) -> Result<DateTime>;
-    fn accessed(&self) -> Result<DateTime>;
-    fn created(&self) -> Result<DateTime>;
-    */
-
     fn modified(&self) -> Result<SystemTime>;
-
-    /*
-    fn owner(&self) -> Result<String>;
-    fn group(&self) -> Result<String>;
-    */
 }
 
 /// Storage represents a storage backend, e.g. a filesystem.
