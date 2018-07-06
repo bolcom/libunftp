@@ -4,6 +4,7 @@ use std::{fmt,result};
 use self::std::path::{Path,PathBuf};
 use self::std::time::SystemTime;
 
+/// Represents the Metadata of a file
 pub trait Metadata {
     fn len(&self) -> u64;
     fn is_dir(&self) -> bool;
@@ -13,6 +14,7 @@ pub trait Metadata {
 
 /// Storage represents a storage backend, e.g. a filesystem.
 pub trait StorageBackend {
+    /// Returns the `Metadata` for a file
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
 }
 
@@ -30,6 +32,9 @@ impl FileSystem {
 
 impl StorageBackend for FileSystem {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>> {
+        // TODO: Abstract getting the full path to a separate method
+        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
+        // protect against "../" in `path`.
         let full_path = self.root.join(path);
         let attr = std::fs::metadata(full_path)?;
         Ok(Box::new(attr))
@@ -93,15 +98,15 @@ mod tests {
 
     #[test]
     fn test_fs_stat() {
-        let root = "/tmp";
+        let root = std::env::temp_dir();
 
-        let file = tempfile::NamedTempFile::new_in(root).unwrap();
+        let file = tempfile::NamedTempFile::new_in(&root).unwrap();
         let path = file.path().clone();
         let file = file.as_file();
         let meta = file.metadata().unwrap();
 
         let filename = path.file_name().unwrap();
-        let fs = FileSystem::new(root);
+        let fs = FileSystem::new(&root);
         let my_meta = fs.stat(filename).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
