@@ -92,6 +92,15 @@ fn process(socket: TcpStream) {
             // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
             // `UNIX Type: L8` for greatest compatibility.
             Command::Syst => format!("215 UNIX Type: L8\r\n"),
+            Command::Stat{path} => {
+                match path {
+                    None => format!("211 I'm just a humble FTP server\r\n"),
+                    Some(path) => {
+                        let path = std::str::from_utf8(&path).unwrap();
+                        format!("212 is file: {}\r\n", session.storage.stat(path).unwrap().is_file())
+                    },
+                }
+            },
             Command::Acct{account: _} => format!("530 I don't know accounting man\r\n"),
             Command::Type => format!("200 I'm always in binary mode, dude...\r\n"),
             Command::Stru{structure} => {

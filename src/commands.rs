@@ -32,6 +32,9 @@ pub enum Command {
         account: Bytes,
     },
     Syst,
+    Stat {
+        path: Option<Bytes>,
+    },
     Type,
     Stru {
         structure: StruParam,
@@ -73,6 +76,14 @@ impl Command {
                 }
             }
             b"SYST" => Command::Syst,
+            b"STAT" => {
+                let params = parse_to_eol(cmd_params)?;
+                let mut path = None;
+                if params.len() > 0 {
+                    path = Some(params);
+                }
+                Command::Stat{path: path}
+            },
             b"TYPE" => {
                 // We don't care about text format conversion, so we'll ignore the params and we're
                 // just always in binary mode.
