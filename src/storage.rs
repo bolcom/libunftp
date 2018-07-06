@@ -27,19 +27,19 @@ pub trait StorageBackend {
     fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes>;
 }
 
-pub struct FileSystem {
+pub struct Filesystem {
     root: PathBuf,
 }
 
-impl FileSystem {
+impl Filesystem {
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {
-        FileSystem {
+        Filesystem {
             root: root.into(),
         }
     }
 }
 
-impl StorageBackend for FileSystem {
+impl StorageBackend for Filesystem {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
@@ -124,7 +124,7 @@ mod tests {
         let meta = file.metadata().unwrap();
 
         let filename = path.file_name().unwrap();
-        let fs = FileSystem::new(&root);
+        let fs = Filesystem::new(&root);
         let my_meta = fs.stat(filename).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
@@ -143,7 +143,7 @@ mod tests {
         file.read_to_end(&mut content).unwrap();
 
         let filename = path.file_name().unwrap();
-        let fs = FileSystem::new(&root);
+        let fs = Filesystem::new(&root);
         let my_content = fs.get(filename).unwrap();
         assert_eq!(content, my_content);
     }
