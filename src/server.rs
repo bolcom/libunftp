@@ -21,7 +21,6 @@ use auth;
 use auth::Authenticator;
 
 use storage;
-use storage::StorageBackend;
 
 use commands;
 use commands::Command;
@@ -112,7 +111,7 @@ impl Server<storage::Filesystem> {
 
 }
 
-impl<S> Server<S> where S: 'static + StorageBackend + Sync + Send {
+impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     pub fn new(s: S) -> Self {
         Server {
             storage: Arc::new(s),
