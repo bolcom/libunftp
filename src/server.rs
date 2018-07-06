@@ -18,6 +18,9 @@ use self::bytes::{BytesMut, BufMut};
 use auth;
 use auth::Authenticator;
 
+use storage;
+use storage::StorageBackend;
+
 use commands;
 use commands::Command;
 
@@ -126,18 +129,24 @@ fn process(socket: TcpStream) {
     tokio::spawn(task);
 }
 
-pub struct Session<'a> {
+pub struct Session<'a, S>
+    where S: storage::StorageBackend
+{
     username: Option<String>,
     authenticator: &'a (Authenticator + Send + Sync),
     is_authenticated: bool,
+    storage: S,
 }
 
-impl<'a> Session<'a> {
+impl<'a> Session<'a, storage::Filesystem> {
     fn new() -> Self {
+        let storage = storage::Filesystem::new("/tmp");
+
         Session {
             authenticator: &auth::AnonymousAuthenticator{},
             username: None,
             is_authenticated: false,
+            storage: storage,
         }
     }
 
