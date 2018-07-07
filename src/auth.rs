@@ -2,7 +2,7 @@ pub trait Authenticator {
     fn authenticate(&self, username: &str, password: &str) -> Result<bool, ()>;
 }
 
-// The AnonymousAuthenicator always allows everybody.
+/// Authenticator implementation that simply allows everyone.
 pub struct AnonymousAuthenticator;
 
 impl Authenticator for AnonymousAuthenticator {

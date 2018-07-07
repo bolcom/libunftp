@@ -100,6 +100,15 @@ pub struct Server<S>
 }
 
 impl Server<storage::Filesystem> {
+    /// Create a new [`Server`] with the given filesystem root.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    ///
+    /// let server = Server::with_root("/srv/ftp");
+    /// ```
     pub fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
         Server {
             storage: Arc::new(storage::Filesystem::new(path)),
@@ -112,6 +121,11 @@ impl Server<storage::Filesystem> {
 }
 
 impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
+    /// Construct a new [`Server`] with the given [`StorageBackend`], with other parameters set to
+    /// defaults.
+    ///
+    /// [`Server`]: struct.Server.html
+    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     pub fn new(s: S) -> Self {
         Server {
             storage: Arc::new(s),
@@ -121,6 +135,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         }
     }
 
+    /// Listen for connections on the given address.
     pub fn listen(self, addr: &str) {
         // TODO: See if we can accept a `ToSocketAddrs` trait
         let addr = addr.parse().unwrap();
