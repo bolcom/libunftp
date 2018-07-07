@@ -135,6 +135,36 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         }
     }
 
+    /// Set the greeting that will be sent to the client after connecting.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    ///
+    /// let mut server = Server::with_root("/tmp").greeting("Welcome to my FTP Server");
+    /// ```
+    pub fn greeting(mut self, greeting: &'static str) -> Self {
+        self.greeting = greeting;
+        self
+    }
+
+    /// Set the [`Authenticator`] that will be used for authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::{auth, auth::AnonymousAuthenticator, Server};
+    ///
+    /// let mut server = Server::with_root("/tmp").authenticator(&auth::AnonymousAuthenticator{});
+    /// ```
+    ///
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    pub fn authenticator<A: auth::Authenticator + Send + Sync>(mut self, authenticator: &'static A) -> Self {
+        self.authenticator = authenticator;
+        self
+    }
+
     /// Listen for connections on the given address.
     pub fn listen(self, addr: &str) {
         // TODO: See if we can accept a `ToSocketAddrs` trait
