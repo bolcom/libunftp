@@ -4,51 +4,88 @@ extern crate bytes;
 use std::{fmt,result};
 use self::bytes::{Bytes};
 
-// Unforunately Rust doesn't support anonymous enums for now, so we'll have to do with explict
-// comman parameter enums for the commands that take mutualy exclusive parameters.
+/// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
+/// the given structure given. This stems from a time where it was common for some operating
+/// systems to address i.e. particular records in files, but isn't used a lot these days. We
+/// support the command itself for legacy reasons, but will only support the `File` structure.
+// Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
+// command parameter enums for the commands that take mutually exclusive parameters.
 #[derive(Debug, PartialEq)]
 pub enum StruParam {
+    /// "Regular" file structure.
     File,
+    /// Files are structured in "Records".
     Record,
+    /// Files are structured in "Pages".
     Page,
 }
 
+/// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
+/// only support the `Stream` mode. We still have to support the command itself for compatibility
+/// reasons, though.
 #[derive(Debug, PartialEq)]
 pub enum ModeParam {
+    /// Data is sent in a continuous stream of bytes.
     Stream,
+    /// Data is sent as a series of blocks preceded by one or more header bytes.
     Block,
+    /// Some round-about way of sending compressed data.
     Compressed,
 }
 
 #[derive(Debug, PartialEq)]
+/// The FTP commands.
 pub enum Command {
+    /// The `USER` command
     User {
+        /// The bytes making up the actual username.
         username: Bytes,
     },
+    /// The `PASS` command
     Pass {
+        /// The bytes making up the actual password.
         password: Bytes,
     },
+    /// The `ACCT` command
     Acct {
+        /// The bytes making up the account about which information is requested.
         account: Bytes,
     },
+    /// The `SYST` command
     Syst,
+    /// The `STAT` command
     Stat {
+        /// The bytes making up the path about which information is requested, if given.
         path: Option<Bytes>,
     },
+    /// The `TYPE` command
     Type,
+    /// The `STRU` command
     Stru {
+        /// The structure to which the client would like to switch. Only the `File` structure is
+        /// supported by us.
         structure: StruParam,
     },
+    /// The `MODE` command
     Mode {
+        /// The transfer mode to which the client would like to switch. Only the `Stream` mode is
+        /// supported by us.
         mode: ModeParam,
     },
+    /// The `HELP` command
     Help,
+    /// The `NOOP` command
     Noop,
+    /// The `PASSV` command
     Pasv,
+    /// The `PORT` command
     Port,
 }
 
 impl Command {
+    /// Parse the given bytes into a [`Command`].
+    ///
+    /// [`Command`]: ./struct.Command.html
     pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
         let vec = buf.into().to_vec();
         let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
@@ -180,16 +217,17 @@ fn is_valid_token_char(b: u8) -> bool {
     b > 0x1F && b < 0x7F
 }
 
+/// The Error type that can be returned by methods in this module.
 // TODO: Use quick-error crate to make this more ergonomic.
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    // Invalid command was given
+    /// Invalid command was given
     InvalidCommand,
-    // Invalid UTF8 character in string
+    /// Invalid UTF8 character in string
     InvalidUTF8,
-    // Invalid end-of-line character
+    /// Invalid end-of-line character
     InvalidEOL,
-    // Generic IO error
+    /// Generic IO error
     IO,
 }
 
@@ -228,6 +266,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// The Result type used in this module.
 pub type Result<T> = result::Result<T, Error>;
 
 

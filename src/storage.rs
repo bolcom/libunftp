@@ -12,13 +12,23 @@ use self::bytes::Bytes;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
+    /// Returns the length (size) of the file
     fn len(&self) -> u64;
+    /// Returns true if the path is a directory
     fn is_dir(&self) -> bool;
+
+    /// Returns true if the path is a file
     fn is_file(&self) -> bool;
+
+    /// Returns the last modified time of the path
     fn modified(&self) -> Result<SystemTime>;
 }
 
-/// Storage represents a storage backend, e.g. a filesystem.
+/// The `Storage` trait defines a common interface to different storage backends for our FTP
+/// [`Server`], e.g. for a [`Filesystem`] or GCP buckets.
+///
+/// [`Server`]: ../server/struct.Server.html
+/// [`filesystem`]: ./struct.Filesystem.html
 pub trait StorageBackend {
     /// Returns the `Metadata` for a file
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
@@ -27,11 +37,15 @@ pub trait StorageBackend {
     fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes>;
 }
 
+/// StorageBackend that uses a Filesystem, like a traditional FTP server.
 pub struct Filesystem {
     root: PathBuf,
 }
 
 impl Filesystem {
+    /// Create a new Filesytem backend, with the given root. No operations can take place outside
+    /// of the root. For example, when the `Filesystem` root is set to `/srv/ftp`, and a client
+    /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {
         Filesystem {
             root: root.into(),
@@ -78,7 +92,11 @@ impl Metadata for std::fs::Metadata {
 }
 
 #[derive(Debug, PartialEq)]
+/// The `Error` variants that can be produced by the [`StorageBackend`] implementations.
+///
+/// [`StorageBackend`]: ./trait.StorageBackend.html
 pub enum Error {
+    /// An IO Error
     IOError
 }
 
@@ -106,7 +124,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
-pub type Result<T> = result::Result<T, Error>;
+type Result<T> = result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {

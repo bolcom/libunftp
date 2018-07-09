@@ -89,7 +89,25 @@ impl Session {
     }
 }
 
-/// An instance of a FTP server
+/// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
+/// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
+///
+/// The server can be started with the `listen` method.
+///
+/// # Example
+///
+/// ```rust
+/// use firetrap::Server;
+/// # use std::thread;
+///
+/// let server = Server::with_root("/srv/ftp");
+/// # thread::spawn(move || {
+/// server.listen("127.0.0.1:2121");
+/// # });
+/// ```
+///
+/// [`Authenticator`]: ../auth/trait.Authenticator.html
+/// [`StorageBackend`]: ../storage/trait.StorageBackend.html
 pub struct Server<S>
     where S: storage::StorageBackend
 {
@@ -100,7 +118,7 @@ pub struct Server<S>
 }
 
 impl Server<storage::Filesystem> {
-    /// Create a new [`Server`] with the given filesystem root.
+    /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example
     ///
@@ -121,8 +139,8 @@ impl Server<storage::Filesystem> {
 }
 
 impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
-    /// Construct a new [`Server`] with the given [`StorageBackend`], with other parameters set to
-    /// defaults.
+    /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
+    /// set to defaults.
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
@@ -142,7 +160,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// ```rust
     /// use firetrap::Server;
     ///
+    /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_root("/tmp").greeting("Welcome to my FTP Server");
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_root("/tmp");
+    /// server.greeting("Welcome to my FTP Server");
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
         self.greeting = greeting;
@@ -156,7 +179,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// ```rust
     /// use firetrap::{auth, auth::AnonymousAuthenticator, Server};
     ///
+    /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_root("/tmp").authenticator(&auth::AnonymousAuthenticator{});
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_root("/tmp");
+    /// server.authenticator(&auth::AnonymousAuthenticator{});
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
@@ -165,7 +193,19 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         self
     }
 
-    /// Listen for connections on the given address.
+    /// Start the server and listen for connections on the given address.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    /// # use std::thread;
+    ///
+    /// let mut server = Server::with_root("/srv/ftp");
+    /// # thread::spawn(move || {
+    /// server.listen("127.0.0.1:2000");
+    /// # });
+    /// ```
     pub fn listen(self, addr: &str) {
         // TODO: See if we can accept a `ToSocketAddrs` trait
         let addr = addr.parse().unwrap();
