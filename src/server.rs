@@ -10,6 +10,7 @@ use self::std::sync::{Arc, Mutex};
 
 use self::futures::prelude::*;
 use self::futures::Sink;
+use self::futures::sync::mpsc;
 
 use self::tokio::prelude::*;
 use self::tokio::net::{TcpListener, TcpStream};
@@ -25,8 +26,54 @@ use storage;
 use commands;
 use commands::Command;
 
-// FTPCodec implements tokio's `Decoder` and `Encoder` traits, that we'll use to decode FTP
-// commands and encode their responses.
+/// DataMsg represents a status message from the data channel handler to our main (per connection)
+/// event handler.
+enum DataMsg {
+    SendData,
+}
+
+/// Event represents an `Event` that will be handled by our per-client event loop. It can be either
+/// a command from the client, or a status message from the data channel handler.
+enum Event {
+    /// A command from a client (e.g. `USER` or `PASV`)
+    Command(commands::Command),
+    /// A status message from the data channel handler
+    DataMsg(DataMsg),
+}
+
+// DataCodec implements tokio's `Decoder` and `Encoder` traits for the data channel, that we'll use
+// to decode and encode byte transfers over the data channel.
+struct DataCodec;
+
+impl DataCodec {
+    fn new() -> Self {
+        DataCodec{}
+    }
+}
+
+impl Decoder for DataCodec {
+    type Item = Vec<u8>;
+    type Error = std::io::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Vec<u8>>, std::io::Error> {
+        Ok(Some(buf.to_vec()))
+    }
+}
+
+impl Encoder for DataCodec {
+    type Item = Vec<u8>;
+    type Error = std::io::Error;
+
+    // TODO: Check if we can do this more efficiently than with a Vec<T>
+    fn encode(&mut self, data: Vec<u8>, buf: &mut BytesMut) -> Result<(), std::io::Error> {
+        buf.reserve(data.len());
+        buf.put(data);
+        Ok(())
+    }
+}
+
+// FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
+// use to decode FTP commands and encode their responses.
 struct FTPCodec {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
@@ -114,7 +161,6 @@ pub struct Server<S>
     storage: Arc<S>,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
-    runtime: tokio::runtime::Runtime,
 }
 
 impl Server<storage::Filesystem> {
@@ -132,7 +178,6 @@ impl Server<storage::Filesystem> {
             storage: Arc::new(storage::Filesystem::new(path)),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
-            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -149,7 +194,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
             storage: Arc::new(s),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
-            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -225,74 +269,147 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let storage = Arc::clone(&self.storage);
         let authenticator = self.authenticator;
         let session = Arc::new(Mutex::new(Session::new()));
-        let respond = move |command| {
-            let response = match command {
-                Command::User{username} => {
-                    // TODO: Don't unwrap here
-                    let user = std::str::from_utf8(&username).unwrap();
-                    let mut session = session.lock().unwrap();
-                    session.username = Some(user.to_string());
-                    format!("331 Password Required\r\n")
-                },
-                Command::Pass{password} => {
-                    // TODO: Don't unwrap here
-                    let pass = std::str::from_utf8(&password).unwrap();
-                    let mut session = session.lock().unwrap();
-                    match session.username.clone() {
-                        Some(ref user) => {
-                            let res = authenticator.authenticate(&user.clone(), pass);
-                            match res {
-                                Ok(true) => {
-                                    session.is_authenticated = true;
-                                    format!("230 User logged in, proceed\r\n")
+        let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
+        let respond = move |event| {
+            let response = match event {
+                Event::Command(cmd) => {
+                    match cmd {
+                        Command::User{username} => {
+                            // TODO: Don't unwrap here
+                            let user = std::str::from_utf8(&username).unwrap();
+                            let mut session = session.lock().unwrap();
+                            session.username = Some(user.to_string());
+                            Ok(format!("331 Password Required\r\n"))
+                        },
+                        Command::Pass{password} => {
+                            // TODO: Don't unwrap here
+                            let pass = std::str::from_utf8(&password).unwrap();
+                            let mut session = session.lock().unwrap();
+                            match session.username.clone() {
+                                Some(ref user) => {
+                                    let res = authenticator.authenticate(&user.clone(), pass);
+                                    match res {
+                                        Ok(true) => {
+                                            session.is_authenticated = true;
+                                            Ok(format!("230 User logged in, proceed\r\n"))
+                                        },
+                                        Ok(false) => Ok(format!("530 Wrong username or password\r\n")),
+                                        Err(e) => Err(format!("530 Something went wrong when trying to authenticate: {:?}\r\n", e)),
+                                    }
                                 },
-                                Ok(false) => format!("530 Wrong username or password\r\n"),
-                                Err(_) => format!("530 Something went wrong when trying to authenticate\r\n"),
+                                None => Ok(format!("530 No username supplied\r\n")),
                             }
                         },
-                        None => format!("530 No username supplied\r\n"),
-                    }
-                },
-                // This response is kind of like the User-Agent in http: very much mis-used to gauge
-                // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
-                // `UNIX Type: L8` for greatest compatibility.
-                Command::Syst => format!("215 UNIX Type: L8\r\n"),
-                Command::Stat{path} => {
-                    match path {
-                        None => format!("211 I'm just a humble FTP server\r\n"),
-                        Some(path) => {
-                            let path = std::str::from_utf8(&path).unwrap();
-                            format!("212 is file: {}\r\n", storage.stat(path).unwrap().is_file())
+                        // This response is kind of like the User-Agent in http: very much mis-used to gauge
+                        // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
+                        // `UNIX Type: L8` for greatest compatibility.
+                        Command::Syst => Ok(format!("215 UNIX Type: L8\r\n")),
+                        Command::Stat{path} => {
+                            match path {
+                                None => Ok(format!("211 I'm just a humble FTP server\r\n")),
+                                Some(path) => {
+                                    let path = std::str::from_utf8(&path).unwrap();
+                                    Ok(format!("212 is file: {}\r\n", storage.stat(path).unwrap().is_file()))
+                                },
+                            }
+                        },
+                        Command::Acct{account: _} => Ok(format!("530 I don't know accounting man\r\n")),
+                        Command::Type => Ok(format!("200 I'm always in binary mode, dude...\r\n")),
+                        Command::Stru{structure} => {
+                            match structure {
+                                commands::StruParam::File => Ok(format!("200 We're in File structure mode\r\n")),
+                                _ => Ok(format!("504 Only File structure is supported\r\n")),
+                            }
+                        },
+                        Command::Mode{mode} => {
+                            match mode {
+                                commands::ModeParam::Stream => Ok(format!("200 Using Stream transfer mode\r\n")),
+                                _ => Ok(format!("504 Only Stream transfer mode is supported\r\n")),
+                            }
+                        },
+                        Command::Help => Ok(format!("214 We haven't implemented a useful HELP command, sorry\r\n")),
+                        Command::Noop => Ok(format!("200 Successfully did nothing\r\n")),
+                        Command::Pasv => {
+                            let addr_s = "127.0.0.1:1111";
+                            let addr: std::net::SocketAddr = addr_s.parse().unwrap();
+                            let listener = TcpListener::bind(&addr).unwrap();
+                            println!("got a listener");
+
+                            let addr: std::net::SocketAddrV4 = addr_s.parse().unwrap();
+                            let octets = addr.ip().octets();
+                            let port = addr.port();
+                            let p1 = port >> 8;
+                            let p2 = port - (p1 * 256);
+
+                            tokio::spawn(Box::new(future::ok(println!("im inside a future inside a future"))));
+
+                            let tx = tx.clone();
+                            tokio::spawn(
+                                Box::new(
+                                    listener.incoming()
+                                    .take(1)
+                                    .map_err(|e| println!("Failed to accept data socket: {:?}", e))
+                                    .for_each(move |socket| {
+                                        println!("Accepted data socket!");
+                                        let codec = DataCodec::new();
+                                        let (sink, _stream) = codec.framed(socket).split();
+                                        let task = sink.send(b"hoi!\n".to_vec())
+                                            .and_then(move |mut sink| sink.close())
+                                            .map(|_| ())
+                                            .map_err(|_| ());
+                                        tokio::spawn(task);
+                                        let tx = tx.clone();
+                                        tokio::spawn(
+                                            tx.send(DataMsg::SendData)
+                                            .map(|_| {
+                                                println!("send message");
+                                                ()
+                                            })
+                                            .map_err(|_e| {
+                                                println!("failed to send message!");
+                                                ()
+                                            })
+                                        );
+                                        Ok(())
+                                    })
+                                )
+                            );
+
+                            Ok(format!("227 {},{},{},{},{},{}\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
+                        },
+                        Command::Port => Ok(format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n")),
+                        Command::Retr => {
+                            Ok(format!("150 Sending data\r\n"))
                         },
                     }
                 },
-                Command::Acct{account: _} => format!("530 I don't know accounting man\r\n"),
-                Command::Type => format!("200 I'm always in binary mode, dude...\r\n"),
-                Command::Stru{structure} => {
-                    match structure {
-                        commands::StruParam::File => format!("200 We're in File structure mode\r\n"),
-                        _ => format!("504 Only File structure is supported\r\n"),
-                    }
+                Event::DataMsg(_msg) => {
+                    Ok(format!("226 Send you something nice\r\n"))
                 },
-                Command::Mode{mode} => {
-                    match mode {
-                        commands::ModeParam::Stream => format!("200 Using Stream transfer mode\r\n"),
-                        _ => format!("504 Only Stream transfer mode is supported\r\n"),
-                    }
-                },
-                Command::Help => format!("214 We haven't implemented a useful HELP command, sorry\r\n"),
-                Command::Noop => format!("200 Successfully did nothing\r\n"),
-                Command::Pasv => unimplemented!(),
-                Command::Port => format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n"),
             };
-            Box::new(future::ok(response))
+            response
         };
 
         let codec = FTPCodec::new();
         let (sink, stream) = codec.framed(socket).split();
-        let task = sink.send(format!("220 {}\r\n", self.greeting))
+        let cmd_task = sink.send(format!("220 {}\r\n", self.greeting))
             .and_then(|sink| sink.flush())
-            .and_then(move |sink| sink.send_all(stream.and_then(respond)))
+            .and_then(move |sink| {
+                sink.send_all(
+                    stream
+                    .map_err(|e| format!("{:?}", e))
+                    .map(|cmd| Event::Command(cmd))
+                    .select(rx
+                        .map_err(|_| "some rx error".to_owned())
+                        .map(|msg| Event::DataMsg(msg))
+                    )
+                    .and_then(respond)
+                    .map_err(|e| {
+                        println!("connection error or something: {:?}", e);
+                        commands::Error::IO
+                    })
+                )
+            })
             .then(|res| {
                 if let Err(e) = res {
                     println!("Failed to process connection: {:?}", e);
@@ -300,8 +417,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
                 Ok(())
             });
-
-        let executor = self.runtime.executor();
-        executor.spawn(task);
+        tokio::spawn(cmd_task);
     }
 }

@@ -80,6 +80,8 @@ pub enum Command {
     Pasv,
     /// The `PORT` command
     Port,
+    /// The `RETR` command
+    Retr,
 }
 
 impl Command {
@@ -173,6 +175,7 @@ impl Command {
                 }
                 Command::Port
             },
+            b"RETR" => Command::Retr,
             _ => return Err(Error::InvalidCommand),
         };
 
