@@ -176,7 +176,7 @@ impl Command {
                 Command::Port
             },
             b"RETR" => Command::Retr,
-            _ => return Err(Error::InvalidCommand),
+            _ => return Err(Error::UnknownCommand(format!("{}", std::str::from_utf8(cmd_token)?))),
         };
 
         Ok(cmd)
@@ -224,7 +224,9 @@ fn is_valid_token_char(b: u8) -> bool {
 // TODO: Use quick-error crate to make this more ergonomic.
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    /// Invalid command was given
+    /// The client issued a command that we don't know about
+    UnknownCommand(String),
+    /// Invalid command was given (e.g., required parameters are missing)
     InvalidCommand,
     /// An invalid token (e.g. not UTF-8) was encountered while parsing the command
     InvalidToken(u8),
@@ -239,11 +241,12 @@ pub enum Error {
 impl Error {
     fn description_str(&self) -> &'static str {
         match *self {
-            Error::InvalidCommand   => "Invalid command",
-            Error::InvalidUTF8      => "Invalid UTF8 character in string",
-            Error::InvalidEOL       => "Invalid end-of-line character (should be `\r\n` or `\n`)",
-            Error::IO               => "Some generic IO error (TODO: specify :P)",
-            Error::InvalidToken(_c) => "Invalid token encountered in command",
+            Error::InvalidCommand           => "Invalid command",
+            Error::InvalidUTF8              => "Invalid UTF8 character in string",
+            Error::InvalidEOL               => "Invalid end-of-line character (should be `\r\n` or `\n`)",
+            Error::IO                       => "Some generic IO error (TODO: specify :P)",
+            Error::InvalidToken(_c)         => "Invalid token encountered in command",
+            Error::UnknownCommand(ref _c)   => "Unknown command"
         }
     }
 }
@@ -251,8 +254,9 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::InvalidToken(c)  => f.write_str(&format!("{}: {}", self.description_str(), c)),
-            _                       => f.write_str(&self.description_str()),
+            Error::InvalidToken(ref c)      => f.write_str(&format!("{}: {}", self.description_str(), c)),
+            Error::UnknownCommand(ref c)    => f.write_str(&format!("{}: {}", self.description_str(), c)),
+            _                               => f.write_str(&self.description_str()),
         }
     }
 }
@@ -293,7 +297,7 @@ mod tests {
     // According to RFC 959, verbs should be interpreted without regards to case
     fn pars_user_cmd_mixed_case() {
         let input = "uSeR Dolores\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(Error::UnknownCommand("uSeR".to_owned())));
     }
 
     #[test]
