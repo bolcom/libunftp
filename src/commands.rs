@@ -208,7 +208,7 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
         }
 
         if !is_valid_token_char(*b) {
-            return Err(Error::InvalidCommand);
+            return Err(Error::InvalidToken(*b));
         }
 
         // TODO: Check for overflow (and (thus) making sure we end)
@@ -226,6 +226,8 @@ fn is_valid_token_char(b: u8) -> bool {
 pub enum Error {
     /// Invalid command was given
     InvalidCommand,
+    /// An invalid token (e.g. not UTF-8) was encountered while parsing the command
+    InvalidToken(u8),
     /// Invalid UTF8 character in string
     InvalidUTF8,
     /// Invalid end-of-line character
@@ -241,13 +243,17 @@ impl Error {
             Error::InvalidUTF8      => "Invalid UTF8 character in string",
             Error::InvalidEOL       => "Invalid end-of-line character (should be `\r\n` or `\n`)",
             Error::IO               => "Some generic IO error (TODO: specify :P)",
+            Error::InvalidToken(_c) => "Invalid token encountered in command",
         }
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&self.description_str())
+        match *self {
+            Error::InvalidToken(c)  => f.write_str(&format!("{}: {}", self.description_str(), c)),
+            _                       => f.write_str(&self.description_str()),
+        }
     }
 }
 
