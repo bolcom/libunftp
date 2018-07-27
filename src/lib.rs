@@ -1,6 +1,9 @@
 #![deny(missing_docs)]
 //! Firetrap, a FTP server library for Rust.
 
+#[macro_use]
+extern crate log;
+
 /// The actual server protocol and networking.
 ///
 /// [`Server`]: ./server/struct.Server.html

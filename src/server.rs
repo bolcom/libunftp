@@ -12,7 +12,6 @@ use self::futures::prelude::*;
 use self::futures::Sink;
 use self::futures::sync::mpsc;
 
-use self::tokio::prelude::*;
 use self::tokio::net::{TcpListener, TcpStream};
 use self::tokio_codec::{Encoder, Decoder};
 
@@ -257,7 +256,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
         tokio::run({
             listener.incoming()
-                .map_err(|e| println!("Failed to accept socket: {:?}", e))
+                .map_err(|e| warn!("Failed to accept socket: {}", e))
                 .for_each(move |socket| {
                     self.process(socket);
                     Ok(())
@@ -333,7 +332,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             let addr_s = "127.0.0.1:1111";
                             let addr: std::net::SocketAddr = addr_s.parse().unwrap();
                             let listener = TcpListener::bind(&addr).unwrap();
-                            println!("got a listener");
 
                             let addr: std::net::SocketAddrV4 = addr_s.parse().unwrap();
                             let octets = addr.ip().octets();
@@ -341,16 +339,13 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             let p1 = port >> 8;
                             let p2 = port - (p1 * 256);
 
-                            tokio::spawn(Box::new(future::ok(println!("im inside a future inside a future"))));
-
                             let tx = tx.clone();
                             tokio::spawn(
                                 Box::new(
                                     listener.incoming()
                                     .take(1)
-                                    .map_err(|e| println!("Failed to accept data socket: {:?}", e))
+                                    .map_err(|e| warn!("Failed to accept data socket: {:?}", e))
                                     .for_each(move |socket| {
-                                        println!("Accepted data socket!");
                                         let codec = DataCodec::new();
                                         let (sink, _stream) = codec.framed(socket).split();
                                         let task = sink.send(b"hoi!\n".to_vec())
@@ -361,12 +356,9 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                         let tx = tx.clone();
                                         tokio::spawn(
                                             tx.send(DataMsg::SendData)
-                                            .map(|_| {
-                                                println!("send message");
-                                                ()
-                                            })
-                                            .map_err(|_e| {
-                                                println!("failed to send message!");
+                                            .map(|_| () )
+                                            .map_err(|e| {
+                                                warn!("Failed to send data channel status message: {}", e);
                                                 ()
                                             })
                                         );
@@ -392,31 +384,33 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
         let codec = FTPCodec::new();
         let (sink, stream) = codec.framed(socket).split();
-        let cmd_task = sink.send(format!("220 {}\r\n", self.greeting))
+        let task = sink.send(format!("220 {}\r\n", self.greeting))
             .and_then(|sink| sink.flush())
             .and_then(move |sink| {
                 sink.send_all(
                     stream
-                    .map_err(|e| format!("{:?}", e))
+                    .map_err(|e| format!("{}", e))
                     .map(|cmd| Event::Command(cmd))
                     .select(rx
-                        .map_err(|_| "some rx error".to_owned())
+                        // The receiver should never fail, so we should never see this message.
+                        // However, we need to map_err anyway to get the types right.
+                        .map_err(|_| "Unknown receiver error".to_owned())
                         .map(|msg| Event::DataMsg(msg))
                     )
                     .and_then(respond)
                     .map_err(|e| {
-                        println!("connection error or something: {:?}", e);
+                        warn!("Failed to process command: {}", e);
                         commands::Error::IO
                     })
                 )
             })
             .then(|res| {
                 if let Err(e) = res {
-                    println!("Failed to process connection: {:?}", e);
+                    warn!("Failed to process connection: {}", e);
                 }
 
                 Ok(())
             });
-        tokio::spawn(cmd_task);
+        tokio::spawn(task);
     }
 }
