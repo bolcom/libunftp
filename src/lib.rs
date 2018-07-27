@@ -4,6 +4,9 @@
 #[macro_use]
 extern crate log;
 
+#[cfg(test)]
+#[macro_use] extern crate pretty_assertions;
+
 /// The actual server protocol and networking.
 ///
 /// [`Server`]: ./server/struct.Server.html
