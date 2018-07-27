@@ -235,7 +235,7 @@ pub enum Error {
     /// Invalid end-of-line character
     InvalidEOL,
     /// Generic IO error
-    IO,
+    IO(String),
 }
 
 impl Error {
@@ -244,8 +244,8 @@ impl Error {
             Error::InvalidCommand           => "Invalid command",
             Error::InvalidUTF8              => "Invalid UTF8 character in string",
             Error::InvalidEOL               => "Invalid end-of-line character (should be `\r\n` or `\n`)",
-            Error::IO                       => "Some generic IO error (TODO: specify :P)",
-            Error::InvalidToken(_c)         => "Invalid token encountered in command",
+            Error::IO(ref _msg)             => "IO Error",
+            Error::InvalidToken(ref _c)     => "Invalid token encountered in command",
             Error::UnknownCommand(ref _c)   => "Unknown command"
         }
     }
@@ -256,6 +256,7 @@ impl fmt::Display for Error {
         match *self {
             Error::InvalidToken(ref c)      => f.write_str(&format!("{}: {}", self.description_str(), c)),
             Error::UnknownCommand(ref c)    => f.write_str(&format!("{}: {}", self.description_str(), c)),
+            Error::IO(ref msg)              => f.write_str(msg),
             _                               => f.write_str(&self.description_str()),
         }
     }
@@ -274,8 +275,9 @@ impl From<std::str::Utf8Error> for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(_err: std::io::Error) -> Error {
-        Error::IO
+    fn from(err: std::io::Error) -> Error {
+        use std::error::Error as stderr;
+        Error::IO(err.description().to_owned())
     }
 }
 

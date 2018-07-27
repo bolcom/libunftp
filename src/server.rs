@@ -400,7 +400,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                     .and_then(respond)
                     .map_err(|e| {
                         warn!("Failed to process command: {}", e);
-                        commands::Error::IO
+                        commands::Error::IO(e)
                     })
                 )
             })
