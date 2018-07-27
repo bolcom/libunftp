@@ -35,6 +35,9 @@ pub trait StorageBackend {
 
     /// Returns the content of a file
     fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes>;
+
+    /// Write the given bytes to a file
+    fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()>;
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.
@@ -64,12 +67,27 @@ impl StorageBackend for Filesystem {
     }
 
     fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes> {
+        // TODO: Abstract getting the full path to a separate method
+        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
+        // protect against "../" in `path`.
         let full_path = self.root.join(path);
         let mut f = File::open(full_path)?;
-        // TODO: Try to do this zero-copy
+        // TODO: Try to do this zero-copy (or maybe use the tokio filesystem thingy?)
         let mut buffer = Vec::new();
         f.read_to_end(&mut buffer)?;
         Ok(Bytes::from(buffer))
+    }
+
+    fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()> {
+        // TODO: Abstract getting the full path to a separate method
+        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
+        // protect against "../" in `path`.
+        //
+        // TODO: Add permission checks
+        let full_path = self.root.join(path);
+        let mut f = File::create(full_path)?;
+        f.write_all(bytes)?;
+        Ok(())
     }
 }
 
@@ -164,5 +182,20 @@ mod tests {
         let fs = Filesystem::new(&root);
         let my_content = fs.get(filename).unwrap();
         assert_eq!(content, my_content);
+    }
+
+    #[test]
+    fn test_fs_put() {
+        let root = std::env::temp_dir();
+
+        let orig_content = b"hallo";
+        let fs = Filesystem::new(&root);
+        fs.put(orig_content, "greeting.txt").unwrap();
+
+        let mut written_content = Vec::new();
+        let mut f = File::open(root.join("greeting.txt")).unwrap();
+        f.read_to_end(&mut written_content).unwrap();
+
+        assert_eq!(orig_content, written_content.as_slice());
     }
 }
