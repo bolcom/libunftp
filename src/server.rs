@@ -121,17 +121,106 @@ impl Encoder for FTPCodec {
 }
 
 // This is where we keep the state for a ftp session.
-struct Session {
+struct Session<S>
+    where S: storage::StorageBackend
+{
     username: Option<String>,
     is_authenticated: bool,
+    storage: Option<S>,
+    //data_cmd_chan: Option<futures::sync::oneshot::Sender<Command>>,
+    data_cmd_tx: Option<mpsc::Sender<Command>>,
+    data_cmd_rx: Option<mpsc::Receiver<Command>>,
 }
 
-impl Session {
+impl Session<storage::Filesystem> {
+    fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
+        Session {
+            username: None,
+            is_authenticated: false,
+            storage: Some(storage::Filesystem::new(path)),
+            data_cmd_tx: None,
+            data_cmd_rx: None,
+        }
+    }
+
     fn new() -> Self {
         Session {
             username: None,
             is_authenticated: false,
+            storage: None,
+            data_cmd_tx: None,
+            data_cmd_rx: None,
         }
+    }
+
+    /// socket: the data socket we'll be working with
+    /// tx: channel to send the result of our operation on
+    /// rx: channel to receive the command on
+    fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
+    //fn process_data(&self, socket: TcpStream, tx: mpsc::Sender<DataMsg>, rx: futures::sync::oneshot::Receiver<Command>) {
+        //use storage::StorageBackend;
+
+        let codec = DataCodec::new();
+        let (sink, _stream) = codec.framed(socket).split();
+
+        let rx = self.data_cmd_rx.take().unwrap();
+
+        let task = rx
+            .take(1)
+            .into_future()
+            .map(|_cmd: (Option<Command>, _)| {
+                tokio::spawn(
+                    sink.send(b"hoi".to_vec())
+                    .map(|_| ())
+                    .map_err(|_| ())
+                 );
+                println!("hallo?");
+                tokio::spawn(
+                    tx.send(DataMsg::SendData)
+                    .map(|_| ())
+                    .map_err(|_| ())
+                );
+            })
+            .map_err(|_| ())
+            .map(|_| ())
+            .map_err(|_| ())
+        ;
+
+        tokio::spawn(task);
+
+        /*
+        match self.command.as_ref().unwrap() {
+            Command::Retr{path} => {
+                let _data = self.storage.unwrap().get(path);
+                let task = sink.send(b"hoi!\n".to_vec())
+                    .and_then(move |mut sink| sink.close())
+                    .map(|_| {
+                        tokio::spawn(
+                            tx.send(DataMsg::SendData)
+                            .map(|_| ())
+                            .map_err(|_| ())
+                        );
+                        ()
+                    })
+                    .map_err(|_| ());
+                tokio::spawn(task);
+            },
+            _ => {
+                let task = sink.send(b"doei!\n".to_vec())
+                    .and_then(move |mut sink| sink.close())
+                    .map(|_| {
+                        tokio::spawn(
+                            tx.send(DataMsg::SendData)
+                            .map(|_| ())
+                            .map_err(|_| ())
+                        );
+                        ()
+                    })
+                    .map_err(|_| ());
+                tokio::spawn(task);
+            }
+        }
+        */
     }
 }
 
@@ -329,6 +418,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         Command::Help => Ok(format!("214 We haven't implemented a useful HELP command, sorry\r\n")),
                         Command::Noop => Ok(format!("200 Successfully did nothing\r\n")),
                         Command::Pasv => {
+                            // TODO: Pick port from port, and on the IP the control channel is
+                            // listening on.
                             let addr_s = "127.0.0.1:1111";
                             let addr: std::net::SocketAddr = addr_s.parse().unwrap();
                             let listener = TcpListener::bind(&addr).unwrap();
@@ -338,30 +429,29 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             let port = addr.port();
                             let p1 = port >> 8;
                             let p2 = port - (p1 * 256);
-
                             let tx = tx.clone();
+
+                            let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
+                            {
+                            let mut session = session.lock().unwrap();
+                            session.data_cmd_tx = Some(cmd_tx);
+                            session.data_cmd_rx = Some(cmd_rx);
+                            }
+
+                            let session = session.clone();
                             tokio::spawn(
                                 Box::new(
                                     listener.incoming()
                                     .take(1)
                                     .map_err(|e| warn!("Failed to accept data socket: {:?}", e))
                                     .for_each(move |socket| {
-                                        let codec = DataCodec::new();
-                                        let (sink, _stream) = codec.framed(socket).split();
-                                        let task = sink.send(b"hoi!\n".to_vec())
-                                            .and_then(move |mut sink| sink.close())
-                                            .map(|_| ())
-                                            .map_err(|_| ());
-                                        tokio::spawn(task);
                                         let tx = tx.clone();
-                                        tokio::spawn(
-                                            tx.send(DataMsg::SendData)
-                                            .map(|_| () )
-                                            .map_err(|e| {
-                                                warn!("Failed to send data channel status message: {}", e);
-                                                ()
-                                            })
-                                        );
+                                        let session = session.clone();
+                                        let mut session = session.lock().unwrap_or_else(|res| {
+                                            println!("session lock() result: {}", res);
+                                            panic!()
+                                        });
+                                        session.process_data(socket, tx);
                                         Ok(())
                                     })
                                 )
@@ -370,7 +460,16 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             Ok(format!("227 {},{},{},{},{},{}\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
                         },
                         Command::Port => Ok(format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n")),
-                        Command::Retr => {
+                        Command::Retr{ref path} => {
+                            let mut session = session.lock().unwrap();
+                            let tx = session.data_cmd_tx.clone();
+                            let tx = tx.unwrap();
+                            session.data_cmd_tx = None;
+                            tokio::spawn(
+                                tx.send(cmd.clone())
+                                .map(|_| ())
+                                .map_err(|_| ())
+                            );
                             Ok(format!("150 Sending data\r\n"))
                         },
                     }

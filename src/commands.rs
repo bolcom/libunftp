@@ -10,7 +10,7 @@ use self::bytes::{Bytes};
 /// support the command itself for legacy reasons, but will only support the `File` structure.
 // Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
 // command parameter enums for the commands that take mutually exclusive parameters.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum StruParam {
     /// "Regular" file structure.
     File,
@@ -23,7 +23,7 @@ pub enum StruParam {
 /// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
 /// only support the `Stream` mode. We still have to support the command itself for compatibility
 /// reasons, though.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ModeParam {
     /// Data is sent in a continuous stream of bytes.
     Stream,
@@ -33,7 +33,7 @@ pub enum ModeParam {
     Compressed,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// The FTP commands.
 pub enum Command {
     /// The `USER` command
@@ -81,7 +81,10 @@ pub enum Command {
     /// The `PORT` command
     Port,
     /// The `RETR` command
-    Retr,
+    Retr{
+        /// The path to the file the client would like to retrieve.
+        path: Bytes,
+    },
 }
 
 impl Command {
@@ -175,7 +178,13 @@ impl Command {
                 }
                 Command::Port
             },
-            b"RETR" => Command::Retr,
+            b"RETR" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.len() == 0 {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Retr{path: path}
+            },
             _ => return Err(Error::UnknownCommand(format!("{}", std::str::from_utf8(cmd_token)?))),
         };
 
