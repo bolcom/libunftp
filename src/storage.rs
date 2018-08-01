@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_fs_stat() {
+    fn fs_stat() {
         let root = std::env::temp_dir();
 
         let file = tempfile::NamedTempFile::new_in(&root).unwrap();
@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fs_get() {
+    fn fs_get() {
         let root = std::env::temp_dir();
 
         let mut file = tempfile::NamedTempFile::new_in(&root).unwrap();
@@ -185,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fs_put() {
+    fn fs_put() {
         let root = std::env::temp_dir();
 
         let orig_content = b"hallo";
