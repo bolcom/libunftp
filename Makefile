@@ -1,3 +1,15 @@
+.PHONY: watch
+watch:
+	cargo watch -x check -x test -x doc --clear
+
+.PHONY: run
+run: debug
+	RUST_LOG=INFO ./target/debug/examples/basic
+
+.PHONY: doc
+doc:
+	cargo doc --open
+
 .PHONY: build
 build:
 	cargo build --release
@@ -6,14 +18,6 @@ build:
 debug:
 	cargo build
 
-.PHONY: run
-run: debug
-	RUST_LOG=INFO ./target/debug/examples/basic
-
 .PHONY: test
 test:
 	cargo test
-
-.PHONY: watch
-watch:
-	cargo watch -x check -x test -x doc --clear
