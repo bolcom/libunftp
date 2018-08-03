@@ -40,37 +40,6 @@ enum Event {
     DataMsg(DataMsg),
 }
 
-// DataCodec implements tokio's `Decoder` and `Encoder` traits for the data channel, that we'll use
-// to decode and encode byte transfers over the data channel.
-struct DataCodec;
-
-impl DataCodec {
-    fn new() -> Self {
-        DataCodec{}
-    }
-}
-
-impl Decoder for DataCodec {
-    type Item = Vec<u8>;
-    type Error = std::io::Error;
-
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Vec<u8>>, std::io::Error> {
-        Ok(Some(buf.to_vec()))
-    }
-}
-
-impl Encoder for DataCodec {
-    type Item = Vec<u8>;
-    type Error = std::io::Error;
-
-    // TODO: Check if we can do this more efficiently than with a Vec<T>
-    fn encode(&mut self, data: Vec<u8>, buf: &mut BytesMut) -> Result<(), std::io::Error> {
-        buf.reserve(data.len());
-        buf.put(data);
-        Ok(())
-    }
-}
-
 // FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
 // use to decode FTP commands and encode their responses.
 struct FTPCodec {
@@ -127,7 +96,6 @@ struct Session<S>
     username: Option<String>,
     is_authenticated: bool,
     storage: Option<S>,
-    //data_cmd_chan: Option<futures::sync::oneshot::Sender<Command>>,
     data_cmd_tx: Option<mpsc::Sender<Command>>,
     data_cmd_rx: Option<mpsc::Receiver<Command>>,
 }
@@ -157,29 +125,29 @@ impl Session<storage::Filesystem> {
     /// tx: channel to send the result of our operation on
     /// rx: channel to receive the command on
     fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
-    //fn process_data(&self, socket: TcpStream, tx: mpsc::Sender<DataMsg>, rx: futures::sync::oneshot::Receiver<Command>) {
-        //use storage::StorageBackend;
-
-        let codec = DataCodec::new();
-        let (sink, _stream) = codec.framed(socket).split();
+        use self::tokio::fs::file::File;
 
         let rx = self.data_cmd_rx.take().unwrap();
 
         let task = rx
             .take(1)
             .into_future()
-            .map(|_cmd: (Option<Command>, _)| {
-                tokio::spawn(
-                    sink.send(b"hoi".to_vec())
-                    .map(|_| ())
-                    .map_err(|_| ())
-                 );
-                println!("hallo?");
-                tokio::spawn(
-                    tx.send(DataMsg::SendData)
-                    .map(|_| ())
-                    .map_err(|_| ())
-                );
+            .map(|(cmd, _): (Option<Command>, _)| {
+                if let Some(Command::Retr{path}) = cmd {
+                    tokio::spawn(
+                        File::open(path)
+                        .and_then(|f| {
+                            self::tokio_io::io::copy(f, socket)
+                        })
+                        .map(|_| ())
+                        .map_err(|_| ())
+                     );
+                    tokio::spawn(
+                        tx.send(DataMsg::SendData)
+                        .map(|_| ())
+                        .map_err(|_| ())
+                    );
+                }
             })
             .map_err(|_| ())
             .map(|_| ())
@@ -187,40 +155,6 @@ impl Session<storage::Filesystem> {
         ;
 
         tokio::spawn(task);
-
-        /*
-        match self.command.as_ref().unwrap() {
-            Command::Retr{path} => {
-                let _data = self.storage.unwrap().get(path);
-                let task = sink.send(b"hoi!\n".to_vec())
-                    .and_then(move |mut sink| sink.close())
-                    .map(|_| {
-                        tokio::spawn(
-                            tx.send(DataMsg::SendData)
-                            .map(|_| ())
-                            .map_err(|_| ())
-                        );
-                        ()
-                    })
-                    .map_err(|_| ());
-                tokio::spawn(task);
-            },
-            _ => {
-                let task = sink.send(b"doei!\n".to_vec())
-                    .and_then(move |mut sink| sink.close())
-                    .map(|_| {
-                        tokio::spawn(
-                            tx.send(DataMsg::SendData)
-                            .map(|_| ())
-                            .map_err(|_| ())
-                        );
-                        ()
-                    })
-                    .map_err(|_| ());
-                tokio::spawn(task);
-            }
-        }
-        */
     }
 }
 
@@ -457,10 +391,10 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 )
                             );
 
-                            Ok(format!("227 {},{},{},{},{},{}\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
+                            Ok(format!("227 Entering Passive Mode ({},{},{},{},{},{})\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
                         },
                         Command::Port => Ok(format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n")),
-                        Command::Retr{ref path} => {
+                        Command::Retr{path: _} => {
                             let mut session = session.lock().unwrap();
                             let tx = session.data_cmd_tx.clone();
                             let tx = tx.unwrap();

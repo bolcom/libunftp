@@ -83,7 +83,7 @@ pub enum Command {
     /// The `RETR` command
     Retr{
         /// The path to the file the client would like to retrieve.
-        path: Bytes,
+        path: String,
     },
 }
 
@@ -183,7 +183,9 @@ impl Command {
                 if path.len() == 0 {
                     return Err(Error::InvalidCommand);
                 }
-                Command::Retr{path: path}
+                let path = String::from_utf8_lossy(&path);
+                // TODO: Can we do this without allocation?
+                Command::Retr{path: path.to_string()}
             },
             _ => return Err(Error::UnknownCommand(format!("{}", std::str::from_utf8(cmd_token)?))),
         };
