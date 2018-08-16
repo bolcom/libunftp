@@ -1,14 +1,15 @@
 extern crate std;
 extern crate bytes;
+extern crate tokio;
+extern crate futures;
 
 use std::{fmt,result};
-use std::fs::File;
 use self::std::path::{Path,PathBuf};
 use self::std::time::SystemTime;
 
 use std::io::prelude::*;
 
-use self::bytes::Bytes;
+use self::futures::Future;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -30,11 +31,20 @@ pub trait Metadata {
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
 pub trait StorageBackend {
+    /// TODO: document
+    type File;
+    /// TODO: document
+    type Error;
+
     /// Returns the `Metadata` for a file
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
 
     /// Returns the content of a file
-    fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes>;
+    //fn get<P: AsRef<Path>>(&self, path: P) -> Result<&[u8]>;
+    // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
+    // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
+    // Trait.
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to a file
     fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()>;
@@ -57,6 +67,9 @@ impl Filesystem {
 }
 
 impl StorageBackend for Filesystem {
+    type File =  self::tokio::fs::File;
+    type Error = self::tokio::io::Error;
+
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
@@ -66,16 +79,22 @@ impl StorageBackend for Filesystem {
         Ok(Box::new(attr))
     }
 
-    fn get<P: AsRef<Path>>(&self, path: P) -> Result<Bytes> {
+    //fn get<P: AsRef<Path>>(&self, path: P) -> tokio::fs::file::OpenFuture<P> {
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = self::tokio::io::Error> + Send> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
         let full_path = self.root.join(path);
+
+        /*
         let mut f = File::open(full_path)?;
         // TODO: Try to do this zero-copy (or maybe use the tokio filesystem thingy?)
         let mut buffer = Vec::new();
         f.read_to_end(&mut buffer)?;
         Ok(Bytes::from(buffer))
+        */
+
+        Box::new(self::tokio::fs::file::File::open(full_path))
     }
 
     fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()> {
@@ -85,7 +104,7 @@ impl StorageBackend for Filesystem {
         //
         // TODO: Add permission checks
         let full_path = self.root.join(path);
-        let mut f = File::create(full_path)?;
+        let mut f = std::fs::File::create(full_path)?;
         f.write_all(bytes)?;
         Ok(())
     }
@@ -149,6 +168,7 @@ mod tests {
     extern crate tempfile;
 
     use super::*;
+    use std::fs::File;
 
     #[test]
     fn fs_stat() {
@@ -170,18 +190,37 @@ mod tests {
     }
 
     #[test]
+
     fn fs_get() {
         let root = std::env::temp_dir();
 
         let mut file = tempfile::NamedTempFile::new_in(&root).unwrap();
         let path = file.path().to_owned();
-        let mut content = Vec::new();
-        file.read_to_end(&mut content).unwrap();
+
+        // Write some data to our test file
+        let data = b"Koen was here\n";
+        file.write_all(data).unwrap();
 
         let filename = path.file_name().unwrap();
         let fs = Filesystem::new(&root);
-        let my_content = fs.get(filename).unwrap();
-        assert_eq!(content, my_content);
+
+        // Since the filesystem backend is based on futures, we need a runtime to run it
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let mut my_file = rt.block_on(fs.get(filename)).unwrap();
+        let mut my_content = Vec::new();
+        rt.block_on(
+            self::futures::future::lazy(move || {
+                self::tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
+                assert_eq!(data.as_ref(), &*my_content);
+                // We need a `Err` branch because otherwise the compiler can't infer the `E` type,
+                // and I'm not sure where/how to annotate it.
+                if true {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            })
+        ).unwrap();
     }
 
     #[test]

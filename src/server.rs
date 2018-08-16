@@ -95,7 +95,7 @@ struct Session<S>
 {
     username: Option<String>,
     is_authenticated: bool,
-    storage: Option<S>,
+    storage: Arc<S>,
     data_cmd_tx: Option<mpsc::Sender<Command>>,
     data_cmd_rx: Option<mpsc::Receiver<Command>>,
 }
@@ -105,12 +105,13 @@ impl Session<storage::Filesystem> {
         Session {
             username: None,
             is_authenticated: false,
-            storage: Some(storage::Filesystem::new(path)),
+            storage: Arc::new(storage::Filesystem::new(path)),
             data_cmd_tx: None,
             data_cmd_rx: None,
         }
     }
 
+    /*
     fn new() -> Self {
         Session {
             username: None,
@@ -120,22 +121,24 @@ impl Session<storage::Filesystem> {
             data_cmd_rx: None,
         }
     }
+    */
 
     /// socket: the data socket we'll be working with
     /// tx: channel to send the result of our operation on
     /// rx: channel to receive the command on
     fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
-        use self::tokio::fs::file::File;
+        use storage::StorageBackend;
 
         let rx = self.data_cmd_rx.take().unwrap();
+        let storage = Arc::clone(&self.storage);
 
         let task = rx
             .take(1)
             .into_future()
-            .map(|(cmd, _): (Option<Command>, _)| {
+            .map(move |(cmd, _): (Option<Command>, _)| {
                 if let Some(Command::Retr{path}) = cmd {
                     tokio::spawn(
-                        File::open(path)
+                        storage.get(path)
                         .and_then(|f| {
                             self::tokio_io::io::copy(f, socket)
                         })
@@ -290,7 +293,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     fn process(&self, socket: TcpStream) {
         let storage = Arc::clone(&self.storage);
         let authenticator = self.authenticator;
-        let session = Arc::new(Mutex::new(Session::new()));
+        let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let respond = move |event| {
             let response = match event {
