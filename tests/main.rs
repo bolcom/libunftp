@@ -78,3 +78,21 @@ fn get() {
 
     assert_eq!(remote_data, data);
 }
+
+#[test]
+fn put() {
+    use std::io::Cursor;
+
+    let addr = "127.0.0.1:1238";
+    start_server!(addr);
+
+    let content = b"Hello from this test!\n";
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let mut reader = Cursor::new(content);
+    ftp_stream.put("greeting.txt", &mut reader).unwrap();
+
+    // retrieve file back again, and check if we got the same back.
+    let remote_data = ftp_stream.simple_retr("greeting.txt").unwrap().into_inner();
+    assert_eq!(remote_data, content);
+}

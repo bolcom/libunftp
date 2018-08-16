@@ -28,7 +28,14 @@ use commands::Command;
 /// DataMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 enum DataMsg {
+    // Send the data to the client
     SendData,
+    // We've written the data from the client to the StorageBackend
+    WrittenData,
+    // Data connection was unexpectedly closed
+    ConnectionReset,
+    // Failed to write data to disk
+    WriteFailed,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -136,20 +143,54 @@ impl Session<storage::Filesystem> {
             .take(1)
             .into_future()
             .map(move |(cmd, _): (Option<Command>, _)| {
-                if let Some(Command::Retr{path}) = cmd {
-                    tokio::spawn(
-                        storage.get(path)
-                        .and_then(|f| {
-                            self::tokio_io::io::copy(f, socket)
-                        })
-                        .map(|_| ())
-                        .map_err(|_| ())
-                     );
-                    tokio::spawn(
-                        tx.send(DataMsg::SendData)
-                        .map(|_| ())
-                        .map_err(|_| ())
-                    );
+                match cmd {
+                    Some(Command::Retr{path}) => {
+                        tokio::spawn(
+                            storage.get(path)
+                            .and_then(|f| {
+                                self::tokio_io::io::copy(f, socket)
+                            })
+                            .map(|_| ())
+                            .map_err(|_| ())
+                         );
+                        tokio::spawn(
+                            tx.send(DataMsg::SendData)
+                            .map(|_| ())
+                            .map_err(|_| ())
+                        );
+                    }
+                    Some(Command::Stor{path}) => {
+                        let tx_ok = tx.clone();
+                        tokio::spawn(
+                            storage.put(socket, path)
+                            .map(|_| {
+                                 tokio::spawn(
+                                    tx_ok.send(DataMsg::WrittenData)
+                                    .map(|_| ())
+                                    .map_err(|_| ())
+                                 );
+                                 ()
+                            })
+                            .map_err(|e| {
+                                // TODO: We can't be sure from the ErrorKind if the writing to the
+                                // storage failed, or the datachannel to the client failed. Fix
+                                // that :)
+                                let resp = match e.kind() {
+                                    std::io::ErrorKind::ConnectionReset => DataMsg::ConnectionReset,
+                                    std::io::ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                                    _ => DataMsg::WriteFailed,
+                                };
+                                tokio::spawn(
+                                    tx.send(resp)
+                                    .map(|_| ())
+                                    .map_err(|_| ())
+                                );
+                                ()
+                            })
+                        );
+                    },
+                    Some(_) => unimplemented!(),
+                    None => unreachable!(),
                 }
             })
             .map_err(|_| ())
@@ -409,10 +450,35 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             );
                             Ok(format!("150 Sending data\r\n"))
                         },
+                        Command::Stor{path: _} => {
+                            let mut session = session.lock().unwrap();
+                            let tx = session.data_cmd_tx.clone();
+                            if tx.is_none() {
+                                // We have no data channel
+                                return Ok(format!("425 No data connection established\r\n"));
+                            }
+                            let tx = tx.unwrap();
+                            session.data_cmd_tx = None;
+                            tokio::spawn(
+                                tx.send(cmd.clone())
+                                .map(|_| ())
+                                .map_err(|_| ())
+                            );
+                            Ok(format!("150 Will retrieve something\r\n"))
+                        }
                     }
                 },
-                Event::DataMsg(_msg) => {
+                Event::DataMsg(DataMsg::SendData) => {
                     Ok(format!("226 Send you something nice\r\n"))
+                },
+                Event::DataMsg(DataMsg::WriteFailed) => {
+                    Ok(format!("451 Failed to write file\r\n"))
+                },
+                Event::DataMsg(DataMsg::ConnectionReset) => {
+                    Ok(format!("426 Datachannel unexpectedly closed\r\n"))
+                },
+                Event::DataMsg(DataMsg::WrittenData) => {
+                    Ok(format!("226 File succesfully written\r\n"))
                 },
             };
             response

@@ -81,10 +81,15 @@ pub enum Command {
     /// The `PORT` command
     Port,
     /// The `RETR` command
-    Retr{
+    Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
     },
+    /// The `STOR` command
+    Stor {
+        /// The path to the file the client would like to store.
+        path: String
+    }
 }
 
 impl Command {
@@ -187,6 +192,15 @@ impl Command {
                 // TODO: Can we do this without allocation?
                 Command::Retr{path: path.to_string()}
             },
+            b"STOR" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.len() == 0 {
+                    return Err(Error::InvalidCommand);
+                }
+                // TODO:: Can we do this without allocation?
+                let path = String::from_utf8_lossy(&path);
+                Command::Stor{path: path.to_string()}
+            }
             _ => return Err(Error::UnknownCommand(format!("{}", std::str::from_utf8(cmd_token)?))),
         };
 

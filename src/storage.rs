@@ -1,13 +1,13 @@
 extern crate std;
 extern crate bytes;
 extern crate tokio;
+extern crate tokio_io;
 extern crate futures;
 
 use std::{fmt,result};
 use self::std::path::{Path,PathBuf};
 use self::std::time::SystemTime;
 
-use std::io::prelude::*;
 
 use self::futures::Future;
 
@@ -40,14 +40,14 @@ pub trait StorageBackend {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
 
     /// Returns the content of a file
-    //fn get<P: AsRef<Path>>(&self, path: P) -> Result<&[u8]>;
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to a file
-    fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()>;
+    // TODO: Get rid of 'static requirement her
+    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = std::io::Error> + Send>;
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.
@@ -79,34 +79,29 @@ impl StorageBackend for Filesystem {
         Ok(Box::new(attr))
     }
 
-    //fn get<P: AsRef<Path>>(&self, path: P) -> tokio::fs::file::OpenFuture<P> {
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = self::tokio::io::Error> + Send> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
         let full_path = self.root.join(path);
-
-        /*
-        let mut f = File::open(full_path)?;
-        // TODO: Try to do this zero-copy (or maybe use the tokio filesystem thingy?)
-        let mut buffer = Vec::new();
-        f.read_to_end(&mut buffer)?;
-        Ok(Bytes::from(buffer))
-        */
-
         Box::new(self::tokio::fs::file::File::open(full_path))
     }
 
-    fn put<P: AsRef<Path>>(&self, bytes: &[u8], path: P) -> Result<()> {
+    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = std::io::Error> + Send> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
         //
         // TODO: Add permission checks
+
         let full_path = self.root.join(path);
-        let mut f = std::fs::File::create(full_path)?;
-        f.write_all(bytes)?;
-        Ok(())
+        let fut = self::tokio::fs::file::File::create(full_path)
+            .and_then(|f| {
+                self::tokio_io::io::copy(bytes, f)
+            })
+            .map(|(n, _, _)| n)
+            ;
+        Box::new(fut)
     }
 }
 
@@ -170,6 +165,8 @@ mod tests {
     use super::*;
     use std::fs::File;
 
+    use std::io::prelude::*;
+
     #[test]
     fn fs_stat() {
         let root = std::env::temp_dir();
@@ -226,10 +223,14 @@ mod tests {
     #[test]
     fn fs_put() {
         let root = std::env::temp_dir();
-
         let orig_content = b"hallo";
         let fs = Filesystem::new(&root);
-        fs.put(orig_content, "greeting.txt").unwrap();
+
+        // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
+        // to completion
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt")).unwrap();
 
         let mut written_content = Vec::new();
         let mut f = File::open(root.join("greeting.txt")).unwrap();
