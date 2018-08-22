@@ -128,18 +128,6 @@ impl Session<storage::Filesystem> {
         }
     }
 
-    /*
-    fn new() -> Self {
-        Session {
-            username: None,
-            is_authenticated: false,
-            storage: None,
-            data_cmd_tx: None,
-            data_cmd_rx: None,
-        }
-    }
-    */
-
     /// socket: the data socket we'll be working with
     /// tx: channel to send the result of our operation on
     /// rx: channel to receive the command on
@@ -189,30 +177,26 @@ impl Session<storage::Filesystem> {
                     }
                     Some(Command::Stor{path}) => {
                         let tx_ok = tx.clone();
+                        let tx_error = tx.clone();
                         tokio::spawn(
                             storage.put(socket, path)
-                            .map(|_| {
-                                 tokio::spawn(
-                                    tx_ok.send(DataMsg::WrittenData)
-                                    .map(|_| ())
-                                    .map_err(|_| ())
-                                 );
-                                 ()
+                            .and_then(|_| {
+                                tx_ok.send(DataMsg::WrittenData)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
                             })
-                            .map_err(|e| {
-                                // TODO: We can't be sure from the ErrorKind if the writing to the
-                                // storage failed, or the datachannel to the client failed. Fix
-                                // that :)
-                                let resp = match e.kind() {
-                                    ErrorKind::ConnectionReset => DataMsg::ConnectionReset,
-                                    ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                            .or_else(|e| {
+                                let msg = match e.kind() {
+                                    ErrorKind::NotFound => DataMsg::NotFound,
+                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
                                     _ => DataMsg::WriteFailed,
+
                                 };
-                                tokio::spawn(
-                                    tx.send(resp)
-                                    .map(|_| ())
-                                    .map_err(|_| ())
-                                );
+                                tx_error.send(msg)
+                            })
+                            .map(|_| ())
+                            .map_err(|e| {
+                                warn!("Failed to send file: {:?}", e);
                                 ()
                             })
                         );
@@ -494,7 +478,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 .map(|_| ())
                                 .map_err(|_| ())
                             );
-                            Ok(format!("150 Will retrieve something\r\n"))
+                            Ok(format!("150 Will send you something\r\n"))
                         }
                     }
                 },
@@ -502,10 +486,10 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                 Event::DataMsg(DataMsg::PermissionDenied) => Ok(format!("550 Permision denied\r\n")),
                 Event::DataMsg(DataMsg::SendingData) => Ok(format!("150 Sending Data\r\n")),
                 Event::DataMsg(DataMsg::SendData) => Ok(format!("226 Send you something nice\r\n")),
-                Event::DataMsg(DataMsg::WriteFailed) => Ok(format!("451 Failed to write file\r\n")),
+                Event::DataMsg(DataMsg::WriteFailed) => Ok(format!("450 Failed to write file\r\n")),
                 Event::DataMsg(DataMsg::ConnectionReset) => Ok(format!("426 Datachannel unexpectedly closed\r\n")),
                 Event::DataMsg(DataMsg::WrittenData) => Ok(format!("226 File succesfully written\r\n")),
-                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok(format!("451 Unknown Error\r\n")),
+                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok(format!("450 Unknown Error\r\n")),
             };
             response
         };
