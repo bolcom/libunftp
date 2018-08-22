@@ -36,6 +36,8 @@ enum DataMsg {
     ConnectionReset,
     // Failed to write data to disk
     WriteFailed,
+    // Started sending data to the client
+    SendingData
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -145,19 +147,23 @@ impl Session<storage::Filesystem> {
             .map(move |(cmd, _): (Option<Command>, _)| {
                 match cmd {
                     Some(Command::Retr{path}) => {
+                        let tx_sending = tx.clone();
                         tokio::spawn(
                             storage.get(path)
                             .and_then(|f| {
-                                self::tokio_io::io::copy(f, socket)
+                                tx_sending.send(DataMsg::SendingData)
+                                .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "bla"))
+                                .and_then(|_| {
+                                    self::tokio_io::io::copy(f, socket)
+                                })
+                                .and_then(|_| {
+                                    tx.send(DataMsg::SendData)
+                                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "bla"))
+                                })
                             })
                             .map(|_| ())
                             .map_err(|_| ())
                          );
-                        tokio::spawn(
-                            tx.send(DataMsg::SendData)
-                            .map(|_| ())
-                            .map_err(|_| ())
-                        );
                     }
                     Some(Command::Stor{path}) => {
                         let tx_ok = tx.clone();
@@ -448,7 +454,9 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 .map(|_| ())
                                 .map_err(|_| ())
                             );
-                            Ok(format!("150 Sending data\r\n"))
+                            // TODO: Return a Option<String> or something, to prevent us from
+                            // returning "" ><
+                            Ok(format!(""))
                         },
                         Command::Stor{path: _} => {
                             let mut session = session.lock().unwrap();
@@ -468,6 +476,9 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         }
                     }
                 },
+                Event::DataMsg(DataMsg::SendingData) => {
+                    Ok(format!("150 Sending Data\r\n"))
+                }
                 Event::DataMsg(DataMsg::SendData) => {
                     Ok(format!("226 Send you something nice\r\n"))
                 },
