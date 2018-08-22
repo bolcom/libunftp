@@ -1,6 +1,6 @@
 .PHONY: watch
 watch:
-	cargo watch -x check -x test -x doc --clear
+	cargo watch -x check -x test --clear
 
 .PHONY: run
 run: debug
