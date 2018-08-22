@@ -25,9 +25,15 @@ use storage;
 use commands;
 use commands::Command;
 
+use self::std::io::ErrorKind;
+
 /// DataMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 enum DataMsg {
+    // Permission Denied
+    PermissionDenied,
+    // File not found
+    NotFound,
     // Send the data to the client
     SendData,
     // We've written the data from the client to the StorageBackend
@@ -37,7 +43,9 @@ enum DataMsg {
     // Failed to write data to disk
     WriteFailed,
     // Started sending data to the client
-    SendingData
+    SendingData,
+    // Unknown Error retrieving file
+    UnknownRetrieveError,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -148,21 +156,35 @@ impl Session<storage::Filesystem> {
                 match cmd {
                     Some(Command::Retr{path}) => {
                         let tx_sending = tx.clone();
+                        let tx_error = tx.clone();
                         tokio::spawn(
                             storage.get(path)
                             .and_then(|f| {
                                 tx_sending.send(DataMsg::SendingData)
-                                .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "bla"))
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
                                 .and_then(|_| {
                                     self::tokio_io::io::copy(f, socket)
                                 })
                                 .and_then(|_| {
                                     tx.send(DataMsg::SendData)
-                                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "bla"))
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
                                 })
                             })
+                            .or_else(|e| {
+                                let msg = match e.kind() {
+                                    ErrorKind::NotFound => DataMsg::NotFound,
+                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                                    _ => DataMsg::UnknownRetrieveError,
+                                };
+                                tx_error.send(msg)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
+                            })
                             .map(|_| ())
-                            .map_err(|_| ())
+                            .map_err(|e| {
+                                warn!("Failed to send file: {:?}", e);
+                                ()
+                            })
                          );
                     }
                     Some(Command::Stor{path}) => {
@@ -182,8 +204,8 @@ impl Session<storage::Filesystem> {
                                 // storage failed, or the datachannel to the client failed. Fix
                                 // that :)
                                 let resp = match e.kind() {
-                                    std::io::ErrorKind::ConnectionReset => DataMsg::ConnectionReset,
-                                    std::io::ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                                    ErrorKind::ConnectionReset => DataMsg::ConnectionReset,
+                                    ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
                                     _ => DataMsg::WriteFailed,
                                 };
                                 tokio::spawn(
@@ -476,21 +498,14 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         }
                     }
                 },
-                Event::DataMsg(DataMsg::SendingData) => {
-                    Ok(format!("150 Sending Data\r\n"))
-                }
-                Event::DataMsg(DataMsg::SendData) => {
-                    Ok(format!("226 Send you something nice\r\n"))
-                },
-                Event::DataMsg(DataMsg::WriteFailed) => {
-                    Ok(format!("451 Failed to write file\r\n"))
-                },
-                Event::DataMsg(DataMsg::ConnectionReset) => {
-                    Ok(format!("426 Datachannel unexpectedly closed\r\n"))
-                },
-                Event::DataMsg(DataMsg::WrittenData) => {
-                    Ok(format!("226 File succesfully written\r\n"))
-                },
+                Event::DataMsg(DataMsg::NotFound) => Ok(format!("550 File not found\r\n")),
+                Event::DataMsg(DataMsg::PermissionDenied) => Ok(format!("550 Permision denied\r\n")),
+                Event::DataMsg(DataMsg::SendingData) => Ok(format!("150 Sending Data\r\n")),
+                Event::DataMsg(DataMsg::SendData) => Ok(format!("226 Send you something nice\r\n")),
+                Event::DataMsg(DataMsg::WriteFailed) => Ok(format!("451 Failed to write file\r\n")),
+                Event::DataMsg(DataMsg::ConnectionReset) => Ok(format!("426 Datachannel unexpectedly closed\r\n")),
+                Event::DataMsg(DataMsg::WrittenData) => Ok(format!("226 File succesfully written\r\n")),
+                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok(format!("451 Unknown Error\r\n")),
             };
             response
         };
