@@ -107,29 +107,26 @@ impl Command {
             b"USER" => {
                 let username = parse_to_eol(cmd_params)?;
                 Command::User{
-                    username: username,
+                    username,
                 }
             },
             b"PASS" => {
                 let password = parse_to_eol(cmd_params)?;
                 Command::Pass{
-                    password: password,
+                    password,
                 }
             }
             b"ACCT" => {
                 let account = parse_to_eol(cmd_params)?;
                 Command::Acct{
-                    account: account,
+                    account,
                 }
             }
             b"SYST" => Command::Syst,
             b"STAT" => {
                 let params = parse_to_eol(cmd_params)?;
-                let mut path = None;
-                if params.len() > 0 {
-                    path = Some(params);
-                }
-                Command::Stat{path: path}
+                let path = if !params.is_empty() { Some(params) } else { None };
+                Command::Stat{path}
             },
             b"TYPE" => {
                 // We don't care about text format conversion, so we'll ignore the params and we're
@@ -163,7 +160,7 @@ impl Command {
             b"HELP" => Command::Help,
             b"NOOP" => {
                 let params = parse_to_eol(cmd_params)?;
-                if params.len() > 0 {
+                if !params.is_empty() {
                     // NOOP params are prohibited
                     return Err(Error::InvalidCommand);
                 }
@@ -171,21 +168,21 @@ impl Command {
             },
             b"PASV" => {
                 let params = parse_to_eol(cmd_params)?;
-                if params.len() > 0 {
+                if !params.is_empty() {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Pasv
             },
             b"PORT" => {
                 let params = parse_to_eol(cmd_params)?;
-                if params.len() == 0 {
+                if params.is_empty() {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Port
             },
             b"RETR" => {
                 let path = parse_to_eol(cmd_params)?;
-                if path.len() == 0 {
+                if path.is_empty() {
                     return Err(Error::InvalidCommand);
                 }
                 let path = String::from_utf8_lossy(&path);
@@ -194,14 +191,14 @@ impl Command {
             },
             b"STOR" => {
                 let path = parse_to_eol(cmd_params)?;
-                if path.len() == 0 {
+                if path.is_empty() {
                     return Err(Error::InvalidCommand);
                 }
                 // TODO:: Can we do this without allocation?
                 let path = String::from_utf8_lossy(&path);
                 Command::Stor{path: path.to_string()}
             }
-            _ => return Err(Error::UnknownCommand(format!("{}", std::str::from_utf8(cmd_token)?))),
+            _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 
         Ok(cmd)

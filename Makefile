@@ -21,3 +21,6 @@ debug:
 .PHONY: test
 test:
 	cargo test
+
+clippy:
+	cargo +nightly clippy

@@ -15,6 +15,10 @@ use self::futures::Future;
 pub trait Metadata {
     /// Returns the length (size) of the file
     fn len(&self) -> u64;
+
+    /// Returns self.len() == 0
+    fn is_empty(&self) -> bool;
+
     /// Returns true if the path is a directory
     fn is_dir(&self) -> bool;
 
@@ -108,6 +112,10 @@ impl StorageBackend for Filesystem {
 impl Metadata for std::fs::Metadata {
     fn len(&self) -> u64 {
         self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     fn is_dir(&self) -> bool {

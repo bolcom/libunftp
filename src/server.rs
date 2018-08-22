@@ -349,7 +349,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let respond = move |event| {
-            let response = match event {
+            match event {
                 Event::Command(cmd) => {
                     match cmd {
                         Command::User{username} => {
@@ -357,7 +357,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             let user = std::str::from_utf8(&username).unwrap();
                             let mut session = session.lock().unwrap();
                             session.username = Some(user.to_string());
-                            Ok(format!("331 Password Required\r\n"))
+                            Ok("331 Password Required\r\n".to_string())
                         },
                         Command::Pass{password} => {
                             // TODO: Don't unwrap here
@@ -369,44 +369,44 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                     match res {
                                         Ok(true) => {
                                             session.is_authenticated = true;
-                                            Ok(format!("230 User logged in, proceed\r\n"))
+                                            Ok("230 User logged in, proceed\r\n".to_string())
                                         },
-                                        Ok(false) => Ok(format!("530 Wrong username or password\r\n")),
+                                        Ok(false) => Ok("530 Wrong username or password\r\n".to_string()),
                                         Err(e) => Err(format!("530 Something went wrong when trying to authenticate: {:?}\r\n", e)),
                                     }
                                 },
-                                None => Ok(format!("530 No username supplied\r\n")),
+                                None => Ok("530 No username supplied\r\n".to_string()),
                             }
                         },
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
                         // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
                         // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => Ok(format!("215 UNIX Type: L8\r\n")),
+                        Command::Syst => Ok("215 UNIX Type: L8\r\n".to_string()),
                         Command::Stat{path} => {
                             match path {
-                                None => Ok(format!("211 I'm just a humble FTP server\r\n")),
+                                None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path).unwrap();
                                     Ok(format!("212 is file: {}\r\n", storage.stat(path).unwrap().is_file()))
                                 },
                             }
                         },
-                        Command::Acct{account: _} => Ok(format!("530 I don't know accounting man\r\n")),
-                        Command::Type => Ok(format!("200 I'm always in binary mode, dude...\r\n")),
+                        Command::Acct{ .. } => Ok("530 I don't know accounting man\r\n".to_string()),
+                        Command::Type => Ok("200 I'm always in binary mode, dude...\r\n".to_string()),
                         Command::Stru{structure} => {
                             match structure {
-                                commands::StruParam::File => Ok(format!("200 We're in File structure mode\r\n")),
-                                _ => Ok(format!("504 Only File structure is supported\r\n")),
+                                commands::StruParam::File => Ok("200 We're in File structure mode\r\n".to_string()),
+                                _ => Ok("504 Only File structure is supported\r\n".to_string()),
                             }
                         },
                         Command::Mode{mode} => {
                             match mode {
-                                commands::ModeParam::Stream => Ok(format!("200 Using Stream transfer mode\r\n")),
-                                _ => Ok(format!("504 Only Stream transfer mode is supported\r\n")),
+                                commands::ModeParam::Stream => Ok("200 Using Stream transfer mode\r\n".to_string()),
+                                _ => Ok("504 Only Stream transfer mode is supported\r\n".to_string()),
                             }
                         },
-                        Command::Help => Ok(format!("214 We haven't implemented a useful HELP command, sorry\r\n")),
-                        Command::Noop => Ok(format!("200 Successfully did nothing\r\n")),
+                        Command::Help => Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string()),
+                        Command::Noop => Ok("200 Successfully did nothing\r\n".to_string()),
                         Command::Pasv => {
                             // TODO: Pick port from port, and on the IP the control channel is
                             // listening on.
@@ -449,8 +449,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
                             Ok(format!("227 Entering Passive Mode ({},{},{},{},{},{})\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
                         },
-                        Command::Port => Ok(format!("502 ACTIVE mode is not supported - use PASSIVE instead\r\n")),
-                        Command::Retr{path: _} => {
+                        Command::Port => Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n".to_string()),
+                        Command::Retr{ .. } => {
                             let mut session = session.lock().unwrap();
                             let tx = session.data_cmd_tx.clone();
                             let tx = tx.unwrap();
@@ -462,14 +462,14 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             );
                             // TODO: Return a Option<String> or something, to prevent us from
                             // returning "" ><
-                            Ok(format!(""))
+                            Ok("".to_string())
                         },
-                        Command::Stor{path: _} => {
+                        Command::Stor{ .. } => {
                             let mut session = session.lock().unwrap();
                             let tx = session.data_cmd_tx.clone();
                             if tx.is_none() {
                                 // We have no data channel
-                                return Ok(format!("425 No data connection established\r\n"));
+                                return Ok("425 No data connection established\r\n".to_string());
                             }
                             let tx = tx.unwrap();
                             session.data_cmd_tx = None;
@@ -478,20 +478,19 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 .map(|_| ())
                                 .map_err(|_| ())
                             );
-                            Ok(format!("150 Will send you something\r\n"))
+                            Ok("150 Will send you something\r\n".to_string())
                         }
                     }
                 },
-                Event::DataMsg(DataMsg::NotFound) => Ok(format!("550 File not found\r\n")),
-                Event::DataMsg(DataMsg::PermissionDenied) => Ok(format!("550 Permision denied\r\n")),
-                Event::DataMsg(DataMsg::SendingData) => Ok(format!("150 Sending Data\r\n")),
-                Event::DataMsg(DataMsg::SendData) => Ok(format!("226 Send you something nice\r\n")),
-                Event::DataMsg(DataMsg::WriteFailed) => Ok(format!("450 Failed to write file\r\n")),
-                Event::DataMsg(DataMsg::ConnectionReset) => Ok(format!("426 Datachannel unexpectedly closed\r\n")),
-                Event::DataMsg(DataMsg::WrittenData) => Ok(format!("226 File succesfully written\r\n")),
-                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok(format!("450 Unknown Error\r\n")),
-            };
-            response
+                Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
+                Event::DataMsg(DataMsg::PermissionDenied) => Ok("550 Permision denied\r\n".to_string()),
+                Event::DataMsg(DataMsg::SendingData) => Ok("150 Sending Data\r\n".to_string()),
+                Event::DataMsg(DataMsg::SendData) => Ok("226 Send you something nice\r\n".to_string()),
+                Event::DataMsg(DataMsg::WriteFailed) => Ok("450 Failed to write file\r\n".to_string()),
+                Event::DataMsg(DataMsg::ConnectionReset) => Ok("426 Datachannel unexpectedly closed\r\n".to_string()),
+                Event::DataMsg(DataMsg::WrittenData) => Ok("226 File succesfully written\r\n".to_string()),
+                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
+            }
         };
 
         let codec = FTPCodec::new();
@@ -502,12 +501,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                 sink.send_all(
                     stream
                     .map_err(|e| format!("{}", e))
-                    .map(|cmd| Event::Command(cmd))
+                    .map(Event::Command)
                     .select(rx
                         // The receiver should never fail, so we should never see this message.
                         // However, we need to map_err anyway to get the types right.
                         .map_err(|_| "Unknown receiver error".to_owned())
-                        .map(|msg| Event::DataMsg(msg))
+                        .map(Event::DataMsg)
                     )
                     .and_then(respond)
                     .map_err(|e| {
