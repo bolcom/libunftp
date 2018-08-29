@@ -236,7 +236,7 @@ impl Session<storage::Filesystem> {
 pub struct Server<S>
     where S: storage::StorageBackend
 {
-    storage: Arc<S>,
+    _storage: Arc<S>,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
 }
@@ -253,7 +253,7 @@ impl Server<storage::Filesystem> {
     /// ```
     pub fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
         Server {
-            storage: Arc::new(storage::Filesystem::new(path)),
+            _storage: Arc::new(storage::Filesystem::new(path)),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
         }
@@ -269,7 +269,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     pub fn new(s: S) -> Self {
         Server {
-            storage: Arc::new(s),
+            _storage: Arc::new(s),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
         }
@@ -344,7 +344,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     }
 
     fn process(&self, socket: TcpStream) {
-        let storage = Arc::clone(&self.storage);
         let authenticator = self.authenticator;
         let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
