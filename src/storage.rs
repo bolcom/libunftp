@@ -92,7 +92,8 @@ impl StorageBackend for Filesystem {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
-        // protect against "../" in `path`.
+        // protect against "../" in `path`. (Check if the std::fs::canonicalize method is
+        // suitable).
         let full_path = self.root.join(path);
         Box::new(tokio::fs::symlink_metadata(full_path))
     }
