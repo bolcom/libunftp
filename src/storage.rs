@@ -5,11 +5,10 @@ extern crate tokio_io;
 extern crate futures;
 
 use std::{fmt,result};
-use self::std::path::{Path,PathBuf};
-use self::std::time::SystemTime;
+use std::path::{Path,PathBuf};
+use std::time::SystemTime;
 
-
-use self::futures::Future;
+use self::futures::{Future, Stream};
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -29,6 +28,16 @@ pub trait Metadata {
     fn modified(&self) -> Result<SystemTime>;
 }
 
+/// Fileinfo describes a file
+pub struct Fileinfo<P>
+    where P: AsRef<Path>
+{
+    /// The full path to the file
+    pub path: P,
+    /// The file's metadata
+    pub metadata: std::fs::Metadata,
+}
+
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
 /// [`Server`], e.g. for a [`Filesystem`] or GCP buckets.
 ///
@@ -44,6 +53,9 @@ pub trait StorageBackend {
 
     /// Returns the `Metadata` for a file
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
+
+    /// Return a list of files in the given directory
+    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf>, Error = Self::Error> + Send>;
 
     /// Returns the content of a file
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
@@ -83,6 +95,29 @@ impl StorageBackend for Filesystem {
         // protect against "../" in `path`.
         let full_path = self.root.join(path);
         Box::new(tokio::fs::symlink_metadata(full_path))
+    }
+
+    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf>, Error = Self::Error> + Send> {
+        //Box::new(self::futures::stream::futures_ordered(futures::err))
+        // TODO: Abstract getting the full path to a separate method
+        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
+        // protect against "../" in `path`.
+        let full_path = match path {
+            Some(path) => self.root.join(path),
+            // TODO: Use cwd as default instead of the root
+            None => self.root.clone(),
+        };
+
+        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(|dir_entry| -> Option<Fileinfo<std::path::PathBuf>> {
+            let path = dir_entry.path();
+            match std::fs::metadata(&path) {
+                Ok(stat)    => Some(Fileinfo{path: path, metadata: stat}),
+                Err(_)      => None,
+            }
+        })
+        ;
+
+        Box::new(fut)
     }
 
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = self::tokio::io::Error> + Send> {
@@ -202,7 +237,32 @@ mod tests {
     }
 
     #[test]
+    fn fs_list() {
+        // Create a temp directory and create some files in it
+        let root = tempfile::tempdir().unwrap();
+        let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
+        let path = file.path().clone();
+        let file = file.as_file();
+        let meta = file.metadata().unwrap();
 
+        // Create a filesystem StorageBackend with our root dir
+        let fs = Filesystem::new(&root.path());
+
+        // Since the filesystem backend is based on futures, we need a runtime to run it
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let my_list = rt.block_on(fs.list(Some(&root.path())).collect()).unwrap();
+
+        assert_eq!(my_list.len(), 1);
+
+        let my_fileinfo = &my_list[0];
+        assert_eq!(my_fileinfo.path, path);
+        assert_eq!(my_fileinfo.metadata.is_dir(), meta.is_dir());
+        assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
+        assert_eq!(my_fileinfo.metadata.len(), meta.len());
+        assert_eq!(my_fileinfo.metadata.modified().unwrap(), meta.modified().unwrap());
+    }
+
+    #[test]
     fn fs_get() {
         let root = std::env::temp_dir();
 
