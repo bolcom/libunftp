@@ -38,10 +38,12 @@ pub trait StorageBackend {
     /// TODO: document
     type File;
     /// TODO: document
+    type Metadata;
+    /// TODO: document
     type Error;
 
     /// Returns the `Metadata` for a file
-    fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>>;
+    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
     /// Returns the content of a file
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
@@ -72,15 +74,15 @@ impl Filesystem {
 
 impl StorageBackend for Filesystem {
     type File =  self::tokio::fs::File;
+    type Metadata = std::fs::Metadata;
     type Error = self::tokio::io::Error;
 
-    fn stat<P: AsRef<Path>>(&self, path: P) -> Result<Box<Metadata>> {
+    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
         let full_path = self.root.join(path);
-        let attr = std::fs::metadata(full_path)?;
-        Ok(Box::new(attr))
+        Box::new(tokio::fs::symlink_metadata(full_path))
     }
 
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = self::tokio::io::Error> + Send> {
@@ -179,14 +181,19 @@ mod tests {
     fn fs_stat() {
         let root = std::env::temp_dir();
 
+        // Create a temp file and get it's metadata
         let file = tempfile::NamedTempFile::new_in(&root).unwrap();
         let path = file.path().clone();
         let file = file.as_file();
         let meta = file.metadata().unwrap();
 
-        let filename = path.file_name().unwrap();
+        // Create a filesystem StorageBackend with the directory containing our temp file as root
         let fs = Filesystem::new(&root);
-        let my_meta = fs.stat(filename).unwrap();
+
+        // Since the filesystem backend is based on futures, we need a runtime to run it
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let filename = path.file_name().unwrap();
+        let my_meta = rt.block_on(fs.stat(filename)).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
