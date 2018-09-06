@@ -95,6 +95,8 @@ pub enum Command {
         /// The path of the file/directory the clients wants to list
         path: Option<String>,
     },
+    /// The `FEAT` command
+    Feat,
 }
 
 impl Command {
@@ -208,6 +210,7 @@ impl Command {
                 let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
                 Command::List{path: path}
             },
+            b"FEAT" => Command::Feat,
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 
@@ -498,12 +501,9 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::List{path: expected_path}));
     }
 
-    /*
     #[test]
-    // TODO: Implement (return Result<Option<T>> from `parse_token` and friends)
-    fn parse_acct_no_account() {
-        let input = b"ACCT \r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    fn parse_feat() {
+        let input = "FEAT\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Feat));
     }
-    */
 }

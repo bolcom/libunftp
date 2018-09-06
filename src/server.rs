@@ -528,6 +528,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             );
                             Ok("150 Sending directory list\r\n".to_string())
                         },
+                        Command::Feat => {
+                            let response =
+                                "211 I support some cool features\r\n\
+                                211 End\r\n".to_string();
+                            Ok(response)
+                        },
                     }
                 },
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
@@ -545,6 +551,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let codec = FTPCodec::new();
         let (sink, stream) = codec.framed(socket).split();
         let task = sink.send(format!("220 {}\r\n", self.greeting))
+            // TODO: Send proper 502 if the client sends a unknown command
             .and_then(|sink| sink.flush())
             .and_then(move |sink| {
                 sink.send_all(
