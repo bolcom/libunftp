@@ -89,7 +89,12 @@ pub enum Command {
     Stor {
         /// The path to the file the client would like to store.
         path: String
-    }
+    },
+    /// The `LIST` command
+    List {
+        /// The path of the file/directory the clients wants to list
+        path: Option<String>,
+    },
 }
 
 impl Command {
@@ -197,7 +202,12 @@ impl Command {
                 // TODO:: Can we do this without allocation?
                 let path = String::from_utf8_lossy(&path);
                 Command::Stor{path: path.to_string()}
-            }
+            },
+            b"LIST" => {
+                let path = parse_to_eol(cmd_params)?;
+                let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
+                Command::List{path: path}
+            },
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 
@@ -476,6 +486,16 @@ mod tests {
 
         let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
         assert_eq!(Command::parse(input).unwrap(), Command::Port);
+    }
+
+    #[test]
+    fn parse_list() {
+        let input = "LIST\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::List{path: None}));
+
+        let input = "LIST tmp\r\n";
+        let expected_path = Some("tmp".to_string());
+        assert_eq!(Command::parse(input), Ok(Command::List{path: expected_path}));
     }
 
     /*

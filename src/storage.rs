@@ -26,16 +26,52 @@ pub trait Metadata {
 
     /// Returns the last modified time of the path
     fn modified(&self) -> Result<SystemTime>;
+
+    /// Returns the gid of the file
+    fn gid(&self) -> u32;
+
+    /// Returns the uid of the file
+    fn uid(&self) -> u32;
 }
 
 /// Fileinfo describes a file
-pub struct Fileinfo<P>
-    where P: AsRef<Path>
+pub struct Fileinfo<P, M>
+    where P: AsRef<Path>,
+    M: Metadata,
 {
     /// The full path to the file
     pub path: P,
     /// The file's metadata
-    pub metadata: std::fs::Metadata,
+    pub metadata: M,
+}
+
+impl<P, M> std::fmt::Display for Fileinfo<P, M>
+    where P: AsRef<Path>,
+    M: Metadata,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{filetype}{permissions}     {owner} {group} {size} {modified} {path}{slash}",
+               filetype = if self.metadata.is_dir() {
+                   "d"
+               } else {
+                   "-"
+               },
+               // TODO: Don't hardcode permissions ;)
+               permissions = "rwxr-xr-x",
+               // TODO: Consider showing canonical names here
+               owner = self.metadata.uid(),
+               group = self.metadata.gid(),
+               size = self.metadata.len(),
+               // TODO: Fill in modified time
+               modified = "",
+               path = self.path.as_ref().to_string_lossy(),
+               slash = if self.metadata.is_dir() {
+                   "/"
+               } else {
+                   ""
+               },
+        )
+    }
 }
 
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
@@ -55,7 +91,42 @@ pub trait StorageBackend {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
     /// Return a list of files in the given directory
-    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf>, Error = Self::Error> + Send>;
+    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> where <Self as StorageBackend>::Metadata: Metadata;
+
+    /// Return some bytes that make up a directory listing that can immediately be send to the
+    /// client
+    // TODO: Find out why the 'where' is necessary. We only need it when we `format!`.
+    // TODO: Find out if we can do this without the `'static` requirements. Perhaps this is easiest
+    // to do when we migrate to async/await syntax.
+    fn list_fmt<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+        where <Self as StorageBackend>::Metadata: Metadata + 'static,
+              <Self as StorageBackend>::Error: Send + 'static,
+    {
+        //let res: Vec<u8> = Vec::new();
+
+        let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        let stream: Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(path);
+        let res_work = res.clone();
+        let fut = stream.for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
+            let mut res = res_work.lock().unwrap();
+            let fmt = format!("{}\r\n", file);
+            let fmt_vec = fmt.into_bytes();
+            res.extend_from_slice(&fmt_vec);
+            Ok(())
+        }).and_then(|_| {
+            Ok(())
+        }).
+        map(move |_| {
+            std::sync::Arc::try_unwrap(res).expect("failed try_unwrap").into_inner().unwrap()
+        }).map(move |res| {
+            std::io::Cursor::new(res)
+        }).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::Other, "shut up")
+        });
+
+        Box::new(fut)
+    }
 
     /// Returns the content of a file
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
@@ -98,8 +169,9 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::symlink_metadata(full_path))
     }
 
-    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf>, Error = Self::Error> + Send> {
-        //Box::new(self::futures::stream::futures_ordered(futures::err))
+    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+        where <Self as StorageBackend>::Metadata: Metadata
+    {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
@@ -109,7 +181,7 @@ impl StorageBackend for Filesystem {
             None => self.root.clone(),
         };
 
-        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(|dir_entry| -> Option<Fileinfo<std::path::PathBuf>> {
+        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(|dir_entry| {
             let path = dir_entry.path();
             match std::fs::metadata(&path) {
                 Ok(stat)    => Some(Fileinfo{path: path, metadata: stat}),
@@ -147,6 +219,7 @@ impl StorageBackend for Filesystem {
     }
 }
 
+use std::os::unix::fs::MetadataExt;
 impl Metadata for std::fs::Metadata {
     fn len(&self) -> u64 {
         self.len()
@@ -166,6 +239,14 @@ impl Metadata for std::fs::Metadata {
 
     fn modified(&self) -> Result<SystemTime> {
         self.modified().map_err(|e| e.into())
+    }
+
+    fn gid(&self) -> u32 {
+        MetadataExt::gid(self)
+    }
+
+    fn uid(&self) -> u32 {
+        MetadataExt::uid(self)
     }
 }
 
@@ -264,6 +345,25 @@ mod tests {
     }
 
     #[test]
+    fn fs_list_fmt() {
+        // Create a temp directory and create some files in it
+        let root = tempfile::tempdir().unwrap();
+        let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
+        let path = file.path().clone();
+
+        // Create a filesystem StorageBackend with our root dir
+        let fs = Filesystem::new(&root.path());
+
+        // Since the filesystem backend is based on futures, we need a runtime to run it
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let my_list = rt.block_on(fs.list_fmt(Some(&root.path()))).unwrap();
+
+        let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
+
+        assert!(my_list.contains(path.to_str().unwrap()));
+    }
+
+    #[test]
     fn fs_get() {
         let root = std::env::temp_dir();
 
@@ -313,5 +413,26 @@ mod tests {
         f.read_to_end(&mut written_content).unwrap();
 
         assert_eq!(orig_content, written_content.as_slice());
+    }
+
+    #[test]
+    fn fileinfo_fmt() {
+        struct MockMetadata{};
+        impl Metadata for MockMetadata {
+            fn len(&self) -> u64 { 5 }
+            fn is_empty(&self) -> bool { false }
+            fn is_dir(&self) -> bool { false }
+            fn is_file(&self) -> bool { true }
+            fn modified(&self) -> Result<SystemTime> { Ok(std::time::SystemTime::UNIX_EPOCH) }
+            fn uid(&self) -> u32 { 1 }
+            fn gid(&self) -> u32 { 2 }
+        }
+
+        let dir = std::env::temp_dir();
+        let meta = MockMetadata{};
+        let fileinfo = Fileinfo{path: dir.to_str().unwrap(), metadata: meta};
+        let my_format = format!("{}", fileinfo);
+        let format = format!("-rwxr-xr-x     1 2 5  {}", dir.to_str().unwrap());
+        assert_eq!(my_format, format);
     }
 }

@@ -46,6 +46,8 @@ enum DataMsg {
     SendingData,
     // Unknown Error retrieving file
     UnknownRetrieveError,
+    // Listed the directory successfully
+    DirectorySuccesfullyListed,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -201,6 +203,35 @@ impl Session<storage::Filesystem> {
                             })
                         );
                     },
+                    Some(Command::List{path}) => {
+                        let tx_ok = tx.clone();
+                        let tx_error = tx.clone();
+                        tokio::spawn(
+                            storage.list_fmt(path)
+                            .and_then(|res| tokio::io::copy(res, socket))
+                            .and_then(|_| {
+                                tx_ok.send(DataMsg::DirectorySuccesfullyListed)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
+                            })
+                            .or_else(|e| {
+                                let msg = match e.kind() {
+                                    // TODO: Consider making these events unique (so don't reuse
+                                    // the `Stor` messages here)
+                                    ErrorKind::NotFound => DataMsg::NotFound,
+                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                                    _ => DataMsg::WriteFailed,
+                                };
+                                tx_error.send(msg)
+                            })
+                            .map(|_| ())
+                            .map_err(|e| {
+                                warn!("Failed to send directory list: {:?}", e);
+                                ()
+                            })
+                        );
+                    },
+					// TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(_) => unimplemented!(),
                     None => unreachable!(),
                 }
@@ -386,7 +417,9 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path).unwrap();
-                                    Ok(format!("212 is file: {}\r\n", storage.stat(path).unwrap().is_file()))
+                                    // TODO: Implement :)
+                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
+                                    Ok("504 Stat with paths unsupported atm\r\n".to_string())
                                 },
                             }
                         },
@@ -409,7 +442,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         Command::Pasv => {
                             // TODO: Pick port from port, and on the IP the control channel is
                             // listening on.
-                            let addr_s = "127.0.0.1:1111";
+                            let addr_s = "127.0.0.1:1112";
                             let addr: std::net::SocketAddr = addr_s.parse().unwrap();
                             let listener = TcpListener::bind(&addr).unwrap();
 
@@ -478,7 +511,23 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 .map_err(|_| ())
                             );
                             Ok("150 Will send you something\r\n".to_string())
-                        }
+                        },
+                        Command::List{ .. } => {
+                            let mut session = session.lock().unwrap();
+                            let tx = session.data_cmd_tx.clone();
+                            if tx.is_none() {
+                                // We don't have a data channel
+                                return Ok("425 No data connection established\r\n".to_string());
+                            }
+                            let tx = tx.unwrap();
+                            session.data_cmd_tx = None;
+                            tokio::spawn(
+                                tx.send(cmd.clone())
+                                .map(|_| ())
+                                .map_err(|_| ())
+                            );
+                            Ok("150 Sending directory list\r\n".to_string())
+                        },
                     }
                 },
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
@@ -489,6 +538,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                 Event::DataMsg(DataMsg::ConnectionReset) => Ok("426 Datachannel unexpectedly closed\r\n".to_string()),
                 Event::DataMsg(DataMsg::WrittenData) => Ok("226 File succesfully written\r\n".to_string()),
                 Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
+                Event::DataMsg(DataMsg::DirectorySuccesfullyListed) => Ok("226 Listed the directory\r\n".to_string()),
             }
         };
 

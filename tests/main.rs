@@ -4,6 +4,9 @@ extern crate ftp;
 use std::{thread, time};
 use ftp::FtpStream;
 
+// TODO: Replace `unwrap()` in tests with `expect()`, so it's more clear what
+// went wrong if a test fails.
+
 macro_rules! start_server {
     ( $addr:expr, $path:expr ) => {
         thread::spawn(move || {
@@ -95,4 +98,29 @@ fn put() {
     // retrieve file back again, and check if we got the same back.
     let remote_data = ftp_stream.simple_retr("greeting.txt").unwrap().into_inner();
     assert_eq!(remote_data, content);
+}
+
+#[test]
+fn list() {
+    let addr = "127.0.0.1:1239";
+    let root = std::env::temp_dir();
+    let path = root.clone();
+    start_server!(addr, path);
+
+    // Create a filename in the ftp root that we will look for in the `LIST` output
+    let path = root.join("test.txt");
+    {
+        let _f = std::fs::File::create(path);
+    }
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let list = ftp_stream.list(None).unwrap();
+    let mut found = false;
+    for entry in list {
+        if entry.contains("test.txt") {
+            found = true;
+            break;
+        }
+    }
+    assert!(found);
 }
