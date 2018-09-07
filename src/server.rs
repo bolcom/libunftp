@@ -117,16 +117,19 @@ struct Session<S>
     storage: Arc<S>,
     data_cmd_tx: Option<mpsc::Sender<Command>>,
     data_cmd_rx: Option<mpsc::Receiver<Command>>,
+    cwd: std::path::PathBuf,
 }
 
 impl Session<storage::Filesystem> {
-    fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
+    fn with_root<P: Into<std::path::PathBuf> + Clone>(path: P) -> Self {
+        let cwd = path.clone().into();
         Session {
             username: None,
             is_authenticated: false,
             storage: Arc::new(storage::Filesystem::new(path)),
             data_cmd_tx: None,
             data_cmd_rx: None,
+            cwd: cwd,
         }
     }
 
@@ -533,6 +536,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 "211 I support some cool features\r\n\
                                 211 End\r\n".to_string();
                             Ok(response)
+                        },
+                        Command::Pwd => {
+                            let session = session.lock().unwrap();
+                            // TODO: properly escape double quotes in `cwd`
+                            Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
                         },
                     }
                 },

@@ -97,6 +97,8 @@ pub enum Command {
     },
     /// The `FEAT` command
     Feat,
+    /// The `PWD` command
+    Pwd,
 }
 
 impl Command {
@@ -211,6 +213,13 @@ impl Command {
                 Command::List{path: path}
             },
             b"FEAT" => Command::Feat,
+            b"PWD" | b"XPWD" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Pwd
+            },
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 
@@ -506,4 +515,13 @@ mod tests {
         let input = "FEAT\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Feat));
     }
+
+    #[test]
+    fn parse_pwd() {
+        let input = "PWD\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Pwd));
+
+        let input = "PWD bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+     }
 }

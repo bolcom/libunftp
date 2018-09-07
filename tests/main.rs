@@ -124,3 +124,17 @@ fn list() {
     }
     assert!(found);
 }
+
+#[test]
+fn pwd() {
+    let addr = "127.0.0.1:1240";
+    let root = std::env::temp_dir();
+    let path = root.clone();
+    start_server!(addr, path);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    println!("hoi");
+    let pwd = ftp_stream.pwd().unwrap();
+    println!("doei");
+    assert_eq!(&pwd, root.to_str().unwrap());
+}
