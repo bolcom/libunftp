@@ -1,5 +1,6 @@
 extern crate firetrap;
 extern crate ftp;
+extern crate tempfile;
 
 use std::{thread, time};
 use ftp::FtpStream;
@@ -133,8 +134,22 @@ fn pwd() {
     start_server!(addr, path);
 
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
-    println!("hoi");
     let pwd = ftp_stream.pwd().unwrap();
-    println!("doei");
     assert_eq!(&pwd, root.to_str().unwrap());
+}
+
+#[test]
+fn cwd() {
+    let addr = "127.0.0.1:1241";
+    let root = std::env::temp_dir();
+    let path = root.clone();
+    start_server!(addr, root);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let pwd = ftp_stream.pwd().unwrap();
+    let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
+    let basename = dir_in_root.path().file_name().unwrap();
+    ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
+    let new_pwd = ftp_stream.pwd().unwrap();
+    assert_eq!(std::path::Path::new(&new_pwd), std::path::Path::new(&pwd).join(&new_pwd));
 }
