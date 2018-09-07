@@ -99,6 +99,11 @@ pub enum Command {
     Feat,
     /// The `PWD` command
     Pwd,
+    /// The `CWD` command
+    Cwd {
+        /// The path the client would like to change directory to.
+        path: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -225,6 +230,15 @@ impl Command {
                     return Err(Error::InvalidCommand);
                 }
                 Command::Pwd
+            },
+            b"CWD" | b"XCWD" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.is_empty() {
+                    return Err(Error::InvalidCommand);
+                }
+                let path = String::from_utf8_lossy(&path).to_string();
+                let path = path.into();
+                Command::Cwd{path}
             },
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
@@ -532,5 +546,17 @@ mod tests {
 
         let input = "PWD bla\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+    }
+
+    #[test]
+    fn parse_cwd() {
+        let input = "CWD\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "CWD /tmp\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Cwd{path: "/tmp".into()}));
+
+        let input = "CWD public\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Cwd{path: "public".into()}));
     }
 }

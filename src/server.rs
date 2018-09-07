@@ -542,6 +542,14 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             // TODO: properly escape double quotes in `cwd`
                             Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
                         },
+                        Command::Cwd{path} => {
+                            // TODO: We current accept all CWD requests. Consider only allowing
+                            // this if the directory actually exists and the user has the proper
+                            // permission.
+                            let mut session = session.lock().unwrap();
+                            session.cwd.push(path);
+                            Ok("250 Okay.\r\n".to_string())
+                        },
                     }
                 },
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
