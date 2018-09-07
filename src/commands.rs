@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     // According to RFC 959, verbs should be interpreted without regards to case
-    fn pars_user_cmd_mixed_case() {
+    fn parse_user_cmd_mixed_case() {
         let input = "uSeR Dolores\r\n";
         assert_eq!(Command::parse(input), Err(Error::UnknownCommand("uSeR".to_owned())));
     }
