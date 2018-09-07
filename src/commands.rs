@@ -212,7 +212,13 @@ impl Command {
                 let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
                 Command::List{path: path}
             },
-            b"FEAT" => Command::Feat,
+            b"FEAT" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Feat
+            },
             b"PWD" | b"XPWD" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
@@ -514,6 +520,9 @@ mod tests {
     fn parse_feat() {
         let input = "FEAT\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Feat));
+
+        let input = "FEAT bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
     #[test]
@@ -523,5 +532,5 @@ mod tests {
 
         let input = "PWD bla\r\n";
         assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
-     }
+    }
 }
