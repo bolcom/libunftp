@@ -121,15 +121,14 @@ struct Session<S>
 }
 
 impl Session<storage::Filesystem> {
-    fn with_root<P: Into<std::path::PathBuf> + Clone>(path: P) -> Self {
-        let cwd = path.clone().into();
+    fn with_root<P: Into<std::path::PathBuf> + Clone>(root: P) -> Self {
         Session {
             username: None,
             is_authenticated: false,
-            storage: Arc::new(storage::Filesystem::new(path)),
+            storage: Arc::new(storage::Filesystem::new(root)),
             data_cmd_tx: None,
             data_cmd_rx: None,
-            cwd: cwd,
+            cwd: "/".into(),
         }
     }
 

@@ -135,7 +135,7 @@ fn pwd() {
 
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
     let pwd = ftp_stream.pwd().unwrap();
-    assert_eq!(&pwd, root.to_str().unwrap());
+    assert_eq!(&pwd, "/");
 }
 
 #[test]

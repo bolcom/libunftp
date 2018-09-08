@@ -180,11 +180,15 @@ impl StorageBackend for Filesystem {
             // TODO: Use cwd as default instead of the root
             None => self.root.clone(),
         };
+        let prefix = self.root.clone();
 
-        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(|dir_entry| {
+        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(move |dir_entry| {
+            let prefix = prefix.clone();
             let path = dir_entry.path();
-            match std::fs::metadata(&path) {
-                Ok(stat)    => Some(Fileinfo{path: path, metadata: stat}),
+            let relpath = path.strip_prefix(prefix).unwrap();
+            let relpath = std::path::PathBuf::from(relpath);
+            match std::fs::metadata(dir_entry.path()) {
+                Ok(stat)    => Some(Fileinfo{path: relpath, metadata: stat}),
                 Err(_)      => None,
             }
         })
@@ -324,6 +328,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
         let path = file.path().clone();
+        let relpath = path.strip_prefix(&root.path()).unwrap();
         let file = file.as_file();
         let meta = file.metadata().unwrap();
 
@@ -337,7 +342,7 @@ mod tests {
         assert_eq!(my_list.len(), 1);
 
         let my_fileinfo = &my_list[0];
-        assert_eq!(my_fileinfo.path, path);
+        assert_eq!(my_fileinfo.path, relpath);
         assert_eq!(my_fileinfo.metadata.is_dir(), meta.is_dir());
         assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
         assert_eq!(my_fileinfo.metadata.len(), meta.len());
@@ -350,6 +355,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
         let path = file.path().clone();
+        let relpath = path.strip_prefix(&root.path()).unwrap();
 
         // Create a filesystem StorageBackend with our root dir
         let fs = Filesystem::new(&root.path());
@@ -360,7 +366,7 @@ mod tests {
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
 
-        assert!(my_list.contains(path.to_str().unwrap()));
+        assert!(my_list.contains(relpath.to_str().unwrap()));
     }
 
     #[test]
