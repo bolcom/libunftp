@@ -140,7 +140,6 @@ impl Session<storage::Filesystem> {
 
         let rx = self.data_cmd_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
-
         let task = rx
             .take(1)
             .into_future()
@@ -272,6 +271,7 @@ pub struct Server<S>
     _storage: Arc<S>,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
+    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
 }
 
 impl Server<storage::Filesystem> {
@@ -285,11 +285,13 @@ impl Server<storage::Filesystem> {
     /// let server = Server::with_root("/srv/ftp");
     /// ```
     pub fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
-        Server {
+        let server = Server {
             _storage: Arc::new(storage::Filesystem::new(path)),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
-        }
+            passive_addrs: Arc::new(vec![]),
+        };
+        server.passive_ports(49152..65535)
     }
 
 }
@@ -301,11 +303,13 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     pub fn new(s: S) -> Self {
-        Server {
+        let server = Server {
             _storage: Arc::new(s),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
-        }
+            passive_addrs: Arc::new(vec![]),
+        };
+        server.passive_ports(49152..65535)
     }
 
     /// Set the greeting that will be sent to the client after connecting.
@@ -324,6 +328,32 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
         self.greeting = greeting;
+        self
+    }
+
+    /// Set the range of passive ports that we'll use for passive connections.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_root("/tmp").passive_ports(49152..65535);
+    ///
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_root("/tmp");
+    /// server.passive_ports(49152..65535);
+    /// ```
+    pub fn passive_ports(mut self, range: std::ops::Range<u16>) -> Self {
+        let mut addrs = vec!();
+        for port in range {
+            let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
+            let addr = std::net::SocketAddr::new(ip, port);
+            addrs.push(addr);
+        }
+        self.passive_addrs = Arc::new(addrs);
         self
     }
 
@@ -380,6 +410,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let authenticator = self.authenticator;
         let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
+        let passive_addrs = Arc::clone(&self.passive_addrs);
+
         let respond = move |event| {
             match event {
                 Event::Command(cmd) => {
@@ -442,13 +474,13 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         Command::Help => Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string()),
                         Command::Noop => Ok("200 Successfully did nothing\r\n".to_string()),
                         Command::Pasv => {
-                            // TODO: Pick port from port, and on the IP the control channel is
-                            // listening on.
-                            let addr_s = "127.0.0.1:1112";
-                            let addr: std::net::SocketAddr = addr_s.parse().unwrap();
-                            let listener = TcpListener::bind(&addr).unwrap();
+                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice()).unwrap();
+                            let addr = match listener.local_addr().unwrap() {
+                                std::net::SocketAddr::V4(addr) => addr,
+                                std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
+                            };
+                            let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default()).unwrap();
 
-                            let addr: std::net::SocketAddrV4 = addr_s.parse().unwrap();
                             let octets = addr.ip().octets();
                             let port = addr.port();
                             let p1 = port >> 8;
