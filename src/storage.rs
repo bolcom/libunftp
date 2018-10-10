@@ -3,12 +3,15 @@ extern crate bytes;
 extern crate tokio;
 extern crate tokio_io;
 extern crate futures;
+extern crate chrono;
 
 use std::{fmt,result};
 use std::path::{Path,PathBuf};
 use std::time::SystemTime;
 
 use self::futures::{Future, Stream};
+
+use self::chrono::prelude::*;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -50,7 +53,8 @@ impl<P, M> std::fmt::Display for Fileinfo<P, M>
     M: Metadata,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{filetype}{permissions}     {owner} {group} {size} {modified} {path}{slash}",
+        let modified: DateTime<Local> = DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
+        write!(f, "{filetype}{permissions}     {owner} {group} {size} {modified} {path}",
                filetype = if self.metadata.is_dir() {
                    "d"
                } else {
@@ -62,14 +66,8 @@ impl<P, M> std::fmt::Display for Fileinfo<P, M>
                owner = self.metadata.uid(),
                group = self.metadata.gid(),
                size = self.metadata.len(),
-               // TODO: Fill in modified time
-               modified = "",
+               modified = modified.format("%b %d %Y"),
                path = self.path.as_ref().to_string_lossy(),
-               slash = if self.metadata.is_dir() {
-                   "/"
-               } else {
-                   ""
-               },
         )
     }
 }
@@ -438,7 +436,7 @@ mod tests {
         let meta = MockMetadata{};
         let fileinfo = Fileinfo{path: dir.to_str().unwrap(), metadata: meta};
         let my_format = format!("{}", fileinfo);
-        let format = format!("-rwxr-xr-x     1 2 5  {}", dir.to_str().unwrap());
+        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", dir.to_str().unwrap());
         assert_eq!(my_format, format);
     }
 }
