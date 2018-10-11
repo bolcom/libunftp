@@ -146,10 +146,30 @@ fn cwd() {
     start_server!(addr, root);
 
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
-    let pwd = ftp_stream.pwd().unwrap();
     let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
     let basename = dir_in_root.path().file_name().unwrap();
+
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
-    let new_pwd = ftp_stream.pwd().unwrap();
-    assert_eq!(std::path::Path::new(&new_pwd), std::path::Path::new(&pwd).join(&new_pwd));
+    let pwd = ftp_stream.pwd().unwrap();
+    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+}
+
+#[test]
+fn cdup() {
+    let addr = "127.0.0.1:1242";
+    let root = std::env::temp_dir();
+    let path = root.clone();
+    start_server!(addr, root);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
+    let basename = dir_in_root.path().file_name().unwrap();
+
+    ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
+    let pwd = ftp_stream.pwd().unwrap();
+    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+
+    ftp_stream.cdup().unwrap();
+    let pwd = ftp_stream.pwd().unwrap();
+    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/"));
 }

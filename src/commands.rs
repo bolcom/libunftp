@@ -255,7 +255,13 @@ impl Command {
                 let path = path.into();
                 Command::Cwd{path}
             },
-            b"CDUP" => Command::Cdup,
+            b"CDUP" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(Error::InvalidCommand);
+                }
+                Command::Cdup
+            },
             b"OPTS" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
@@ -585,6 +591,15 @@ mod tests {
 
         let input = "CWD public\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Cwd{path: "public".into()}));
+    }
+
+    #[test]
+    fn parse_cdup() {
+        let input = "CDUP\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Cdup));
+
+        let input = "CDUP bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
     }
 
     #[test]
