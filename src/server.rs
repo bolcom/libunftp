@@ -140,6 +140,7 @@ impl Session<storage::Filesystem> {
 
         let rx = self.data_cmd_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
+        let cwd = self.cwd.clone();
         let task = rx
             .take(1)
             .into_future()
@@ -205,6 +206,10 @@ impl Session<storage::Filesystem> {
                         );
                     },
                     Some(Command::List{path}) => {
+                        let path = match path {
+                            Some(path) => cwd.join(path),
+                            None => cwd,
+                        };
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
@@ -504,7 +509,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                         let tx = tx.clone();
                                         let session = session.clone();
                                         let mut session = session.lock().unwrap_or_else(|res| {
-                                            println!("session lock() result: {}", res);
+                                            error!("session lock() result: {}", res);
                                             panic!()
                                         });
                                         session.process_data(socket, tx);
@@ -579,6 +584,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             // permission.
                             let mut session = session.lock().unwrap();
                             session.cwd.push(path);
+                            Ok("250 Okay.\r\n".to_string())
+                        },
+                        Command::Cdup => {
+                            let mut session = session.lock().unwrap();
+                            session.cwd.pop();
                             Ok("250 Okay.\r\n".to_string())
                         },
                     }

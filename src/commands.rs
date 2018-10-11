@@ -104,6 +104,8 @@ pub enum Command {
         /// The path the client would like to change directory to.
         path: std::path::PathBuf,
     },
+    /// The `CDUP` command
+    Cdup,
 }
 
 impl Command {
@@ -240,6 +242,7 @@ impl Command {
                 let path = path.into();
                 Command::Cwd{path}
             },
+            b"CDUP" => Command::Cdup,
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 

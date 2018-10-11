@@ -67,7 +67,7 @@ impl<P, M> std::fmt::Display for Fileinfo<P, M>
                group = self.metadata.gid(),
                size = self.metadata.len(),
                modified = modified.format("%b %d %Y"),
-               path = self.path.as_ref().to_string_lossy(),
+               path = self.path.as_ref().components().last().unwrap().as_os_str().to_string_lossy(),
         )
     }
 }
@@ -89,18 +89,17 @@ pub trait StorageBackend {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
     /// Return a list of files in the given directory
-    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> where <Self as StorageBackend>::Metadata: Metadata;
+    fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> where <Self as StorageBackend>::Metadata: Metadata;
 
     /// Return some bytes that make up a directory listing that can immediately be send to the
     /// client
     // TODO: Find out why the 'where' is necessary. We only need it when we `format!`.
     // TODO: Find out if we can do this without the `'static` requirements. Perhaps this is easiest
     // to do when we migrate to async/await syntax.
-    fn list_fmt<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    fn list_fmt<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
               <Self as StorageBackend>::Error: Send + 'static,
     {
-        //let res: Vec<u8> = Vec::new();
 
         let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
@@ -167,17 +166,23 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::symlink_metadata(full_path))
     }
 
-    fn list<P: AsRef<Path>>(&self, path: Option<P>) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata
     {
         // TODO: Abstract getting the full path to a separate method
         // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
         // protect against "../" in `path`.
-        let full_path = match path {
-            Some(path) => self.root.join(path),
-            // TODO: Use cwd as default instead of the root
-            None => self.root.clone(),
+        let path = path.as_ref();
+        let full_path = if path.eq(Path::new("/")) {
+            self.root.clone()
+        } else {
+            if path.starts_with("/") {
+                self.root.join(path.strip_prefix("/").unwrap())
+            } else {
+                self.root.join(path)
+            }
         };
+
         let prefix = self.root.clone();
 
         let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(move |dir_entry| {
@@ -335,7 +340,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list(Some(&root.path())).collect()).unwrap();
+        let my_list = rt.block_on(fs.list("/").collect()).unwrap();
 
         assert_eq!(my_list.len(), 1);
 
@@ -360,7 +365,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list_fmt(Some(&root.path()))).unwrap();
+        let my_list = rt.block_on(fs.list_fmt("/")).unwrap();
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
 
@@ -436,7 +441,7 @@ mod tests {
         let meta = MockMetadata{};
         let fileinfo = Fileinfo{path: dir.to_str().unwrap(), metadata: meta};
         let my_format = format!("{}", fileinfo);
-        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", dir.to_str().unwrap());
+        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", dir.strip_prefix("/").unwrap().to_str().unwrap());
         assert_eq!(my_format, format);
     }
 }
