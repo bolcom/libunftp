@@ -33,6 +33,14 @@ pub enum ModeParam {
     Compressed,
 }
 
+/// The parameter that can be given to the `OPTS` command, specifying the option the client wants
+/// to set.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Opt {
+    /// The client wants us to enable UTF-8 encoding for file paths and such.
+    UTF8,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 /// The FTP commands.
 pub enum Command {
@@ -106,6 +114,11 @@ pub enum Command {
     },
     /// The `CDUP` command
     Cdup,
+    /// The `OPTS` command
+    Opts {
+        /// The option the client wants to set
+        option: Opt
+    }
 }
 
 impl Command {
@@ -243,6 +256,17 @@ impl Command {
                 Command::Cwd{path}
             },
             b"CDUP" => Command::Cdup,
+            b"OPTS" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(Error::InvalidCommand)
+                }
+
+                match &params[..] {
+                    b"UTF8"  => Command::Opts{option: Opt::UTF8},
+                    _       => return Err(Error::InvalidCommand),
+                }
+            },
             _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
         };
 
@@ -561,5 +585,17 @@ mod tests {
 
         let input = "CWD public\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Cwd{path: "public".into()}));
+    }
+
+    #[test]
+    fn parse_opts() {
+        let input = "OPTS\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "OPTS bla\r\n";
+        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+
+        let input = "OPTS UTF8\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Opts{option: Opt::UTF8}));
     }
 }

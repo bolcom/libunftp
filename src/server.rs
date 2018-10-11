@@ -591,6 +591,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             session.cwd.pop();
                             Ok("250 Okay.\r\n".to_string())
                         },
+                        Command::Opts{option} => {
+                            match option {
+                                commands::Opt::UTF8 => Ok("250 Okay, I'm always in UTF8 mode.\r\n".to_string())
+                            }
+                        },
                     }
                 },
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
