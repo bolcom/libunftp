@@ -77,7 +77,7 @@ fn get() {
 
     // Retrieve the remote file
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
-    let remote_file = ftp_stream.simple_retr(filename.to_str().unwrap()).unwrap();
+    let remote_file = ftp_stream.simple_retr("bla.txt").unwrap();
     let remote_data = remote_file.into_inner();
 
     assert_eq!(remote_data, data);

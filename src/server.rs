@@ -151,6 +151,7 @@ impl Session<storage::Filesystem> {
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.get(path)
+                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                             .and_then(|f| {
                                 tx_sending.send(DataMsg::SendingData)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
@@ -184,6 +185,7 @@ impl Session<storage::Filesystem> {
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.put(socket, path)
+                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
                             .and_then(|_| {
                                 tx_ok.send(DataMsg::WrittenData)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))

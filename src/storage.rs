@@ -133,7 +133,7 @@ pub trait StorageBackend {
 
     /// Write the given bytes to a file
     // TODO: Get rid of 'static requirement her
-    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = std::io::Error> + Send>;
+    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.
@@ -150,37 +150,67 @@ impl Filesystem {
             root: root.into(),
         }
     }
+
+    /// Returns the canonical path corresponding to the input path, with symlinks and sequences
+    /// like '../' resolved.
+    ///
+    /// It is part of the `Filesystem` implementation, because symlinks and sequences like '../'
+    /// only have special meaning with regards to a Filesystem backend. When implementing other
+    /// backends, we will likely not support symlinks, and '..' will be a regular directory name. I
+    /// might have to change my mind on this though, we'll see how it goes when implementing other
+    /// backends.
+    fn real_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
+        Ok(std::fs::canonicalize(path)?)
+    }
+
+    /// Returns the full, absolute and canonical path corresponding to the (relative to FTP root)
+    /// input path, resolving symlinks and sequences like '../'.
+    fn full_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
+        // `path.join(other_path)` replaces `path` with `other_path` if `other_path` is absolute,
+        // so we have to check for it.
+        let path = path.as_ref();
+        let full_path = if path.starts_with("/") {
+            self.root.join(path.strip_prefix("/").unwrap())
+        } else {
+            self.root.join(path)
+        };
+
+        // TODO: Use `?` operator here, when we can use `impl Future`
+        let real_full_path = match self.real_path(full_path) {
+            Ok(path) => path,
+            Err(e) => return Err(e),
+        };
+
+        if real_full_path.starts_with(&self.root) {
+            Ok(real_full_path)
+        } else {
+            // TODO: Some more useful error reporting
+            Err(Error::IOError)
+        }
+    }
 }
 
 impl StorageBackend for Filesystem {
     type File =  self::tokio::fs::File;
     type Metadata = std::fs::Metadata;
-    type Error = self::tokio::io::Error;
+    type Error = Error;
 
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
-        // TODO: Abstract getting the full path to a separate method
-        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
-        // protect against "../" in `path`. (Check if the std::fs::canonicalize method is
-        // suitable).
-        let full_path = self.root.join(path);
-        Box::new(tokio::fs::symlink_metadata(full_path))
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(err) => return Box::new(futures::future::err(err)),
+        };
+        // TODO: Some more useful error reporting
+        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::IOError))
     }
 
     fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata
     {
-        // TODO: Abstract getting the full path to a separate method
-        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
-        // protect against "../" in `path`.
-        let path = path.as_ref();
-        let full_path = if path.eq(Path::new("/")) {
-            self.root.clone()
-        } else {
-            if path.starts_with("/") {
-                self.root.join(path.strip_prefix("/").unwrap())
-            } else {
-                self.root.join(path)
-            }
+        // TODO: Use `?` operator here when we can use `impl Future`
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Box::new(futures::future::err(e).into_stream()),
         };
 
         let prefix = self.root.clone();
@@ -194,34 +224,34 @@ impl StorageBackend for Filesystem {
                 Ok(stat)    => Some(Fileinfo{path: relpath, metadata: stat}),
                 Err(_)      => None,
             }
-        })
-        ;
+        });
 
-        Box::new(fut)
+        // TODO: Some more useful error reporting
+        Box::new(fut.map_err(|_| Error::IOError))
     }
 
-    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = self::tokio::io::Error> + Send> {
-        // TODO: Abstract getting the full path to a separate method
-        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
-        // protect against "../" in `path`.
-        let full_path = self.root.join(path);
-        Box::new(self::tokio::fs::file::File::open(full_path))
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = Self::Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Box::new(futures::future::err(e)),
+        };
+        // TODO: Some more useful error reporting
+        Box::new(self::tokio::fs::file::File::open(full_path).map_err(|_| Error::IOError))
     }
 
-    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = std::io::Error> + Send> {
-        // TODO: Abstract getting the full path to a separate method
-        // TODO: Add checks to validate the resulting full path is indeed a child of `root` (e.g.
-        // protect against "../" in `path`.
-        //
+    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
-
-        let full_path = self.root.join(path);
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e)  => return Box::new(futures::future::err(e)),
+        };
         let fut = self::tokio::fs::file::File::create(full_path)
             .and_then(|f| {
                 self::tokio_io::io::copy(bytes, f)
             })
             .map(|(n, _, _)| n)
-            ;
+            // TODO: Some more useful error reporting
+            .map_err(|_| Error::IOError);
         Box::new(fut)
     }
 }
