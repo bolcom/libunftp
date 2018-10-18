@@ -241,10 +241,13 @@ impl StorageBackend for Filesystem {
 
     fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e)  => return Box::new(futures::future::err(e)),
+        let path = path.as_ref();
+        let full_path = if path.starts_with("/") {
+            self.root.join(path.strip_prefix("/").unwrap())
+        } else {
+            self.root.join(path)
         };
+
         let fut = self::tokio::fs::file::File::create(full_path)
             .and_then(|f| {
                 self::tokio_io::io::copy(bytes, f)
@@ -445,7 +448,7 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt")).unwrap();
+        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt")).expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
         let mut f = File::open(root.join("greeting.txt")).unwrap();
