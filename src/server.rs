@@ -12,6 +12,8 @@ use self::futures::prelude::*;
 use self::futures::Sink;
 use self::futures::sync::mpsc;
 
+use failure::*;
+
 use self::tokio::net::{TcpListener, TcpStream};
 use self::tokio_codec::{Encoder, Decoder};
 
@@ -26,6 +28,8 @@ use commands;
 use commands::Command;
 
 use self::std::io::ErrorKind;
+
+use std::fmt;
 
 /// DataMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
@@ -79,11 +83,11 @@ impl FTPCodec {
 
 impl Decoder for FTPCodec {
     type Item = Command;
-    type Error = commands::Error;
+    type Error = FTPError;
 
     // Here we decode the incoming bytes into a meaningful command. We'll split on newlines, and
     // parse the resulting line using `Command::parse()`. This method will be called by tokio.
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, commands::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, Self::Error> {
         if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
             let newline_index = newline_offset + self.next_index;
             let line = buf.split_to(newline_index + 1);
@@ -98,14 +102,92 @@ impl Decoder for FTPCodec {
 
 impl Encoder for FTPCodec {
     type Item = String;
-    type Error = commands::Error;
+    type Error = FTPError;
 
     // Here we encode the outgoing response, nothing special going on.
-    fn encode(&mut self, response: String, buf: &mut BytesMut) -> Result<(), commands::Error> {
+    fn encode(&mut self, response: String, buf: &mut BytesMut) -> Result<(), Self::Error> {
         buf.reserve(response.len());
         buf.put(response);
         Ok(())
     }
+}
+
+#[derive(Debug)]
+struct FTPError {
+    inner: Context<FTPErrorKind>,
+}
+
+impl From<commands::ParseError> for FTPError {
+    fn from(err: commands::ParseError) -> FTPError {
+        err.context(FTPErrorKind::ParseError).into()
+    }
+}
+
+impl From<std::io::Error> for FTPError {
+    fn from(err: std::io::Error) -> FTPError {
+        err.context(FTPErrorKind::DecodeError).into()
+    }
+}
+
+impl From<std::str::Utf8Error> for FTPError {
+    fn from(err: std::str::Utf8Error) -> FTPError {
+        err.context(FTPErrorKind::ParseError).into()
+    }
+}
+
+impl <'a, T>From<std::sync::PoisonError<std::sync::MutexGuard<'a, T>>> for FTPError {
+    fn from(_err: std::sync::PoisonError<std::sync::MutexGuard<'a, T>>) -> FTPError {
+        FTPError { inner: Context::new(FTPErrorKind::InternalServerError) }
+    }
+}
+
+impl FTPError {
+    #[allow(unused)]
+    pub fn kind(&self) -> &FTPErrorKind {
+        self.inner.get_context()
+    }
+}
+
+impl Fail for FTPError {
+    fn cause(&self) -> Option<&Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
+    }
+}
+
+impl fmt::Display for FTPError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.inner, f)
+    }
+}
+
+impl From<FTPErrorKind> for FTPError {
+    fn from(kind: FTPErrorKind) -> FTPError {
+        FTPError { inner: Context::new(kind) }
+    }
+}
+
+impl From<Context<FTPErrorKind>> for FTPError {
+    fn from(inner: Context<FTPErrorKind>) -> FTPError {
+        FTPError { inner: inner }
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Fail)]
+enum FTPErrorKind {
+    #[fail(display = "Failed to decode command")]
+    DecodeError,
+    #[fail(display = "Failed to encode reply")]
+    EncodeError,
+    #[fail(display = "Failed to parse command")]
+    ParseError,
+    #[fail(display = "Internal Server Error")]
+    InternalServerError,
+    #[fail(display = "Something went wrong when trying to authenticate")]
+    AuthenticationError,
 }
 
 // This is where we keep the state for a ftp session.
@@ -415,25 +497,24 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
     fn process(&self, socket: TcpStream) {
         let authenticator = self.authenticator;
+        // TODO: Get rid of hard-coded storage backend here
         let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
-        let respond = move |event| {
+        let respond = move |event| -> Result<String, FTPError> {
             match event {
                 Event::Command(cmd) => {
                     match cmd {
                         Command::User{username} => {
-                            // TODO: Don't unwrap here
-                            let user = std::str::from_utf8(&username).unwrap();
-                            let mut session = session.lock().unwrap();
+                            let user = std::str::from_utf8(&username)?;
+                            let mut session = session.lock()?;
                             session.username = Some(user.to_string());
                             Ok("331 Password Required\r\n".to_string())
                         },
                         Command::Pass{password} => {
-                            // TODO: Don't unwrap here
-                            let pass = std::str::from_utf8(&password).unwrap();
-                            let mut session = session.lock().unwrap();
+                            let pass = std::str::from_utf8(&password)?;
+                            let mut session = session.lock()?;
                             match session.username.clone() {
                                 Some(ref user) => {
                                     let res = authenticator.authenticate(&user.clone(), pass);
@@ -443,10 +524,10 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                             Ok("230 User logged in, proceed\r\n".to_string())
                                         },
                                         Ok(false) => Ok("530 Wrong username or password\r\n".to_string()),
-                                        Err(e) => Err(format!("530 Something went wrong when trying to authenticate: {:?}\r\n", e)),
+                                        Err(_) => Err(FTPErrorKind::AuthenticationError)?,
                                     }
                                 },
-                                None => Ok("530 No username supplied\r\n".to_string()),
+                                None => Ok("503 Login with `USER` first.\r\n".to_string()),
                             }
                         },
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
@@ -457,7 +538,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             match path {
                                 None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
                                 Some(path) => {
-                                    let path = std::str::from_utf8(&path).unwrap();
+                                    let path = std::str::from_utf8(&path)?;
                                     // TODO: Implement :)
                                     info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
                                     Ok("504 Stat with paths unsupported atm\r\n".to_string())
@@ -481,12 +562,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         Command::Help => Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string()),
                         Command::Noop => Ok("200 Successfully did nothing\r\n".to_string()),
                         Command::Pasv => {
-                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice()).unwrap();
-                            let addr = match listener.local_addr().unwrap() {
+                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
+                            let addr = match listener.local_addr()? {
                                 std::net::SocketAddr::V4(addr) => addr,
                                 std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
                             };
-                            let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default()).unwrap();
+                            let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
                             let octets = addr.ip().octets();
                             let port = addr.port();
@@ -496,7 +577,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
                             let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
                             {
-                            let mut session = session.lock().unwrap();
+                            let mut session = session.lock()?;
                             session.data_cmd_tx = Some(cmd_tx);
                             session.data_cmd_rx = Some(cmd_rx);
                             }
@@ -511,6 +592,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                         let tx = tx.clone();
                                         let session = session.clone();
                                         let mut session = session.lock().unwrap_or_else(|res| {
+                                            // TODO: Send signal to `tx` here, so we can handle the
+                                            // error
                                             error!("session lock() result: {}", res);
                                             panic!()
                                         });
@@ -524,10 +607,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         },
                         Command::Port => Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n".to_string()),
                         Command::Retr{ .. } => {
-                            let mut session = session.lock().unwrap();
-                            let tx = session.data_cmd_tx.clone();
-                            let tx = tx.unwrap();
-                            session.data_cmd_tx = None;
+                            let mut session = session.lock()?;
+                            let tx = match session.data_cmd_tx.take() {
+                                Some(tx) => tx,
+                                None => return Err(FTPErrorKind::InternalServerError.into()),
+                            };
                             tokio::spawn(
                                 tx.send(cmd.clone())
                                 .map(|_| ())
@@ -538,14 +622,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             Ok("".to_string())
                         },
                         Command::Stor{ .. } => {
-                            let mut session = session.lock().unwrap();
-                            let tx = session.data_cmd_tx.clone();
-                            if tx.is_none() {
-                                // We have no data channel
-                                return Ok("425 No data connection established\r\n".to_string());
-                            }
-                            let tx = tx.unwrap();
-                            session.data_cmd_tx = None;
+                            let mut session = session.lock()?;
+                            let tx = match session.data_cmd_tx.take() {
+                                Some(tx) => tx,
+                                None => return Ok("425 No data connection established\r\n".to_string()),
+                            };
                             tokio::spawn(
                                 tx.send(cmd.clone())
                                 .map(|_| ())
@@ -554,14 +635,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             Ok("150 Will send you something\r\n".to_string())
                         },
                         Command::List{ .. } => {
-                            let mut session = session.lock().unwrap();
-                            let tx = session.data_cmd_tx.clone();
-                            if tx.is_none() {
-                                // We don't have a data channel
-                                return Ok("425 No data connection established\r\n".to_string());
-                            }
-                            let tx = tx.unwrap();
-                            session.data_cmd_tx = None;
+                            let mut session = session.lock()?;
+                            let tx = match session.data_cmd_tx.take() {
+                                Some(tx) => tx,
+                                None => return Ok("425 No data connection established\r\n".to_string()),
+                            };
                             tokio::spawn(
                                 tx.send(cmd.clone())
                                 .map(|_| ())
@@ -576,7 +654,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             Ok(response)
                         },
                         Command::Pwd => {
-                            let session = session.lock().unwrap();
+                            let session = session.lock()?;
                             // TODO: properly escape double quotes in `cwd`
                             Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
                         },
@@ -584,12 +662,12 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             // TODO: We current accept all CWD requests. Consider only allowing
                             // this if the directory actually exists and the user has the proper
                             // permission.
-                            let mut session = session.lock().unwrap();
+                            let mut session = session.lock()?;
                             session.cwd.push(path);
                             Ok("250 Okay.\r\n".to_string())
                         },
                         Command::Cdup => {
-                            let mut session = session.lock().unwrap();
+                            let mut session = session.lock()?;
                             session.cwd.pop();
                             Ok("250 Okay.\r\n".to_string())
                         },
@@ -620,18 +698,24 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
             .and_then(move |sink| {
                 sink.send_all(
                     stream
-                    .map_err(|e| format!("{}", e))
+                    .map_err(|_| {
+                        FTPErrorKind::EncodeError.into()
+                    })
                     .map(Event::Command)
                     .select(rx
                         // The receiver should never fail, so we should never see this message.
                         // However, we need to map_err anyway to get the types right.
-                        .map_err(|_| "Unknown receiver error".to_owned())
+                        //.map_err(|_| "Unknown receiver error".to_owned())
                         .map(Event::DataMsg)
+                        .map_err(|_| FTPErrorKind::EncodeError.into())
                     )
                     .and_then(respond)
                     .map_err(|e| {
                         warn!("Failed to process command: {}", e);
-                        commands::Error::IO(e)
+                        //commands::Error::IO(e)
+                        //
+                        // TODO: Make this something useful
+                        FTPErrorKind::EncodeError
                     })
                 )
             })

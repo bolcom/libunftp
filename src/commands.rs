@@ -1,7 +1,9 @@
 extern crate std;
 extern crate bytes;
 
-use std::{fmt,result};
+use failure::*;
+
+use std::{fmt, result};
 use self::bytes::{Bytes};
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
@@ -47,6 +49,11 @@ pub enum Command {
     /// The `USER` command
     User {
         /// The bytes making up the actual username.
+        // Ideally I'd like to immediately convert the username to a valid UTF8 `&str`, because
+        // that's part of the semantics of the `User` struct, and thus should be part of parsing.
+        // Unfortunately though, that would mean the `Command` enum would become generic over
+        // lifetimes and for ergonomic reasons I want to avoid that ATM. TODO: Reconsider when NLL
+        // have been merged into stable.
         username: Bytes,
     },
     /// The `PASS` command
@@ -124,7 +131,7 @@ pub enum Command {
 impl Command {
     /// Parse the given bytes into a [`Command`].
     ///
-    /// [`Command`]: ./struct.Command.html
+    /// [`Command`]: ./enum.Command.html
     pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
         let vec = buf.into().to_vec();
         let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
@@ -165,25 +172,25 @@ impl Command {
             b"STRU" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.len() > 1 {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 match params.first() {
                     Some(b'F') => Command::Stru{structure: StruParam::File},
                     Some(b'R') => Command::Stru{structure: StruParam::Record},
                     Some(b'P') => Command::Stru{structure: StruParam::Page},
-                    _ => return Err(Error::InvalidCommand),
+                    _ => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             },
             b"MODE" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.len() > 1 {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 match params.first() {
                     Some(b'S') => Command::Mode{mode: ModeParam::Stream},
                     Some(b'B') => Command::Mode{mode: ModeParam::Block},
                     Some(b'C') => Command::Mode{mode: ModeParam::Compressed},
-                    _ => return Err(Error::InvalidCommand),
+                    _ => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             },
             b"HELP" => Command::Help,
@@ -191,28 +198,28 @@ impl Command {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
                     // NOOP params are prohibited
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Noop
             },
             b"PASV" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Pasv
             },
             b"PORT" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Port
             },
             b"RETR" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 let path = String::from_utf8_lossy(&path);
                 // TODO: Can we do this without allocation?
@@ -221,7 +228,7 @@ impl Command {
             b"STOR" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 // TODO:: Can we do this without allocation?
                 let path = String::from_utf8_lossy(&path);
@@ -235,21 +242,21 @@ impl Command {
             b"FEAT" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Feat
             },
             b"PWD" | b"XPWD" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Pwd
             },
             b"CWD" | b"XCWD" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 let path = String::from_utf8_lossy(&path).to_string();
                 let path = path.into();
@@ -258,22 +265,22 @@ impl Command {
             b"CDUP" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(Error::InvalidCommand);
+                    return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 Command::Cdup
             },
             b"OPTS" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(Error::InvalidCommand)
+                    return Err(ParseErrorKind::InvalidCommand)?
                 }
 
                 match &params[..] {
                     b"UTF8"  => Command::Opts{option: Opt::UTF8},
-                    _       => return Err(Error::InvalidCommand),
+                    _       => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             },
-            _ => return Err(Error::UnknownCommand(std::str::from_utf8(cmd_token)?.to_string())),
+            _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
 
         Ok(cmd)
@@ -290,13 +297,13 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     loop {
         let b = match iter.next() {
             Some(b) => b,
-            _ => return Err(Error::InvalidEOL),
+            _ => return Err(ParseErrorKind::InvalidEOL)?,
         };
 
         if *b == b'\r' {
             match iter.next() {
                 Some(b'\n') => return Ok(bytes.split_to(pos)),
-                _ => return Err(Error::InvalidEOL),
+                _ => return Err(ParseErrorKind::InvalidEOL)?,
             }
         }
 
@@ -305,7 +312,7 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
         }
 
         if !is_valid_token_char(*b) {
-            return Err(Error::InvalidToken(*b));
+            return Err(ParseErrorKind::InvalidToken{token: *b})?;
         }
 
         // TODO: Check for overflow (and (thus) making sure we end)
@@ -317,70 +324,87 @@ fn is_valid_token_char(b: u8) -> bool {
     b > 0x1F && b < 0x7F
 }
 
-/// The Error type that can be returned by methods in this module.
-// TODO: Use quick-error crate to make this more ergonomic.
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    /// The client issued a command that we don't know about
-    UnknownCommand(String),
-    /// Invalid command was given (e.g., required parameters are missing)
+/// The error type returned by the [Command::parse] method.
+///
+/// [Command::parse]: ./enum.Command.html#method.parse
+#[derive(Debug)]
+pub struct ParseError {
+    inner: Context<ParseErrorKind>,
+}
+
+impl PartialEq for ParseError {
+    #[inline]
+    fn eq(&self, other: &ParseError) -> bool {
+        self.kind() == other.kind()
+    }
+}
+
+/// A list specifying categories of Parse errors. It is meant to be used with the [ParseError]
+/// type.
+///
+/// [ParseError]: ./struct.ParseError.html
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ParseErrorKind {
+    /// The client issued a command that we don't know about.
+    #[fail(display = "Unknown command: {}", command)]
+    UnknownCommand {
+        /// The command that we don't know about.
+        command: String,
+    },
+    /// The client issued an invalid command (e.g. required parameters are missing).
+    #[fail(display = "Invalid command")]
     InvalidCommand,
-    /// An invalid token (e.g. not UTF-8) was encountered while parsing the command
-    InvalidToken(u8),
-    /// Invalid UTF8 character in string
+    /// An invalid token (e.g. not UTF-8) was encountered while parsing the command.
+    #[fail(display = "Invalid token while parsing: {}", token)]
+    InvalidToken{
+        /// The Token that is not UTF-8 encoded.
+        token: u8,
+    },
+    /// Non-UTF8 character encountered.
+    #[fail(display = "Non-UTF8 character while parsing")]
     InvalidUTF8,
-    /// Invalid end-of-line character
+    /// Invalid end-of-line character.
+    #[fail(display = "Invalid end-of-line")]
     InvalidEOL,
-    /// Generic IO error
-    IO(String),
 }
 
-impl Error {
-    fn description_str(&self) -> &'static str {
-        match *self {
-            Error::InvalidCommand           => "Invalid command",
-            Error::InvalidUTF8              => "Invalid UTF8 character in string",
-            Error::InvalidEOL               => "Invalid end-of-line character (should be `\r\n` or `\n`)",
-            Error::IO(ref _msg)             => "IO Error",
-            Error::InvalidToken(ref _c)     => "Invalid token encountered in command",
-            Error::UnknownCommand(ref _c)   => "Unknown command"
-        }
+impl Fail for ParseError {
+    fn cause(&self) -> Option<&Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
     }
 }
 
-impl fmt::Display for Error {
+impl ParseError {
+    /// Returns the corresponding `ParseErrorKind` for this error.
+    pub fn kind(&self) -> &ParseErrorKind {
+        self.inner.get_context()
+    }
+}
+
+impl From<ParseErrorKind> for ParseError {
+    fn from(kind: ParseErrorKind) -> ParseError {
+        ParseError { inner: Context::new(kind) }
+    }
+}
+
+impl From<Context<ParseErrorKind>> for ParseError {
+    fn from(inner: Context<ParseErrorKind>) -> ParseError {
+        ParseError { inner: inner }
+    }
+}
+
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::InvalidToken(ref c)      => f.write_str(&format!("{}: {}", self.description_str(), c)),
-            Error::UnknownCommand(ref c)    => f.write_str(&format!("{}: {}", self.description_str(), c)),
-            Error::IO(ref msg)              => f.write_str(msg),
-            _                               => f.write_str(&self.description_str()),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        self.description_str()
-    }
-}
-
-impl From<std::str::Utf8Error> for Error {
-    fn from(_err: std::str::Utf8Error) -> Error {
-        Error::InvalidUTF8
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        use std::error::Error as stderr;
-        Error::IO(err.description().to_owned())
+        fmt::Display::fmt(&self.inner, f)
     }
 }
 
 /// The Result type used in this module.
-pub type Result<T> = result::Result<T, Error>;
-
+pub type Result<T> = result::Result<T, ParseError>;
 
 #[cfg(test)]
 mod tests {
@@ -393,10 +417,10 @@ mod tests {
     }
 
     #[test]
-    // According to RFC 959, verbs should be interpreted without regards to case
+    // TODO: According to RFC 959, verbs should be interpreted without regards to case
     fn parse_user_cmd_mixed_case() {
         let input = "uSeR Dolores\r\n";
-        assert_eq!(Command::parse(input), Err(Error::UnknownCommand("uSeR".to_owned())));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::UnknownCommand{command: "uSeR".into() })}));
     }
 
     #[test]
@@ -410,14 +434,14 @@ mod tests {
     // Although we accept requests ending in only '\n', we won't accept requests ending only in '\r'
     fn parse_user_cmd_cr() {
         let input = "USER Dolores\r";
-        assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidEOL)}));
     }
 
     #[test]
     // We should fail if the request does not end in '\n' or '\r'
     fn parse_user_cmd_no_eol() {
         let input = "USER Dolores";
-        assert_eq!(Command::parse(input), Err(Error::InvalidEOL));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidEOL)}));
     }
 
     #[test]
@@ -454,7 +478,7 @@ mod tests {
     #[test]
     fn parse_stru_no_params() {
         let input = "STRU\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
@@ -478,13 +502,13 @@ mod tests {
     #[test]
     fn parse_stru_garbage() {
         let input = "STRU FSK\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "STRU F lskdjf\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "STRU\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
@@ -508,13 +532,13 @@ mod tests {
     #[test]
     fn parse_mode_garbage() {
         let input = "MODE SKDJF\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "MODE\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "MODE S D\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
@@ -532,7 +556,7 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Noop);
 
         let input = "NOOP bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
@@ -541,13 +565,13 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Pasv);
 
         let input = "PASV bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
     fn parse_port() {
         let input = "PORT\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
         assert_eq!(Command::parse(input).unwrap(), Command::Port);
@@ -569,7 +593,7 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Feat));
 
         let input = "FEAT bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
@@ -578,13 +602,13 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Pwd));
 
         let input = "PWD bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
     fn parse_cwd() {
         let input = "CWD\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "CWD /tmp\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Cwd{path: "/tmp".into()}));
@@ -599,16 +623,16 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Cdup));
 
         let input = "CDUP bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 
     #[test]
     fn parse_opts() {
         let input = "OPTS\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "OPTS bla\r\n";
-        assert_eq!(Command::parse(input), Err(Error::InvalidCommand));
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
 
         let input = "OPTS UTF8\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Opts{option: Opt::UTF8}));
