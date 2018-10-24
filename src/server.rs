@@ -112,8 +112,9 @@ impl Encoder for FTPCodec {
     }
 }
 
+/// The error type returned by this library.
 #[derive(Debug)]
-struct FTPError {
+pub struct FTPError {
     inner: Context<FTPErrorKind>,
 }
 
@@ -142,6 +143,7 @@ impl <'a, T>From<std::sync::PoisonError<std::sync::MutexGuard<'a, T>>> for FTPEr
 }
 
 impl FTPError {
+    /// Return the inner error kind of this error.
     #[allow(unused)]
     pub fn kind(&self) -> &FTPErrorKind {
         self.inner.get_context()
@@ -176,16 +178,23 @@ impl From<Context<FTPErrorKind>> for FTPError {
     }
 }
 
+/// A list specifying categories of FTP errors. It is meant to be used with the [FTPError] type.
 #[derive(Eq, PartialEq, Debug, Fail)]
-enum FTPErrorKind {
+pub enum FTPErrorKind {
+    /// Something went wrong decoding the client's command.
     #[fail(display = "Failed to decode command")]
     DecodeError,
+    /// Something went wrong encoding the client's command.
     #[fail(display = "Failed to encode reply")]
     EncodeError,
+    /// Something went wrong parsing the client's command.
     #[fail(display = "Failed to parse command")]
     ParseError,
+    /// Internal Server Error. This is probably a bug, i.e. when we're unable to lock a resource we
+    /// should be able to lock.
     #[fail(display = "Internal Server Error")]
     InternalServerError,
+    /// Authentication backend returned an error.
     #[fail(display = "Something went wrong when trying to authenticate")]
     AuthenticationError,
 }
@@ -220,6 +229,8 @@ impl Session<storage::Filesystem> {
     fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
         use storage::StorageBackend;
 
+        // TODO: Either take the rx as argument, or properly check the result instead of
+        // `unwrap()`.
         let rx = self.data_cmd_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
@@ -480,6 +491,11 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// server.listen("127.0.0.1:2000");
     /// # });
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics when called with invalid addresses or when the process is unable to
+    /// `bind()` to the address.
     pub fn listen(self, addr: &str) {
         // TODO: See if we can accept a `ToSocketAddrs` trait
         let addr = addr.parse().unwrap();
@@ -712,8 +728,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                     .and_then(respond)
                     .map_err(|e| {
                         warn!("Failed to process command: {}", e);
-                        //commands::Error::IO(e)
-                        //
                         // TODO: Make this something useful
                         FTPErrorKind::EncodeError
                     })
