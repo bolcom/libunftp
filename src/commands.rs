@@ -52,8 +52,8 @@ pub enum Command {
         // Ideally I'd like to immediately convert the username to a valid UTF8 `&str`, because
         // that's part of the semantics of the `User` struct, and thus should be part of parsing.
         // Unfortunately though, that would mean the `Command` enum would become generic over
-        // lifetimes and for ergonomic reasons I want to avoid that ATM. TODO: Reconsider when NLL
-        // have been merged into stable.
+        // lifetimes and for ergonomic reasons I want to avoid that ATM.
+        // TODO: Reconsider when NLL have been merged into stable.
         username: Bytes,
     },
     /// The `PASS` command
@@ -138,7 +138,7 @@ impl Command {
         let cmd_token = iter.next().unwrap();
         let cmd_params = iter.next().unwrap_or(&[]);
 
-        // TODO: Make command parsing case insensitive
+        // TODO: Make command parsing case insensitive (consider using "nom")
         let cmd = match cmd_token {
             b"USER" => {
                 let username = parse_to_eol(cmd_params)?;
@@ -289,7 +289,7 @@ impl Command {
 
 /// Try to parse a buffer of bytes, upto end of line into a `&str`.
 fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
-    let mut pos = 0;
+    let mut pos: usize = 0;
     let mut bytes: Bytes = bytes.into();
     let copy = bytes.clone();
     let mut iter = copy.as_ref().iter();
@@ -315,7 +315,8 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
             return Err(ParseErrorKind::InvalidToken{token: *b})?;
         }
 
-        // TODO: Check for overflow (and (thus) making sure we end)
+        // We don't have to be afraid of an overflow here, since a `Bytes` can never be bigger than
+        // `std::usize::MAX`
         pos += 1;
     }
 }
