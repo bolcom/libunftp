@@ -120,19 +120,25 @@ pub struct FTPError {
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
-        err.context(FTPErrorKind::ParseError).into()
+        match err.kind() {
+            commands::ParseErrorKind::UnknownCommand{..} => err.context(FTPErrorKind::UnknownCommand).into(),
+            commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
+            commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
+            commands::ParseErrorKind::InvalidToken{..} => err.context(FTPErrorKind::UTF8Error).into(),
+            _ => err.context(FTPErrorKind::InvalidCommand).into(),
+        }
     }
 }
 
 impl From<std::io::Error> for FTPError {
     fn from(err: std::io::Error) -> FTPError {
-        err.context(FTPErrorKind::DecodeError).into()
+        err.context(FTPErrorKind::IOError).into()
     }
 }
 
 impl From<std::str::Utf8Error> for FTPError {
     fn from(err: std::str::Utf8Error) -> FTPError {
-        err.context(FTPErrorKind::ParseError).into()
+        err.context(FTPErrorKind::UTF8Error).into()
     }
 }
 
@@ -181,12 +187,9 @@ impl From<Context<FTPErrorKind>> for FTPError {
 /// A list specifying categories of FTP errors. It is meant to be used with the [FTPError] type.
 #[derive(Eq, PartialEq, Debug, Fail)]
 pub enum FTPErrorKind {
-    /// Something went wrong decoding the client's command.
-    #[fail(display = "Failed to decode command")]
-    DecodeError,
-    /// Something went wrong encoding the client's command.
-    #[fail(display = "Failed to encode reply")]
-    EncodeError,
+    /// We encountered a system IO error.
+    #[fail(display = "Failed to perform IO")]
+    IOError,
     /// Something went wrong parsing the client's command.
     #[fail(display = "Failed to parse command")]
     ParseError,
@@ -197,6 +200,20 @@ pub enum FTPErrorKind {
     /// Authentication backend returned an error.
     #[fail(display = "Something went wrong when trying to authenticate")]
     AuthenticationError,
+    /// We received something on the data message channel that we don't understand. This should be
+    /// impossible.
+    #[fail(display = "Failed to map event from data channel")]
+    DataMsgError,
+    /// We encountered a non-UTF8 character in the command.
+    #[fail(display = "Non-UTF8 character in command")]
+    UTF8Error,
+    /// The client issued a command we don't know about.
+    #[fail(display = "Unknown command")]
+    UnknownCommand,
+    /// The client issued a command that we know about, but in an invalid way (e.g. `USER` without
+    /// an username).
+    #[fail(display = "Invalid command (invalid parameter)")]
+    InvalidCommand,
 }
 
 // This is where we keep the state for a ftp session.
@@ -497,7 +514,6 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub fn listen(self, addr: &str) {
-        // TODO: See if we can accept a `ToSocketAddrs` trait
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
@@ -518,7 +534,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
-        let respond = move |event| -> Result<String, FTPError> {
+        let respond = move |event: Event| -> Result<String, FTPError> {
             match event {
                 Event::Command(cmd) => {
                     match cmd {
@@ -709,28 +725,29 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
         let codec = FTPCodec::new();
         let (sink, stream) = codec.framed(socket).split();
         let task = sink.send(format!("220 {}\r\n", self.greeting))
-            // TODO: Send proper 502 if the client sends a unknown command
             .and_then(|sink| sink.flush())
             .and_then(move |sink| {
                 sink.send_all(
                     stream
-                    .map_err(|_| {
-                        FTPErrorKind::EncodeError.into()
-                    })
                     .map(Event::Command)
                     .select(rx
-                        // The receiver should never fail, so we should never see this message.
-                        // However, we need to map_err anyway to get the types right.
-                        //.map_err(|_| "Unknown receiver error".to_owned())
                         .map(Event::DataMsg)
-                        .map_err(|_| FTPErrorKind::EncodeError.into())
+                        .map_err(|_| FTPErrorKind::DataMsgError.into())
                     )
                     .and_then(respond)
-                    .map_err(|e| {
+                    .or_else(|e| {
                         warn!("Failed to process command: {}", e);
-                        // TODO: Make this something useful
-                        FTPErrorKind::EncodeError
+                        let response = match e.kind() {
+                            FTPErrorKind::UnknownCommand => "500 Command not implemented\r\n".to_string(),
+                            FTPErrorKind::UTF8Error => "500 Invalid UTF8 in command\r\n".to_string(),
+                            FTPErrorKind::InvalidCommand => "501 Invalid Parameter\r\n".to_string(),
+                            _ => "451 Unknown internal server error, please try again later\r\n".to_string(),
+                        };
+                        futures::future::ok(response)
                     })
+                    // Needed for type annotation, we can possible remove this once the compiler is
+                    // smarter about inference :)
+                    .map_err(|e: FTPError| e )
                 )
             })
             .then(|res| {
