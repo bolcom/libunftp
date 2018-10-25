@@ -1,4 +1,11 @@
 #![deny(missing_docs)]
+
+/// [`Authenticator`] implementation that authenticates against [`PAM`].
+///
+/// [`Authenticator`]: trait.Authenticator.html
+#[cfg(feature = "pam")]
+pub mod pam;
+
 /// The authenticator trait defines a common interface that can be implemented for a multitude of
 /// authentcation backends, e.g. LDAP or PAM. It is used by [`Server`] to authenticate users.
 ///

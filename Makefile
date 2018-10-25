@@ -1,6 +1,6 @@
 .PHONY: watch
 watch:
-	cargo watch -x check -x test --clear
+	cargo watch -x check -x "test --all-features" --clear
 
 .PHONY: run
 run: debug
@@ -20,7 +20,7 @@ debug:
 
 .PHONY: test
 test:
-	cargo test
+	cargo test --all-features
 
 clippy:
 	cargo +nightly clippy
