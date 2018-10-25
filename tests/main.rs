@@ -173,3 +173,16 @@ fn cdup() {
     let pwd = ftp_stream.pwd().unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/"));
 }
+
+#[test]
+fn dele() {
+    let addr = "127.0.0.1:1243";
+    let root = std::env::temp_dir();
+    start_server!(addr, root);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let file_in_root = tempfile::NamedTempFile::new().unwrap();
+    let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
+    ftp_stream.rm(file_name).unwrap();
+    assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
+}

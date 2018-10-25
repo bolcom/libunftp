@@ -45,6 +45,8 @@ pub enum Opt {
 
 #[derive(Debug, PartialEq, Clone)]
 /// The FTP commands.
+// TODO: Write a short description of what the command should do according to the FTP spec in the
+// docstring.
 pub enum Command {
     /// The `USER` command
     User {
@@ -125,7 +127,12 @@ pub enum Command {
     Opts {
         /// The option the client wants to set
         option: Opt
-    }
+    },
+    /// The `DELE` command
+    Dele {
+        /// The (regular) file to delete.
+        path: String,
+    },
 }
 
 impl Command {
@@ -279,6 +286,17 @@ impl Command {
                     b"UTF8"  => Command::Opts{option: Opt::UTF8},
                     _       => return Err(ParseErrorKind::InvalidCommand)?,
                 }
+            },
+            b"DELE" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let path = String::from_utf8_lossy(&path).to_string();
+                let path = path.into();
+                Command::Dele{path}
+
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -637,5 +655,14 @@ mod tests {
 
         let input = "OPTS UTF8\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Opts{option: Opt::UTF8}));
+    }
+
+    #[test]
+    fn parse_dele() {
+        let input = "DELE\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "DELE some_file\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Dele{path: "some_file".into()}));
     }
 }

@@ -27,12 +27,16 @@ use storage;
 use commands;
 use commands::Command;
 
+use storage::StorageBackend;
+
 use self::std::io::ErrorKind;
 
 use std::fmt;
 
 /// DataMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
+// TODO: Rename this enum (it is not only used for data channel communication anymore).
+// TODO: Give these events better names
 enum DataMsg {
     // Permission Denied
     PermissionDenied,
@@ -52,6 +56,10 @@ enum DataMsg {
     UnknownRetrieveError,
     // Listed the directory successfully
     DirectorySuccesfullyListed,
+    // File succesfully deleted
+    DelSuccess,
+    // Failed to delete file
+    DelFail,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -244,8 +252,6 @@ impl Session<storage::Filesystem> {
     /// tx: channel to send the result of our operation on
     /// rx: channel to receive the command on
     fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
-        use storage::StorageBackend;
-
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = self.data_cmd_rx.take().unwrap();
@@ -708,6 +714,30 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                                 commands::Opt::UTF8 => Ok("250 Okay, I'm always in UTF8 mode.\r\n".to_string())
                             }
                         },
+                        Command::Dele{path} => {
+                            let mut session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            let tx_success = tx.clone();
+                            let tx_fail = tx.clone();
+                            tokio::spawn(
+                                storage.del(path)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
+                                .and_then(|_| {
+                                    tx_success.send(DataMsg::DelSuccess)
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
+                                })
+                                .or_else(|_| {
+                                    tx_fail.send(DataMsg::DelFail)
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
+                                })
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to delete file: {}", e);
+                                    ()
+                                })
+                            );
+                            Ok("".to_string())
+                        },
                     }
                 },
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
@@ -719,6 +749,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                 Event::DataMsg(DataMsg::WrittenData) => Ok("226 File succesfully written\r\n".to_string()),
                 Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
                 Event::DataMsg(DataMsg::DirectorySuccesfullyListed) => Ok("226 Listed the directory\r\n".to_string()),
+                Event::DataMsg(DataMsg::DelSuccess) => Ok("250 File successfully removed\r\n".to_string()),
+                Event::DataMsg(DataMsg::DelFail) => Ok("450 Failed to delete the file\r\n".to_string()),
             }
         };
 

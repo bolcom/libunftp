@@ -134,6 +134,10 @@ pub trait StorageBackend {
     /// Write the given bytes to a file
     // TODO: Get rid of 'static requirement her
     fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
+
+    /// Delete the given file
+    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.
@@ -256,6 +260,14 @@ impl StorageBackend for Filesystem {
             // TODO: Some more useful error reporting
             .map_err(|_| Error::IOError);
         Box::new(fut)
+    }
+
+    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Box::new(futures::future::err(e)),
+        };
+        Box::new(self::tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
     }
 }
 
