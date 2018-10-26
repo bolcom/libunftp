@@ -132,8 +132,11 @@ pub struct FTPError {
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
-        match err.kind() {
-            commands::ParseErrorKind::UnknownCommand{..} => err.context(FTPErrorKind::UnknownCommand).into(),
+        match err.kind().clone() {
+            commands::ParseErrorKind::UnknownCommand{command} => {
+                // TODO: Do something smart with CoW to prevent copying the command around.
+                err.context(FTPErrorKind::UnknownCommand{command: command}).into()
+            },
             commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
             commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
             commands::ParseErrorKind::InvalidToken{..} => err.context(FTPErrorKind::UTF8Error).into(),
@@ -220,8 +223,11 @@ pub enum FTPErrorKind {
     #[fail(display = "Non-UTF8 character in command")]
     UTF8Error,
     /// The client issued a command we don't know about.
-    #[fail(display = "Unknown command")]
-    UnknownCommand,
+    #[fail(display = "Unknown command: {}", command)]
+    UnknownCommand {
+        /// The command that we don't know about
+        command: String,
+    },
     /// The client issued a command that we know about, but in an invalid way (e.g. `USER` without
     /// an username).
     #[fail(display = "Invalid command (invalid parameter)")]
@@ -787,7 +793,7 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                     .or_else(|e| {
                         warn!("Failed to process command: {}", e);
                         let response = match e.kind() {
-                            FTPErrorKind::UnknownCommand => "500 Command not implemented\r\n".to_string(),
+                            FTPErrorKind::UnknownCommand{..} => "500 Command not implemented\r\n".to_string(),
                             FTPErrorKind::UTF8Error => "500 Invalid UTF8 in command\r\n".to_string(),
                             FTPErrorKind::InvalidCommand => "501 Invalid Parameter\r\n".to_string(),
                             _ => "451 Unknown internal server error, please try again later\r\n".to_string(),
