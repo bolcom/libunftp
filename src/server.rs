@@ -37,6 +37,7 @@ use std::fmt;
 /// event handler.
 // TODO: Rename this enum (it is not only used for data channel communication anymore).
 // TODO: Give these events better names
+#[derive(PartialEq)]
 enum DataMsg {
     // Permission Denied
     PermissionDenied,
@@ -60,10 +61,13 @@ enum DataMsg {
     DelSuccess,
     // Failed to delete file
     DelFail,
+    // Quit the client connection
+    Quit,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
+#[derive(PartialEq)]
 enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(commands::Command),
@@ -738,8 +742,14 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                             );
                             Ok("".to_string())
                         },
+                        Command::Quit => {
+                            let tx = tx.clone();
+                            tokio::spawn(tx.send(DataMsg::Quit).map(|_| ()).map_err(|_| ()));
+                            Ok("221 bye!\r\n".to_string())
+                        },
                     }
                 },
+
                 Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
                 Event::DataMsg(DataMsg::PermissionDenied) => Ok("550 Permision denied\r\n".to_string()),
                 Event::DataMsg(DataMsg::SendingData) => Ok("150 Sending Data\r\n".to_string()),
@@ -751,6 +761,9 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                 Event::DataMsg(DataMsg::DirectorySuccesfullyListed) => Ok("226 Listed the directory\r\n".to_string()),
                 Event::DataMsg(DataMsg::DelSuccess) => Ok("250 File successfully removed\r\n".to_string()),
                 Event::DataMsg(DataMsg::DelFail) => Ok("450 Failed to delete the file\r\n".to_string()),
+                // The DataMsg::Quit will never be reached, because we catch it in the task before
+                // this closure is called (because we have to close the connection).
+                Event::DataMsg(DataMsg::Quit) => Ok("221 bye!\r\n".to_string()),
             }
         };
 
@@ -766,6 +779,10 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
                         .map(Event::DataMsg)
                         .map_err(|_| FTPErrorKind::DataMsgError.into())
                     )
+                    .take_while(|event| {
+                        // TODO: Make sure data connections are closed
+                        Ok(*event != Event::DataMsg(DataMsg::Quit))
+                    })
                     .and_then(respond)
                     .or_else(|e| {
                         warn!("Failed to process command: {}", e);

@@ -133,6 +133,8 @@ pub enum Command {
         /// The (regular) file to delete.
         path: String,
     },
+    /// The `QUIT` command
+    Quit,
 }
 
 impl Command {
@@ -298,6 +300,14 @@ impl Command {
                 Command::Dele{path}
 
             },
+            b"QUIT" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                Command::Quit
+            }
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
 
@@ -664,5 +674,14 @@ mod tests {
 
         let input = "DELE some_file\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Dele{path: "some_file".into()}));
+    }
+
+    #[test]
+    fn parse_quit() {
+        let input = "QUIT\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Quit));
+
+        let input = "QUIT NOW\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 }
