@@ -186,3 +186,15 @@ fn dele() {
     ftp_stream.rm(file_name).unwrap();
     assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
 }
+
+#[test]
+fn quit() {
+    let addr = "127.0.0.1:1244";
+    let root = std::env::temp_dir();
+    start_server!(addr, root);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    ftp_stream.quit().unwrap();
+    // Make sure the connection is actually closed
+    ftp_stream.noop().unwrap_err();
+}
