@@ -367,7 +367,7 @@ impl Session<storage::Filesystem> {
                     },
 					// TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(_) => unimplemented!(),
-                    None => unreachable!(),
+                    None => { /* This probably happened because the control channel was closed before we got here */ },
                 }
             })
             .map_err(|_| ())
