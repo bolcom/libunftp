@@ -27,8 +27,6 @@ use storage;
 use commands;
 use commands::Command;
 
-use storage::StorageBackend;
-
 use self::std::io::ErrorKind;
 
 use std::fmt;
@@ -236,7 +234,10 @@ pub enum FTPErrorKind {
 
 // This is where we keep the state for a ftp session.
 struct Session<S>
-    where S: storage::StorageBackend
+    where S: storage::StorageBackend,
+          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::Metadata: storage::Metadata,
+          <S as storage::StorageBackend>::Error: Send,
 {
     username: Option<String>,
     is_authenticated: bool,
@@ -246,12 +247,17 @@ struct Session<S>
     cwd: std::path::PathBuf,
 }
 
-impl Session<storage::Filesystem> {
-    fn with_root<P: Into<std::path::PathBuf> + Clone>(root: P) -> Self {
+impl<S> Session<S>
+    where S: storage::StorageBackend + Send + Sync + 'static,
+          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::Metadata: storage::Metadata,
+          <S as storage::StorageBackend>::Error: Send,
+{
+    fn with_storage(storage: Arc<S>) -> Self {
         Session {
             username: None,
             is_authenticated: false,
-            storage: Arc::new(storage::Filesystem::new(root)),
+            storage: storage,
             data_cmd_tx: None,
             data_cmd_rx: None,
             cwd: "/".into(),
@@ -401,7 +407,7 @@ impl Session<storage::Filesystem> {
 pub struct Server<S>
     where S: storage::StorageBackend
 {
-    _storage: Arc<S>,
+    storage: Box<(Fn() -> S) + Send>,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
@@ -417,9 +423,10 @@ impl Server<storage::Filesystem> {
     ///
     /// let server = Server::with_root("/srv/ftp");
     /// ```
-    pub fn with_root<P: Into<std::path::PathBuf>>(path: P) -> Self {
+    pub fn with_root<P: Into<std::path::PathBuf> + Send + 'static>(path: P) -> Self {
+        let p = path.into();
         let server = Server {
-            _storage: Arc::new(storage::Filesystem::new(path)),
+            storage: Box::new(move || {let p = &p.clone(); storage::Filesystem::new(p)}),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
             passive_addrs: Arc::new(vec![]),
@@ -429,15 +436,20 @@ impl Server<storage::Filesystem> {
 
 }
 
-impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
+impl<S> Server<S>
+    where S: 'static + storage::StorageBackend + Sync + Send,
+          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::Metadata: storage::Metadata,
+          <S as storage::StorageBackend>::Error: Send,
+{
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: S) -> Self {
+    pub fn new(s: Box<Fn() -> S + Send>) -> Self {
         let server = Server {
-            _storage: Arc::new(s),
+            storage: s,
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator{},
             passive_addrs: Arc::new(vec![]),
@@ -545,8 +557,8 @@ impl<S> Server<S> where S: 'static + storage::StorageBackend + Sync + Send {
 
     fn process(&self, socket: TcpStream) {
         let authenticator = self.authenticator;
-        // TODO: Get rid of hard-coded storage backend here
-        let session = Arc::new(Mutex::new(Session::with_root("/tmp")));
+        let storage = Arc::new((self.storage)());
+        let session = Arc::new(Mutex::new(Session::with_storage(storage)));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
