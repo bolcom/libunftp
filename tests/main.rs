@@ -196,5 +196,7 @@ fn quit() {
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
     ftp_stream.quit().unwrap();
     // Make sure the connection is actually closed
+    // This may take some time, so we'll sleep for a bit.
+    std::thread::sleep(std::time::Duration::from_millis(10));
     ftp_stream.noop().unwrap_err();
 }
