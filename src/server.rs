@@ -371,6 +371,38 @@ impl<S> Session<S>
                             })
                         );
                     },
+                    Some(Command::Nlst{path}) => {
+                        let path = match path {
+                            Some(path) => cwd.join(path),
+                            None => cwd,
+                        };
+                        let tx_ok = tx.clone();
+                        let tx_error = tx.clone();
+                        tokio::spawn(
+                            storage.nlst(path)
+                            .and_then(|res| tokio::io::copy(res, socket))
+                            .and_then(|_| {
+                                tx_ok.send(DataMsg::DirectorySuccesfullyListed)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
+                            })
+                            .or_else(|e| {
+                                let msg = match e.kind() {
+                                    // TODO: Consider making these events unique (so don't reuse
+                                    // the `Stor` messages here)
+                                    ErrorKind::NotFound => DataMsg::NotFound,
+                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
+                                    _ => DataMsg::WriteFailed,
+                                };
+                                tx_error.send(msg)
+                            })
+                            .map(|_| ())
+                            .map_err(|e| {
+                                warn!("Failed to send directory list: {:?}", e);
+                                ()
+                            })
+                        );
+                    },
 					// TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(_) => unimplemented!(),
                     None => { /* This probably happened because the control channel was closed before we got here */ },
@@ -695,6 +727,20 @@ impl<S> Server<S>
                             Ok("150 Will send you something\r\n".to_string())
                         },
                         Command::List{ .. } => {
+                            // TODO: Map this error so we can give more meaningful error messages.
+                            let mut session = session.lock()?;
+                            let tx = match session.data_cmd_tx.take() {
+                                Some(tx) => tx,
+                                None => return Ok("425 No data connection established\r\n".to_string()),
+                            };
+                            tokio::spawn(
+                                tx.send(cmd.clone())
+                                .map(|_| ())
+                                .map_err(|_| ())
+                            );
+                            Ok("150 Sending directory list\r\n".to_string())
+                        },
+                        Command::Nlst{ .. } => {
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,

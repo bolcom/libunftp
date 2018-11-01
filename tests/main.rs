@@ -127,6 +127,25 @@ fn list() {
 }
 
 #[test]
+fn nlst() {
+    let addr = "127.0.0.1:1245";
+    let root = tempfile::TempDir::new().unwrap().into_path();
+    let path = root.clone();
+    println!("path: {:?}", root);
+    start_server!(addr, root);
+
+    // Create a filename that we wanna see in the `NLST` output
+    let path = path.join("test.txt");
+    {
+        let _f = std::fs::File::create(path);
+    }
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let list = ftp_stream.nlst(None).unwrap();
+    assert_eq!(list, vec!["test.txt"]);
+}
+
+#[test]
 fn pwd() {
     let addr = "127.0.0.1:1240";
     let root = std::env::temp_dir();

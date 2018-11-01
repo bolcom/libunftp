@@ -112,6 +112,11 @@ pub enum Command {
         /// The path of the file/directory the clients wants to list
         path: Option<String>,
     },
+    /// The `NLST` command
+    Nlst {
+        /// The path of the file/directory the clients wants to list.
+        path: Option<String>
+    },
     /// The `FEAT` command
     Feat,
     /// The `PWD` command
@@ -248,6 +253,11 @@ impl Command {
                 let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
                 Command::List{path: path}
             },
+            b"NLST" | b"nlst" => {
+                let path = parse_to_eol(cmd_params)?;
+                let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
+                Command::Nlst{path: path}
+            },
             b"FEAT" |b"feat" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
@@ -307,7 +317,7 @@ impl Command {
                 }
 
                 Command::Quit
-            }
+            },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
 

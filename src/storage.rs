@@ -93,9 +93,6 @@ pub trait StorageBackend {
 
     /// Return some bytes that make up a directory listing that can immediately be send to the
     /// client
-    // TODO: Find out why the 'where' is necessary. We only need it when we `format!`.
-    // TODO: Find out if we can do this without the `'static` requirements. Perhaps this is easiest
-    // to do when we migrate to async/await syntax.
     fn list_fmt<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
               <Self as StorageBackend>::Error: Send + 'static,
@@ -108,6 +105,36 @@ pub trait StorageBackend {
         let fut = stream.for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
             let mut res = res_work.lock().unwrap();
             let fmt = format!("{}\r\n", file);
+            let fmt_vec = fmt.into_bytes();
+            res.extend_from_slice(&fmt_vec);
+            Ok(())
+        }).and_then(|_| {
+            Ok(())
+        }).
+        map(move |_| {
+            std::sync::Arc::try_unwrap(res).expect("failed try_unwrap").into_inner().unwrap()
+        }).map(move |res| {
+            std::io::Cursor::new(res)
+        }).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::Other, "shut up")
+        });
+
+        Box::new(fut)
+    }
+
+    /// Return some bytes that make up a NLST directory listing (only the basename) that can
+    /// immediately be send to the client.
+    fn nlst<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+        where <Self as StorageBackend>::Metadata: Metadata + 'static,
+              <Self as StorageBackend>::Error: Send + 'static,
+    {
+        let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        let stream: Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(path);
+        let res_work = res.clone();
+        let fut = stream.for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
+            let mut res = res_work.lock().unwrap();
+            let fmt = format!("{}\r\n", file.path.file_name().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap_or(""));
             let fmt_vec = fmt.into_bytes();
             res.extend_from_slice(&fmt_vec);
             Ok(())
