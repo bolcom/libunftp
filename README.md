@@ -35,3 +35,10 @@ For more examples checkout out the [examples](./examples) directory.
 
 ##### Run tests
 `make test`
+
+#### Run fuzz targets
+
+At the moment we use cargo-fuzz, which (atm) only supports (LLVM) `libFuzzer`.
+TODO: Add fuzz tests using AFL and honggfuzz too.
+
+`make fuzz`

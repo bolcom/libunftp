@@ -22,5 +22,10 @@ debug:
 test:
 	cargo test --all-features
 
+.PHONY: clippy
 clippy:
 	cargo +nightly clippy
+
+.PHONY: fuzz
+fuzz:
+	cargo +nightly fuzz run parse_command
