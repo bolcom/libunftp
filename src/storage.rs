@@ -164,7 +164,6 @@ pub trait StorageBackend {
 
     /// Delete the given file
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
-
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.

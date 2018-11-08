@@ -232,6 +232,13 @@ pub enum FTPErrorKind {
     InvalidCommand,
 }
 
+#[derive(PartialEq)]
+enum SessionState {
+    New,
+    WaitPass,
+    WaitCmd,
+}
+
 // This is where we keep the state for a ftp session.
 struct Session<S>
     where S: storage::StorageBackend,
@@ -240,11 +247,11 @@ struct Session<S>
           <S as storage::StorageBackend>::Error: Send,
 {
     username: Option<String>,
-    is_authenticated: bool,
     storage: Arc<S>,
     data_cmd_tx: Option<mpsc::Sender<Command>>,
     data_cmd_rx: Option<mpsc::Receiver<Command>>,
     cwd: std::path::PathBuf,
+    state: SessionState,
 }
 
 impl<S> Session<S>
@@ -256,11 +263,11 @@ impl<S> Session<S>
     fn with_storage(storage: Arc<S>) -> Self {
         Session {
             username: None,
-            is_authenticated: false,
             storage: storage,
             data_cmd_tx: None,
             data_cmd_rx: None,
             cwd: "/".into(),
+            state: SessionState::New,
         }
     }
 
@@ -468,6 +475,17 @@ impl Server<storage::Filesystem> {
 
 }
 
+macro_rules! ensure_authenticated {
+    ($session: ident) => {
+        {
+            let session = $session.lock()?;
+            if session.state != WaitCmd {
+                return Ok("530 Please authenticate first\r\n".to_string())
+            }
+        }
+    };
+}
+
 impl<S> Server<S>
     where S: 'static + storage::StorageBackend + Sync + Send,
           <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
@@ -589,71 +607,111 @@ impl<S> Server<S>
 
     fn process(&self, socket: TcpStream) {
         let authenticator = self.authenticator;
+        // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let session = Arc::new(Mutex::new(Session::with_storage(storage)));
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
         let respond = move |event: Event| -> Result<String, FTPError> {
+            use self::SessionState::*;
+
             match event {
                 Event::Command(cmd) => {
                     match cmd {
                         Command::User{username} => {
-                            let user = std::str::from_utf8(&username)?;
                             let mut session = session.lock()?;
-                            session.username = Some(user.to_string());
-                            Ok("331 Password Required\r\n".to_string())
-                        },
+                            match session.state {
+                                New | WaitPass => {
+                                    let user = std::str::from_utf8(&username)?;
+                                    session.username = Some(user.to_string());
+                                    session.state = WaitPass;
+                                    Ok("331 Password Required\r\n".to_string())
+                                },
+                                _ => Ok("503 Please create a new connection to switch user\r\n".to_string())
+                            }
+                        }
                         Command::Pass{password} => {
-                            let pass = std::str::from_utf8(&password)?;
                             let mut session = session.lock()?;
-                            match session.username.clone() {
-                                Some(ref user) => {
-                                    let res = authenticator.authenticate(&user.clone(), pass);
+                            match session.state {
+                                WaitPass => {
+                                    let pass = std::str::from_utf8(&password)?;
+                                    let user = session.username.clone().unwrap();
+                                    let res = authenticator.authenticate(&user, pass);
                                     match res {
                                         Ok(true) => {
-                                            session.is_authenticated = true;
+                                            session.state = WaitCmd;
                                             Ok("230 User logged in, proceed\r\n".to_string())
-                                        },
+                                        }
                                         Ok(false) => Ok("530 Wrong username or password\r\n".to_string()),
-                                        Err(_) => Err(FTPErrorKind::AuthenticationError)?,
+                                        Err(_) => {
+                                            warn!("Unknown Authentication backend failure");
+                                            Ok("530 Failed to authenticate\r\n".to_string())
+                                        }
                                     }
                                 },
-                                None => Ok("503 Login with `USER` first.\r\n".to_string()),
+                                New => Ok("503 Please give me a username first\r\n".to_string()),
+                                _ => Ok("530 Please open a new connection to re-authenticate\r\n".to_string())
                             }
                         },
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
                         // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
                         // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => Ok("215 UNIX Type: L8\r\n".to_string()),
+                        Command::Syst => {
+                            ensure_authenticated!(session);
+                            Ok("215 UNIX Type: L8\r\n".to_string())
+                        },
                         Command::Stat{path} => {
-                            match path {
-                                None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
-                                Some(path) => {
-                                    let path = std::str::from_utf8(&path)?;
-                                    // TODO: Implement :)
-                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok("504 Stat with paths unsupported atm\r\n".to_string())
-                                },
+                            ensure_authenticated!(session);
+                            let mut session = session.lock()?;
+                            match session.state {
+                                WaitCmd => {
+                                    match path {
+                                        None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
+                                        Some(path) => {
+                                            let path = std::str::from_utf8(&path)?;
+                                            // TODO: Implement :)
+                                            info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
+                                            Ok("504 Stat with paths unsupported atm\r\n".to_string())
+                                        },
+                                    }
+                                }
+                                _ => Ok("530 Please login first\r\n".to_string())
                             }
                         },
-                        Command::Acct{ .. } => Ok("530 I don't know accounting man\r\n".to_string()),
-                        Command::Type => Ok("200 I'm always in binary mode, dude...\r\n".to_string()),
+                        Command::Acct{ .. } => {
+                            ensure_authenticated!(session);
+                            Ok("530 I don't know accounting man\r\n".to_string())
+                        },
+                        Command::Type => {
+                            ensure_authenticated!(session);
+                            Ok("200 I'm always in binary mode, dude...\r\n".to_string())
+                        },
                         Command::Stru{structure} => {
+                            ensure_authenticated!(session);
                             match structure {
                                 commands::StruParam::File => Ok("200 We're in File structure mode\r\n".to_string()),
                                 _ => Ok("504 Only File structure is supported\r\n".to_string()),
                             }
                         },
                         Command::Mode{mode} => {
+                            ensure_authenticated!(session);
                             match mode {
                                 commands::ModeParam::Stream => Ok("200 Using Stream transfer mode\r\n".to_string()),
                                 _ => Ok("504 Only Stream transfer mode is supported\r\n".to_string()),
                             }
                         },
-                        Command::Help => Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string()),
-                        Command::Noop => Ok("200 Successfully did nothing\r\n".to_string()),
+                        Command::Help => {
+                            ensure_authenticated!(session);
+                            Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string())
+                        },
+                        Command::Noop => {
+                            ensure_authenticated!(session);
+                            Ok("200 Successfully did nothing\r\n".to_string())
+                        },
                         Command::Pasv => {
+                            ensure_authenticated!(session);
+
                             let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
                             let addr = match listener.local_addr()? {
                                 std::net::SocketAddr::V4(addr) => addr,
@@ -697,8 +755,12 @@ impl<S> Server<S>
 
                             Ok(format!("227 Entering Passive Mode ({},{},{},{},{},{})\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
                         },
-                        Command::Port => Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n".to_string()),
+                        Command::Port => {
+                            ensure_authenticated!(session);
+                            Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n".to_string())
+                        },
                         Command::Retr{ .. } => {
+                            ensure_authenticated!(session);
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
@@ -714,6 +776,7 @@ impl<S> Server<S>
                             Ok("".to_string())
                         },
                         Command::Stor{ .. } => {
+                            ensure_authenticated!(session);
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
@@ -727,6 +790,7 @@ impl<S> Server<S>
                             Ok("150 Will send you something\r\n".to_string())
                         },
                         Command::List{ .. } => {
+                            ensure_authenticated!(session);
                             // TODO: Map this error so we can give more meaningful error messages.
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
@@ -741,6 +805,7 @@ impl<S> Server<S>
                             Ok("150 Sending directory list\r\n".to_string())
                         },
                         Command::Nlst{ .. } => {
+                            ensure_authenticated!(session);
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
@@ -754,17 +819,20 @@ impl<S> Server<S>
                             Ok("150 Sending directory list\r\n".to_string())
                         },
                         Command::Feat => {
+                            ensure_authenticated!(session);
                             let response =
                                 "211 I support some cool features\r\n\
                                 211 End\r\n".to_string();
                             Ok(response)
                         },
                         Command::Pwd => {
+                            ensure_authenticated!(session);
                             let session = session.lock()?;
                             // TODO: properly escape double quotes in `cwd`
                             Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
                         },
                         Command::Cwd{path} => {
+                            ensure_authenticated!(session);
                             // TODO: We current accept all CWD requests. Consider only allowing
                             // this if the directory actually exists and the user has the proper
                             // permission.
@@ -773,16 +841,19 @@ impl<S> Server<S>
                             Ok("250 Okay.\r\n".to_string())
                         },
                         Command::Cdup => {
+                            ensure_authenticated!(session);
                             let mut session = session.lock()?;
                             session.cwd.pop();
                             Ok("250 Okay.\r\n".to_string())
                         },
                         Command::Opts{option} => {
+                            ensure_authenticated!(session);
                             match option {
                                 commands::Opt::UTF8 => Ok("250 Okay, I'm always in UTF8 mode.\r\n".to_string())
                             }
                         },
                         Command::Dele{path} => {
+                            ensure_authenticated!(session);
                             let mut session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
                             let tx_success = tx.clone();
