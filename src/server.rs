@@ -475,17 +475,6 @@ impl Server<storage::Filesystem> {
 
 }
 
-macro_rules! ensure_authenticated {
-    ($session: ident) => {
-        {
-            let session = $session.lock()?;
-            if session.state != WaitCmd {
-                return Ok("530 Please authenticate first\r\n".to_string())
-            }
-        }
-    };
-}
-
 impl<S> Server<S>
     where S: 'static + storage::StorageBackend + Sync + Send,
           <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
@@ -613,6 +602,34 @@ impl<S> Server<S>
         let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
+        macro_rules! respond {
+            ($closure:expr) => ({
+                ensure_authenticated!();
+                $closure()
+            });
+        }
+
+        macro_rules! spawn {
+            ($future:expr) => {
+                tokio::spawn(
+                    $future
+                    .map(|_| ())
+                    .map_err(|_| ())
+                );
+            }
+        }
+
+        macro_rules! ensure_authenticated {
+            (  ) => {
+                {
+                    let session = session.lock()?;
+                    if session.state != WaitCmd {
+                        return Ok("530 Please authenticate with USER and PASS first\r\n".to_string())
+                    }
+                }
+            };
+        }
+
         let respond = move |event: Event| -> Result<String, FTPError> {
             use self::SessionState::*;
 
@@ -657,60 +674,40 @@ impl<S> Server<S>
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
                         // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
                         // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => {
-                            ensure_authenticated!(session);
-                            Ok("215 UNIX Type: L8\r\n".to_string())
-                        },
+                        Command::Syst => respond!(|| Ok("215 UNIX Type: L8\r\n".to_string())),
                         Command::Stat{path} => {
-                            ensure_authenticated!(session);
-                            let mut session = session.lock()?;
-                            match session.state {
-                                WaitCmd => {
-                                    match path {
-                                        None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
-                                        Some(path) => {
-                                            let path = std::str::from_utf8(&path)?;
-                                            // TODO: Implement :)
-                                            info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                            Ok("504 Stat with paths unsupported atm\r\n".to_string())
-                                        },
-                                    }
-                                }
-                                _ => Ok("530 Please login first\r\n".to_string())
+                            ensure_authenticated!();
+                            match path {
+                                None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
+                                Some(path) => {
+                                    let path = std::str::from_utf8(&path)?;
+                                    // TODO: Implement :)
+                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
+                                    Ok("504 Stat with paths unsupported atm\r\n".to_string())
+                                },
                             }
                         },
-                        Command::Acct{ .. } => {
-                            ensure_authenticated!(session);
-                            Ok("530 I don't know accounting man\r\n".to_string())
-                        },
-                        Command::Type => {
-                            ensure_authenticated!(session);
-                            Ok("200 I'm always in binary mode, dude...\r\n".to_string())
-                        },
+                        Command::Acct{ .. } => respond!(|| Ok("530 I don't know accounting man\r\n".to_string())),
+                        Command::Type => respond!(|| Ok("200 I'm always in binary mode, dude...\r\n".to_string())),
                         Command::Stru{structure} => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             match structure {
                                 commands::StruParam::File => Ok("200 We're in File structure mode\r\n".to_string()),
                                 _ => Ok("504 Only File structure is supported\r\n".to_string()),
                             }
                         },
                         Command::Mode{mode} => {
-                            ensure_authenticated!(session);
-                            match mode {
-                                commands::ModeParam::Stream => Ok("200 Using Stream transfer mode\r\n".to_string()),
-                                _ => Ok("504 Only Stream transfer mode is supported\r\n".to_string()),
-                            }
+                            respond!(|| {
+                                match mode {
+                                    commands::ModeParam::Stream => Ok("200 Using Stream transfer mode\r\n".to_string()),
+                                    _ => Ok("504 Only Stream transfer mode is supported\r\n".to_string()),
+                                }
+                            })
                         },
-                        Command::Help => {
-                            ensure_authenticated!(session);
-                            Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string())
-                        },
-                        Command::Noop => {
-                            ensure_authenticated!(session);
-                            Ok("200 Successfully did nothing\r\n".to_string())
-                        },
+                        Command::Help => respond!(|| Ok("214 We haven't implemented a useful HELP command, sorry\r\n".to_string())),
+                        Command::Noop => respond!(|| Ok("200 Successfully did nothing\r\n".to_string())),
                         Command::Pasv => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
 
                             let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
                             let addr = match listener.local_addr()? {
@@ -756,104 +753,90 @@ impl<S> Server<S>
                             Ok(format!("227 Entering Passive Mode ({},{},{},{},{},{})\r\n", octets[0], octets[1], octets[2], octets[3], p1 , p2))
                         },
                         Command::Port => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n".to_string())
                         },
                         Command::Retr{ .. } => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => return Err(FTPErrorKind::InternalServerError.into()),
                             };
-                            tokio::spawn(
-                                tx.send(cmd.clone())
-                                .map(|_| ())
-                                .map_err(|_| ())
-                            );
+                            spawn!(tx.send(cmd.clone()));
                             // TODO: Return a Option<String> or something, to prevent us from
                             // returning "" ><
                             Ok("".to_string())
                         },
                         Command::Stor{ .. } => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => return Ok("425 No data connection established\r\n".to_string()),
                             };
-                            tokio::spawn(
-                                tx.send(cmd.clone())
-                                .map(|_| ())
-                                .map_err(|_| ())
-                            );
+                            spawn!(tx.send(cmd.clone()));
                             Ok("150 Will send you something\r\n".to_string())
                         },
                         Command::List{ .. } => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             // TODO: Map this error so we can give more meaningful error messages.
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => return Ok("425 No data connection established\r\n".to_string()),
                             };
-                            tokio::spawn(
-                                tx.send(cmd.clone())
-                                .map(|_| ())
-                                .map_err(|_| ())
-                            );
+                            spawn!(tx.send(cmd.clone()));
                             Ok("150 Sending directory list\r\n".to_string())
                         },
                         Command::Nlst{ .. } => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let mut session = session.lock()?;
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => return Ok("425 No data connection established\r\n".to_string()),
                             };
-                            tokio::spawn(
-                                tx.send(cmd.clone())
-                                .map(|_| ())
-                                .map_err(|_| ())
-                            );
+                            spawn!(tx.send(cmd.clone()));
                             Ok("150 Sending directory list\r\n".to_string())
                         },
                         Command::Feat => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let response =
                                 "211 I support some cool features\r\n\
                                 211 End\r\n".to_string();
                             Ok(response)
                         },
                         Command::Pwd => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let session = session.lock()?;
                             // TODO: properly escape double quotes in `cwd`
                             Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
                         },
                         Command::Cwd{path} => {
-                            ensure_authenticated!(session);
                             // TODO: We current accept all CWD requests. Consider only allowing
                             // this if the directory actually exists and the user has the proper
                             // permission.
-                            let mut session = session.lock()?;
-                            session.cwd.push(path);
-                            Ok("250 Okay.\r\n".to_string())
+                            respond!(|| {
+                                let mut session = session.lock()?;
+                                session.cwd.push(path);
+                                Ok("250 Okay.\r\n".to_string())
+                            })
                         },
                         Command::Cdup => {
-                            ensure_authenticated!(session);
-                            let mut session = session.lock()?;
-                            session.cwd.pop();
-                            Ok("250 Okay.\r\n".to_string())
+                            respond!(|| {
+                                let mut session = session.lock()?;
+                                session.cwd.pop();
+                                Ok("250 Okay.\r\n".to_string())
+                            })
                         },
                         Command::Opts{option} => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             match option {
                                 commands::Opt::UTF8 => Ok("250 Okay, I'm always in UTF8 mode.\r\n".to_string())
                             }
                         },
                         Command::Dele{path} => {
-                            ensure_authenticated!(session);
+                            ensure_authenticated!();
                             let mut session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
                             let tx_success = tx.clone();
@@ -879,7 +862,7 @@ impl<S> Server<S>
                         },
                         Command::Quit => {
                             let tx = tx.clone();
-                            tokio::spawn(tx.send(DataMsg::Quit).map(|_| ()).map_err(|_| ()));
+                            spawn!(tx.send(DataMsg::Quit));
                             Ok("221 bye!\r\n".to_string())
                         },
                     }
