@@ -31,12 +31,12 @@ use self::std::io::ErrorKind;
 
 use std::fmt;
 
-/// DataMsg represents a status message from the data channel handler to our main (per connection)
+/// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 // TODO: Rename this enum (it is not only used for data channel communication anymore).
 // TODO: Give these events better names
 #[derive(PartialEq)]
-enum DataMsg {
+enum InternalMsg {
     // Permission Denied
     PermissionDenied,
     // File not found
@@ -70,7 +70,7 @@ enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(commands::Command),
     /// A status message from the data channel handler
-    DataMsg(DataMsg),
+    InternalMsg(InternalMsg),
 }
 
 // FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
@@ -216,7 +216,7 @@ pub enum FTPErrorKind {
     /// We received something on the data message channel that we don't understand. This should be
     /// impossible.
     #[fail(display = "Failed to map event from data channel")]
-    DataMsgError,
+    InternalMsgError,
     /// We encountered a non-UTF8 character in the command.
     #[fail(display = "Non-UTF8 character in command")]
     UTF8Error,
@@ -274,7 +274,7 @@ impl<S> Session<S>
     /// socket: the data socket we'll be working with
     /// tx: channel to send the result of our operation on
     /// rx: channel to receive the command on
-    fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<DataMsg>) {
+    fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<InternalMsg>) {
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = self.data_cmd_rx.take().unwrap();
@@ -292,22 +292,22 @@ impl<S> Session<S>
                             storage.get(path)
                             .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                             .and_then(|f| {
-                                tx_sending.send(DataMsg::SendingData)
+                                tx_sending.send(InternalMsg::SendingData)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
                                 .and_then(|_| {
                                     self::tokio_io::io::copy(f, socket)
                                 })
                                 .and_then(|_| {
-                                    tx.send(DataMsg::SendData)
+                                    tx.send(InternalMsg::SendData)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
                                 })
                             })
                             .or_else(|e| {
                                 let msg = match e.kind() {
-                                    ErrorKind::NotFound => DataMsg::NotFound,
-                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
-                                    _ => DataMsg::UnknownRetrieveError,
+                                    ErrorKind::NotFound => InternalMsg::NotFound,
+                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                    _ => InternalMsg::UnknownRetrieveError,
                                 };
                                 tx_error.send(msg)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
@@ -326,15 +326,15 @@ impl<S> Session<S>
                             storage.put(socket, path)
                             .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
                             .and_then(|_| {
-                                tx_ok.send(DataMsg::WrittenData)
+                                tx_ok.send(InternalMsg::WrittenData)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
                             })
                             .or_else(|e| {
                                 let msg = match e.kind() {
-                                    ErrorKind::NotFound => DataMsg::NotFound,
-                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
-                                    _ => DataMsg::WriteFailed,
+                                    ErrorKind::NotFound => InternalMsg::NotFound,
+                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                    _ => InternalMsg::WriteFailed,
 
                                 };
                                 tx_error.send(msg)
@@ -357,17 +357,17 @@ impl<S> Session<S>
                             storage.list_fmt(path)
                             .and_then(|res| tokio::io::copy(res, socket))
                             .and_then(|_| {
-                                tx_ok.send(DataMsg::DirectorySuccesfullyListed)
+                                tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                             })
                             .or_else(|e| {
                                 let msg = match e.kind() {
                                     // TODO: Consider making these events unique (so don't reuse
                                     // the `Stor` messages here)
-                                    ErrorKind::NotFound => DataMsg::NotFound,
-                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
-                                    _ => DataMsg::WriteFailed,
+                                    ErrorKind::NotFound => InternalMsg::NotFound,
+                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                    _ => InternalMsg::WriteFailed,
                                 };
                                 tx_error.send(msg)
                             })
@@ -389,17 +389,17 @@ impl<S> Session<S>
                             storage.nlst(path)
                             .and_then(|res| tokio::io::copy(res, socket))
                             .and_then(|_| {
-                                tx_ok.send(DataMsg::DirectorySuccesfullyListed)
+                                tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                             })
                             .or_else(|e| {
                                 let msg = match e.kind() {
                                     // TODO: Consider making these events unique (so don't reuse
                                     // the `Stor` messages here)
-                                    ErrorKind::NotFound => DataMsg::NotFound,
-                                    ErrorKind::PermissionDenied => DataMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => DataMsg::ConnectionReset,
-                                    _ => DataMsg::WriteFailed,
+                                    ErrorKind::NotFound => InternalMsg::NotFound,
+                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                    _ => InternalMsg::WriteFailed,
                                 };
                                 tx_error.send(msg)
                             })
@@ -599,7 +599,7 @@ impl<S> Server<S>
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let session = Arc::new(Mutex::new(Session::with_storage(storage)));
-        let (tx, rx): (mpsc::Sender<DataMsg>, mpsc::Receiver<DataMsg>) = mpsc::channel(1);
+        let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
 
         macro_rules! respond {
@@ -632,6 +632,7 @@ impl<S> Server<S>
 
         let respond = move |event: Event| -> Result<String, FTPError> {
             use self::SessionState::*;
+            use self::InternalMsg::*;
 
             match event {
                 Event::Command(cmd) => {
@@ -845,11 +846,11 @@ impl<S> Server<S>
                                 storage.del(path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
                                 .and_then(|_| {
-                                    tx_success.send(DataMsg::DelSuccess)
+                                    tx_success.send(InternalMsg::DelSuccess)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
                                 })
                                 .or_else(|_| {
-                                    tx_fail.send(DataMsg::DelFail)
+                                    tx_fail.send(InternalMsg::DelFail)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
                                 })
                                 .map(|_| ())
@@ -862,26 +863,26 @@ impl<S> Server<S>
                         },
                         Command::Quit => {
                             let tx = tx.clone();
-                            spawn!(tx.send(DataMsg::Quit));
+                            spawn!(tx.send(InternalMsg::Quit));
                             Ok("221 bye!\r\n".to_string())
                         },
                     }
                 },
 
-                Event::DataMsg(DataMsg::NotFound) => Ok("550 File not found\r\n".to_string()),
-                Event::DataMsg(DataMsg::PermissionDenied) => Ok("550 Permision denied\r\n".to_string()),
-                Event::DataMsg(DataMsg::SendingData) => Ok("150 Sending Data\r\n".to_string()),
-                Event::DataMsg(DataMsg::SendData) => Ok("226 Send you something nice\r\n".to_string()),
-                Event::DataMsg(DataMsg::WriteFailed) => Ok("450 Failed to write file\r\n".to_string()),
-                Event::DataMsg(DataMsg::ConnectionReset) => Ok("426 Datachannel unexpectedly closed\r\n".to_string()),
-                Event::DataMsg(DataMsg::WrittenData) => Ok("226 File succesfully written\r\n".to_string()),
-                Event::DataMsg(DataMsg::UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
-                Event::DataMsg(DataMsg::DirectorySuccesfullyListed) => Ok("226 Listed the directory\r\n".to_string()),
-                Event::DataMsg(DataMsg::DelSuccess) => Ok("250 File successfully removed\r\n".to_string()),
-                Event::DataMsg(DataMsg::DelFail) => Ok("450 Failed to delete the file\r\n".to_string()),
-                // The DataMsg::Quit will never be reached, because we catch it in the task before
+                Event::InternalMsg(NotFound) => Ok("550 File not found\r\n".to_string()),
+                Event::InternalMsg(PermissionDenied) => Ok("550 Permision denied\r\n".to_string()),
+                Event::InternalMsg(SendingData) => Ok("150 Sending Data\r\n".to_string()),
+                Event::InternalMsg(SendData) => Ok("226 Send you something nice\r\n".to_string()),
+                Event::InternalMsg(WriteFailed) => Ok("450 Failed to write file\r\n".to_string()),
+                Event::InternalMsg(ConnectionReset) => Ok("426 Datachannel unexpectedly closed\r\n".to_string()),
+                Event::InternalMsg(WrittenData) => Ok("226 File succesfully written\r\n".to_string()),
+                Event::InternalMsg(UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
+                Event::InternalMsg(DirectorySuccesfullyListed) => Ok("226 Listed the directory\r\n".to_string()),
+                Event::InternalMsg(DelSuccess) => Ok("250 File successfully removed\r\n".to_string()),
+                Event::InternalMsg(DelFail) => Ok("450 Failed to delete the file\r\n".to_string()),
+                // The InternalMsg::Quit will never be reached, because we catch it in the task before
                 // this closure is called (because we have to close the connection).
-                Event::DataMsg(DataMsg::Quit) => Ok("221 bye!\r\n".to_string()),
+                Event::InternalMsg(Quit) => Ok("221 bye!\r\n".to_string()),
             }
         };
 
@@ -894,12 +895,12 @@ impl<S> Server<S>
                     stream
                     .map(Event::Command)
                     .select(rx
-                        .map(Event::DataMsg)
-                        .map_err(|_| FTPErrorKind::DataMsgError.into())
+                        .map(Event::InternalMsg)
+                        .map_err(|_| FTPErrorKind::InternalMsgError.into())
                     )
                     .take_while(|event| {
                         // TODO: Make sure data connections are closed
-                        Ok(*event != Event::DataMsg(DataMsg::Quit))
+                        Ok(*event != Event::InternalMsg(InternalMsg::Quit))
                     })
                     .and_then(respond)
                     .or_else(|e| {
