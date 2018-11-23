@@ -61,6 +61,10 @@ enum InternalMsg {
     DelFail,
     // Quit the client connection
     Quit,
+    // Successfully created directory
+    MkdirSuccess(std::path::PathBuf),
+    // Failed to crate directory
+    MkdirFail,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -866,6 +870,31 @@ impl<S> Server<S>
                             spawn!(tx.send(InternalMsg::Quit));
                             Ok("221 bye!\r\n".to_string())
                         },
+                        Command::Mkd{path} => {
+                            ensure_authenticated!();
+                            let mut session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            let tx_success = tx.clone();
+                            let tx_fail = tx.clone();
+                            tokio::spawn(
+                                storage.mkd(&path)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
+                                .and_then(|_| {
+                                    tx_success.send(InternalMsg::MkdirSuccess(path))
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirSuccess' message"))
+                                })
+                                .or_else(|_| {
+                                    tx_fail.send(InternalMsg::MkdirFail)
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirFail' message"))
+                                })
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to create directory: {}", e);
+                                    ()
+                                })
+                            );
+                            Ok("".to_string())
+                        },
                     }
                 },
 
@@ -883,6 +912,8 @@ impl<S> Server<S>
                 // The InternalMsg::Quit will never be reached, because we catch it in the task before
                 // this closure is called (because we have to close the connection).
                 Event::InternalMsg(Quit) => Ok("221 bye!\r\n".to_string()),
+                Event::InternalMsg(MkdirSuccess(path)) => Ok(format!("257 {}\r\n", path.to_string_lossy())),
+                Event::InternalMsg(MkdirFail) => Ok("550 Failed to create directory\r\n".to_string()),
             }
         };
 
@@ -925,6 +956,7 @@ impl<S> Server<S>
 
                 Ok(())
             });
+
         tokio::spawn(task);
     }
 }

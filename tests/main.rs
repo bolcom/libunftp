@@ -147,30 +147,6 @@ fn list() {
 }
 
 #[test]
-fn nlst() {
-    let addr = "127.0.0.1:1245";
-    let root = tempfile::TempDir::new().unwrap().into_path();
-    let path = root.clone();
-    println!("path: {:?}", root);
-    start_server!(addr, root);
-
-    // Create a filename that we wanna see in the `NLST` output
-    let path = path.join("test.txt");
-    {
-        let _f = std::fs::File::create(path);
-    }
-
-    let mut ftp_stream = FtpStream::connect(addr).unwrap();
-
-    // Make sure we fail if we're not logged in
-    let _list = ftp_stream.nlst(None).unwrap_err();
-
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
-    let list = ftp_stream.nlst(None).unwrap();
-    assert_eq!(list, vec!["test.txt"]);
-}
-
-#[test]
 fn pwd() {
     let addr = "127.0.0.1:1240";
     let root = std::env::temp_dir();
@@ -261,4 +237,48 @@ fn quit() {
     // This may take some time, so we'll sleep for a bit.
     std::thread::sleep(std::time::Duration::from_millis(10));
     ftp_stream.noop().unwrap_err();
+}
+
+#[test]
+fn nlst() {
+    let addr = "127.0.0.1:1245";
+    let root = tempfile::TempDir::new().unwrap().into_path();
+    let path = root.clone();
+    println!("path: {:?}", root);
+    start_server!(addr, root);
+
+    // Create a filename that we wanna see in the `NLST` output
+    let path = path.join("test.txt");
+    {
+        let _f = std::fs::File::create(path);
+    }
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+
+    // Make sure we fail if we're not logged in
+    let _list = ftp_stream.nlst(None).unwrap_err();
+
+    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    let list = ftp_stream.nlst(None).unwrap();
+    assert_eq!(list, vec!["test.txt"]);
+}
+
+#[test]
+fn mkdir() {
+    let addr = "127.0.0.1:1246";
+    let root = tempfile::TempDir::new().unwrap().into_path();
+    let server_root = root.clone();
+    start_server!(addr, server_root);
+
+    let mut ftp_stream = FtpStream::connect(addr).unwrap();
+    let new_dir_name = "hallo";
+    // Make sure we fail if we're not logged in
+    ftp_stream.mkdir(new_dir_name).unwrap_err();
+
+    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.mkdir(new_dir_name).unwrap();
+
+    let full_path = root.join(new_dir_name);
+    let metadata = std::fs::metadata(full_path).unwrap();
+    assert!(metadata.is_dir());
 }

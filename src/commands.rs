@@ -140,6 +140,11 @@ pub enum Command {
     },
     /// The `QUIT` command
     Quit,
+    /// The `MKD` command
+    Mkd {
+        /// The path to the directory the client wants to create.
+        path: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -317,6 +322,16 @@ impl Command {
                 }
 
                 Command::Quit
+            },
+            b"MKD" | b"XMKD" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let path = String::from_utf8_lossy(&params).to_string();
+                let path = path.into();
+                Command::Mkd{path}
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -699,5 +714,14 @@ mod tests {
 
         let input = "QUIT NOW\r\n";
         assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+    }
+
+    #[test]
+    fn parse_mkd() {
+        let input = "MKD\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "MKD bla\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Mkd{path: "bla".into()}));
     }
 }

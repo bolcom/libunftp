@@ -4,6 +4,7 @@ extern crate tokio;
 extern crate tokio_io;
 extern crate futures;
 extern crate chrono;
+extern crate path_abs;
 
 use std::{fmt,result};
 use std::path::{Path,PathBuf};
@@ -164,11 +165,25 @@ pub trait StorageBackend {
 
     /// Delete the given file
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+
+    /// Create the given directory
+    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a Filesystem, like a traditional FTP server.
 pub struct Filesystem {
     root: PathBuf,
+}
+
+/// Returns the canonical path corresponding to the input path, sequences like '../' resolved.
+///
+/// I may decide to make this part of just the Filesystem implementation, because strictly speaking
+/// '../' is only special on the context of a filesystem. Then again, FTP does kind of imply a
+/// filesystem... hmm...
+fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
+    use self::path_abs::PathAbs;
+    let p = PathAbs::new(path)?;
+    Ok(p.as_path().to_path_buf())
 }
 
 impl Filesystem {
@@ -179,18 +194,6 @@ impl Filesystem {
         Filesystem {
             root: root.into(),
         }
-    }
-
-    /// Returns the canonical path corresponding to the input path, with symlinks and sequences
-    /// like '../' resolved.
-    ///
-    /// It is part of the `Filesystem` implementation, because symlinks and sequences like '../'
-    /// only have special meaning with regards to a Filesystem backend. When implementing other
-    /// backends, we will likely not support symlinks, and '..' will be a regular directory name. I
-    /// might have to change my mind on this though, we'll see how it goes when implementing other
-    /// backends.
-    fn real_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
-        Ok(std::fs::canonicalize(path)?)
     }
 
     /// Returns the full, absolute and canonical path corresponding to the (relative to FTP root)
@@ -206,7 +209,7 @@ impl Filesystem {
         };
 
         // TODO: Use `?` operator here, when we can use `impl Future`
-        let real_full_path = match self.real_path(full_path) {
+        let real_full_path = match canonicalize(full_path) {
             Ok(path) => path,
             Err(e) => return Err(e),
         };
@@ -214,8 +217,7 @@ impl Filesystem {
         if real_full_path.starts_with(&self.root) {
             Ok(real_full_path)
         } else {
-            // TODO: Some more useful error reporting
-            Err(Error::IOError)
+            Err(Error::PathError)
         }
     }
 }
@@ -295,6 +297,15 @@ impl StorageBackend for Filesystem {
         };
         Box::new(self::tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
     }
+
+    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Box::new(futures::future::err(e)),
+        };
+
+        Box::new(self::tokio::fs::create_dir(full_path).map_err(|e| {println!("error: {}", e); Error::IOError}))
+    }
 }
 
 use std::os::unix::fs::MetadataExt;
@@ -334,7 +345,9 @@ impl Metadata for std::fs::Metadata {
 /// [`StorageBackend`]: ./trait.StorageBackend.html
 pub enum Error {
     /// An IO Error
-    IOError
+    IOError,
+    /// Path error
+    PathError,
 }
 
 impl Error {
@@ -358,6 +371,12 @@ impl std::error::Error for Error {
 impl From<std::io::Error> for Error {
     fn from(_err: std::io::Error) -> Error {
         Error::IOError
+    }
+}
+
+impl From<path_abs::Error> for Error {
+    fn from(_err: path_abs::Error) -> Error {
+        Error::PathError
     }
 }
 
@@ -482,7 +501,7 @@ mod tests {
         let orig_content = b"hallo";
         let fs = Filesystem::new(&root);
 
-        // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -514,5 +533,22 @@ mod tests {
         let my_format = format!("{}", fileinfo);
         let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", dir.strip_prefix("/").unwrap().to_str().unwrap());
         assert_eq!(my_format, format);
+    }
+
+    #[test]
+    fn fs_mkd() {
+        let root = tempfile::TempDir::new().unwrap().into_path();
+        let fs = Filesystem::new(&root);
+        let new_dir_name = "bla";
+
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
+        // to completion
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+        rt.block_on(fs.mkd(new_dir_name)).expect("Failed to mkd");
+
+        let full_path = root.join(new_dir_name);
+        let metadata = std::fs::metadata(full_path).unwrap();
+        assert!(metadata.is_dir());
     }
 }
