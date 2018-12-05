@@ -2,7 +2,7 @@
 help: # Show available `make` commands
 	@echo 'Available `make` commands:' >/dev/stderr
 	@echo >/dev/stderr
-	@sed -n 's/^\([a-z][a-zA-Z0-9]\+\):[^#]*\(#\(.*\)\)/\1\t\t\3/p' Makefile
+	@awk -F'#' '/^[a-z][A-Za-z0-9]+/ {if (NF > 1) { sub(/:[^#]*/, ""); print $$1 "\t\t" $$2}}' Makefile
 
 .PHONY: watch
 watch: # Continuously run `cargo check` and `cargo test` on file changes
