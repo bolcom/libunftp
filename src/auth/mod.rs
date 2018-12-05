@@ -1,19 +1,37 @@
 #![deny(missing_docs)]
 
+/// Defines the common interface that can be implemented for a multitude of authentication
+/// backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
+///
+/// You can define your own implementation to integrate the FTP server with whatever authentication
+/// mechanism you need. For example, to define an `Authenticator` that will randomly decide:
+///
+/// ```rust
+/// # extern crate rand;
+/// # extern crate firetrap;
+/// use rand::prelude::*;
+/// use firetrap::auth::Authenticator;
+///
+/// struct RandomAuthenticator;
+///
+/// impl Authenticator for RandomAuthenticator {
+///     fn authenticate(&self, _username: &str, _password: &str) -> Result<bool, ()> {
+///         Ok(rand::random())
+///     }
+/// }
+/// ```
+/// [`Server`]: ../server/struct.Server.html
+pub trait Authenticator {
+    /// Authenticate the given user with the given password.
+    fn authenticate(&self, username: &str, password: &str) -> Result<bool, ()>;
+}
+
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
 /// [`Authenticator`]: trait.Authenticator.html
+/// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[cfg(feature = "pam")]
 pub mod pam;
-
-/// The authenticator trait defines a common interface that can be implemented for a multitude of
-/// authentcation backends, e.g. LDAP or PAM. It is used by [`Server`] to authenticate users.
-///
-/// [`Server`]: ../server/struct.Server.html
-pub trait Authenticator {
-    /// Authenticate the given user with the given password
-    fn authenticate(&self, username: &str, password: &str) -> Result<bool, ()>;
-}
 
 /// Authenticator implementation that simply allows everyone.
 ///

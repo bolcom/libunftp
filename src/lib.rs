@@ -1,36 +1,43 @@
 #![deny(missing_docs)]
-//! Firetrap, a FTP server library for Rust.
+//! FTP server library for Rust
+//!
+//! Firetrap helps you create modern, safe and extensible FTP servers in Rust.
+//!
+//! Because of its plugable authentication and storage backends (e.g. local filesystem, Google
+//! Buckets) it's more flexible than traditional FTP servers and a perfect match for the cloud.
+//!
+//! It is currently under heavy development and not yet recommended for production use.
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! extern crate firetrap;
+//!
+//! fn main() {
+//!  let server = firetrap::Server::with_root(std::env::temp_dir());
+//!  # if false { // We don't want to actually start the server in an example.
+//!  server.listen("127.0.0.1:2121");
+//!  # }
+//! }
+//! ```
 
 #[macro_use]
 extern crate log;
-
 extern crate failure;
 #[macro_use] extern crate failure_derive;
-
 #[cfg(test)]
 #[macro_use] extern crate pretty_assertions;
 
-/// The actual server protocol and networking.
-///
-/// [`Server`]: ./server/struct.Server.html
+/// Contains the `Server` struct that is used to configure and control a FTP server instance.
 pub mod server;
+pub use server::Server;
 
-/// The FTP [`Command`]s types and parding
-///
-/// [`Command`]: ./commands/struct.Command.html
-pub mod commands;
+pub(crate) mod commands;
 
-/// The [`Authenticator`] trait (used by the [`Server`] to authenticate users), as
-/// well as its implementations (e.g. the [`AnonymousAuthenticator`]).
-///
-/// [`Authenticator`]: ./auth/trait.Authenticator.html
-/// [`AnonymousAuthenticator`]: ./auth/struct.AnonymousAuthenticator.html
+/// Contains the `Authenticator` trait that is used by the `Server` to authenticate users, as well
+/// as its various implementations.
 pub mod auth;
 
-/// The [`StorageBackend`] trait and its implementations (.e.g. [`Filesystem`]).
-///
-/// [`StorageBackend`]: ./auth/trait.StorageBackend.html
-/// [`Filesystem`]: ./storage/struct.Filesystem.html
+/// Contains the `StorageBackend` trait that is by the `Server` and its various
+/// implementations.
 pub mod storage;
-
-pub use server::Server;

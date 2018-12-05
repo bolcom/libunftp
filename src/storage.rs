@@ -16,29 +16,31 @@ use self::chrono::prelude::*;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
-    /// Returns the length (size) of the file
+    /// Returns the length (size) of the file.
     fn len(&self) -> u64;
 
-    /// Returns self.len() == 0
+    /// Returns `self.len() == 0`.
     fn is_empty(&self) -> bool;
 
-    /// Returns true if the path is a directory
+    /// Returns true if the path is a directory.
     fn is_dir(&self) -> bool;
 
-    /// Returns true if the path is a file
+    /// Returns true if the path is a file.
     fn is_file(&self) -> bool;
 
-    /// Returns the last modified time of the path
+    /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime>;
 
-    /// Returns the gid of the file
+    /// Returns the `gid` of the file.
     fn gid(&self) -> u32;
 
-    /// Returns the uid of the file
+    /// Returns the `uid` of the file.
     fn uid(&self) -> u32;
 }
 
-/// Fileinfo describes a file
+/// Fileinfo contains the path and `Metadata` of a file.
+///
+/// [`Metadata`]: ./trait.Metadata.html
 pub struct Fileinfo<P, M>
     where P: AsRef<Path>,
     M: Metadata,
@@ -79,21 +81,23 @@ impl<P, M> std::fmt::Display for Fileinfo<P, M>
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
 pub trait StorageBackend {
-    /// TODO: document
+    /// The concrete type of the Files returned by this StorageBackend.
     type File;
-    /// TODO: document
+    /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata;
-    /// TODO: document
+    /// The concrete type of the error returned by this StorageBackend.
     type Error;
 
-    /// Returns the `Metadata` for a file
+    /// Returns the `Metadata` for the given file.
+    ///
+    /// [`Metadata`]: ./trait.Metadata.html
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
-    /// Return a list of files in the given directory
+    /// Returns the list of files in the given directory.
     fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> where <Self as StorageBackend>::Metadata: Metadata;
 
-    /// Return some bytes that make up a directory listing that can immediately be send to the
-    /// client
+    /// Returns some bytes that make up a directory listing that can immediately be send to the
+    /// client.
     fn list_fmt<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
               <Self as StorageBackend>::Error: Send + 'static,
@@ -123,7 +127,7 @@ pub trait StorageBackend {
         Box::new(fut)
     }
 
-    /// Return some bytes that make up a NLST directory listing (only the basename) that can
+    /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be send to the client.
     fn nlst<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
@@ -153,24 +157,24 @@ pub trait StorageBackend {
         Box::new(fut)
     }
 
-    /// Returns the content of a file
+    /// Returns the content of the given file.
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
-    /// Write the given bytes to a file
+    /// Write the given bytes to the given file.
     // TODO: Get rid of 'static requirement her
     fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
 
-    /// Delete the given file
+    /// Delete the given file.
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
-    /// Create the given directory
+    /// Create the given directory.
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 }
 
-/// StorageBackend that uses a Filesystem, like a traditional FTP server.
+/// StorageBackend that uses a local filesystem, like a traditional FTP server.
 pub struct Filesystem {
     root: PathBuf,
 }
