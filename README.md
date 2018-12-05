@@ -1,11 +1,18 @@
 # [firetrap](https://github.com/koenw/firetrap)
 
+[![Crate Version](https://img.shields.io/crates/l/firetrap.svg)](https://crates.io/crates/firetrap)
+[![Crate License](https://img.shields.io/crates/v/firetrap.svg)](https://crates.io/crates/firetrap)
+[![Build Status](https://travis-ci.org/koenw/firetrap.svg)](https://travis-ci.org/koenw/firetrap)
+[![API Docs](https://docs.rs/firetrap/badge.svg)](https://docs.rs/firetrap)
+
 Firetrap helps you create modern, safe and extensible FTP servers in Rust.
 
 Because of its plugable authentication and storage backends (e.g. local filesystem, Google Buckets) it's more flexible than traditional FTP servers and a perfect match for the cloud.
 
 It is currently under heavy development and not yet recommended for production use.
 **API MAY BREAK**
+
+[API Documentation](https://docs.rs/firetrap)
 
 ## Prerequisites
 
@@ -42,6 +49,8 @@ fn main() {
 You can now run your server with `cargo run` and connect to `localhost:2121` with your favourite FTP client :)
 
 For more examples checkout out the [examples](./examples) directory.
+
+For more information checkout the [API Documentation](https://docs.rs/firetrap).
 
 ## Contributing
 
