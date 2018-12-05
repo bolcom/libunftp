@@ -1,31 +1,33 @@
+.PHONY: help
+help: # Show available `make` commands
+	@echo 'Available `make` commands:' >/dev/stderr
+	@echo >/dev/stderr
+	@sed -n 's/^\([a-z][a-zA-Z0-9]\+\):[^#]*\(#\(.*\)\)/\1\t\t\3/p' Makefile
+
 .PHONY: watch
-watch:
+watch: # Continuously run `cargo check` and `cargo test` on file changes
 	cargo watch -x check -x "test --all-features" --clear
 
+.PHONY: test
+test: # Run all tests
+	cargo test --all-features
+
+.PHONY: fuzz
+fuzz: # Run fuzzing tests
+	cargo +nightly fuzz run parse_command
+
 .PHONY: run
-run: debug
+run: debug # Run the `basic` example in verbose mode
 	RUST_LOG=INFO ./target/debug/examples/basic
 
 .PHONY: doc
-doc:
+doc: # Open the API docs in the browser
 	cargo doc --open
 
-.PHONY: build
-build:
-	cargo build --release
-
 .PHONY: debug
-debug:
+debug: # Create a debug build
 	cargo build
 
-.PHONY: test
-test:
-	cargo test --all-features
-
-.PHONY: clippy
-clippy:
-	cargo +nightly clippy
-
-.PHONY: fuzz
-fuzz:
-	cargo +nightly fuzz run parse_command
+.PHONY: build
+build: # Create a release build
+	cargo build --release
