@@ -27,7 +27,7 @@ If you've got Rust and cargo installed, create your project with
 cargo new my_project
 ```
 
-Then add firetrap to your projects dependencies in `Cargo.toml`:
+Then add firetrap to your project's dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -54,9 +54,9 @@ For more information checkout the [API Documentation](https://docs.rs/firetrap).
 
 ## Contributing
 
-First of all, thank you for you interest in contributing to firetrap!
-Please feel free to create a github issue if you encounter any problems.
-a feature request, or just feel like it:)
+First of all, thank you for your interest in contributing to firetrap!
+Please feel free to create a github issue if you encounter any problems,
+want to submit a feature request, or just feel like it :)
 
 Run `make help` in the root of this repository to see the available *make* commands.
 

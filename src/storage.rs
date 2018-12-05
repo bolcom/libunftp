@@ -96,7 +96,7 @@ pub trait StorageBackend {
     /// Returns the list of files in the given directory.
     fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> where <Self as StorageBackend>::Metadata: Metadata;
 
-    /// Returns some bytes that make up a directory listing that can immediately be send to the
+    /// Returns some bytes that make up a directory listing that can immediately be sent to the
     /// client.
     fn list_fmt<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
@@ -128,7 +128,7 @@ pub trait StorageBackend {
     }
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
-    /// immediately be send to the client.
+    /// immediately be sent to the client.
     fn nlst<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
         where <Self as StorageBackend>::Metadata: Metadata + 'static,
               <Self as StorageBackend>::Error: Send + 'static,
@@ -164,7 +164,7 @@ pub trait StorageBackend {
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to the given file.
-    // TODO: Get rid of 'static requirement her
+    // TODO: Get rid of 'static requirement here
     fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.
@@ -191,7 +191,7 @@ fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
 }
 
 impl Filesystem {
-    /// Create a new Filesytem backend, with the given root. No operations can take place outside
+    /// Create a new Filesystem backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `Filesystem` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {

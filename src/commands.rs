@@ -7,7 +7,7 @@ use std::{fmt, result};
 use self::bytes::{Bytes};
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
-/// the given structure given. This stems from a time where it was common for some operating
+/// the given structure. This stems from a time where it was common for some operating
 /// systems to address i.e. particular records in files, but isn't used a lot these days. We
 /// support the command itself for legacy reasons, but will only support the `File` structure.
 // Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
@@ -340,7 +340,7 @@ impl Command {
     }
 }
 
-/// Try to parse a buffer of bytes, upto end of line into a `&str`.
+/// Try to parse a buffer of bytes, up to end of line into a `&str`.
 fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     let mut pos: usize = 0;
     let mut bytes: Bytes = bytes.into();
