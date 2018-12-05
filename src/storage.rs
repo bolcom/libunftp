@@ -535,7 +535,8 @@ mod tests {
         let meta = MockMetadata{};
         let fileinfo = Fileinfo{path: dir.to_str().unwrap(), metadata: meta};
         let my_format = format!("{}", fileinfo);
-        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", dir.strip_prefix("/").unwrap().to_str().unwrap());
+        let basename = std::path::Path::new(&dir).file_name().unwrap().to_string_lossy();
+        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", basename);
         assert_eq!(my_format, format);
     }
 
