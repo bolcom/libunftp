@@ -30,7 +30,7 @@ extern crate failure_derive;
 
 /// Contains the `Server` struct that is used to configure and control a FTP server instance.
 pub mod server;
-pub use server::Server;
+pub use crate::server::Server;
 
 pub(crate) mod commands;
 

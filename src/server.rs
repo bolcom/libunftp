@@ -19,13 +19,13 @@ use self::tokio_codec::{Encoder, Decoder};
 
 use self::bytes::{BytesMut, BufMut};
 
-use auth;
-use auth::Authenticator;
+use crate::auth;
+use crate::auth::Authenticator;
 
-use storage;
+use crate::storage;
 
-use commands;
-use commands::Command;
+use crate::commands;
+use crate::commands::Command;
 
 use self::std::io::ErrorKind;
 
