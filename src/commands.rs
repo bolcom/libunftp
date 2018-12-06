@@ -145,11 +145,13 @@ pub enum Command {
         /// The path to the directory the client wants to create.
         path: std::path::PathBuf,
     },
-    /// The `Allo` command
+    /// The `ALLO` command
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
         // as noop, we won't even parse it.
     },
+    /// The `ABOR` command
+    Abor,
 }
 
 impl Command {
@@ -340,6 +342,13 @@ impl Command {
             },
             b"ALLO" | b"allo" => {
                 Command::Allo{}
+            },
+            b"ABOR" | b"abor" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+                Command::Abor
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -745,5 +754,14 @@ mod tests {
 
         let input = "ALLO R 5\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Allo{}));
+    }
+
+    #[test]
+    fn parse_abor() {
+        let input = "ABOR\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Abor));
+
+        let input = "ABOR bla\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 }

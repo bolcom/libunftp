@@ -254,8 +254,17 @@ struct Session<S>
     storage: Arc<S>,
     data_cmd_tx: Option<mpsc::Sender<Command>>,
     data_cmd_rx: Option<mpsc::Receiver<Command>>,
+    data_abort_tx: Option<mpsc::Sender<()>>,
+    data_abort_rx: Option<mpsc::Receiver<()>>,
     cwd: std::path::PathBuf,
     state: SessionState,
+}
+
+// Commands that can be send to the data channel.
+#[derive(PartialEq)]
+enum DataCommand {
+    ExternalCommand(Command),
+    Abort,
 }
 
 impl<S> Session<S>
@@ -270,6 +279,8 @@ impl<S> Session<S>
             storage: storage,
             data_cmd_tx: None,
             data_cmd_rx: None,
+            data_abort_tx: None,
+            data_abort_rx: None,
             cwd: "/".into(),
             state: SessionState::New,
         }
@@ -282,14 +293,25 @@ impl<S> Session<S>
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = self.data_cmd_rx.take().unwrap();
+        // TODO: Same as above, don't `unwrap()` here. Ideally we solve this by refactoring to a
+        // proper state machine.
+        let abort_rx = self.data_abort_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
         let task = rx
             .take(1)
+            .map(|c| DataCommand::ExternalCommand(c))
+            .select(abort_rx
+                .map(|_| DataCommand::Abort)
+            )
+            .take_while(|data_cmd| {
+                Ok(*data_cmd != DataCommand::Abort)
+            })
             .into_future()
-            .map(move |(cmd, _): (Option<Command>, _)| {
+            .map(move |(cmd, _)| {
+                use self::DataCommand::ExternalCommand;
                 match cmd {
-                    Some(Command::Retr{path}) => {
+                    Some(ExternalCommand(Command::Retr{path})) => {
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
@@ -323,7 +345,7 @@ impl<S> Session<S>
                             })
                          );
                     }
-                    Some(Command::Stor{path}) => {
+                    Some(ExternalCommand(Command::Stor{path})) => {
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
@@ -350,7 +372,7 @@ impl<S> Session<S>
                             })
                         );
                     },
-                    Some(Command::List{path}) => {
+                    Some(ExternalCommand(Command::List{path})) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
@@ -382,7 +404,7 @@ impl<S> Session<S>
                             })
                         );
                     },
-                    Some(Command::Nlst{path}) => {
+                    Some(ExternalCommand(Command::Nlst{path})) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
@@ -415,13 +437,16 @@ impl<S> Session<S>
                         );
                     },
 					// TODO: Remove catch-all Some(_) when I'm done implementing :)
-                    Some(_) => unimplemented!(),
+                    Some(ExternalCommand(_)) => unimplemented!(),
+                    Some(DataCommand::Abort) => {
+                        unreachable!()
+                    },
                     None => { /* This probably happened because the control channel was closed before we got here */ },
                 }
             })
+            .into_future()
             .map_err(|_| ())
             .map(|_| ())
-            .map_err(|_| ())
         ;
 
         tokio::spawn(task);
@@ -728,10 +753,13 @@ impl<S> Server<S>
                             let tx = tx.clone();
 
                             let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
+                            let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
                             {
                             let mut session = session.lock()?;
                             session.data_cmd_tx = Some(cmd_tx);
                             session.data_cmd_rx = Some(cmd_rx);
+                            session.data_abort_tx = Some(data_abort_tx);
+                            session.data_abort_rx = Some(data_abort_rx);
                             }
 
                             let session = session.clone();
@@ -899,6 +927,17 @@ impl<S> Server<S>
                             ensure_authenticated!();
                             // ALLO is obsolete and we'll just ignore it.
                             Ok("202 I don't need to allocate anything".to_string())
+                        },
+                        Command::Abor => {
+                            ensure_authenticated!();
+                            let mut session = session.lock()?;
+                            match session.data_abort_tx.take() {
+                                Some(tx) => {
+                                    spawn!(tx.send(()));
+                                    Ok("226 Closed data channel\r\n".to_string())
+                                },
+                                None => Ok("226 Data channel already closed\r\n".to_string()),
+                            }
                         },
                     }
                 },
