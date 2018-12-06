@@ -328,7 +328,7 @@ impl Command {
 
                 Command::Quit
             },
-            b"MKD" | b"XMKD" => {
+            b"MKD" | b"XMKD" | b"mkd" | b"xmkd" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
                     return Err(ParseErrorKind::InvalidCommand)?
