@@ -24,7 +24,7 @@
 #[macro_use]
 extern crate log;
 extern crate failure;
-#[macro_use] extern crate failure_derive;
+extern crate failure_derive;
 #[cfg(test)]
 #[macro_use] extern crate pretty_assertions;
 
