@@ -870,7 +870,7 @@ impl<S> Server<S>
                         },
                         Command::Dele{path} => {
                             ensure_authenticated!();
-                            let mut session = session.lock()?;
+                            let session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
                             let tx_success = tx.clone();
                             let tx_fail = tx.clone();
@@ -900,7 +900,7 @@ impl<S> Server<S>
                         },
                         Command::Mkd{path} => {
                             ensure_authenticated!();
-                            let mut session = session.lock()?;
+                            let session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
                             let tx_success = tx.clone();
                             let tx_fail = tx.clone();
