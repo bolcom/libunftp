@@ -31,7 +31,7 @@ Then add firetrap to your project's dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
-firetrap = "*"
+firetrap = "0.1"
 ```
 
 Now you're ready to write your server!
