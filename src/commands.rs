@@ -145,6 +145,11 @@ pub enum Command {
         /// The path to the directory the client wants to create.
         path: std::path::PathBuf,
     },
+    /// The `Allo` command
+    Allo {
+        // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
+        // as noop, we won't even parse it.
+    },
 }
 
 impl Command {
@@ -332,6 +337,9 @@ impl Command {
                 let path = String::from_utf8_lossy(&params).to_string();
                 let path = path.into();
                 Command::Mkd{path}
+            },
+            b"ALLO" | b"allo" => {
+                Command::Allo{}
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -723,5 +731,19 @@ mod tests {
 
         let input = "MKD bla\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Mkd{path: "bla".into()}));
+    }
+
+    #[test]
+    fn parse_allo() {
+        let input = "ALLO\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Allo{}));
+
+        // This is actually not a valid `ALLO` command, but since we ignore it anyway there is no
+        // need to add complexity by actually parsing it.
+        let input = "ALLO 5\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Allo{}));
+
+        let input = "ALLO R 5\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Allo{}));
     }
 }

@@ -895,6 +895,11 @@ impl<S> Server<S>
                             );
                             Ok("".to_string())
                         },
+                        Command::Allo{..} => {
+                            ensure_authenticated!();
+                            // ALLO is obsolete and we'll just ignore it.
+                            Ok("202 I don't need to allocate anything".to_string())
+                        },
                     }
                 },
 
