@@ -1,12 +1,6 @@
-extern crate firetrap;
-extern crate ftp;
-extern crate tempfile;
-
 use std::{thread, time};
 use ftp::FtpStream;
-
-// TODO: Replace `unwrap()` in tests with `expect()`, so it's more clear what
-// went wrong if a test fails.
+use pretty_assertions::assert_eq;
 
 macro_rules! start_server {
     ( $addr:expr, $path:expr ) => {
@@ -59,8 +53,6 @@ fn noop() {
 
 #[test]
 fn get() {
-    extern crate rand;
-
     use std::io::Write;
 
     let addr = "127.0.0.1:1237";

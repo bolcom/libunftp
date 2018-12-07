@@ -1,10 +1,6 @@
-extern crate std;
-extern crate bytes;
-
-use failure::*;
-
 use std::{fmt, result};
-use self::bytes::{Bytes};
+use failure::*;
+use bytes::{Bytes};
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
 /// the given structure. This stems from a time where it was common for some operating
@@ -489,6 +485,7 @@ pub type Result<T> = result::Result<T, ParseError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn parse_user_cmd_crnl() {

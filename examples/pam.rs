@@ -1,8 +1,5 @@
-extern crate firetrap;
-#[macro_use] extern crate log;
-extern crate pretty_env_logger;
-#[macro_use] extern crate lazy_static;
-
+use log::*;
+use lazy_static::lazy_static;
 use firetrap::auth::pam;
 
 lazy_static! {

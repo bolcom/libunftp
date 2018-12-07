@@ -1,37 +1,22 @@
-extern crate std;
+use std::sync::{Arc, Mutex};
+use std::io::ErrorKind;
+use std::fmt;
 
-extern crate futures;
-extern crate tokio;
-extern crate tokio_io;
-extern crate tokio_codec;
-extern crate bytes;
-
-use self::std::sync::{Arc, Mutex};
-
-use self::futures::prelude::*;
-use self::futures::Sink;
-use self::futures::sync::mpsc;
-
+use futures::prelude::*;
+use futures::Sink;
+use futures::sync::mpsc;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_codec::{Encoder, Decoder};
 use failure::*;
-
-use self::tokio::net::{TcpListener, TcpStream};
-use self::tokio_codec::{Encoder, Decoder};
-
-use self::bytes::{BytesMut, BufMut};
+use bytes::{BytesMut, BufMut};
+use uuid::Uuid;
+use log::{info, warn, error};
 
 use crate::auth;
 use crate::auth::Authenticator;
-
 use crate::storage;
-
 use crate::commands;
 use crate::commands::Command;
-
-use uuid::Uuid;
-
-use self::std::io::ErrorKind;
-
-use std::fmt;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
@@ -247,7 +232,7 @@ enum SessionState {
 // This is where we keep the state for a ftp session.
 struct Session<S>
     where S: storage::StorageBackend,
-          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
           <S as storage::StorageBackend>::Metadata: storage::Metadata,
           <S as storage::StorageBackend>::Error: Send,
 {
@@ -270,7 +255,7 @@ enum DataCommand {
 
 impl<S> Session<S>
     where S: storage::StorageBackend + Send + Sync + 'static,
-          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
           <S as storage::StorageBackend>::Metadata: storage::Metadata,
           <S as storage::StorageBackend>::Error: Send,
 {
@@ -322,7 +307,7 @@ impl<S> Session<S>
                                 tx_sending.send(InternalMsg::SendingData)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
                                 .and_then(|_| {
-                                    self::tokio_io::io::copy(f, socket)
+                                    tokio_io::io::copy(f, socket)
                                 })
                                 .and_then(|_| {
                                     tx.send(InternalMsg::SendData)
@@ -507,7 +492,7 @@ impl Server<storage::Filesystem> {
 
 impl<S> Server<S>
     where S: 'static + storage::StorageBackend + Sync + Send,
-          <S as storage::StorageBackend>::File: self::tokio_io::AsyncRead + Send,
+          <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
           <S as storage::StorageBackend>::Metadata: storage::Metadata,
           <S as storage::StorageBackend>::Error: Send,
 {

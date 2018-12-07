@@ -1,5 +1,4 @@
 #![deny(missing_docs)]
-
 /// Defines the common interface that can be implemented for a multitude of authentication
 /// backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
 ///
@@ -7,8 +6,6 @@
 /// mechanism you need. For example, to define an `Authenticator` that will randomly decide:
 ///
 /// ```rust
-/// # extern crate rand;
-/// # extern crate firetrap;
 /// use rand::prelude::*;
 /// use firetrap::auth::Authenticator;
 ///

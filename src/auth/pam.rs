@@ -1,5 +1,3 @@
-extern crate pam_auth;
-
 use crate::auth::Authenticator;
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].

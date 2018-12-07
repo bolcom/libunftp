@@ -21,13 +21,6 @@
 //! }
 //! ```
 
-#[macro_use]
-extern crate log;
-extern crate failure;
-extern crate failure_derive;
-#[cfg(test)]
-#[macro_use] extern crate pretty_assertions;
-
 /// Contains the `Server` struct that is used to configure and control a FTP server instance.
 pub mod server;
 pub use crate::server::Server;

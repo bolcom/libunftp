@@ -1,18 +1,9 @@
-extern crate std;
-extern crate bytes;
-extern crate tokio;
-extern crate tokio_io;
-extern crate futures;
-extern crate chrono;
-extern crate path_abs;
-
 use std::{fmt,result};
 use std::path::{Path,PathBuf};
 use std::time::SystemTime;
 
-use self::futures::{Future, Stream};
-
-use self::chrono::prelude::*;
+use futures::{Future, Stream};
+use chrono::prelude::*;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -164,8 +155,7 @@ pub trait StorageBackend {
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to the given file.
-    // TODO: Get rid of 'static requirement here
-    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
@@ -185,7 +175,7 @@ pub struct Filesystem {
 /// '../' is only special on the context of a filesystem. Then again, FTP does kind of imply a
 /// filesystem... hmm...
 fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
-    use self::path_abs::PathAbs;
+    use path_abs::PathAbs;
     let p = PathAbs::new(path)?;
     Ok(p.as_path().to_path_buf())
 }
@@ -227,7 +217,7 @@ impl Filesystem {
 }
 
 impl StorageBackend for Filesystem {
-    type File =  self::tokio::fs::File;
+    type File =  tokio::fs::File;
     type Metadata = std::fs::Metadata;
     type Error = Error;
 
@@ -266,16 +256,16 @@ impl StorageBackend for Filesystem {
         Box::new(fut.map_err(|_| Error::IOError))
     }
 
-    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = self::tokio::fs::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(futures::future::err(e)),
         };
         // TODO: Some more useful error reporting
-        Box::new(self::tokio::fs::file::File::open(full_path).map_err(|_| Error::IOError))
+        Box::new(tokio::fs::file::File::open(full_path).map_err(|_| Error::IOError))
     }
 
-    fn put<P: AsRef<Path>, R: self::tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -284,9 +274,9 @@ impl StorageBackend for Filesystem {
             self.root.join(path)
         };
 
-        let fut = self::tokio::fs::file::File::create(full_path)
+        let fut = tokio::fs::file::File::create(full_path)
             .and_then(|f| {
-                self::tokio_io::io::copy(bytes, f)
+                tokio_io::io::copy(bytes, f)
             })
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
@@ -299,7 +289,7 @@ impl StorageBackend for Filesystem {
             Ok(path) => path,
             Err(e) => return Box::new(futures::future::err(e)),
         };
-        Box::new(self::tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
+        Box::new(tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
     }
 
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
@@ -308,7 +298,7 @@ impl StorageBackend for Filesystem {
             Err(e) => return Box::new(futures::future::err(e)),
         };
 
-        Box::new(self::tokio::fs::create_dir(full_path).map_err(|e| {println!("error: {}", e); Error::IOError}))
+        Box::new(tokio::fs::create_dir(full_path).map_err(|e| {println!("error: {}", e); Error::IOError}))
     }
 }
 
@@ -388,12 +378,10 @@ type Result<T> = result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    extern crate tempfile;
-
     use super::*;
     use std::fs::File;
-
     use std::io::prelude::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn fs_stat() {
@@ -485,8 +473,8 @@ mod tests {
         let mut my_file = rt.block_on(fs.get(filename)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(
-            self::futures::future::lazy(move || {
-                self::tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
+            futures::future::lazy(move || {
+                tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
                 assert_eq!(data.as_ref(), &*my_content);
                 // We need a `Err` branch because otherwise the compiler can't infer the `E` type,
                 // and I'm not sure where/how to annotate it.
