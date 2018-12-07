@@ -130,7 +130,7 @@ pub trait StorageBackend {
         let res_work = res.clone();
         let fut = stream.for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
             let mut res = res_work.lock().unwrap();
-            let fmt = format!("{}\r\n", file.path.file_name().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap_or(""));
+            let fmt = format!("{}\r\n", file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or(""));
             let fmt_vec = fmt.into_bytes();
             res.extend_from_slice(&fmt_vec);
             Ok(())

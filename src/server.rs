@@ -286,7 +286,7 @@ impl<S> Session<S>
         let cwd = self.cwd.clone();
         let task = rx
             .take(1)
-            .map(|c| DataCommand::ExternalCommand(c))
+            .map(DataCommand::ExternalCommand)
             .select(abort_rx
                 .map(|_| DataCommand::Abort)
             )
@@ -327,7 +327,6 @@ impl<S> Session<S>
                             .map(|_| ())
                             .map_err(|e| {
                                 warn!("Failed to send file: {:?}", e);
-                                ()
                             })
                          );
                     }
@@ -354,7 +353,6 @@ impl<S> Session<S>
                             .map(|_| ())
                             .map_err(|e| {
                                 warn!("Failed to send file: {:?}", e);
-                                ()
                             })
                         );
                     },
@@ -386,7 +384,6 @@ impl<S> Session<S>
                             .map(|_| ())
                             .map_err(|e| {
                                 warn!("Failed to send directory list: {:?}", e);
-                                ()
                             })
                         );
                     },
@@ -418,7 +415,6 @@ impl<S> Session<S>
                             .map(|_| ())
                             .map_err(|e| {
                                 warn!("Failed to send directory list: {:?}", e);
-                                ()
                             })
                         );
                     },
@@ -874,7 +870,6 @@ impl<S> Server<S>
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to delete file: {}", e);
-                                    ()
                                 })
                             );
                             Ok("".to_string())
@@ -904,7 +899,6 @@ impl<S> Server<S>
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to create directory: {}", e);
-                                    ()
                                 })
                             );
                             Ok("".to_string())
