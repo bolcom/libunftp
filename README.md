@@ -16,7 +16,7 @@ It is currently under heavy development and not yet recommended for production u
 
 ## Prerequisites
 
-You'll need [Rust](https://rust-lang.org) to build firetrap.
+You'll need [Rust](https://rust-lang.org) 1.31 or higher to build firetrap.
 There are no runtime dependencies besides the OS and libc.
 
 ## Getting started
