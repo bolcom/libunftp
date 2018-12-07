@@ -2,7 +2,7 @@ use std::{fmt,result};
 use std::path::{Path,PathBuf};
 use std::time::SystemTime;
 
-use futures::{Future, Stream};
+use futures::{future, Future, Stream};
 use chrono::prelude::*;
 
 /// Represents the Metadata of a file
@@ -162,6 +162,9 @@ pub trait StorageBackend {
 
     /// Create the given directory.
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+
+    /// Rename the given file to the given filename.
+    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
@@ -224,7 +227,7 @@ impl StorageBackend for Filesystem {
     fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(err) => return Box::new(futures::future::err(err)),
+            Err(err) => return Box::new(future::err(err)),
         };
         // TODO: Some more useful error reporting
         Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::IOError))
@@ -236,7 +239,7 @@ impl StorageBackend for Filesystem {
         // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(futures::future::err(e).into_stream()),
+            Err(e) => return Box::new(future::err(e).into_stream()),
         };
 
         let prefix = self.root.clone();
@@ -259,7 +262,7 @@ impl StorageBackend for Filesystem {
     fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(futures::future::err(e)),
+            Err(e) => return Box::new(future::err(e)),
         };
         // TODO: Some more useful error reporting
         Box::new(tokio::fs::file::File::open(full_path).map_err(|_| Error::IOError))
@@ -287,7 +290,7 @@ impl StorageBackend for Filesystem {
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(futures::future::err(e)),
+            Err(e) => return Box::new(future::err(e)),
         };
         Box::new(tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
     }
@@ -295,10 +298,35 @@ impl StorageBackend for Filesystem {
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(futures::future::err(e)),
+            Err(e) => return Box::new(future::err(e)),
         };
 
         Box::new(tokio::fs::create_dir(full_path).map_err(|e| {println!("error: {}", e); Error::IOError}))
+    }
+
+    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let from = match self.full_path(from) {
+            Ok(path) => path,
+            Err(e) => return Box::new(future::err(e)),
+        };
+        let to = match self.full_path(to) {
+            Ok(path) => path,
+            Err(e) => return Box::new(future::err(e)),
+        };
+
+        let from_rename = from.clone(); // Alright, borrow checker, have it your way.
+        let fut =
+            tokio::fs::metadata(from)
+            .map_err(|_| Error::IOError)
+            .and_then(move |metadata| {
+                if metadata.is_file() {
+                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|_| Error::IOError))
+                } else {
+                    future::Either::B(future::err(Error::IOError))
+                }
+            })
+        ;
+        Box::new(fut)
     }
 }
 
@@ -473,7 +501,7 @@ mod tests {
         let mut my_file = rt.block_on(fs.get(filename)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(
-            futures::future::lazy(move || {
+            future::lazy(move || {
                 tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
                 assert_eq!(data.as_ref(), &*my_content);
                 // We need a `Err` branch because otherwise the compiler can't infer the `E` type,
@@ -543,5 +571,26 @@ mod tests {
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::metadata(full_path).unwrap();
         assert!(metadata.is_dir());
+    }
+
+    #[test]
+    fn fs_rename() {
+        let root = tempfile::TempDir::new().unwrap().into_path();
+        let file = tempfile::NamedTempFile::new_in(&root).unwrap();
+        let old_filename = file.path().file_name().unwrap().to_str().unwrap();
+        let new_filename = "hello.txt";
+
+        // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
+        // to completion
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+        let fs = Filesystem::new(&root);
+        rt.block_on(fs.rename(&old_filename, &new_filename)).expect("Failed to rename");
+
+        let new_full_path = root.join(new_filename);
+        assert!(std::fs::metadata(new_full_path).expect("new filename not found").is_file());
+
+        let old_full_path = root.join(old_filename);
+        std::fs::metadata(old_full_path).expect_err("Old filename should not exists anymore");
     }
 }

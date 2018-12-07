@@ -236,7 +236,6 @@ fn nlst() {
     let addr = "127.0.0.1:1245";
     let root = tempfile::TempDir::new().unwrap().into_path();
     let path = root.clone();
-    println!("path: {:?}", root);
     start_server!(addr, root);
 
     // Create a filename that we wanna see in the `NLST` output
@@ -273,4 +272,40 @@ fn mkdir() {
     let full_path = root.join(new_dir_name);
     let metadata = std::fs::metadata(full_path).unwrap();
     assert!(metadata.is_dir());
+}
+
+#[test]
+fn rename() {
+    let addr = "127.0.0.1:1247";
+    let root = tempfile::TempDir::new().unwrap().into_path();
+    let server_root = root.clone();
+    start_server!(addr, server_root);
+
+    // Create a file that we will rename
+    let full_from = root.join("ikbenhier.txt");
+    let _f = std::fs::File::create(&full_from);
+    let from_filename = full_from.file_name().unwrap().to_str().unwrap();
+
+    // What we'll rename our file to
+    let full_to = root.join("nu ben ik hier.txt");
+    let to_filename = full_to.file_name().unwrap().to_str().unwrap();
+
+    let mut ftp_stream = FtpStream::connect(addr).expect("Failed to connect");
+
+    // Make sure we fail if we're not logged in
+    ftp_stream.rename(&from_filename, &to_filename).expect_err("Rename accepted without logging in");
+
+    // Do the renaming
+    let _ = ftp_stream.login("some", "user").unwrap();
+    ftp_stream.rename(&from_filename, &to_filename).expect("Failed to rename");
+
+    // Give the OS some time to actually rename the thingy.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Make sure the old filename is gone
+    std::fs::metadata(full_from).expect_err("Renamed file still exists with old name");
+
+    // Make sure the new filename exists
+    let metadata = std::fs::metadata(full_to).expect("New filename not created");
+    assert!(metadata.is_file());
 }

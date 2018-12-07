@@ -150,6 +150,16 @@ pub enum Command {
     Abor,
     /// The `STOU` command
     Stou,
+    /// The `RNFR` command
+    Rnfr {
+        /// The file to be renamed
+        file: std::path::PathBuf,
+    },
+    /// The `RNTO` command
+    Rnto {
+        /// The filename to rename to
+        file: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -354,6 +364,38 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand)?
                 }
                 Command::Stou
+            },
+            b"RNFR" | b"rnfr" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let file = String::from_utf8_lossy(&params).to_string();
+                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
+                // 3659 actually defines "/" as the standard delimiter.
+                if file.contains("/") {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let file = file.into();
+                Command::Rnfr{file: file}
+            },
+            b"RNTO" | b"rnto" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let file = String::from_utf8_lossy(&params).to_string();
+                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
+                // 3659 actually defines "/" as the standard delimiter.
+                if file.contains("/") {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+
+                let file = file.into();
+                Command::Rnto{file: file}
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -778,5 +820,35 @@ mod tests {
 
         let input = "STOU bla\r\n";
         assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+    }
+
+    #[test]
+    fn parse_rnfr() {
+        let input = "RNFR\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "RNFR dir/file\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "RNFR myfile\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr{file: "myfile".into()}));
+
+        let input = "RNFR this file\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr{file: "this file".into()}));
+    }
+
+    #[test]
+    fn parse_rnto() {
+        let input = "RNTO\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "RNTO dir/file\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+
+        let input = "RNTO name with spaces\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Rnto{file: "name with spaces".into()}));
+
+        let input = "RNTO new_name\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Rnto{file: "new_name".into()}));
     }
 }

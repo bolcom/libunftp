@@ -243,6 +243,7 @@ struct Session<S>
     data_abort_tx: Option<mpsc::Sender<()>>,
     data_abort_rx: Option<mpsc::Receiver<()>>,
     cwd: std::path::PathBuf,
+    rename_from: Option<std::path::PathBuf>,
     state: SessionState,
 }
 
@@ -268,6 +269,7 @@ impl<S> Session<S>
             data_abort_tx: None,
             data_abort_rx: None,
             cwd: "/".into(),
+            rename_from: None,
             state: SessionState::New,
         }
     }
@@ -933,6 +935,24 @@ impl<S> Server<S>
                             let path = session.cwd.join(&filename).to_string_lossy().to_string();
                             spawn!(tx.send(Command::Stor{path: path}));
                             Ok(format!("150 {}\r\n", filename.to_string_lossy()))
+                        },
+                        Command::Rnfr{file} => {
+                            ensure_authenticated!();
+                            let mut session = session.lock()?;
+                            session.rename_from = Some(file);
+                            Ok("350 Tell me, what would you like the new name to be?\r\n".to_string())
+                        },
+                        Command::Rnto{file} => {
+                            ensure_authenticated!();
+                            let mut session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            match session.rename_from.take() {
+                                Some(from) => {
+                                    spawn!(storage.rename(from, file));
+                                    Ok("250 sure, it shall be known\r\n".to_string())
+                                },
+                                None => return Ok("450 Please tell me what file you want to rename first\r\n".to_string())
+                            }
                         },
                     }
                 },
