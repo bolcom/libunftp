@@ -27,13 +27,14 @@ use crate::storage;
 use crate::commands;
 use crate::commands::Command;
 
+use uuid::Uuid;
+
 use self::std::io::ErrorKind;
 
 use std::fmt;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
-// TODO: Rename this enum (it is not only used for data channel communication anymore).
 // TODO: Give these events better names
 #[derive(PartialEq)]
 enum InternalMsg {
@@ -809,7 +810,7 @@ impl<S> Server<S>
                                 None => return Ok("425 No data connection established\r\n".to_string()),
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok("150 Will send you something\r\n".to_string())
+                            Ok("150 Ready to receive data\r\n".to_string())
                         },
                         Command::List{ .. } => {
                             ensure_authenticated!();
@@ -938,6 +939,21 @@ impl<S> Server<S>
                                 },
                                 None => Ok("226 Data channel already closed\r\n".to_string()),
                             }
+                        },
+                        // TODO: Write functional test for STOU command.
+                        Command::Stou => {
+                            ensure_authenticated!();
+                            let mut session = session.lock()?;
+                            let tx = match session.data_cmd_tx.take() {
+                                Some(tx) => tx,
+                                None => return Ok("425 No data connection established\r\n".to_string()),
+                            };
+
+                            let uuid = Uuid::new_v4().to_string();
+                            let filename = std::path::Path::new(&uuid);
+                            let path = session.cwd.join(&filename).to_string_lossy().to_string();
+                            spawn!(tx.send(Command::Stor{path: path}));
+                            Ok(format!("150 {}\r\n", filename.to_string_lossy()))
                         },
                     }
                 },

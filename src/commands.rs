@@ -152,6 +152,8 @@ pub enum Command {
     },
     /// The `ABOR` command
     Abor,
+    /// The `STOU` command
+    Stou,
 }
 
 impl Command {
@@ -349,6 +351,13 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand)?
                 }
                 Command::Abor
+            },
+            b"STOU" | b"stou" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?
+                }
+                Command::Stou
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -762,6 +771,15 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Abor));
 
         let input = "ABOR bla\r\n";
+        assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
+    }
+
+    #[test]
+    fn parse_stou() {
+        let input = "STOU\r\n";
+        assert_eq!(Command::parse(input), Ok(Command::Stou));
+
+        let input = "STOU bla\r\n";
         assert_eq!(Command::parse(input), Err(ParseError{inner: Context::new(ParseErrorKind::InvalidCommand)}));
     }
 }
