@@ -21,7 +21,7 @@ use crate::commands::Command;
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 // TODO: Give these events better names
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum InternalMsg {
     // Permission Denied
     PermissionDenied,
@@ -55,7 +55,7 @@ enum InternalMsg {
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(commands::Command),
@@ -646,6 +646,8 @@ impl<S> Server<S>
         let respond = move |event: Event| -> Result<String, FTPError> {
             use self::SessionState::*;
             use self::InternalMsg::*;
+
+            info!("Processing event {:?}", event);
 
             match event {
                 Event::Command(cmd) => {
