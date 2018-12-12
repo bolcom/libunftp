@@ -374,7 +374,7 @@ impl Command {
                 let file = String::from_utf8_lossy(&params).to_string();
                 // We really match on "/" and not some cross-OS-portable delimiter, because RFC
                 // 3659 actually defines "/" as the standard delimiter.
-                if file.contains("/") {
+                if file.contains('/') {
                     return Err(ParseErrorKind::InvalidCommand)?
                 }
 
@@ -390,7 +390,7 @@ impl Command {
                 let file = String::from_utf8_lossy(&params).to_string();
                 // We really match on "/" and not some cross-OS-portable delimiter, because RFC
                 // 3659 actually defines "/" as the standard delimiter.
-                if file.contains("/") {
+                if file.contains('/') {
                     return Err(ParseErrorKind::InvalidCommand)?
                 }
 
@@ -408,8 +408,7 @@ impl Command {
 fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     let mut pos: usize = 0;
     let mut bytes: Bytes = bytes.into();
-    let copy = bytes.clone();
-    let mut iter = copy.as_ref().iter();
+    let mut iter = bytes.as_ref().iter();
 
     loop {
         let b = match iter.next() {
