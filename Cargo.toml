@@ -35,3 +35,7 @@ lazy_static = "1.1"
 
 [features]
 pam = ["pam-auth"]
+
+[[example]]
+name = "pam"
+required-features = ["pam"]
