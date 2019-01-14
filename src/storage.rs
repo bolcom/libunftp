@@ -417,7 +417,7 @@ mod tests {
 
         // Create a temp file and get it's metadata
         let file = tempfile::NamedTempFile::new_in(&root).unwrap();
-        let path = file.path().clone();
+        let path = file.path();
         let file = file.as_file();
         let meta = file.metadata().unwrap();
 
@@ -440,7 +440,7 @@ mod tests {
         // Create a temp directory and create some files in it
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
-        let path = file.path().clone();
+        let path = file.path();
         let relpath = path.strip_prefix(&root.path()).unwrap();
         let file = file.as_file();
         let meta = file.metadata().unwrap();
@@ -467,7 +467,7 @@ mod tests {
         // Create a temp directory and create some files in it
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
-        let path = file.path().clone();
+        let path = file.path();
         let relpath = path.strip_prefix(&root.path()).unwrap();
 
         // Create a filesystem StorageBackend with our root dir
