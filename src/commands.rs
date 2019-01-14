@@ -271,12 +271,12 @@ impl Command {
             b"LIST" | b"list" => {
                 let path = parse_to_eol(cmd_params)?;
                 let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
-                Command::List{path: path}
+                Command::List{path}
             },
             b"NLST" | b"nlst" => {
                 let path = parse_to_eol(cmd_params)?;
                 let path = if path.is_empty() { None } else { Some(String::from_utf8_lossy(&path).to_string()) };
-                Command::Nlst{path: path}
+                Command::Nlst{path}
             },
             b"FEAT" |b"feat" => {
                 let params = parse_to_eol(cmd_params)?;
@@ -326,7 +326,6 @@ impl Command {
                 }
 
                 let path = String::from_utf8_lossy(&path).to_string();
-                let path = path.into();
                 Command::Dele{path}
 
             },
@@ -379,7 +378,7 @@ impl Command {
                 }
 
                 let file = file.into();
-                Command::Rnfr{file: file}
+                Command::Rnfr{file}
             },
             b"RNTO" | b"rnto" => {
                 let params = parse_to_eol(cmd_params)?;
@@ -395,7 +394,7 @@ impl Command {
                 }
 
                 let file = file.into();
-                Command::Rnto{file: file}
+                Command::Rnto{file}
             },
             _ => return Err(ParseErrorKind::UnknownCommand{command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string()})?,
         };
@@ -510,7 +509,7 @@ impl From<ParseErrorKind> for ParseError {
 
 impl From<Context<ParseErrorKind>> for ParseError {
     fn from(inner: Context<ParseErrorKind>) -> ParseError {
-        ParseError { inner: inner }
+        ParseError { inner }
     }
 }
 

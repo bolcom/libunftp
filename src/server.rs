@@ -123,7 +123,7 @@ impl From<commands::ParseError> for FTPError {
         match err.kind().clone() {
             commands::ParseErrorKind::UnknownCommand{command} => {
                 // TODO: Do something smart with CoW to prevent copying the command around.
-                err.context(FTPErrorKind::UnknownCommand{command: command}).into()
+                err.context(FTPErrorKind::UnknownCommand{command}).into()
             },
             commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
             commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
@@ -183,7 +183,7 @@ impl From<FTPErrorKind> for FTPError {
 
 impl From<Context<FTPErrorKind>> for FTPError {
     fn from(inner: Context<FTPErrorKind>) -> FTPError {
-        FTPError { inner: inner }
+        FTPError { inner }
     }
 }
 
@@ -263,7 +263,7 @@ impl<S> Session<S>
     fn with_storage(storage: Arc<S>) -> Self {
         Session {
             username: None,
-            storage: storage,
+            storage,
             data_cmd_tx: None,
             data_cmd_rx: None,
             data_abort_tx: None,
@@ -1017,7 +1017,6 @@ impl<S> Server<S>
 
                 Ok(())
             });
-
         tokio::spawn(task);
     }
 }

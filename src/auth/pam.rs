@@ -11,7 +11,7 @@ impl PAMAuthenticator {
     /// Initialize a new [`PAMAuthenticator`] for the given PAM service.
     pub fn new<S: Into<String>>(service: S) -> Self {
         let service = service.into();
-        PAMAuthenticator{service: service}
+        PAMAuthenticator { service }
     }
 }
 
