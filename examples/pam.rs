@@ -1,6 +1,6 @@
-use log::*;
-use lazy_static::lazy_static;
 use firetrap::auth::pam;
+use lazy_static::lazy_static;
+use log::*;
 
 lazy_static! {
     static ref pam_authenticator: pam::PAMAuthenticator = pam::PAMAuthenticator::new("hello");
