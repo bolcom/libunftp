@@ -34,7 +34,7 @@ fn login() {
 
     start_server!(addr);
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
-    let _ = ftp_stream.login(username, password).unwrap();
+    ftp_stream.login(username, password).unwrap();
 }
 
 #[test]
@@ -45,10 +45,10 @@ fn noop() {
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
     // Make sure we fail if we're not logged in
-    let _ = ftp_stream.noop().unwrap_err();
+    ftp_stream.noop().unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
-    let _ = ftp_stream.noop().unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.noop().unwrap();
 }
 
 #[test]
@@ -76,9 +76,9 @@ fn get() {
     let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
     // Make sure we fail if we're not logged in
-    let _ = ftp_stream.simple_retr("bla.txt").unwrap_err();
+    ftp_stream.simple_retr("bla.txt").unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     let remote_file = ftp_stream.simple_retr("bla.txt").unwrap();
     let remote_data = remote_file.into_inner();
 
@@ -100,7 +100,7 @@ fn put() {
     // Make sure we fail if we're not logged in
     ftp_stream.put("greeting.txt", &mut reader).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.put("greeting.txt", &mut reader).unwrap();
 
     // retrieve file back again, and check if we got the same back.
@@ -126,7 +126,7 @@ fn list() {
     // Make sure we fail if we're not logged in
     let _list = ftp_stream.list(None).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     let list = ftp_stream.list(None).unwrap();
     let mut found = false;
     for entry in list {
@@ -150,7 +150,7 @@ fn pwd() {
     // Make sure we fail if we're not logged in
     let _pwd = ftp_stream.pwd().unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     let pwd = ftp_stream.pwd().unwrap();
     assert_eq!(&pwd, "/");
 }
@@ -169,7 +169,7 @@ fn cwd() {
     // Make sure we fail if we're not logged in
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
     let pwd = ftp_stream.pwd().unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
@@ -189,7 +189,7 @@ fn cdup() {
     // Make sure we fail if we're not logged in
     ftp_stream.cdup().unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
     let pwd = ftp_stream.pwd().unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
@@ -212,7 +212,7 @@ fn dele() {
     // Make sure we fail if we're not logged in
     ftp_stream.rm(file_name).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.rm(file_name).unwrap();
     assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
 }
@@ -249,7 +249,7 @@ fn nlst() {
     // Make sure we fail if we're not logged in
     let _list = ftp_stream.nlst(None).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     let list = ftp_stream.nlst(None).unwrap();
     assert_eq!(list, vec!["test.txt"]);
 }
@@ -266,7 +266,7 @@ fn mkdir() {
     // Make sure we fail if we're not logged in
     ftp_stream.mkdir(new_dir_name).unwrap_err();
 
-    let _ = ftp_stream.login("hoi", "jij").unwrap();
+    ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.mkdir(new_dir_name).unwrap();
 
     let full_path = root.join(new_dir_name);
@@ -296,7 +296,7 @@ fn rename() {
     ftp_stream.rename(&from_filename, &to_filename).expect_err("Rename accepted without logging in");
 
     // Do the renaming
-    let _ = ftp_stream.login("some", "user").unwrap();
+    ftp_stream.login("some", "user").unwrap();
     ftp_stream.rename(&from_filename, &to_filename).expect("Failed to rename");
 
     // Give the OS some time to actually rename the thingy.
