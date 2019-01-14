@@ -953,7 +953,7 @@ impl<S> Server<S>
                                     spawn!(storage.rename(from, file));
                                     Ok("250 sure, it shall be known\r\n".to_string())
                                 },
-                                None => return Ok("450 Please tell me what file you want to rename first\r\n".to_string())
+                                None => Ok("450 Please tell me what file you want to rename first\r\n".to_string())
                             }
                         },
                     }
