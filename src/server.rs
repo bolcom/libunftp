@@ -910,7 +910,7 @@ impl<S> Server<S>
                         Command::Allo{..} => {
                             ensure_authenticated!();
                             // ALLO is obsolete and we'll just ignore it.
-                            Ok("202 I don't need to allocate anything".to_string())
+                            Ok("202 I don't need to allocate anything\r\n".to_string())
                         },
                         Command::Abor => {
                             ensure_authenticated!();
