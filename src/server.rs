@@ -474,7 +474,7 @@ where
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
 }
 
-impl Server<storage::Filesystem> {
+impl Server<storage::filesystem::Filesystem> {
     /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example
@@ -489,7 +489,7 @@ impl Server<storage::Filesystem> {
         let server = Server {
             storage: Box::new(move || {
                 let p = &p.clone();
-                storage::Filesystem::new(p)
+                storage::filesystem::Filesystem::new(p)
             }),
             greeting: "Welcome to the firetrap FTP server",
             authenticator: &auth::AnonymousAuthenticator {},
