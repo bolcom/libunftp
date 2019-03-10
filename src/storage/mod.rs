@@ -259,3 +259,6 @@ pub trait StorageBackend {
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
 pub mod filesystem;
+
+/// StorageBackend that uses Cloud storage from Google
+pub mod cloud_storage;
