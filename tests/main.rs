@@ -1,6 +1,6 @@
-use std::{thread, time};
 use ftp::FtpStream;
 use pretty_assertions::assert_eq;
+use std::{thread, time};
 
 macro_rules! start_server {
     ( $addr:expr, $path:expr ) => {
@@ -23,7 +23,6 @@ fn connect() {
     let addr = "127.0.0.1:1234";
     start_server!(addr);
     let mut _ftp_stream = FtpStream::connect(addr).unwrap();
-
 }
 
 #[test]
@@ -172,7 +171,10 @@ fn cwd() {
     ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
     let pwd = ftp_stream.pwd().unwrap();
-    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+    assert_eq!(
+        std::path::Path::new(&pwd),
+        std::path::Path::new("/").join(&basename)
+    );
 }
 
 #[test]
@@ -192,7 +194,10 @@ fn cdup() {
     ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
     let pwd = ftp_stream.pwd().unwrap();
-    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+    assert_eq!(
+        std::path::Path::new(&pwd),
+        std::path::Path::new("/").join(&basename)
+    );
 
     ftp_stream.cdup().unwrap();
     let pwd = ftp_stream.pwd().unwrap();
@@ -214,7 +219,10 @@ fn dele() {
 
     ftp_stream.login("hoi", "jij").unwrap();
     ftp_stream.rm(file_name).unwrap();
-    assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(
+        std::fs::metadata(file_name).unwrap_err().kind(),
+        std::io::ErrorKind::NotFound
+    );
 }
 
 #[test]
@@ -293,11 +301,15 @@ fn rename() {
     let mut ftp_stream = FtpStream::connect(addr).expect("Failed to connect");
 
     // Make sure we fail if we're not logged in
-    ftp_stream.rename(&from_filename, &to_filename).expect_err("Rename accepted without logging in");
+    ftp_stream
+        .rename(&from_filename, &to_filename)
+        .expect_err("Rename accepted without logging in");
 
     // Do the renaming
     ftp_stream.login("some", "user").unwrap();
-    ftp_stream.rename(&from_filename, &to_filename).expect("Failed to rename");
+    ftp_stream
+        .rename(&from_filename, &to_filename)
+        .expect("Failed to rename");
 
     // Give the OS some time to actually rename the thingy.
     std::thread::sleep(std::time::Duration::from_millis(100));
