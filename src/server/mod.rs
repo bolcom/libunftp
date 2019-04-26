@@ -20,6 +20,7 @@ use crate::auth;
 use crate::auth::Authenticator;
 use crate::commands;
 use crate::commands::{AuthParam, Command, ProtParam};
+use crate::metrics;
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
 use crate::stream::{SecuritySwitch, SwitchingTlsStream};
@@ -33,45 +34,51 @@ const CONTROL_CHANNEL_ID: u8 = 0;
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 #[derive(PartialEq, Debug)]
-enum InternalMsg {
-    // Permission Denied
+pub enum InternalMsg {
+    /// Permission Denied
     PermissionDenied,
-    // File not found
+    /// File not found
     NotFound,
-    // Send the data to the client
-    SendData,
-    // We've written the data from the client to the StorageBackend
-    WrittenData,
-    // Data connection was unexpectedly closed
+    /// Send the data to the client
+    SendData {
+        /// The number of bytes transferred
+        bytes: i64,
+    },
+    /// We've written the data from the client to the StorageBackend
+    WrittenData {
+        /// The number of bytes transferred
+        bytes: i64,
+    },
+    /// Data connection was unexpectedly closed
     ConnectionReset,
-    // Failed to write data to disk
+    /// Failed to write data to disk
     WriteFailed,
-    // Started sending data to the client
+    /// Started sending data to the client
     SendingData,
-    // Unknown Error retrieving file
+    /// Unknown Error retrieving file
     UnknownRetrieveError,
-    // Listed the directory successfully
+    /// Listed the directory successfully
     DirectorySuccesfullyListed,
-    // File succesfully deleted
+    /// File succesfully deleted
     DelSuccess,
-    // Failed to delete file
+    /// Failed to delete file
     DelFail,
-    // Quit the client connection
+    /// Quit the client connection
     Quit,
-    // Successfully created directory
+    /// Successfully created directory
     MkdirSuccess(std::path::PathBuf),
-    // Failed to crate directory
+    /// Failed to crate directory
     MkdirFail,
-    // Sent to switch the control channel to TLS/SSL mode.
+    /// Sent to switch the control channel to TLS/SSL mode.
     SecureControlChannel,
-    // Sent to switch the control channel from TLS/SSL mode back to plaintext.
+    /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
     PlaintextControlChannel,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
 #[derive(PartialEq, Debug)]
-enum Event {
+pub enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(commands::Command),
     /// A status message from the data channel handler
@@ -203,6 +210,7 @@ where
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
+    with_metrics: bool,
 }
 
 impl Server<storage::Filesystem> {
@@ -227,6 +235,7 @@ impl Server<storage::Filesystem> {
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
+            with_metrics: false,
         };
         server.passive_ports(49152..65535)
     }
@@ -252,6 +261,7 @@ where
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
+            with_metrics: false,
         };
         server.passive_ports(49152..65535)
     }
@@ -317,6 +327,25 @@ where
         self
     }
 
+    /// Enable the collection of prometheus metrics.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_root("/tmp").with_metrics();
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_root("/tmp");
+    /// server.with_metrics();
+    /// ```
+    pub fn with_metrics(mut self) -> Self {
+        self.with_metrics = true;
+        self
+    }
+
     /// Set the [`Authenticator`] that will be used for authentication.
     ///
     /// # Example
@@ -377,6 +406,7 @@ where
     /// Does TCP processing when a FTP client connects
     fn process(&self, tcp_stream: TcpStream) {
         let authenticator = self.authenticator;
+        let with_metrics = self.with_metrics;
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
@@ -961,7 +991,7 @@ where
                 Event::InternalMsg(SendingData) => {
                     Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data"))
                 }
-                Event::InternalMsg(SendData) => Ok(Reply::new(
+                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(
                     ReplyCode::ClosingDataConnection,
                     "Send you something nice",
                 )),
@@ -973,7 +1003,7 @@ where
                     ReplyCode::ConnectionClosed,
                     "Datachannel unexpectedly closed",
                 )),
-                Event::InternalMsg(WrittenData) => Ok(Reply::new(
+                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(
                     ReplyCode::ClosingDataConnection,
                     "File succesfully written",
                 )),
@@ -1031,12 +1061,18 @@ where
                             rx.map(Event::InternalMsg)
                                 .map_err(|_| FTPErrorKind::InternalMsgError.into()),
                         )
-                        .take_while(|event| {
+                        .take_while(move |event| {
+                            if with_metrics {
+                                metrics::add_event_metric(event);
+                            };
                             // TODO: Make sure data connections are closed
                             Ok(*event != Event::InternalMsg(InternalMsg::Quit))
                         })
                         .and_then(respond)
-                        .or_else(|e| {
+                        .or_else(move |e| {
+                            if with_metrics {
+                                metrics::add_error_metric(e.kind());
+                            };
                             warn!("Failed to process command: {}", e);
                             let response = match e.kind() {
                                 FTPErrorKind::UnknownCommand { .. } => Reply::new(
@@ -1056,6 +1092,12 @@ where
                                 ),
                             };
                             futures::future::ok(response)
+                        })
+                        .map(move |reply| {
+                            if with_metrics {
+                                metrics::add_reply_metric(&reply);
+                            }
+                            reply
                         })
                         // Needed for type annotation, we can possible remove this once the compiler is
                         // smarter about inference :)
