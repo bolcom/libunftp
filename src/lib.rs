@@ -36,3 +36,6 @@ pub mod auth;
 /// Contains the `StorageBackend` trait that is by the `Server` and its various
 /// implementations.
 pub mod storage;
+
+/// Contains the `add...metric` functions that are used for gathering metrics.
+pub mod metrics;

@@ -145,8 +145,8 @@ where
                                         .and_then(|_| {
                                             tokio_io::io::copy(f, tcp_tls_stream)
                                         })
-                                        .and_then(|_| {
-                                            tx.send(InternalMsg::SendData)
+                                        .and_then(|(bytes, _, _)| {
+                                            tx.send(InternalMsg::SendData{bytes: bytes as i64})
                                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
                                         })
                                 })
@@ -173,8 +173,8 @@ where
                         tokio::spawn(
                             storage.put(tcp_tls_stream, path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
-                                .and_then(|_| {
-                                    tx_ok.send(InternalMsg::WrittenData)
+                                .and_then(|bytes| {
+                                    tx_ok.send(InternalMsg::WrittenData{bytes: bytes as i64})
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
                                 })
                                 .or_else(|e| {
