@@ -21,6 +21,11 @@
 //! }
 //! ```
 
+#[macro_use(lazy_static)]
+extern crate lazy_static;
+#[macro_use]
+extern crate prometheus;
+
 /// Contains the `Server` struct that is used to configure and control a FTP server instance.
 pub mod server;
 pub use crate::server::Server;
@@ -35,3 +40,6 @@ pub mod auth;
 /// Contains the `StorageBackend` trait that is by the `Server` and its various
 /// implementations.
 pub mod storage;
+
+/// Contains the `add...metric` functions that are used for gathering metrics.
+pub mod metrics;
