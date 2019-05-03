@@ -4,6 +4,7 @@ use std::{fmt, result};
 
 use chrono::prelude::*;
 use futures::{future, Future, Stream};
+use log::debug;
 
 /// Represents the Metadata of a file
 pub trait Metadata {
@@ -334,7 +335,10 @@ impl StorageBackend for Filesystem {
             Err(e) => return Box::new(future::err(e)),
         };
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::file::File::open(full_path).map_err(|_| Error::IOError))
+        Box::new(tokio::fs::file::File::open(full_path).map_err(|e| {
+            debug!("{:?}", e);
+            Error::IOError
+        }))
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
@@ -354,7 +358,10 @@ impl StorageBackend for Filesystem {
             .and_then(|f| tokio_io::io::copy(bytes, f))
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
-            .map_err(|_| Error::IOError);
+            .map_err(|e| {
+                debug!("{:?}", e);
+                Error::IOError
+            });
         Box::new(fut)
     }
 
@@ -373,7 +380,7 @@ impl StorageBackend for Filesystem {
         };
 
         Box::new(tokio::fs::create_dir(full_path).map_err(|e| {
-            println!("error: {}", e);
+            debug!("error: {}", e);
             Error::IOError
         }))
     }
@@ -409,6 +416,7 @@ impl StorageBackend for Filesystem {
 }
 
 use std::os::unix::fs::MetadataExt;
+
 impl Metadata for std::fs::Metadata {
     fn len(&self) -> u64 {
         self.len()

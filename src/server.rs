@@ -16,15 +16,18 @@ use uuid::Uuid;
 use crate::auth;
 use crate::auth::Authenticator;
 use crate::commands;
-use crate::commands::Command;
+use crate::commands::{AuthParam, Command, ProtParam};
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
+use crate::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
+use tokio_io::{AsyncRead,AsyncWrite};
 
 const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
+const CONTROL_CHANNEL_ID: u8 = 0;
+const DATA_CHANNEL_ID: u8 = 1;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
-// TODO: Give these events better names
 #[derive(PartialEq, Debug)]
 enum InternalMsg {
     // Permission Denied
@@ -55,6 +58,10 @@ enum InternalMsg {
     MkdirSuccess(std::path::PathBuf),
     // Failed to crate directory
     MkdirFail,
+    // Sent to switch the control channel to TLS/SSL mode.
+    SecureControlChannel,
+    // Sent to switch the control channel from TLS/SSL mode back to plaintext.
+    PlaintextControlChannel,
 }
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
@@ -281,6 +288,10 @@ where
     state: SessionState,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
+    // True if the command channel is in secure mode
+    cmd_tls: bool,
+    // True if the data channel is in secure mode.
+    data_tls: bool,
 }
 
 // Commands that can be send to the data channel.
@@ -289,6 +300,14 @@ enum DataCommand {
     ExternalCommand(Command),
     Abort,
 }
+
+
+// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
+trait AsyncStream: AsyncRead + AsyncWrite + Send {}
+
+impl AsyncStream for TcpStream {}
+
+impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 
 impl<S> Session<S>
 where
@@ -310,6 +329,8 @@ where
             state: SessionState::New,
             certs_file: Option::None,
             key_file: Option::None,
+            cmd_tls: false,
+            data_tls: false,
         }
     }
 
@@ -319,10 +340,28 @@ where
         self
     }
 
+    /// Processing for the data connection.
+    ///
     /// socket: the data socket we'll be working with
+    /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    /// rx: channel to receive commands from the control process
-    fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<InternalMsg>) {
+    fn process_data(
+        &mut self,
+        socket: TcpStream,
+        sec_switch: Arc<Mutex<Session<S>>>,
+        tx: mpsc::Sender<InternalMsg>,
+    ) {
+        let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
+            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
+                socket,
+                sec_switch,
+                DATA_CHANNEL_ID,
+                certs,
+                keys
+            )),
+            _ => Box::new(socket),
+        };
+
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = self.data_cmd_rx.take().unwrap();
@@ -355,7 +394,7 @@ where
                                     tx_sending.send(InternalMsg::SendingData)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
                                         .and_then(|_| {
-                                            tokio_io::io::copy(f, socket)
+                                            tokio_io::io::copy(f, tcp_tls_stream)
                                         })
                                         .and_then(|_| {
                                             tx.send(InternalMsg::SendData)
@@ -383,7 +422,7 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.put(socket, path)
+                            storage.put(tcp_tls_stream, path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
                                 .and_then(|_| {
                                     tx_ok.send(InternalMsg::WrittenData)
@@ -413,7 +452,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.list_fmt(path)
-                                .and_then(|res| tokio::io::copy(res, socket))
+                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
@@ -444,7 +483,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.nlst(path)
-                                .and_then(|res| tokio::io::copy(res, socket))
+                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
@@ -480,6 +519,32 @@ where
             ;
 
         tokio::spawn(task);
+    }
+}
+
+impl<S> SecuritySwitch for Session<S>
+where
+    S: storage::StorageBackend,
+    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend>::Error: Send,
+{
+    fn which_state(&self, channel: u8) -> SecurityState {
+        match channel {
+            CONTROL_CHANNEL_ID => {
+                if self.cmd_tls {
+                    return SecurityState::On;
+                }
+                SecurityState::Off
+            }
+            DATA_CHANNEL_ID => {
+                if self.data_tls {
+                    return SecurityState::On;
+                }
+                SecurityState::Off
+            }
+            _ => SecurityState::Off,
+        }
     }
 }
 
@@ -683,13 +748,27 @@ where
         });
     }
 
-    fn process(&self, socket: TcpStream) {
+    /// Does TCP processing when a FTP client connects
+    fn process(&self, tcp_stream: TcpStream) {
         let authenticator = self.authenticator;
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
-        let session = Arc::new(Mutex::new(Session::with_storage(storage)));
+        let session =
+            Session::with_storage(storage).certs(self.certs_file.clone(), self.key_file.clone());
+        let session = Arc::new(Mutex::new(session));
         let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);
+
+        let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
+            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
+                tcp_stream,
+                session.clone(),
+                CONTROL_CHANNEL_ID,
+                certs,
+                keys,
+            )),
+            _ => Box::new(tcp_stream),
+        };
 
         macro_rules! respond {
             ($closure:expr) => {{
@@ -884,14 +963,14 @@ where
                                     .map_err(|e| warn!("Failed to accept data socket: {:?}", e))
                                     .for_each(move |socket| {
                                         let tx = tx.clone();
-                                        let session = session.clone();
-                                        let mut session = session.lock().unwrap_or_else(|res| {
+                                        let session2 = session.clone();
+                                        let mut session2 = session2.lock().unwrap_or_else(|res| {
                                             // TODO: Send signal to `tx` here, so we can handle the
                                             // error
                                             error!("session lock() result: {}", res);
                                             panic!()
                                         });
-                                        session.process_data(socket, tx);
+                                        session2.process_data(socket, session.clone(), tx);
                                         Ok(())
                                     }),
                             ));
@@ -1182,9 +1261,72 @@ where
                                 )),
                             }
                         }
+                        Command::Auth { protocol } => match protocol {
+                            AuthParam::Tls => {
+                                let tx = tx.clone();
+                                spawn!(tx.send(InternalMsg::SecureControlChannel));
+                                Ok(Reply::new(
+                                    ReplyCode::AuthOkayNoDataNeeded,
+                                    "Upgrading to TLS",
+                                ))
+                            }
+                            AuthParam::Ssl => Ok(Reply::new(
+                                ReplyCode::CommandNotImplementedForParameter,
+                                "Auth SSL not implemented",
+                            )),
+                        },
+                        Command::PBSZ {} => {
+                            ensure_authenticated!();
+                            Ok(Reply::new(ReplyCode::CommandOkay, "happiness..."))
+                        }
+                        Command::CCC {} => {
+                            ensure_authenticated!();
+                            let tx = tx.clone();
+                            let session = session.lock()?;
+                            if session.cmd_tls {
+                                spawn!(tx.send(InternalMsg::PlaintextControlChannel));
+                                Ok(Reply::new(
+                                    ReplyCode::CommandOkay,
+                                    "control channel in plaintext now",
+                                ))
+                            } else {
+                                Ok(Reply::new(
+                                    ReplyCode::Resp533,
+                                    "control channel already in plaintext mode",
+                                ))
+                            }
+                        }
+                        Command::CDC {} => {
+                            ensure_authenticated!();
+                            Ok(Reply::new(ReplyCode::CommandSyntaxError, "coming soon..."))
+                        }
+                        Command::PROT { param } => {
+                            ensure_authenticated!();
+                            match param {
+                                ProtParam::Clear => {
+                                    let mut session = session.lock()?;
+                                    session.data_tls = false;
+                                    Ok(Reply::new(
+                                        ReplyCode::CommandOkay,
+                                        "PROT OK. Switching data channel to plaintext",
+                                    ))
+                                }
+                                ProtParam::Private => {
+                                    let mut session = session.lock().unwrap();
+                                    session.data_tls = true;
+                                    Ok(Reply::new(
+                                        ReplyCode::CommandOkay,
+                                        "PROT OK. Securing data channel",
+                                    ))
+                                }
+                                _ => Ok(Reply::new(
+                                    ReplyCode::CommandNotImplementedForParameter,
+                                    "PROT S/E not implemented",
+                                )),
+                            }
+                        }
                     }
                 }
-
                 Event::InternalMsg(NotFound) => {
                     Ok(Reply::new(ReplyCode::FileError, "File not found"))
                 }
@@ -1230,6 +1372,16 @@ where
                 Event::InternalMsg(Quit) => {
                     Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
                 }
+                Event::InternalMsg(SecureControlChannel) => {
+                    let mut session = session.lock()?;
+                    session.cmd_tls = true;
+                    Ok(Reply::none())
+                }
+                Event::InternalMsg(PlaintextControlChannel) => {
+                    let mut session = session.lock()?;
+                    session.cmd_tls = false;
+                    Ok(Reply::none())
+                }
                 Event::InternalMsg(MkdirSuccess(path)) => Ok(Reply::new_with_string(
                     ReplyCode::DirCreated,
                     path.to_string_lossy().to_string(),
@@ -1242,7 +1394,7 @@ where
         };
 
         let codec = FTPCodec::new();
-        let (sink, stream) = codec.framed(socket).split();
+        let (sink, stream) = codec.framed(tcp_tls_stream).split();
         let task = sink
             .send(Reply::new(ReplyCode::ServiceReady, self.greeting))
             .and_then(|sink| sink.flush())
