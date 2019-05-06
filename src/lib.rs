@@ -26,6 +26,7 @@ pub mod server;
 pub use crate::server::Server;
 
 pub(crate) mod commands;
+pub(crate) mod reply;
 
 /// Contains the `Authenticator` trait that is used by the `Server` to authenticate users, as well
 /// as its various implementations.

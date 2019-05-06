@@ -1,8 +1,9 @@
 use std::fmt;
 use std::io::ErrorKind;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use bytes::{BufMut, BytesMut};
+use bytes::BytesMut;
 use failure::*;
 use futures::prelude::*;
 use futures::sync::mpsc;
@@ -16,6 +17,7 @@ use crate::auth;
 use crate::auth::Authenticator;
 use crate::commands;
 use crate::commands::Command;
+use crate::reply::{Reply, ReplyCode};
 use crate::storage;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
@@ -99,13 +101,36 @@ impl Decoder for FTPCodec {
 }
 
 impl Encoder for FTPCodec {
-    type Item = String;
+    type Item = Reply;
     type Error = FTPError;
 
-    // Here we encode the outgoing response, nothing special going on.
-    fn encode(&mut self, response: String, buf: &mut BytesMut) -> Result<(), Self::Error> {
-        buf.reserve(response.len());
-        buf.put(response);
+    // Here we encode the outgoing response
+    fn encode(&mut self, reply: Reply, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        let mut buffer = vec![];
+        match reply {
+            Reply::None => {
+                return Ok(());
+            }
+            Reply::CodeAndMsg { code, msg } => {
+                if msg.is_empty() {
+                    write!(buffer, "{}\r\n", code as u32)?;
+                } else {
+                    write!(buffer, "{} {}\r\n", code as u32, msg)?;
+                }
+            }
+            Reply::MultiLine { code, mut lines } => {
+                let s = lines.pop().unwrap();
+                write!(
+                    buffer,
+                    "{}-{}\r\n{} {}\r\n",
+                    code as u32,
+                    lines.join("\r\n"), // TODO: Handle when line starts with a number
+                    code as u32,
+                    s
+                )?;
+            }
+        }
+        buf.extend(&buffer);
         Ok(())
     }
 }
@@ -283,8 +308,8 @@ where
     }
 
     /// socket: the data socket we'll be working with
-    /// tx: channel to send the result of our operation on
-    /// rx: channel to receive the command on
+    /// tx: channel to send the result of our operation to the control process
+    /// rx: channel to receive commands from the control process
     fn process_data(&mut self, socket: TcpStream, tx: mpsc::Sender<InternalMsg>) {
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
@@ -648,12 +673,15 @@ where
             (  ) => {{
                 let session = session.lock()?;
                 if session.state != WaitCmd {
-                    return Ok("530 Please authenticate with USER and PASS first\r\n".to_string());
+                    return Ok(Reply::new(
+                        ReplyCode::NotLoggedIn,
+                        "Please authenticate with USER and PASS first",
+                    ));
                 }
             }};
         }
 
-        let respond = move |event: Event| -> Result<String, FTPError> {
+        let respond = move |event: Event| -> Result<Reply, FTPError> {
             use self::InternalMsg::*;
             use self::SessionState::*;
 
@@ -669,10 +697,12 @@ where
                                     let user = std::str::from_utf8(&username)?;
                                     session.username = Some(user.to_string());
                                     session.state = WaitPass;
-                                    Ok("331 Password Required\r\n".to_string())
+                                    Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
                                 }
-                                _ => Ok("503 Please create a new connection to switch user\r\n"
-                                    .to_string()),
+                                _ => Ok(Reply::new(
+                                    ReplyCode::BadCommandSequence,
+                                    "Please create a new connection to switch user",
+                                )),
                             }
                         }
                         Command::Pass { password } => {
@@ -685,66 +715,97 @@ where
                                     match res {
                                         Ok(true) => {
                                             session.state = WaitCmd;
-                                            Ok("230 User logged in, proceed\r\n".to_string())
+                                            Ok(Reply::new(
+                                                ReplyCode::UserLoggedIn,
+                                                "User logged in, proceed",
+                                            ))
                                         }
-                                        Ok(false) => {
-                                            Ok("530 Wrong username or password\r\n".to_string())
-                                        }
+                                        Ok(false) => Ok(Reply::new(
+                                            ReplyCode::NotLoggedIn,
+                                            "Wrong username or password",
+                                        )),
                                         Err(_) => {
                                             warn!("Unknown Authentication backend failure");
-                                            Ok("530 Failed to authenticate\r\n".to_string())
+                                            Ok(Reply::new(
+                                                ReplyCode::NotLoggedIn,
+                                                "Failed to authenticate",
+                                            ))
                                         }
                                     }
                                 }
-                                New => Ok("503 Please give me a username first\r\n".to_string()),
-                                _ => Ok("530 Please open a new connection to re-authenticate\r\n"
-                                    .to_string()),
+                                New => Ok(Reply::new(
+                                    ReplyCode::BadCommandSequence,
+                                    "Please give me a username first",
+                                )),
+                                _ => Ok(Reply::new(
+                                    ReplyCode::NotLoggedIn,
+                                    "Please open a new connection to re-authenticate",
+                                )),
                             }
                         }
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
                         // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
                         // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => respond!(|| Ok("215 UNIX Type: L8\r\n".to_string())),
+                        Command::Syst => {
+                            respond!(|| Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8")))
+                        }
                         Command::Stat { path } => {
                             ensure_authenticated!();
                             match path {
-                                None => Ok("211 I'm just a humble FTP server\r\n".to_string()),
+                                None => Ok(Reply::new(
+                                    ReplyCode::SystemStatus,
+                                    "I'm just a humble FTP server",
+                                )),
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path)?;
                                     // TODO: Implement :)
                                     info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok("504 Stat with paths unsupported atm\r\n".to_string())
+                                    Ok(Reply::new(
+                                        ReplyCode::CommandNotImplementedForParameter,
+                                        "Stat with paths unsupported atm",
+                                    ))
                                 }
                             }
                         }
-                        Command::Acct { .. } => {
-                            respond!(|| Ok("530 I don't know accounting man\r\n".to_string()))
-                        }
-                        Command::Type => respond!(|| Ok(
-                            "200 I'm always in binary mode, dude...\r\n".to_string()
-                        )),
+                        Command::Acct { .. } => respond!(|| Ok(Reply::new(
+                            ReplyCode::NotLoggedIn,
+                            "I don't know accounting man"
+                        ))),
+                        Command::Type => respond!(|| Ok(Reply::new(
+                            ReplyCode::CommandOkay,
+                            "I'm always in binary mode, dude..."
+                        ))),
                         Command::Stru { structure } => {
                             ensure_authenticated!();
                             match structure {
-                                commands::StruParam::File => {
-                                    Ok("200 We're in File structure mode\r\n".to_string())
-                                }
-                                _ => Ok("504 Only File structure is supported\r\n".to_string()),
+                                commands::StruParam::File => Ok(Reply::new(
+                                    ReplyCode::CommandOkay,
+                                    "We're in File structure mode",
+                                )),
+                                _ => Ok(Reply::new(
+                                    ReplyCode::CommandNotImplementedForParameter,
+                                    "Only File structure is supported",
+                                )),
                             }
                         }
                         Command::Mode { mode } => respond!(|| match mode {
-                            commands::ModeParam::Stream => {
-                                Ok("200 Using Stream transfer mode\r\n".to_string())
-                            }
-                            _ => Ok("504 Only Stream transfer mode is supported\r\n".to_string()),
+                            commands::ModeParam::Stream => Ok(Reply::new(
+                                ReplyCode::CommandOkay,
+                                "Using Stream transfer mode"
+                            )),
+                            _ => Ok(Reply::new(
+                                ReplyCode::CommandNotImplementedForParameter,
+                                "Only Stream transfer mode is supported"
+                            )),
                         }),
-                        Command::Help => respond!(|| Ok(
-                            "214 We haven't implemented a useful HELP command, sorry\r\n"
-                                .to_string()
-                        )),
-                        Command::Noop => {
-                            respond!(|| Ok("200 Successfully did nothing\r\n".to_string()))
-                        }
+                        Command::Help => respond!(|| Ok(Reply::new(
+                            ReplyCode::HelpMessage,
+                            "We haven't implemented a useful HELP command, sorry"
+                        ))),
+                        Command::Noop => respond!(|| Ok(Reply::new(
+                            ReplyCode::CommandOkay,
+                            "Successfully did nothing"
+                        ))),
                         Command::Pasv => {
                             ensure_authenticated!();
 
@@ -800,15 +861,20 @@ where
                                     }),
                             ));
 
-                            Ok(format!(
-                                "227 Entering Passive Mode ({},{},{},{},{},{})\r\n",
-                                octets[0], octets[1], octets[2], octets[3], p1, p2
+                            Ok(Reply::new_with_string(
+                                ReplyCode::EnteringPassiveMode,
+                                format!(
+                                    "Entering Passive Mode ({},{},{},{},{},{})",
+                                    octets[0], octets[1], octets[2], octets[3], p1, p2
+                                ),
                             ))
                         }
                         Command::Port => {
                             ensure_authenticated!();
-                            Ok("502 ACTIVE mode is not supported - use PASSIVE instead\r\n"
-                                .to_string())
+                            Ok(Reply::new(
+                                ReplyCode::CommandNotImplemented,
+                                "ACTIVE mode is not supported - use PASSIVE instead",
+                            ))
                         }
                         Command::Retr { .. } => {
                             ensure_authenticated!();
@@ -818,9 +884,7 @@ where
                                 None => return Err(FTPErrorKind::InternalServerError.into()),
                             };
                             spawn!(tx.send(cmd.clone()));
-                            // TODO: Return a Option<String> or something, to prevent us from
-                            // returning "" ><
-                            Ok("".to_string())
+                            Ok(Reply::none())
                         }
                         Command::Stor { .. } => {
                             ensure_authenticated!();
@@ -828,11 +892,17 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok("425 No data connection established\r\n".to_string());
+                                    return Ok(Reply::new(
+                                        ReplyCode::CantOpenDataConnection,
+                                        "No data connection established",
+                                    ));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok("150 Ready to receive data\r\n".to_string())
+                            Ok(Reply::new(
+                                ReplyCode::FileStatusOkay,
+                                "Ready to receive data",
+                            ))
                         }
                         Command::List { .. } => {
                             ensure_authenticated!();
@@ -841,11 +911,17 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok("425 No data connection established\r\n".to_string());
+                                    return Ok(Reply::new(
+                                        ReplyCode::CantOpenDataConnection,
+                                        "No data connection established",
+                                    ));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok("150 Sending directory list\r\n".to_string())
+                            Ok(Reply::new(
+                                ReplyCode::FileStatusOkay,
+                                "Sending directory list",
+                            ))
                         }
                         Command::Nlst { .. } => {
                             ensure_authenticated!();
@@ -853,25 +929,39 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok("425 No data connection established\r\n".to_string());
+                                    return Ok(Reply::new(
+                                        ReplyCode::CantOpenDataConnection,
+                                        "No data connection established",
+                                    ));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok("150 Sending directory list\r\n".to_string())
+                            Ok(Reply::new(
+                                ReplyCode::FileStatusOkay,
+                                "Sending directory list",
+                            ))
                         }
                         Command::Feat => {
                             ensure_authenticated!();
-                            let response = "211-Extensions supported:\r\n \
-                                            I support some cool features\r\n\
-                                            211 End\r\n"
-                                .to_string();
-                            Ok(response)
+                            let reply = Reply::new_multiline(
+                                ReplyCode::SystemStatus,
+                                &vec![
+                                    "Extensions supported:",
+                                    "AUTH (Authentication/Security Mechanism)",
+                                    "PROT (Data Channel Protection Level)",
+                                    "PBSZ (Protection Buffer Size)",
+                                ],
+                            );
+                            Ok(reply)
                         }
                         Command::Pwd => {
                             ensure_authenticated!();
                             let session = session.lock()?;
                             // TODO: properly escape double quotes in `cwd`
-                            Ok(format!("257 \"{}\"\r\n", session.cwd.as_path().display()))
+                            Ok(Reply::new_with_string(
+                                ReplyCode::DirCreated,
+                                format!("\"{}\"", session.cwd.as_path().display()),
+                            ))
                         }
                         Command::Cwd { path } => {
                             // TODO: We current accept all CWD requests. Consider only allowing
@@ -880,20 +970,21 @@ where
                             respond!(|| {
                                 let mut session = session.lock()?;
                                 session.cwd.push(path);
-                                Ok("250 Okay.\r\n".to_string())
+                                Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
                             })
                         }
                         Command::Cdup => respond!(|| {
                             let mut session = session.lock()?;
                             session.cwd.pop();
-                            Ok("250 Okay.\r\n".to_string())
+                            Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
                         }),
                         Command::Opts { option } => {
                             ensure_authenticated!();
                             match option {
-                                commands::Opt::UTF8 => {
-                                    Ok("250 Okay, I'm always in UTF8 mode.\r\n".to_string())
-                                }
+                                commands::Opt::UTF8 => Ok(Reply::new(
+                                    ReplyCode::FileActionOkay,
+                                    "Okay, I'm always in UTF8 mode.",
+                                )),
                             }
                         }
                         Command::Dele { path } => {
@@ -932,12 +1023,12 @@ where
                                         warn!("Failed to delete file: {}", e);
                                     }),
                             );
-                            Ok("".to_string())
+                            Ok(Reply::none())
                         }
                         Command::Quit => {
                             let tx = tx.clone();
                             spawn!(tx.send(InternalMsg::Quit));
-                            Ok("221 bye!\r\n".to_string())
+                            Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
                         }
                         Command::Mkd { path } => {
                             ensure_authenticated!();
@@ -977,12 +1068,15 @@ where
                                         warn!("Failed to create directory: {}", e);
                                     }),
                             );
-                            Ok("".to_string())
+                            Ok(Reply::none())
                         }
                         Command::Allo { .. } => {
                             ensure_authenticated!();
                             // ALLO is obsolete and we'll just ignore it.
-                            Ok("202 I don't need to allocate anything\r\n".to_string())
+                            Ok(Reply::new(
+                                ReplyCode::CommandOkayNotImplemented,
+                                "I don't need to allocate anything",
+                            ))
                         }
                         Command::Abor => {
                             ensure_authenticated!();
@@ -990,9 +1084,15 @@ where
                             match session.data_abort_tx.take() {
                                 Some(tx) => {
                                     spawn!(tx.send(()));
-                                    Ok("226 Closed data channel\r\n".to_string())
+                                    Ok(Reply::new(
+                                        ReplyCode::ClosingDataConnection,
+                                        "Closed data channel",
+                                    ))
                                 }
-                                None => Ok("226 Data channel already closed\r\n".to_string()),
+                                None => Ok(Reply::new(
+                                    ReplyCode::ClosingDataConnection,
+                                    "Data channel already closed",
+                                )),
                             }
                         }
                         // TODO: Write functional test for STOU command.
@@ -1002,7 +1102,10 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok("425 No data connection established\r\n".to_string());
+                                    return Ok(Reply::new(
+                                        ReplyCode::CantOpenDataConnection,
+                                        "No data connection established",
+                                    ));
                                 }
                             };
 
@@ -1010,14 +1113,19 @@ where
                             let filename = std::path::Path::new(&uuid);
                             let path = session.cwd.join(&filename).to_string_lossy().to_string();
                             spawn!(tx.send(Command::Stor { path: path }));
-                            Ok(format!("150 {}\r\n", filename.to_string_lossy()))
+                            Ok(Reply::new_with_string(
+                                ReplyCode::FileStatusOkay,
+                                filename.to_string_lossy().to_string(),
+                            ))
                         }
                         Command::Rnfr { file } => {
                             ensure_authenticated!();
                             let mut session = session.lock()?;
                             session.rename_from = Some(file);
-                            Ok("350 Tell me, what would you like the new name to be?\r\n"
-                                .to_string())
+                            Ok(Reply::new(
+                                ReplyCode::FileActionPending,
+                                "Tell me, what would you like the new name to be?",
+                            ))
                         }
                         Command::Rnto { file } => {
                             ensure_authenticated!();
@@ -1026,52 +1134,80 @@ where
                             match session.rename_from.take() {
                                 Some(from) => {
                                     spawn!(storage.rename(from, file));
-                                    Ok("250 sure, it shall be known\r\n".to_string())
+                                    Ok(Reply::new(
+                                        ReplyCode::FileActionOkay,
+                                        "sure, it shall be known",
+                                    ))
                                 }
-                                None => {
-                                    Ok("450 Please tell me what file you want to rename first\r\n"
-                                        .to_string())
-                                }
+                                None => Ok(Reply::new(
+                                    ReplyCode::TransientFileError,
+                                    "Please tell me what file you want to rename first",
+                                )),
                             }
                         }
                     }
                 }
 
-                Event::InternalMsg(NotFound) => Ok("550 File not found\r\n".to_string()),
-                Event::InternalMsg(PermissionDenied) => Ok("550 Permision denied\r\n".to_string()),
-                Event::InternalMsg(SendingData) => Ok("150 Sending Data\r\n".to_string()),
-                Event::InternalMsg(SendData) => Ok("226 Send you something nice\r\n".to_string()),
-                Event::InternalMsg(WriteFailed) => Ok("450 Failed to write file\r\n".to_string()),
-                Event::InternalMsg(ConnectionReset) => {
-                    Ok("426 Datachannel unexpectedly closed\r\n".to_string())
+                Event::InternalMsg(NotFound) => {
+                    Ok(Reply::new(ReplyCode::FileError, "File not found"))
                 }
-                Event::InternalMsg(WrittenData) => {
-                    Ok("226 File succesfully written\r\n".to_string())
+                Event::InternalMsg(PermissionDenied) => {
+                    Ok(Reply::new(ReplyCode::FileError, "Permision denied"))
                 }
-                Event::InternalMsg(UnknownRetrieveError) => Ok("450 Unknown Error\r\n".to_string()),
-                Event::InternalMsg(DirectorySuccesfullyListed) => {
-                    Ok("226 Listed the directory\r\n".to_string())
+                Event::InternalMsg(SendingData) => {
+                    Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data"))
                 }
-                Event::InternalMsg(DelSuccess) => {
-                    Ok("250 File successfully removed\r\n".to_string())
+                Event::InternalMsg(SendData) => Ok(Reply::new(
+                    ReplyCode::ClosingDataConnection,
+                    "Send you something nice",
+                )),
+                Event::InternalMsg(WriteFailed) => Ok(Reply::new(
+                    ReplyCode::TransientFileError,
+                    "Failed to write file",
+                )),
+                Event::InternalMsg(ConnectionReset) => Ok(Reply::new(
+                    ReplyCode::ConnectionClosed,
+                    "Datachannel unexpectedly closed",
+                )),
+                Event::InternalMsg(WrittenData) => Ok(Reply::new(
+                    ReplyCode::ClosingDataConnection,
+                    "File succesfully written",
+                )),
+                Event::InternalMsg(UnknownRetrieveError) => {
+                    Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error"))
                 }
-                Event::InternalMsg(DelFail) => Ok("450 Failed to delete the file\r\n".to_string()),
+                Event::InternalMsg(DirectorySuccesfullyListed) => Ok(Reply::new(
+                    ReplyCode::ClosingDataConnection,
+                    "Listed the directory",
+                )),
+                Event::InternalMsg(DelSuccess) => Ok(Reply::new(
+                    ReplyCode::FileActionOkay,
+                    "File successfully removed",
+                )),
+                Event::InternalMsg(DelFail) => Ok(Reply::new(
+                    ReplyCode::TransientFileError,
+                    "Failed to delete the file",
+                )),
                 // The InternalMsg::Quit will never be reached, because we catch it in the task before
                 // this closure is called (because we have to close the connection).
-                Event::InternalMsg(Quit) => Ok("221 bye!\r\n".to_string()),
-                Event::InternalMsg(MkdirSuccess(path)) => {
-                    Ok(format!("257 {}\r\n", path.to_string_lossy()))
+                Event::InternalMsg(Quit) => {
+                    Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
                 }
-                Event::InternalMsg(MkdirFail) => {
-                    Ok("550 Failed to create directory\r\n".to_string())
-                }
+                Event::InternalMsg(MkdirSuccess(path)) => Ok(Reply::new_with_string(
+                    ReplyCode::DirCreated,
+                    path.to_string_lossy().to_string(),
+                )),
+                Event::InternalMsg(MkdirFail) => Ok(Reply::new(
+                    ReplyCode::FileError,
+                    "Failed to create directory",
+                )),
             }
         };
 
         let codec = FTPCodec::new();
         let (sink, stream) = codec.framed(socket).split();
         let task = sink
-            .send(format!("220 {}\r\n", self.greeting))
+            .send(Reply::new(ReplyCode::ServiceReady, self.greeting))
             .and_then(|sink| sink.flush())
             .and_then(move |sink| {
                 sink.send_all(
@@ -1089,19 +1225,21 @@ where
                         .or_else(|e| {
                             warn!("Failed to process command: {}", e);
                             let response = match e.kind() {
-                                FTPErrorKind::UnknownCommand { .. } => {
-                                    "500 Command not implemented\r\n".to_string()
-                                }
-                                FTPErrorKind::UTF8Error => {
-                                    "500 Invalid UTF8 in command\r\n".to_string()
-                                }
+                                FTPErrorKind::UnknownCommand { .. } => Reply::new(
+                                    ReplyCode::CommandSyntaxError,
+                                    "Command not implemented",
+                                ),
+                                FTPErrorKind::UTF8Error => Reply::new(
+                                    ReplyCode::CommandSyntaxError,
+                                    "Invalid UTF8 in command",
+                                ),
                                 FTPErrorKind::InvalidCommand => {
-                                    "501 Invalid Parameter\r\n".to_string()
+                                    Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter")
                                 }
-                                _ => {
-                                    "451 Unknown internal server error, please try again later\r\n"
-                                        .to_string()
-                                }
+                                _ => Reply::new(
+                                    ReplyCode::LocalError,
+                                    "Unknown internal server error, please try again later",
+                                ),
                             };
                             futures::future::ok(response)
                         })
