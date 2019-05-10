@@ -209,7 +209,7 @@ impl Metadata for std::fs::Metadata {
     }
 
     fn modified(&self) -> Result<SystemTime> {
-        self.modified().map_err(|e| e.into())
+        self.modified().map_err(std::convert::Into::into)
     }
 
     fn gid(&self) -> u32 {

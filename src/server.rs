@@ -1071,7 +1071,7 @@ where
         let (sink, stream) = codec.framed(socket).split();
         let task = sink
             .send(format!("220 {}\r\n", self.greeting))
-            .and_then(|sink| sink.flush())
+            .and_then(futures::sink::Sink::flush)
             .and_then(move |sink| {
                 sink.send_all(
                     stream

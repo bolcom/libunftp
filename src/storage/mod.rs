@@ -94,6 +94,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let modified: DateTime<Local> =
             DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
+        #[allow(clippy::write_literal)]
         write!(
             f,
             "{filetype}{permissions}     {owner} {group} {size} {modified} {path}",
