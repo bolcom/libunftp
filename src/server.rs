@@ -861,7 +861,8 @@ where
                         }
                         Command::Feat => {
                             ensure_authenticated!();
-                            let response = "211 I support some cool features\r\n\
+                            let response = "211-Extensions supported:\r\n \
+                                            I support some cool features\r\n\
                                             211 End\r\n"
                                 .to_string();
                             Ok(response)
