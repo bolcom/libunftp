@@ -74,7 +74,7 @@ where
 pub struct Object {}
 
 impl Read for Object {
-    fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+    fn read(&mut self, _buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
         unimplemented!()
     }
 }
@@ -138,7 +138,7 @@ where
 
     fn stat<P: AsRef<Path>>(
         &self,
-        path: P,
+        _path: P,
     ) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         unimplemented!();
     }
@@ -200,31 +200,31 @@ where
 
     fn get<P: AsRef<Path>>(
         &self,
-        path: P,
+        _path: P,
     ) -> Box<Future<Item = Self::File, Error = Self::Error> + Send> {
         unimplemented!();
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
-        bytes: R,
-        path: P,
+        _bytes: R,
+        _path: P,
     ) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
         unimplemented!();
     }
 
-    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         unimplemented!();
     }
 
-    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn mkd<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         unimplemented!();
     }
 
     fn rename<P: AsRef<Path>>(
         &self,
-        from: P,
-        to: P,
+        _from: P,
+        _to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         unimplemented!();
     }

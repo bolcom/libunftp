@@ -1,0 +1,10 @@
+[package]
+name = "sync_oauth2"
+version = "0.1.0"
+authors = ["Dávid Kosztka <dkosztka@bol.com>"]
+edition = "2018"
+
+[dependencies]
+yup-oauth2 = {version="^1"}
+hyper = {version="^0.10"}
+hyper-rustls = {version="^0.6"}

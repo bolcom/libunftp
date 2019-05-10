@@ -25,10 +25,11 @@ pam-auth = { version = "0.5", optional = true }
 path_abs = "0.4"
 uuid = { version = "0.7", features = ["v4"] }
 
-serde = { version="1.0.90", features=["derive"]}
+serde = { version="1.0.91", features=["derive"]}
 serde_json = "1.0.39"
-hyper = "0.12.27"
+hyper = "0.12.28"
 hyper-tls = "0.3.2"
+sync_oauth2 = {path = "./examples/sync_oauth2", optional = true}
 
 [dev-dependencies]
 tempfile = "3"
@@ -40,7 +41,12 @@ lazy_static = "1.1"
 
 [features]
 pam = ["pam-auth"]
+oauth2 = ["sync_oauth2"]
 
 [[example]]
 name = "pam"
 required-features = ["pam"]
+
+[[example]]
+name = "gcs"
+required-features = ["oauth2"]
