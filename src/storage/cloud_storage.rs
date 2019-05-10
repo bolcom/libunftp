@@ -1,6 +1,4 @@
 //TODO: clean up error handling
-//TODO: clean up atgc
-use atgc;
 use futures::{stream, Future, Stream};
 use hyper::{
     client::connect::HttpConnector,
@@ -24,8 +22,8 @@ use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
-    items: Vec<Item>,
-    prefixes: Vec<String>,
+    items: Option<Vec<Item>>,
+    prefixes: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,20 +31,41 @@ struct Item {
     name: String,
 }
 
-/// StorageBackend that uses Cloud storage from Google
-pub struct CloudStorage {
-    bucket: &'static str,
-    client: Client<HttpsConnector<HttpConnector>>,
+/// A token that describes the type and the accesss token
+pub struct Token {
+    /// The token type
+    pub token_type: String,
+    /// The token himself
+    pub access_token: String,
 }
 
-impl CloudStorage {
+/// A trait to obtain valid Token
+pub trait TokenProvider {
+    /// returns the Token or an Error
+    fn get_token(&self) -> Result<Token, Box<dyn std::error::Error>>;
+}
+/// StorageBackend that uses Cloud storage from Google
+pub struct CloudStorage<T>
+where
+    T: TokenProvider,
+{
+    bucket: &'static str,
+    client: Client<HttpsConnector<HttpConnector>>,
+    token_provider: T,
+}
+
+impl<T> CloudStorage<T>
+where
+    T: TokenProvider,
+{
     /// Create a new CloudStorage backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
-    pub fn new(bucket: &'static str) -> Self {
+    pub fn new(bucket: &'static str, token_provider: T) -> Self {
         CloudStorage {
             bucket,
             client: Client::builder().build(HttpsConnector::new(4).unwrap()),
+            token_provider,
         }
     }
 }
@@ -68,41 +87,51 @@ pub struct ObjectMetadata {}
 impl Metadata for ObjectMetadata {
     /// Returns the length (size) of the file.
     fn len(&self) -> u64 {
-        unimplemented!()
+        //TODO: implement this
+        0
     }
 
+    //TODO: move this to the trait
     /// Returns `self.len() == 0`.
     fn is_empty(&self) -> bool {
-        unimplemented!()
+        self.len() == 0
     }
 
     /// Returns true if the path is a directory.
     fn is_dir(&self) -> bool {
-        unimplemented!()
+        //TODO: implement this
+        false
     }
 
     /// Returns true if the path is a file.
     fn is_file(&self) -> bool {
-        unimplemented!()
+        //TODO: implement this
+        true
     }
 
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime, Error> {
-        unimplemented!()
+        //TODO: implement this
+        Ok(SystemTime::now())
     }
 
     /// Returns the `gid` of the file.
     fn gid(&self) -> u32 {
-        unimplemented!()
+        //TODO: implement this
+        0
     }
 
     /// Returns the `uid` of the file.
     fn uid(&self) -> u32 {
-        unimplemented!()
+        //TODO: implement this
+        0
     }
 }
 
-impl StorageBackend for CloudStorage {
+impl<T> StorageBackend for CloudStorage<T>
+where
+    T: TokenProvider,
+{
     type File = Object;
     type Metadata = ObjectMetadata;
     type Error = Error;
@@ -121,7 +150,7 @@ impl StorageBackend for CloudStorage {
     where
         <Self as StorageBackend>::Metadata: Metadata,
     {
-        let (token_type, access_token) = atgc::get_token();
+        let token = self.token_provider.get_token().expect("borked");
 
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
@@ -141,7 +170,7 @@ impl StorageBackend for CloudStorage {
             .uri(uri)
             .header(
                 header::AUTHORIZATION,
-                format!("{} {}", token_type, access_token),
+                format!("{} {}", token.token_type, token.access_token),
             )
             .method(Method::GET)
             .body(Body::empty())
@@ -156,7 +185,11 @@ impl StorageBackend for CloudStorage {
                     serde_json::from_slice::<ResponseBody>(&body_string).map_err(|_| Error::IOError)
                 })
                 //TODO: map prefixes
-                .map(|response_body| stream::iter_ok(response_body.items))
+                .map(|response_body| {
+                    response_body
+                        .items
+                        .map_or(stream::iter_ok(vec![]), stream::iter_ok)
+                })
                 .flatten_stream()
                 .map(|item| Fileinfo {
                     path: PathBuf::from(item.name),
