@@ -95,7 +95,6 @@ pub struct ObjectMetadata {
 impl Metadata for ObjectMetadata {
     /// Returns the length (size) of the file.
     fn len(&self) -> u64 {
-        //TODO: implement this
         self.size
     }
 
