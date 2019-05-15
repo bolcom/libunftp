@@ -1,4 +1,5 @@
 //TODO: clean up error handling
+use chrono::{DateTime, Utc};
 use futures::{stream, Future, Stream};
 use hyper::{
     client::connect::HttpConnector,
@@ -12,9 +13,10 @@ use hyper::{
 use hyper_tls::HttpsConnector;
 use serde::Deserialize;
 use std::{
+    convert::TryFrom,
     io::Read,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 use tokio::io::AsyncRead;
 
@@ -29,6 +31,8 @@ struct ResponseBody {
 #[derive(Deserialize, Debug)]
 struct Item {
     name: String,
+    updated: DateTime<Utc>,
+    size: String,
 }
 
 /// A token that describes the type and the accesss token
@@ -82,13 +86,17 @@ impl Read for Object {
 impl AsyncRead for Object {}
 
 /// This is a hack for now
-pub struct ObjectMetadata {}
+pub struct ObjectMetadata {
+    last_updated: Option<SystemTime>,
+    is_file: bool,
+    size: u64,
+}
 
 impl Metadata for ObjectMetadata {
     /// Returns the length (size) of the file.
     fn len(&self) -> u64 {
         //TODO: implement this
-        0
+        self.size
     }
 
     //TODO: move this to the trait
@@ -99,20 +107,20 @@ impl Metadata for ObjectMetadata {
 
     /// Returns true if the path is a directory.
     fn is_dir(&self) -> bool {
-        //TODO: implement this
-        false
+        !self.is_file()
     }
 
     /// Returns true if the path is a file.
     fn is_file(&self) -> bool {
-        //TODO: implement this
-        true
+        self.is_file
     }
 
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime, Error> {
-        //TODO: implement this
-        Ok(SystemTime::now())
+        match self.last_updated {
+            Some(timestamp) => Ok(timestamp),
+            None => Err(Error::IOError),
+        }
     }
 
     /// Returns the `gid` of the file.
@@ -193,7 +201,20 @@ where
                 .flatten_stream()
                 .map(|item| Fileinfo {
                     path: PathBuf::from(item.name),
-                    metadata: ObjectMetadata {},
+                    metadata: ObjectMetadata {
+                        last_updated: match u64::try_from(item.updated.timestamp_millis()) {
+                            Ok(timestamp) => {
+                                SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
+                            }
+                            _ => None,
+                        },
+                        is_file: true,
+                        size: match u64::from_str_radix(&item.size, 10) {
+                            Ok(size) => size,
+                            //TODO: is it ok to return 0 if we can't parse the size?
+                            _ => 0,
+                        },
+                    },
                 }),
         )
     }
