@@ -183,38 +183,39 @@ where
             .body(Body::empty())
             .expect("borked");
 
+        let item_to_file_info = |item: Item| Fileinfo {
+            path: PathBuf::from(item.name),
+            metadata: ObjectMetadata {
+                last_updated: match u64::try_from(item.updated.timestamp_millis()) {
+                    Ok(timestamp) => {
+                        SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
+                    }
+                    _ => None,
+                },
+                is_file: true,
+                size: match item.size.parse() {
+                    Ok(size) => size,
+                    //TODO: return 450
+                    _ => 0,
+                },
+            },
+        };
+
         Box::new(
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError)
                 .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
                 .and_then(|body_string| {
-                    serde_json::from_slice::<ResponseBody>(&body_string).map_err(|_| Error::IOError)
-                })
-                //TODO: map prefixes
-                .map(|response_body| {
-                    response_body
-                        .items
-                        .map_or(stream::iter_ok(vec![]), stream::iter_ok)
+                    serde_json::from_slice::<ResponseBody>(&body_string)
+                        .map_err(|_| Error::IOError)
+                        .map(|response_body| {
+                            //TODO: map prefixes
+                            stream::iter_ok(response_body.items.map_or(vec![], |items| items))
+                        })
                 })
                 .flatten_stream()
-                .map(|item| Fileinfo {
-                    path: PathBuf::from(item.name),
-                    metadata: ObjectMetadata {
-                        last_updated: match u64::try_from(item.updated.timestamp_millis()) {
-                            Ok(timestamp) => {
-                                SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
-                            }
-                            _ => None,
-                        },
-                        is_file: true,
-                        size: match u64::from_str_radix(&item.size, 10) {
-                            Ok(size) => size,
-                            //TODO: is it ok to return 0 if we can't parse the size?
-                            _ => 0,
-                        },
-                    },
-                }),
+                .map(item_to_file_info),
         )
     }
 
