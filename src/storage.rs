@@ -49,7 +49,7 @@ where
     M: Metadata,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let modified: DateTime<Local> =
+        let modified: DateTime<Utc> =
             DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
         write!(
             f,
@@ -644,7 +644,10 @@ mod tests {
             .file_name()
             .unwrap()
             .to_string_lossy();
-        let format = format!("-rwxr-xr-x     1 2 5 Jan 01 1970 {}", basename);
+        let format = format!(
+            "-rwxr-xr-x            1            2              5 Jan 01 00:00 {}",
+            basename
+        );
         assert_eq!(my_format, format);
     }
 
