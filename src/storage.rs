@@ -53,7 +53,7 @@ where
             DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
         write!(
             f,
-            "{filetype}{permissions}     {owner} {group} {size} {modified} {path}",
+            "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified} {path}",
             filetype = if self.metadata.is_dir() { "d" } else { "-" },
             // TODO: Don't hardcode permissions ;)
             permissions = "rwxr-xr-x",
@@ -61,7 +61,7 @@ where
             owner = self.metadata.uid(),
             group = self.metadata.gid(),
             size = self.metadata.len(),
-            modified = modified.format("%b %d %Y"),
+            modified = modified.format("%b %d %H:%M"),
             path = self
                 .path
                 .as_ref()
