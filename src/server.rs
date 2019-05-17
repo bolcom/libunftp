@@ -333,6 +333,7 @@ where
                 use self::DataCommand::ExternalCommand;
                 match cmd {
                     Some(ExternalCommand(Command::Retr{path})) => {
+                        let path = cwd.join(path);
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
@@ -366,6 +367,7 @@ where
                          );
                     }
                     Some(ExternalCommand(Command::Stor{path})) => {
+                        let path = cwd.join(path);
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
@@ -991,6 +993,7 @@ where
                             ensure_authenticated!();
                             let session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
+                            let path = session.cwd.join(path);
                             let tx_success = tx.clone();
                             let tx_fail = tx.clone();
                             tokio::spawn(
@@ -1034,6 +1037,7 @@ where
                             ensure_authenticated!();
                             let session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
+                            let path = session.cwd.join(path);
                             let tx_success = tx.clone();
                             let tx_fail = tx.clone();
                             tokio::spawn(
