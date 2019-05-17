@@ -19,6 +19,9 @@ pub trait Metadata {
     /// Returns true if the path is a file.
     fn is_file(&self) -> bool;
 
+    /// Returns true if the path is a symlink.
+    fn is_symlink(&self) -> bool;
+
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime>;
 
@@ -54,7 +57,13 @@ where
         write!(
             f,
             "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified} {path}",
-            filetype = if self.metadata.is_dir() { "d" } else { "-" },
+            filetype = if self.metadata.is_dir() {
+                "d"
+            } else if self.metadata.is_symlink() {
+                "l"
+            } else {
+                "-"
+            },
             // TODO: Don't hardcode permissions ;)
             permissions = "rwxr-xr-x",
             // TODO: Consider showing canonical names here
@@ -303,7 +312,7 @@ impl StorageBackend for Filesystem {
                 let path = dir_entry.path();
                 let relpath = path.strip_prefix(prefix).unwrap();
                 let relpath = std::path::PathBuf::from(relpath);
-                match std::fs::metadata(dir_entry.path()) {
+                match std::fs::symlink_metadata(dir_entry.path()) {
                     Ok(stat) => Some(Fileinfo {
                         path: relpath,
                         metadata: stat,
@@ -384,7 +393,7 @@ impl StorageBackend for Filesystem {
         };
 
         let from_rename = from.clone(); // Alright, borrow checker, have it your way.
-        let fut = tokio::fs::metadata(from)
+        let fut = tokio::fs::symlink_metadata(from)
             .map_err(|_| Error::IOError)
             .and_then(move |metadata| {
                 if metadata.is_file() {
@@ -415,6 +424,10 @@ impl Metadata for std::fs::Metadata {
 
     fn is_file(&self) -> bool {
         self.is_file()
+    }
+
+    fn is_symlink(&self) -> bool {
+        self.file_type().is_symlink()
     }
 
     fn modified(&self) -> Result<SystemTime> {
@@ -500,6 +513,7 @@ mod tests {
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
+        assert_eq!(meta.is_symlink(), my_meta.is_symlink());
         assert_eq!(meta.len(), my_meta.len());
         assert_eq!(meta.modified().unwrap(), my_meta.modified().unwrap());
     }
@@ -527,6 +541,7 @@ mod tests {
         assert_eq!(my_fileinfo.path, relpath);
         assert_eq!(my_fileinfo.metadata.is_dir(), meta.is_dir());
         assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
+        assert_eq!(my_fileinfo.metadata.is_symlink(), meta.is_symlink());
         assert_eq!(my_fileinfo.metadata.len(), meta.len());
         assert_eq!(
             my_fileinfo.metadata.modified().unwrap(),
@@ -622,6 +637,9 @@ mod tests {
             fn is_file(&self) -> bool {
                 true
             }
+            fn is_symlink(&self) -> bool {
+                false
+            }
             fn modified(&self) -> Result<SystemTime> {
                 Ok(std::time::SystemTime::UNIX_EPOCH)
             }
@@ -664,7 +682,7 @@ mod tests {
         rt.block_on(fs.mkd(new_dir_name)).expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
-        let metadata = std::fs::metadata(full_path).unwrap();
+        let metadata = std::fs::symlink_metadata(full_path).unwrap();
         assert!(metadata.is_dir());
     }
 
@@ -689,6 +707,7 @@ mod tests {
             .is_file());
 
         let old_full_path = root.join(old_filename);
-        std::fs::metadata(old_full_path).expect_err("Old filename should not exists anymore");
+        std::fs::symlink_metadata(old_full_path)
+            .expect_err("Old filename should not exists anymore");
     }
 }
