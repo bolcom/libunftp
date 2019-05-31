@@ -80,6 +80,7 @@ pub struct Object {}
 
 impl Read for Object {
     fn read(&mut self, _buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+        //TODO: implement this
         unimplemented!()
     }
 }
@@ -275,6 +276,7 @@ where
         &self,
         _path: P,
     ) -> Box<Future<Item = Self::File, Error = Self::Error> + Send> {
+        //TODO: implement this
         unimplemented!();
     }
 
@@ -283,10 +285,12 @@ where
         _bytes: R,
         _path: P,
     ) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
+        //TODO: implement this
         unimplemented!();
     }
 
     fn del<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        //TODO: implement this
         unimplemented!();
     }
 
@@ -336,6 +340,7 @@ where
         _from: P,
         _to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        //TODO: implement this
         unimplemented!();
     }
 }
