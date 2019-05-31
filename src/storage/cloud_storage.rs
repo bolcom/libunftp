@@ -11,6 +11,7 @@ use hyper::{
     Body, Client, Request,
 };
 use hyper_tls::HttpsConnector;
+use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
     convert::TryFrom,
@@ -145,9 +146,60 @@ where
 
     fn stat<P: AsRef<Path>>(
         &self,
-        _path: P,
+        path: P,
     ) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
-        unimplemented!();
+        let token = self.token_provider.get_token().expect("borked");
+
+        let uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(
+                format!(
+                    "/storage/v1/b/{}/o/{}",
+                    self.bucket,
+                    path.as_ref().to_str().expect("path should be a unicode")
+                )
+                .as_str(),
+            )
+            .build()
+            .expect("invalid uri");
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(
+                header::AUTHORIZATION,
+                format!("{} {}", token.token_type, token.access_token),
+            )
+            .method(Method::GET)
+            .body(Body::empty())
+            .expect("borked");
+
+        let item_to_metadata = |item: Item| ObjectMetadata {
+            last_updated: match u64::try_from(item.updated.timestamp_millis()) {
+                Ok(timestamp) => {
+                    SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
+                }
+                _ => None,
+            },
+            is_file: true,
+            size: match item.size.parse() {
+                Ok(size) => size,
+                //TODO: return 450
+                _ => 0,
+            },
+        };
+
+        Box::new(
+            self.client
+                .request(request)
+                .map_err(|_| Error::IOError)
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .and_then(move |body_string| {
+                    serde_json::from_slice::<Item>(&body_string)
+                        .map_err(|_| Error::IOError)
+                        .map(item_to_metadata)
+                }),
+        )
     }
 
     fn list<P: AsRef<Path>>(
@@ -238,8 +290,45 @@ where
         unimplemented!();
     }
 
-    fn mkd<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
-        unimplemented!();
+    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let token = self.token_provider.get_token().expect("borked");
+
+        let uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(
+                format!(
+                    "/upload/storage/v1/b/{}/o?uploadType=media&name={}/",
+                    self.bucket,
+                    path.as_ref()
+                        .to_str()
+                        .expect("path should be a unicode")
+                        .trim_end_matches('/')
+                )
+                .as_str(),
+            )
+            .build()
+            .expect("invalid uri");
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(
+                header::AUTHORIZATION,
+                format!("{} {}", token.token_type, token.access_token),
+            )
+            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+            .header(header::CONTENT_LENGTH, "0")
+            .method(Method::POST)
+            .body(Body::empty())
+            .expect("borked");
+
+        Box::new(
+            self.client
+                .request(request)
+                .map_err(|_| Error::IOError)
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map(|_body_string| {}),
+        )
     }
 
     fn rename<P: AsRef<Path>>(

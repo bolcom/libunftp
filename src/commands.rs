@@ -166,7 +166,7 @@ impl Command {
     /// Parse the given bytes into a [`Command`].
     ///
     /// [`Command`]: ./enum.Command.html
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     pub fn parse<T: AsRef<[u8]> + Into<Bytes>>(buf: T) -> Result<Command> {
         let vec = buf.into().to_vec();
         let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');

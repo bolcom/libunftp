@@ -262,4 +262,5 @@ pub trait StorageBackend {
 pub mod filesystem;
 
 /// StorageBackend that uses Cloud storage from Google
+#[cfg(feature = "cloud_storage")]
 pub mod cloud_storage;
