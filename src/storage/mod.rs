@@ -95,25 +95,26 @@ where
     M: Metadata,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let modified: DateTime<Local> =
+        let modified: DateTime<Utc> =
             DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
         #[allow(clippy::write_literal)]
         write!(
             f,
-            "{filetype}{permissions}     {owner} {group} {size} {modified} {path}",
+            "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified} {path}",
             filetype = if self.metadata.is_dir() {
                 "d"
             } else if self.metadata.is_symlink() {
                 "l"
             } else {
                 "-"
+            },
             // TODO: Don't hardcode permissions ;)
             permissions = "rwxr-xr-x",
             // TODO: Consider showing canonical names here
             owner = self.metadata.uid(),
             group = self.metadata.gid(),
             size = self.metadata.len(),
-            modified = modified.format("%b %d %Y"),
+            modified = modified.format("%b %d %H:%M"),
             path = self
                 .path
                 .as_ref()
