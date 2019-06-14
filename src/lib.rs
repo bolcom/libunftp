@@ -21,11 +21,6 @@
 //! }
 //! ```
 
-#[macro_use(lazy_static)]
-extern crate lazy_static;
-#[macro_use]
-extern crate prometheus;
-
 /// Contains the `Server` struct that is used to configure and control a FTP server instance.
 pub mod server;
 pub use crate::server::Server;

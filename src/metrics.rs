@@ -1,7 +1,8 @@
 use crate::commands::Command;
-use crate::prometheus::IntCounter;
 use crate::reply::{Reply, ReplyCode};
 use crate::server::{Event, FTPErrorKind, InternalMsg};
+use lazy_static::*;
+use prometheus::{opts, register_int_counter, IntCounter, __register_counter};
 
 // We have to break up the creation of metrics with lazy_static! or
 // else we get an error during compilation that the recursive limit
