@@ -62,6 +62,9 @@ pub trait Metadata {
     /// Returns true if the path is a file.
     fn is_file(&self) -> bool;
 
+    /// Returns true if the path is a symlink.
+    fn is_symlink(&self) -> bool;
+
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime>;
 
@@ -98,7 +101,12 @@ where
         write!(
             f,
             "{filetype}{permissions}     {owner} {group} {size} {modified} {path}",
-            filetype = if self.metadata.is_dir() { "d" } else { "-" },
+            filetype = if self.metadata.is_dir() {
+                "d"
+            } else if self.metadata.is_symlink() {
+                "l"
+            } else {
+                "-"
             // TODO: Don't hardcode permissions ;)
             permissions = "rwxr-xr-x",
             // TODO: Consider showing canonical names here
