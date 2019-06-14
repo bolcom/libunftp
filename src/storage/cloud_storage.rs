@@ -116,6 +116,11 @@ impl Metadata for ObjectMetadata {
         self.is_file
     }
 
+    /// Returns true if the path is a symlink.
+    fn is_symlink(&self) -> bool {
+        false
+    }
+
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime, Error> {
         match self.last_updated {
