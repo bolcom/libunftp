@@ -21,6 +21,8 @@ use std::{
 };
 use tokio::io::AsyncRead;
 
+use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+
 use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
 #[derive(Deserialize, Debug)]
@@ -294,9 +296,36 @@ where
         unimplemented!();
     }
 
-    fn del<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
-        //TODO: implement this
-        unimplemented!();
+    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let token = self.token_provider.get_token().expect("borked");
+
+        let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET)
+            .collect::<String>();
+
+        let uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(format!("/storage/v1/b/{}/o/{}", self.bucket, path).as_str())
+            .build()
+            .expect("invalid uri");
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(
+                header::AUTHORIZATION,
+                format!("{} {}", token.token_type, token.access_token),
+            )
+            .method(Method::DELETE)
+            .body(Body::empty())
+            .expect("borked");
+
+        Box::new(
+            self.client
+                .request(request)
+                .map_err(|_| Error::IOError)
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map(|_body_string| {}),
+        )
     }
 
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
