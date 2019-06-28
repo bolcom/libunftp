@@ -44,7 +44,7 @@ lazy_static = "1.1"
 [features]
 pam = ["pam-auth"]
 oauth2 = ["sync_oauth2"]
-cloud_storage = ["mime"]
+cloud_storage = ["mime", "url"]
 
 [[example]]
 name = "pam"

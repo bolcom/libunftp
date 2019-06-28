@@ -1,6 +1,6 @@
 //TODO: clean up error handling
 use chrono::{DateTime, Utc};
-use futures::{stream, Future, Stream};
+use futures::{future, stream, Future, Stream};
 use hyper::{
     client::connect::HttpConnector,
     http::{
@@ -78,12 +78,29 @@ where
 }
 
 /// The File type for the CloudStorage
-pub struct Object {}
+pub struct Object {
+    data: Vec<u8>,
+    index: usize,
+}
+
+impl Object {
+    fn new(data: Vec<u8>) -> Object {
+        Object { data, index: 0 }
+    }
+}
 
 impl Read for Object {
-    fn read(&mut self, _buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-        //TODO: implement this
-        unimplemented!()
+    fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+        for i in 0..buffer.len() {
+            if i + self.index < self.data.len() {
+                buffer[i] = self.data[i + self.index];
+            } else {
+                self.index = self.index + i;
+                return Ok(i);
+            }
+        }
+        self.index = self.index + buffer.len();
+        Ok(buffer.len())
     }
 }
 
@@ -281,10 +298,41 @@ where
 
     fn get<P: AsRef<Path>>(
         &self,
-        _path: P,
+        path: P,
     ) -> Box<Future<Item = Self::File, Error = Self::Error> + Send> {
-        //TODO: implement this
-        unimplemented!();
+        let token = self.token_provider.get_token().expect("borked");
+
+        let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET)
+            .collect::<String>();
+
+        dbg!(path);
+
+        let uri = &Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path).as_str())
+            .build()
+            .expect("invalid uri");
+
+        dbg!(uri);
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(
+                header::AUTHORIZATION,
+                format!("{} {}", token.token_type, token.access_token),
+            )
+            .method(Method::GET)
+            .body(Body::empty())
+            .expect("borked");
+
+        Box::new(
+            self.client
+                .request(request)
+                .map_err(|_| Error::IOError)
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .and_then(move |body| future::ok(Object::new(body.to_vec()))),
+        )
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
