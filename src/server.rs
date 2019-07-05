@@ -20,6 +20,9 @@ use crate::commands::Command;
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
 
+const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
+
+
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 // TODO: Give these events better names
@@ -262,11 +265,11 @@ enum SessionState {
 
 // This is where we keep the state for a ftp session.
 struct Session<S>
-where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    where
+        S: storage::StorageBackend,
+        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend>::Error: Send,
 {
     username: Option<String>,
     storage: Arc<S>,
@@ -277,6 +280,8 @@ where
     cwd: std::path::PathBuf,
     rename_from: Option<std::path::PathBuf>,
     state: SessionState,
+    certs_file: Option<&'static str>,
+    key_file: Option<&'static str>,
 }
 
 // Commands that can be send to the data channel.
@@ -287,11 +292,11 @@ enum DataCommand {
 }
 
 impl<S> Session<S>
-where
-    S: storage::StorageBackend + Send + Sync + 'static,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    where
+        S: storage::StorageBackend + Send + Sync + 'static,
+        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend>::Error: Send,
 {
     fn with_storage(storage: Arc<S>) -> Self {
         Session {
@@ -304,7 +309,15 @@ where
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
+            certs_file: Option::None,
+            key_file: Option::None,
         }
+    }
+
+    fn certs(mut self, certs_file: Option<&'static str>, key_file :Option<&'static str>) -> Self {
+        self.certs_file = certs_file;
+        self.key_file = key_file;
+        self
     }
 
     /// socket: the data socket we'll be working with
@@ -332,68 +345,67 @@ where
             .map(move |(cmd, _)| {
                 use self::DataCommand::ExternalCommand;
                 match cmd {
-                    Some(ExternalCommand(Command::Retr{path})) => {
+                    Some(ExternalCommand(Command::Retr { path })) => {
                         let path = cwd.join(path);
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.get(path)
-                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
-                            .and_then(|f| {
-                                tx_sending.send(InternalMsg::SendingData)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
-                                .and_then(|_| {
-                                    tokio_io::io::copy(f, socket)
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
+                                .and_then(|f| {
+                                    tx_sending.send(InternalMsg::SendingData)
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
+                                        .and_then(|_| {
+                                            tokio_io::io::copy(f, socket)
+                                        })
+                                        .and_then(|_| {
+                                            tx.send(InternalMsg::SendData)
+                                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
+                                        })
                                 })
-                                .and_then(|_| {
-                                    tx.send(InternalMsg::SendData)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
+                                .or_else(|e| {
+                                    let msg = match e.kind() {
+                                        ErrorKind::NotFound => InternalMsg::NotFound,
+                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                        _ => InternalMsg::UnknownRetrieveError,
+                                    };
+                                    tx_error.send(msg)
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
                                 })
-                            })
-                            .or_else(|e| {
-                                let msg = match e.kind() {
-                                    ErrorKind::NotFound => InternalMsg::NotFound,
-                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                    _ => InternalMsg::UnknownRetrieveError,
-                                };
-                                tx_error.send(msg)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
-                            })
-                            .map(|_| ())
-                            .map_err(|e| {
-                                warn!("Failed to send file: {:?}", e);
-                            })
-                         );
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to send file: {:?}", e);
+                                })
+                        );
                     }
-                    Some(ExternalCommand(Command::Stor{path})) => {
+                    Some(ExternalCommand(Command::Stor { path })) => {
                         let path = cwd.join(path);
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.put(socket, path)
-                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
-                            .and_then(|_| {
-                                tx_ok.send(InternalMsg::WrittenData)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
-                            })
-                            .or_else(|e| {
-                                let msg = match e.kind() {
-                                    ErrorKind::NotFound => InternalMsg::NotFound,
-                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                    _ => InternalMsg::WriteFailed,
-
-                                };
-                                tx_error.send(msg)
-                            })
-                            .map(|_| ())
-                            .map_err(|e| {
-                                warn!("Failed to send file: {:?}", e);
-                            })
+                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
+                                .and_then(|_| {
+                                    tx_ok.send(InternalMsg::WrittenData)
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
+                                })
+                                .or_else(|e| {
+                                    let msg = match e.kind() {
+                                        ErrorKind::NotFound => InternalMsg::NotFound,
+                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                        _ => InternalMsg::WriteFailed,
+                                    };
+                                    tx_error.send(msg)
+                                })
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to send file: {:?}", e);
+                                })
                         );
-                    },
-                    Some(ExternalCommand(Command::List{path})) => {
+                    }
+                    Some(ExternalCommand(Command::List { path })) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
@@ -402,29 +414,29 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.list_fmt(path)
-                            .and_then(|res| tokio::io::copy(res, socket))
-                            .and_then(|_| {
-                                tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                            })
-                            .or_else(|e| {
-                                let msg = match e.kind() {
-                                    // TODO: Consider making these events unique (so don't reuse
-                                    // the `Stor` messages here)
-                                    ErrorKind::NotFound => InternalMsg::NotFound,
-                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                    _ => InternalMsg::WriteFailed,
-                                };
-                                tx_error.send(msg)
-                            })
-                            .map(|_| ())
-                            .map_err(|e| {
-                                warn!("Failed to send directory list: {:?}", e);
-                            })
+                                .and_then(|res| tokio::io::copy(res, socket))
+                                .and_then(|_| {
+                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
+                                })
+                                .or_else(|e| {
+                                    let msg = match e.kind() {
+                                        // TODO: Consider making these events unique (so don't reuse
+                                        // the `Stor` messages here)
+                                        ErrorKind::NotFound => InternalMsg::NotFound,
+                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                        _ => InternalMsg::WriteFailed,
+                                    };
+                                    tx_error.send(msg)
+                                })
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to send directory list: {:?}", e);
+                                })
                         );
-                    },
-                    Some(ExternalCommand(Command::Nlst{path})) => {
+                    }
+                    Some(ExternalCommand(Command::Nlst { path })) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
@@ -433,40 +445,40 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.nlst(path)
-                            .and_then(|res| tokio::io::copy(res, socket))
-                            .and_then(|_| {
-                                tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                            })
-                            .or_else(|e| {
-                                let msg = match e.kind() {
-                                    // TODO: Consider making these events unique (so don't reuse
-                                    // the `Stor` messages here)
-                                    ErrorKind::NotFound => InternalMsg::NotFound,
-                                    ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                    _ => InternalMsg::WriteFailed,
-                                };
-                                tx_error.send(msg)
-                            })
-                            .map(|_| ())
-                            .map_err(|e| {
-                                warn!("Failed to send directory list: {:?}", e);
-                            })
+                                .and_then(|res| tokio::io::copy(res, socket))
+                                .and_then(|_| {
+                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
+                                })
+                                .or_else(|e| {
+                                    let msg = match e.kind() {
+                                        // TODO: Consider making these events unique (so don't reuse
+                                        // the `Stor` messages here)
+                                        ErrorKind::NotFound => InternalMsg::NotFound,
+                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
+                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                        _ => InternalMsg::WriteFailed,
+                                    };
+                                    tx_error.send(msg)
+                                })
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    warn!("Failed to send directory list: {:?}", e);
+                                })
                         );
-                    },
-					// TODO: Remove catch-all Some(_) when I'm done implementing :)
+                    }
+                    // TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(ExternalCommand(_)) => unimplemented!(),
                     Some(DataCommand::Abort) => {
                         unreachable!()
-                    },
-                    None => { /* This probably happened because the control channel was closed before we got here */ },
+                    }
+                    None => { /* This probably happened because the control channel was closed before we got here */ }
                 }
             })
             .into_future()
             .map_err(|_| ())
             .map(|_| ())
-        ;
+            ;
 
         tokio::spawn(task);
     }
@@ -492,13 +504,15 @@ where
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
 pub struct Server<S>
-where
-    S: storage::StorageBackend,
+    where
+        S: storage::StorageBackend,
 {
-    storage: Box<(Fn() -> S) + Send>,
+    storage: Box<(Fn() -> S) + Send >,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    certs_file: Option<&'static str>,
+    key_file: Option<&'static str>,
 }
 
 impl Server<storage::Filesystem> {
@@ -518,20 +532,22 @@ impl Server<storage::Filesystem> {
                 let p = &p.clone();
                 storage::Filesystem::new(p)
             }),
-            greeting: "Welcome to the firetrap FTP server",
+            greeting: DEFAULT_GREETING,
             authenticator: &auth::AnonymousAuthenticator {},
             passive_addrs: Arc::new(vec![]),
+            certs_file: Option::None,
+            key_file: Option::None,
         };
         server.passive_ports(49152..65535)
     }
 }
 
 impl<S> Server<S>
-where
-    S: 'static + storage::StorageBackend + Sync + Send,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    where
+        S: 'static + storage::StorageBackend + Sync + Send,
+        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend>::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
@@ -541,9 +557,11 @@ where
     pub fn new(s: Box<Fn() -> S + Send>) -> Self {
         let server = Server {
             storage: s,
-            greeting: "Welcome to the firetrap FTP server",
+            greeting: DEFAULT_GREETING,
             authenticator: &auth::AnonymousAuthenticator {},
             passive_addrs: Arc::new(vec![]),
+            certs_file: Option::None,
+            key_file: Option::None,
         };
         server.passive_ports(49152..65535)
     }
@@ -590,6 +608,22 @@ where
             addrs.push(addr);
         }
         self.passive_addrs = Arc::new(addrs);
+        self
+    }
+
+    /// Configures the path to the certificates file (PEM format) and the associated private key file
+    /// in order to configure FTPS.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use firetrap::Server;
+    ///
+    /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
+    /// ```
+    pub fn certs(mut self, certs_file: &'static str, key_file :&'static str) -> Self {
+        self.certs_file = Option::Some(certs_file);
+        self.key_file = Option::Some(key_file);
         self
     }
 
