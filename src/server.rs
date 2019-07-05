@@ -22,7 +22,6 @@ use crate::storage;
 
 const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
 
-
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 // TODO: Give these events better names
@@ -265,11 +264,11 @@ enum SessionState {
 
 // This is where we keep the state for a ftp session.
 struct Session<S>
-    where
-        S: storage::StorageBackend,
-        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend>::Error: Send,
+where
+    S: storage::StorageBackend,
+    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend>::Error: Send,
 {
     username: Option<String>,
     storage: Arc<S>,
@@ -292,11 +291,11 @@ enum DataCommand {
 }
 
 impl<S> Session<S>
-    where
-        S: storage::StorageBackend + Send + Sync + 'static,
-        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend>::Error: Send,
+where
+    S: storage::StorageBackend + Send + Sync + 'static,
+    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend>::Error: Send,
 {
     fn with_storage(storage: Arc<S>) -> Self {
         Session {
@@ -314,7 +313,7 @@ impl<S> Session<S>
         }
     }
 
-    fn certs(mut self, certs_file: Option<&'static str>, key_file :Option<&'static str>) -> Self {
+    fn certs(mut self, certs_file: Option<&'static str>, key_file: Option<&'static str>) -> Self {
         self.certs_file = certs_file;
         self.key_file = key_file;
         self
@@ -504,10 +503,10 @@ impl<S> Session<S>
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
 pub struct Server<S>
-    where
-        S: storage::StorageBackend,
+where
+    S: storage::StorageBackend,
 {
-    storage: Box<(Fn() -> S) + Send >,
+    storage: Box<(Fn() -> S) + Send>,
     greeting: &'static str,
     authenticator: &'static (Authenticator + Send + Sync),
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
@@ -543,11 +542,11 @@ impl Server<storage::Filesystem> {
 }
 
 impl<S> Server<S>
-    where
-        S: 'static + storage::StorageBackend + Sync + Send,
-        <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend>::Error: Send,
+where
+    S: 'static + storage::StorageBackend + Sync + Send,
+    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend>::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
@@ -621,7 +620,7 @@ impl<S> Server<S>
     ///
     /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
     /// ```
-    pub fn certs(mut self, certs_file: &'static str, key_file :&'static str) -> Self {
+    pub fn certs(mut self, certs_file: &'static str, key_file: &'static str) -> Self {
         self.certs_file = Option::Some(certs_file);
         self.key_file = Option::Some(key_file);
         self
