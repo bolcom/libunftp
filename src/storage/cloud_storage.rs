@@ -19,7 +19,10 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
-use tokio::io::AsyncRead;
+use tokio::{
+    codec::{BytesCodec, FramedRead},
+    io::AsyncRead,
+};
 
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
@@ -36,6 +39,21 @@ struct Item {
     name: String,
     updated: DateTime<Utc>,
     size: String,
+}
+
+fn item_to_metadata(item: Item) -> ObjectMetadata {
+    ObjectMetadata {
+        last_updated: match u64::try_from(item.updated.timestamp_millis()) {
+            Ok(timestamp) => SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp)),
+            _ => None,
+        },
+        is_file: true,
+        size: match item.size.parse() {
+            Ok(size) => size,
+            //TODO: return 450
+            _ => 0,
+        },
+    }
 }
 
 /// A token that describes the type and the accesss token
@@ -199,21 +217,6 @@ where
             .body(Body::empty())
             .expect("borked");
 
-        let item_to_metadata = |item: Item| ObjectMetadata {
-            last_updated: match u64::try_from(item.updated.timestamp_millis()) {
-                Ok(timestamp) => {
-                    SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
-                }
-                _ => None,
-            },
-            is_file: true,
-            size: match item.size.parse() {
-                Ok(size) => size,
-                //TODO: return 450
-                _ => 0,
-            },
-        };
-
         Box::new(
             self.client
                 .request(request)
@@ -222,7 +225,7 @@ where
                 .and_then(move |body_string| {
                     serde_json::from_slice::<Item>(&body_string)
                         .map_err(|_| Error::IOError)
-                        .map(item_to_metadata)
+                        .map(|item| item_to_metadata(item))
                 }),
         )
     }
@@ -305,16 +308,12 @@ where
         let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET)
             .collect::<String>();
 
-        dbg!(path);
-
         let uri = &Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
             .path_and_query(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path).as_str())
             .build()
             .expect("invalid uri");
-
-        dbg!(uri);
 
         let request = Request::builder()
             .uri(uri)
@@ -337,11 +336,53 @@ where
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
-        _bytes: R,
-        _path: P,
+        bytes: R,
+        path: P,
     ) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
-        //TODO: implement this
-        unimplemented!();
+        let token = self.token_provider.get_token().expect("borked");
+
+        let uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(
+                format!(
+                    "/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+                    self.bucket,
+                    path.as_ref()
+                        .to_str()
+                        .expect("path should be a unicode")
+                        .trim_end_matches('/')
+                )
+                .as_str(),
+            )
+            .build()
+            .expect("invalid uri");
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(
+                header::AUTHORIZATION,
+                format!("{} {}", token.token_type, token.access_token),
+            )
+            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+            .method(Method::POST)
+            .body(Body::wrap_stream(
+                FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze()),
+            ))
+            .expect("borked");
+
+        Box::new(
+            self.client
+                .request(request)
+                .map_err(|_| Error::IOError)
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .and_then(move |body_string| {
+                    serde_json::from_slice::<Item>(&body_string)
+                        .map_err(|_| Error::IOError)
+                        .map(|item| item_to_metadata(item))
+                })
+                .and_then(|meta_data| future::ok(meta_data.len())),
+        )
     }
 
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
