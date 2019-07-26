@@ -41,6 +41,29 @@ struct Item {
     size: String,
 }
 
+/*
+String "{\n \"error\": {\n  \"errors\": [\n   {\n    \"domain\": \"global\",\n    \"reason\": \"notFound\",\n    \"message\": \"No such object: bolcom-dev-unftp-dev-738-unftp-dev//aeou\"\n   }\n  ],\n  \"code\": 404,\n  \"message\": \"No such object: bolcom-dev-unftp-dev-738-unftp-dev//aeou\"\n }\n}\n"
+Err(Error("missing field `name`", line: 13, column: 1))
+*/
+#[derive(Deserialize, Debug)]
+struct ErrorBodyErrors {
+    domain: String,
+    reason: String,
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ErrorBodyError {
+    errors: Vec<ErrorBodyErrors>,
+    code: u32,
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ErrorBody {
+    error: ErrorBodyError,
+}
+
 fn item_to_metadata(item: Item) -> ObjectMetadata {
     ObjectMetadata {
         last_updated: match u64::try_from(item.updated.timestamp_millis()) {
@@ -364,12 +387,57 @@ where
             .body(Body::empty())
             .expect("borked");
 
+        /* Delete failed response:
+Response { status: 404, version: HTTP/1.1, headers: {"x-guploader-uploadid": "", "vary": "Origin", "vary": "X-Origin", "content-type": "application/json; charset=UTF-8", "date": "Fri, 26 Jul 2019 13:32:30 GMT", "expires": "Fri, 26 Jul 2019 13:32:30 GMT", "cache-control": "private, max-age=0", "content-length": "259", "server": "UploadServer", "alt-svc": "quic=\":443\"; ma=2592000; v=\"46,43,39\""}, body: Body(Streaming) }
+
+Successful:
+
+Response { status: 204, version: HTTP/1.1, headers: {"x-guploader-uploadid": "", "vary": "Origin", "vary": "X-Origin", "content-type": "application/json", "cache-control": "no-cache, no-store, max-age=0, must-revalidate", "pragma": "no-cache", "expires": "Mon, 01 Jan 1990 00:00:00 GMT", "date": "Fri, 26 Jul 2019 13:35:00 GMT", "content-length": "0", "server": "UploadServer", "alt-svc": "quic=\":443\"; ma=2592000; v=\"46,43,39\""}, body: Body(Empty) }
+
+*/
+
         Box::new(
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .map(|_body_string| {}),
+                // .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+
+                .and_then(|response| {
+                    if ! response.status().is_success() {
+                        return future::err(Error::IOError)
+                    }
+                    future::ok(response)
+                })
+                .and_then(|response| {
+                    response.into_body().map_err(|_| Error::IOError).concat2()
+                        .and_then(|body| {
+                            match body.iter().count() {
+                                0 => {
+                                    // according the Google Storage
+                                    // API for the delete endpoint, an
+                                    // empty reply means it is
+                                    // successful
+                                    return future::ok(body);
+                                }
+                                _ => {
+                                    println!("{:?}", body);
+                                    match serde_json::from_slice::<ErrorBody>(&body) {
+                                        Ok(result) => {
+                                            println!("String {:?}", result.error.errors[0].reason);
+                                            if result.error.errors[0].reason == "notFound" {
+                                                return future::err(Error::PathError);
+                                            } else {
+                                                return future::err(Error::IOError);
+                                            }
+                                        }
+                                        Err(_) => {
+                                            return future::err(Error::IOError);
+                                        }
+                                    }
+                                }
+                            }})
+                })
+                .map(|_body_string| {})
         )
     }
 
