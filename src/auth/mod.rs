@@ -8,19 +8,27 @@
 /// ```rust
 /// use rand::prelude::*;
 /// use firetrap::auth::Authenticator;
+/// use futures::Future;
 ///
 /// struct RandomAuthenticator;
 ///
 /// impl Authenticator for RandomAuthenticator {
-///     fn authenticate(&self, _username: &str, _password: &str) -> Result<bool, ()> {
-///         Ok(rand::random())
+///     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=bool, Error=()> + Send> {
+///         Box::new(futures::future::ok(rand::random()))
 ///     }
 /// }
 /// ```
 /// [`Server`]: ../server/struct.Server.html
+use futures::Future;
+
+/// Async authenticator interface (error reporting not supported yet)
 pub trait Authenticator {
     /// Authenticate the given user with the given password.
-    fn authenticate(&self, username: &str, password: &str) -> Result<bool, ()>;
+    fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Box<Future<Item = bool, Error = ()> + Send>;
 }
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
@@ -29,6 +37,12 @@ pub trait Authenticator {
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[cfg(feature = "pam")]
 pub mod pam;
+
+/// [`Authenticator`] implementation that authenticates against a JSON REST API.
+///
+/// [`Authenticator`]: trait.Authenticator.html
+#[cfg(feature = "rest")]
+pub mod rest;
 
 /// Authenticator implementation that simply allows everyone.
 ///
@@ -43,7 +57,11 @@ pub mod pam;
 pub struct AnonymousAuthenticator;
 
 impl Authenticator for AnonymousAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Result<bool, ()> {
-        Ok(true)
+    fn authenticate(
+        &self,
+        _username: &str,
+        _password: &str,
+    ) -> Box<Future<Item = bool, Error = ()> + Send> {
+        Box::new(futures::future::ok(true))
     }
 }

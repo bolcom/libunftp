@@ -20,7 +20,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
 
 use crate::auth;
-use crate::auth::Authenticator;
 use crate::commands;
 use crate::commands::{AuthParam, Command, ProtParam};
 use crate::metrics;
@@ -72,6 +71,10 @@ pub enum InternalMsg {
     MkdirSuccess(std::path::PathBuf),
     /// Failed to crate directory
     MkdirFail,
+    /// Authentication successful
+    AuthSuccess,
+    /// Authentication failed
+    AuthFailed,
     /// Sent to switch the control channel to TLS/SSL mode.
     SecureControlChannel,
     /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
@@ -209,7 +212,8 @@ where
 {
     storage: Box<(Fn() -> S) + Send>,
     greeting: &'static str,
-    authenticator: &'static (Authenticator + Send + Sync),
+    // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
+    authenticator: Arc<auth::Authenticator + Send + Sync>,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
@@ -234,7 +238,7 @@ impl Server<storage::Filesystem> {
                 storage::Filesystem::new(p)
             }),
             greeting: DEFAULT_GREETING,
-            authenticator: &auth::AnonymousAuthenticator {},
+            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
@@ -260,7 +264,7 @@ where
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
-            authenticator: &auth::AnonymousAuthenticator {},
+            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
@@ -355,20 +359,15 @@ where
     ///
     /// ```rust
     /// use firetrap::{auth, auth::AnonymousAuthenticator, Server};
+    /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").authenticator(&auth::AnonymousAuthenticator{});
-    ///
-    /// // Or instead if you prefer:
-    /// let mut server = Server::with_root("/tmp");
-    /// server.authenticator(&auth::AnonymousAuthenticator{});
+    /// let mut server = Server::with_root("/tmp")
+    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator<A: auth::Authenticator + Send + Sync>(
-        mut self,
-        authenticator: &'static A,
-    ) -> Self {
+    pub fn authenticator(mut self, authenticator: Arc<auth::Authenticator + Send + Sync>) -> Self {
         self.authenticator = authenticator;
         self
     }
@@ -408,14 +407,15 @@ where
 
     /// Does TCP processing when a FTP client connects
     fn process(&self, tcp_stream: TcpStream) {
-        let authenticator = self.authenticator;
         let with_metrics = self.with_metrics;
+        // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
+        let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
-        let passive_addrs = Arc::clone(&self.passive_addrs);
+        let passive_addrs = self.passive_addrs.clone();
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
@@ -478,32 +478,26 @@ where
                             }
                         }
                         Command::Pass { password } => {
-                            let mut session = session.lock()?;
+                            let session = session.lock()?;
                             match session.state {
                                 SessionState::WaitPass => {
                                     let pass = std::str::from_utf8(&password)?;
                                     let user = session.username.clone().unwrap();
-                                    let res = authenticator.authenticate(&user, pass);
-                                    match res {
-                                        Ok(true) => {
-                                            session.state = SessionState::WaitCmd;
-                                            Ok(Reply::new(
-                                                ReplyCode::UserLoggedIn,
-                                                "User logged in, proceed",
-                                            ))
-                                        }
-                                        Ok(false) => Ok(Reply::new(
-                                            ReplyCode::NotLoggedIn,
-                                            "Wrong username or password",
-                                        )),
-                                        Err(_) => {
-                                            warn!("Unknown Authentication backend failure");
-                                            Ok(Reply::new(
-                                                ReplyCode::NotLoggedIn,
-                                                "Failed to authenticate",
-                                            ))
-                                        }
-                                    }
+                                    let tx = tx.clone();
+
+                                    tokio::spawn(
+                                        authenticator
+                                            .authenticate(&user, pass)
+                                            .then(|x| {
+                                                match x {
+                                                    Ok(true) => tx.send(InternalMsg::AuthSuccess),
+                                                    _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
+                                                }
+                                            })
+                                            .map(|_| ())
+                                            .map_err(|_| ()),
+                                    );
+                                    Ok(Reply::none())
                                 }
                                 New => Ok(Reply::new(
                                     ReplyCode::BadCommandSequence,
@@ -1051,6 +1045,18 @@ where
                 Event::InternalMsg(MkdirFail) => Ok(Reply::new(
                     ReplyCode::FileError,
                     "Failed to create directory",
+                )),
+                Event::InternalMsg(AuthSuccess) => {
+                    let mut session = session.lock()?;
+                    session.state = WaitCmd;
+                    Ok(Reply::new(
+                        ReplyCode::UserLoggedIn,
+                        "User logged in, proceed",
+                    ))
+                }
+                Event::InternalMsg(AuthFailed) => Ok(Reply::new(
+                    ReplyCode::NotLoggedIn,
+                    "Authentication failed",
                 )),
             }
         };

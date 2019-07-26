@@ -1,8 +1,11 @@
 use crate::auth::Authenticator;
 
+use futures::Future;
+
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
 /// [`Authenticator`]: ../trait.Authenticator.html
+/// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 pub struct PAMAuthenticator {
     service: String,
 }
@@ -16,16 +19,34 @@ impl PAMAuthenticator {
 }
 
 impl Authenticator for PAMAuthenticator {
-    fn authenticate(&self, username: &str, password: &str) -> Result<bool, ()> {
-        let mut auth = match pam_auth::Authenticator::new(&self.service) {
-            Some(auth) => auth,
-            None => return Err(()),
-        };
+    fn authenticate(
+        &self,
+        _username: &str,
+        _password: &str,
+    ) -> Box<Future<Item = bool, Error = ()> + Send> {
 
-        auth.set_credentials(username, password);
-        match auth.authenticate() {
-            Ok(()) => Ok(true),
-            Err(_) => Ok(false),
-        }
+        let service = self.service.clone();
+        let username = _username.to_string();
+        let password = _password.to_string();
+
+        Box::new(
+            futures::future::ok(())
+                .and_then(move |_| {
+                    let mut auth = match pam_auth::Authenticator::new(&service) {
+                        Some(auth) => auth,
+                        None => return Err(()),
+                    };
+
+                    auth.set_credentials(&username, &password);
+                    match auth.authenticate() {
+                        Ok(()) => Ok(true),
+                        Err(_) => Ok(false),
+                    }
+                })
+                .map_err(|err| {
+                    debug!("RestError: {:?}", err);
+                    ()
+                }),
+        )
     }
 }
