@@ -1,10 +1,12 @@
-use std::fmt;
+/// Contains the `FTPError` struct that that defines the firetrap custom error type.
+pub mod error;
+
 use std::io::ErrorKind;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use bytes::BytesMut;
-use failure::*;
+use failure::Fail;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use futures::Sink;
@@ -20,7 +22,8 @@ use crate::commands::{AuthParam, Command, ProtParam};
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
 use crate::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
-use tokio_io::{AsyncRead,AsyncWrite};
+use error::{FTPError, FTPErrorKind};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
@@ -144,12 +147,6 @@ impl Encoder for FTPCodec {
     }
 }
 
-/// The error type returned by this library.
-#[derive(Debug)]
-pub struct FTPError {
-    inner: Context<FTPErrorKind>,
-}
-
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
         match err.kind().clone() {
@@ -167,99 +164,6 @@ impl From<commands::ParseError> for FTPError {
             _ => err.context(FTPErrorKind::InvalidCommand).into(),
         }
     }
-}
-
-impl From<std::io::Error> for FTPError {
-    fn from(err: std::io::Error) -> FTPError {
-        err.context(FTPErrorKind::IOError).into()
-    }
-}
-
-impl From<std::str::Utf8Error> for FTPError {
-    fn from(err: std::str::Utf8Error) -> FTPError {
-        err.context(FTPErrorKind::UTF8Error).into()
-    }
-}
-
-impl<'a, T> From<std::sync::PoisonError<std::sync::MutexGuard<'a, T>>> for FTPError {
-    fn from(_err: std::sync::PoisonError<std::sync::MutexGuard<'a, T>>) -> FTPError {
-        FTPError {
-            inner: Context::new(FTPErrorKind::InternalServerError),
-        }
-    }
-}
-
-impl FTPError {
-    /// Return the inner error kind of this error.
-    #[allow(unused)]
-    pub fn kind(&self) -> &FTPErrorKind {
-        self.inner.get_context()
-    }
-}
-
-impl Fail for FTPError {
-    fn cause(&self) -> Option<&Fail> {
-        self.inner.cause()
-    }
-
-    fn backtrace(&self) -> Option<&Backtrace> {
-        self.inner.backtrace()
-    }
-}
-
-impl fmt::Display for FTPError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, f)
-    }
-}
-
-impl From<FTPErrorKind> for FTPError {
-    fn from(kind: FTPErrorKind) -> FTPError {
-        FTPError {
-            inner: Context::new(kind),
-        }
-    }
-}
-
-impl From<Context<FTPErrorKind>> for FTPError {
-    fn from(inner: Context<FTPErrorKind>) -> FTPError {
-        FTPError { inner }
-    }
-}
-
-/// A list specifying categories of FTP errors. It is meant to be used with the [FTPError] type.
-#[derive(Eq, PartialEq, Debug, Fail)]
-pub enum FTPErrorKind {
-    /// We encountered a system IO error.
-    #[fail(display = "Failed to perform IO")]
-    IOError,
-    /// Something went wrong parsing the client's command.
-    #[fail(display = "Failed to parse command")]
-    ParseError,
-    /// Internal Server Error. This is probably a bug, i.e. when we're unable to lock a resource we
-    /// should be able to lock.
-    #[fail(display = "Internal Server Error")]
-    InternalServerError,
-    /// Authentication backend returned an error.
-    #[fail(display = "Something went wrong when trying to authenticate")]
-    AuthenticationError,
-    /// We received something on the data message channel that we don't understand. This should be
-    /// impossible.
-    #[fail(display = "Failed to map event from data channel")]
-    InternalMsgError,
-    /// We encountered a non-UTF8 character in the command.
-    #[fail(display = "Non-UTF8 character in command")]
-    UTF8Error,
-    /// The client issued a command we don't know about.
-    #[fail(display = "Unknown command: {}", command)]
-    UnknownCommand {
-        /// The command that we don't know about
-        command: String,
-    },
-    /// The client issued a command that we know about, but in an invalid way (e.g. `USER` without
-    /// an username).
-    #[fail(display = "Invalid command (invalid parameter)")]
-    InvalidCommand,
 }
 
 #[derive(PartialEq)]
@@ -300,7 +204,6 @@ enum DataCommand {
     ExternalCommand(Command),
     Abort,
 }
-
 
 // Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
 trait AsyncStream: AsyncRead + AsyncWrite + Send {}
@@ -357,7 +260,7 @@ where
                 sec_switch,
                 DATA_CHANNEL_ID,
                 certs,
-                keys
+                keys,
             )),
             _ => Box::new(socket),
         };
