@@ -27,7 +27,7 @@ use error::{FTPError, FTPErrorKind};
 use session::{Session, SessionState};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
+const DEFAULT_GREETING: &str = "Welcome to the firetrap FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
@@ -379,8 +379,7 @@ where
         let authenticator = self.authenticator;
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
-        let session =
-            Session::with_storage(storage).certs(self.certs_file.clone(), self.key_file.clone());
+        let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
         let passive_addrs = Arc::clone(&self.passive_addrs);

@@ -119,52 +119,48 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
         let mut wrlen = 0;
         let mut rdlen = 0;
 
-        loop {
-            let mut write_would_block = false;
-            let mut read_would_block = false;
+        let mut write_would_block = false;
+        let mut read_would_block = false;
 
-            while self.tls.wants_write() {
-                match self.tls_write_io() {
-                    Ok(n) => wrlen += n,
-                    Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                        write_would_block = true;
-                        break;
-                    }
-                    Err(err) => return Err(err),
+        while self.tls.wants_write() {
+            match self.tls_write_io() {
+                Ok(n) => wrlen += n,
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                    write_would_block = true;
+                    break;
                 }
+                Err(err) => return Err(err),
             }
+        }
 
-            if !self.eof && self.tls.wants_read() {
-                match self.tls_read_io() {
-                    Ok(0) => self.eof = true,
-                    Ok(n) => rdlen += n,
-                    Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                        read_would_block = true
-                    }
-                    Err(err) => return Err(err),
-                }
+        if !self.eof && self.tls.wants_read() {
+            match self.tls_read_io() {
+                Ok(0) => self.eof = true,
+                Ok(n) => rdlen += n,
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => read_would_block = true,
+                Err(err) => return Err(err),
             }
+        }
 
+        let would_block = match io_type {
+            TlsIoType::Read => read_would_block,
+            TlsIoType::Write => write_would_block,
+        };
+
+        if would_block {
             let would_block = match io_type {
-                TlsIoType::Read => read_would_block,
-                TlsIoType::Write => write_would_block,
+                TlsIoType::Read => rdlen == 0,
+                TlsIoType::Write => wrlen == 0,
             };
 
-            if would_block {
-                let would_block = match io_type {
-                    TlsIoType::Read => rdlen == 0,
-                    TlsIoType::Write => wrlen == 0,
-                };
-
-                return if would_block {
-                    Err(io::ErrorKind::WouldBlock.into())
-                } else {
-                    Ok((rdlen, wrlen))
-                };
-            }
-
-            return Ok((rdlen, wrlen));
+            return if would_block {
+                Err(io::ErrorKind::WouldBlock.into())
+            } else {
+                Ok((rdlen, wrlen))
+            };
         }
+
+        return Ok((rdlen, wrlen));
     }
 }
 
