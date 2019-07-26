@@ -1,5 +1,6 @@
 /// Contains the `FTPError` struct that that defines the firetrap custom error type.
 pub mod error;
+mod session;
 
 use std::io::ErrorKind;
 use std::io::Write;
@@ -21,13 +22,13 @@ use crate::commands;
 use crate::commands::{AuthParam, Command, ProtParam};
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
-use crate::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
+use crate::stream::{SecuritySwitch, SwitchingTlsStream};
 use error::{FTPError, FTPErrorKind};
+use session::{Session, SessionState};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 const DEFAULT_GREETING: &'static str = "Welcome to the firetrap FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
-const DATA_CHANNEL_ID: u8 = 1;
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
@@ -166,290 +167,12 @@ impl From<commands::ParseError> for FTPError {
     }
 }
 
-#[derive(PartialEq)]
-enum SessionState {
-    New,
-    WaitPass,
-    WaitCmd,
-}
-
-// This is where we keep the state for a ftp session.
-struct Session<S>
-where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
-{
-    username: Option<String>,
-    storage: Arc<S>,
-    data_cmd_tx: Option<mpsc::Sender<Command>>,
-    data_cmd_rx: Option<mpsc::Receiver<Command>>,
-    data_abort_tx: Option<mpsc::Sender<()>>,
-    data_abort_rx: Option<mpsc::Receiver<()>>,
-    cwd: std::path::PathBuf,
-    rename_from: Option<std::path::PathBuf>,
-    state: SessionState,
-    certs_file: Option<&'static str>,
-    key_file: Option<&'static str>,
-    // True if the command channel is in secure mode
-    cmd_tls: bool,
-    // True if the data channel is in secure mode.
-    data_tls: bool,
-}
-
-// Commands that can be send to the data channel.
-#[derive(PartialEq)]
-enum DataCommand {
-    ExternalCommand(Command),
-    Abort,
-}
-
 // Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
 trait AsyncStream: AsyncRead + AsyncWrite + Send {}
 
 impl AsyncStream for TcpStream {}
 
 impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
-
-impl<S> Session<S>
-where
-    S: storage::StorageBackend + Send + Sync + 'static,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
-{
-    fn with_storage(storage: Arc<S>) -> Self {
-        Session {
-            username: None,
-            storage,
-            data_cmd_tx: None,
-            data_cmd_rx: None,
-            data_abort_tx: None,
-            data_abort_rx: None,
-            cwd: "/".into(),
-            rename_from: None,
-            state: SessionState::New,
-            certs_file: Option::None,
-            key_file: Option::None,
-            cmd_tls: false,
-            data_tls: false,
-        }
-    }
-
-    fn certs(mut self, certs_file: Option<&'static str>, key_file: Option<&'static str>) -> Self {
-        self.certs_file = certs_file;
-        self.key_file = key_file;
-        self
-    }
-
-    /// Processing for the data connection.
-    ///
-    /// socket: the data socket we'll be working with
-    /// sec_switch: communicates the security setting for the data channel.
-    /// tx: channel to send the result of our operation to the control process
-    fn process_data(
-        &mut self,
-        socket: TcpStream,
-        sec_switch: Arc<Mutex<Session<S>>>,
-        tx: mpsc::Sender<InternalMsg>,
-    ) {
-        let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
-                socket,
-                sec_switch,
-                DATA_CHANNEL_ID,
-                certs,
-                keys,
-            )),
-            _ => Box::new(socket),
-        };
-
-        // TODO: Either take the rx as argument, or properly check the result instead of
-        // `unwrap()`.
-        let rx = self.data_cmd_rx.take().unwrap();
-        // TODO: Same as above, don't `unwrap()` here. Ideally we solve this by refactoring to a
-        // proper state machine.
-        let abort_rx = self.data_abort_rx.take().unwrap();
-        let storage = Arc::clone(&self.storage);
-        let cwd = self.cwd.clone();
-        let task = rx
-            .take(1)
-            .map(DataCommand::ExternalCommand)
-            .select(abort_rx
-                .map(|_| DataCommand::Abort)
-            )
-            .take_while(|data_cmd| {
-                Ok(*data_cmd != DataCommand::Abort)
-            })
-            .into_future()
-            .map(move |(cmd, _)| {
-                use self::DataCommand::ExternalCommand;
-                match cmd {
-                    Some(ExternalCommand(Command::Retr { path })) => {
-                        let path = cwd.join(path);
-                        let tx_sending = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage.get(path)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
-                                .and_then(|f| {
-                                    tx_sending.send(InternalMsg::SendingData)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
-                                        .and_then(|_| {
-                                            tokio_io::io::copy(f, tcp_tls_stream)
-                                        })
-                                        .and_then(|_| {
-                                            tx.send(InternalMsg::SendData)
-                                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
-                                        })
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::UnknownRetrieveError,
-                                    };
-                                    tx_error.send(msg)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
-                                })
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send file: {:?}", e);
-                                })
-                        );
-                    }
-                    Some(ExternalCommand(Command::Stor { path })) => {
-                        let path = cwd.join(path);
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage.put(tcp_tls_stream, path)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
-                                .and_then(|_| {
-                                    tx_ok.send(InternalMsg::WrittenData)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send file: {:?}", e);
-                                })
-                        );
-                    }
-                    Some(ExternalCommand(Command::List { path })) => {
-                        let path = match path {
-                            Some(path) => cwd.join(path),
-                            None => cwd,
-                        };
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage.list_fmt(path)
-                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        // TODO: Consider making these events unique (so don't reuse
-                                        // the `Stor` messages here)
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send directory list: {:?}", e);
-                                })
-                        );
-                    }
-                    Some(ExternalCommand(Command::Nlst { path })) => {
-                        let path = match path {
-                            Some(path) => cwd.join(path),
-                            None => cwd,
-                        };
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage.nlst(path)
-                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        // TODO: Consider making these events unique (so don't reuse
-                                        // the `Stor` messages here)
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send directory list: {:?}", e);
-                                })
-                        );
-                    }
-                    // TODO: Remove catch-all Some(_) when I'm done implementing :)
-                    Some(ExternalCommand(_)) => unimplemented!(),
-                    Some(DataCommand::Abort) => {
-                        unreachable!()
-                    }
-                    None => { /* This probably happened because the control channel was closed before we got here */ }
-                }
-            })
-            .into_future()
-            .map_err(|_| ())
-            .map(|_| ())
-            ;
-
-        tokio::spawn(task);
-    }
-}
-
-impl<S> SecuritySwitch for Session<S>
-where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
-{
-    fn which_state(&self, channel: u8) -> SecurityState {
-        match channel {
-            CONTROL_CHANNEL_ID => {
-                if self.cmd_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            DATA_CHANNEL_ID => {
-                if self.data_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            _ => SecurityState::Off,
-        }
-    }
-}
 
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
@@ -689,7 +412,7 @@ where
         macro_rules! ensure_authenticated {
             (  ) => {{
                 let session = session.lock()?;
-                if session.state != WaitCmd {
+                if session.state != SessionState::WaitCmd {
                     return Ok(Reply::new(
                         ReplyCode::NotLoggedIn,
                         "Please authenticate with USER and PASS first",
@@ -700,7 +423,7 @@ where
 
         let respond = move |event: Event| -> Result<Reply, FTPError> {
             use self::InternalMsg::*;
-            use self::SessionState::*;
+            use session::SessionState::*;
 
             info!("Processing event {:?}", event);
 
@@ -710,10 +433,10 @@ where
                         Command::User { username } => {
                             let mut session = session.lock()?;
                             match session.state {
-                                New | WaitPass => {
+                                SessionState::New | SessionState::WaitPass => {
                                     let user = std::str::from_utf8(&username)?;
                                     session.username = Some(user.to_string());
-                                    session.state = WaitPass;
+                                    session.state = SessionState::WaitPass;
                                     Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
                                 }
                                 _ => Ok(Reply::new(
@@ -725,13 +448,13 @@ where
                         Command::Pass { password } => {
                             let mut session = session.lock()?;
                             match session.state {
-                                WaitPass => {
+                                SessionState::WaitPass => {
                                     let pass = std::str::from_utf8(&password)?;
                                     let user = session.username.clone().unwrap();
                                     let res = authenticator.authenticate(&user, pass);
                                     match res {
                                         Ok(true) => {
-                                            session.state = WaitCmd;
+                                            session.state = SessionState::WaitCmd;
                                             Ok(Reply::new(
                                                 ReplyCode::UserLoggedIn,
                                                 "User logged in, proceed",
