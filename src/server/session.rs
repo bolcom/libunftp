@@ -10,6 +10,7 @@ use tokio::net::TcpStream;
 use crate::commands::Command;
 use crate::server::InternalMsg;
 use crate::storage;
+use crate::storage::ErrorSemantics;
 use crate::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 
 const DATA_CHANNEL_ID: u8 = 1;
@@ -172,16 +173,23 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage.put(tcp_tls_stream, path)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to put file"))
+                                .map_err(|e| {
+                                    if let Some(kind) = e.io_error_kind() {
+                                        std::io::Error::new(kind, "Failed to put file")
+                                    } else {
+                                        std::io::Error::new(std::io::ErrorKind::Other, "Failed to put file")
+                                    }
+                                })
                                 .and_then(|bytes| {
                                     tx_ok.send(InternalMsg::WrittenData{bytes: bytes as i64})
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to data channel"))
+                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to the control channel"))
                                 })
                                 .or_else(|e| {
                                     let msg = match e.kind() {
                                         ErrorKind::NotFound => InternalMsg::NotFound,
                                         ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
+                                        ErrorKind::ConnectionReset => InternalMsg::ConnectionReset,
+                                        ErrorKind::ConnectionAborted => InternalMsg::DataConnectionClosedAfterStor,
                                         _ => InternalMsg::WriteFailed,
                                     };
                                     tx_error.send(msg)
@@ -203,7 +211,7 @@ where
                             storage.list_fmt(path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
+                                    tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                                 })
                                 .or_else(|e| {
@@ -234,7 +242,7 @@ where
                             storage.nlst(path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccesfullyListed)
+                                    tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                                 })
                                 .or_else(|e| {

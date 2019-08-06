@@ -1,3 +1,4 @@
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{fmt, result};
@@ -93,9 +94,9 @@ pub trait StorageBackend {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
-    type Metadata;
+    type Metadata: Metadata;
     /// The concrete type of the error returned by this StorageBackend.
-    type Error;
+    type Error: ErrorSemantics;
 
     /// Returns the `Metadata` for the given file.
     ///
@@ -288,7 +289,7 @@ impl StorageBackend for Filesystem {
             Err(err) => return Box::new(future::err(err)),
         };
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::IOError))
+        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
     fn list<P: AsRef<Path>>(
@@ -323,7 +324,7 @@ impl StorageBackend for Filesystem {
             });
 
         // TODO: Some more useful error reporting
-        Box::new(fut.map_err(|_| Error::IOError))
+        Box::new(fut.map_err(|e| Error::IOError(e.kind())))
     }
 
     fn get<P: AsRef<Path>>(
@@ -337,7 +338,7 @@ impl StorageBackend for Filesystem {
         // TODO: Some more useful error reporting
         Box::new(tokio::fs::file::File::open(full_path).map_err(|e| {
             debug!("{:?}", e);
-            Error::IOError
+            Error::IOError(e.kind())
         }))
     }
 
@@ -360,7 +361,7 @@ impl StorageBackend for Filesystem {
             // TODO: Some more useful error reporting
             .map_err(|e| {
                 debug!("{:?}", e);
-                Error::IOError
+                Error::IOError(e.kind())
             });
         Box::new(fut)
     }
@@ -370,7 +371,7 @@ impl StorageBackend for Filesystem {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|_| Error::IOError))
+        Box::new(tokio::fs::remove_file(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
@@ -381,7 +382,7 @@ impl StorageBackend for Filesystem {
 
         Box::new(tokio::fs::create_dir(full_path).map_err(|e| {
             debug!("error: {}", e);
-            Error::IOError
+            Error::IOError(e.kind())
         }))
     }
 
@@ -401,21 +402,19 @@ impl StorageBackend for Filesystem {
 
         let from_rename = from.clone(); // Alright, borrow checker, have it your way.
         let fut = tokio::fs::symlink_metadata(from)
-            .map_err(|_| Error::IOError)
+            .map_err(|e| Error::IOError(e.kind()))
             .and_then(move |metadata| {
                 if metadata.is_file() {
                     future::Either::A(
-                        tokio::fs::rename(from_rename, to).map_err(|_| Error::IOError),
+                        tokio::fs::rename(from_rename, to).map_err(|e| Error::IOError(e.kind())),
                     )
                 } else {
-                    future::Either::B(future::err(Error::IOError))
+                    future::Either::B(future::err(Error::MetadataError))
                 }
             });
         Box::new(fut)
     }
 }
-
-use std::os::unix::fs::MetadataExt;
 
 impl Metadata for std::fs::Metadata {
     fn len(&self) -> u64 {
@@ -451,20 +450,41 @@ impl Metadata for std::fs::Metadata {
     }
 }
 
+/// `Error` variants that can be produced by the [`StorageBackend`] implementations must implement
+/// this ErrorSemantics trait.
+///
+/// [`StorageBackend`]: ./trait.StorageBackend.html
+pub trait ErrorSemantics {
+    /// If there was an `std::io::Error` this should return its kind otherwise None.
+    fn io_error_kind(&self) -> Option<std::io::ErrorKind>;
+}
+
 #[derive(Debug, PartialEq)]
 /// The `Error` variants that can be produced by the [`StorageBackend`] implementations.
 ///
 /// [`StorageBackend`]: ./trait.StorageBackend.html
 pub enum Error {
     /// An IO Error
-    IOError,
+    IOError(std::io::ErrorKind),
     /// Path error
     PathError,
+    /// Metadata error
+    MetadataError,
 }
 
 impl Error {
     fn description_str(&self) -> &'static str {
         ""
+    }
+}
+
+impl ErrorSemantics for Error {
+    fn io_error_kind(&self) -> Option<std::io::ErrorKind> {
+        if let Error::IOError(kind) = self {
+            Some(*kind)
+        } else {
+            None
+        }
     }
 }
 
@@ -481,8 +501,8 @@ impl std::error::Error for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(_err: std::io::Error) -> Error {
-        Error::IOError
+    fn from(err: std::io::Error) -> Error {
+        Error::IOError(err.kind())
     }
 }
 
