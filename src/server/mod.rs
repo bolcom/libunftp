@@ -1,5 +1,7 @@
 /// Contains the `FTPError` struct that that defines the firetrap custom error type.
 pub mod error;
+pub use error::{FTPError, FTPErrorKind};
+
 mod session;
 
 use std::io::ErrorKind;
@@ -14,6 +16,7 @@ use futures::Sink;
 use log::{error, info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::{Decoder, Encoder};
+use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
 
 use crate::auth;
@@ -24,9 +27,7 @@ use crate::metrics;
 use crate::reply::{Reply, ReplyCode};
 use crate::storage;
 use crate::stream::{SecuritySwitch, SwitchingTlsStream};
-use error::{FTPError, FTPErrorKind};
 use session::{Session, SessionState};
-use tokio_io::{AsyncRead, AsyncWrite};
 
 const DEFAULT_GREETING: &str = "Welcome to the firetrap FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
@@ -51,6 +52,8 @@ pub enum InternalMsg {
     },
     /// Data connection was unexpectedly closed
     ConnectionReset,
+    /// Data connection was closed on purpose or not on purpose. We don't know, but that is FTP
+    DataConnectionClosedAfterStor,
     /// Failed to write data to disk
     WriteFailed,
     /// Started sending data to the client
@@ -58,8 +61,8 @@ pub enum InternalMsg {
     /// Unknown Error retrieving file
     UnknownRetrieveError,
     /// Listed the directory successfully
-    DirectorySuccesfullyListed,
-    /// File succesfully deleted
+    DirectorySuccessfullyListed,
+    /// File successfully deleted
     DelSuccess,
     /// Failed to delete file
     DelFail,
@@ -1005,12 +1008,16 @@ where
                 )),
                 Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(
                     ReplyCode::ClosingDataConnection,
-                    "File succesfully written",
+                    "File successfully written",
+                )),
+                Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(
+                    ReplyCode::FileActionOkay,
+                    "unFTP holds your data for you",
                 )),
                 Event::InternalMsg(UnknownRetrieveError) => {
                     Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error"))
                 }
-                Event::InternalMsg(DirectorySuccesfullyListed) => Ok(Reply::new(
+                Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(
                     ReplyCode::ClosingDataConnection,
                     "Listed the directory",
                 )),

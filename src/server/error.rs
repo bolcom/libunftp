@@ -1,4 +1,4 @@
-use failure::*;
+use failure::{Backtrace, Context, Fail};
 use std::fmt;
 
 /// The error type returned by this library.
