@@ -8,10 +8,11 @@ use log::warn;
 use tokio::net::TcpStream;
 
 use crate::commands::Command;
-use crate::server::InternalMsg;
+use crate::server::chancomms::DataCommand;
+use crate::server::chancomms::InternalMsg;
+use crate::server::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::storage;
 use crate::storage::ErrorSemantics;
-use crate::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -20,13 +21,6 @@ pub(super) enum SessionState {
     New,
     WaitPass,
     WaitCmd,
-}
-
-// Commands that can be send to the data channel.
-#[derive(PartialEq)]
-enum DataCommand {
-    ExternalCommand(Command),
-    Abort,
 }
 
 // This is where we keep the state for a ftp session.
@@ -79,11 +73,7 @@ where
         }
     }
 
-    pub(super) fn certs(
-        mut self,
-        certs_file: Option<&'static str>,
-        key_file: Option<&'static str>,
-    ) -> Self {
+    pub(super) fn certs(mut self, certs_file: Option<&'static str>, key_file: Option<&'static str>) -> Self {
         self.certs_file = certs_file;
         self.key_file = key_file;
         self
@@ -94,23 +84,11 @@ where
     /// socket: the data socket we'll be working with
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(
-        &mut self,
-        socket: TcpStream,
-        sec_switch: Arc<Mutex<Session<S>>>,
-        tx: mpsc::Sender<InternalMsg>,
-    ) {
-        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> =
-            match (self.certs_file, self.key_file) {
-                (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
-                    socket,
-                    sec_switch,
-                    DATA_CHANNEL_ID,
-                    certs,
-                    keys,
-                )),
-                _ => Box::new(socket),
-            };
+    pub(super) fn process_data(&mut self, socket: TcpStream, sec_switch: Arc<Mutex<Session<S>>>, tx: mpsc::Sender<InternalMsg>) {
+        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (self.certs_file, self.key_file) {
+            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
+            _ => Box::new(socket),
+        };
 
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
@@ -123,12 +101,8 @@ where
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
-            .select(abort_rx
-                .map(|_| DataCommand::Abort)
-            )
-            .take_while(|data_cmd| {
-                Ok(*data_cmd != DataCommand::Abort)
-            })
+            .select(abort_rx.map(|_| DataCommand::Abort))
+            .take_while(|data_cmd| Ok(*data_cmd != DataCommand::Abort))
             .into_future()
             .map(move |(cmd, _)| {
                 use self::DataCommand::ExternalCommand;
@@ -138,16 +112,16 @@ where
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.get(path)
+                            storage
+                                .get(path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                                 .and_then(|f| {
-                                    tx_sending.send(InternalMsg::SendingData)
+                                    tx_sending
+                                        .send(InternalMsg::SendingData)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
-                                        .and_then(|_| {
-                                            tokio_io::io::copy(f, tcp_tls_stream)
-                                        })
+                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream))
                                         .and_then(|(bytes, _, _)| {
-                                            tx.send(InternalMsg::SendData{bytes: bytes as i64})
+                                            tx.send(InternalMsg::SendData { bytes: bytes as i64 })
                                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
                                         })
                                 })
@@ -158,13 +132,14 @@ where
                                         ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
                                         _ => InternalMsg::UnknownRetrieveError,
                                     };
-                                    tx_error.send(msg)
+                                    tx_error
+                                        .send(msg)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
                                 })
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
-                                })
+                                }),
                         );
                     }
                     Some(ExternalCommand(Command::Stor { path })) => {
@@ -172,7 +147,8 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.put(tcp_tls_stream, path)
+                            storage
+                                .put(tcp_tls_stream, path)
                                 .map_err(|e| {
                                     if let Some(kind) = e.io_error_kind() {
                                         std::io::Error::new(kind, "Failed to put file")
@@ -181,7 +157,8 @@ where
                                     }
                                 })
                                 .and_then(|bytes| {
-                                    tx_ok.send(InternalMsg::WrittenData{bytes: bytes as i64})
+                                    tx_ok
+                                        .send(InternalMsg::WrittenData { bytes: bytes as i64 })
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to the control channel"))
                                 })
                                 .or_else(|e| {
@@ -197,7 +174,7 @@ where
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
-                                })
+                                }),
                         );
                     }
                     Some(ExternalCommand(Command::List { path })) => {
@@ -208,10 +185,12 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.list_fmt(path)
+                            storage
+                                .list_fmt(path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
+                                    tx_ok
+                                        .send(InternalMsg::DirectorySuccessfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                                 })
                                 .or_else(|e| {
@@ -228,7 +207,7 @@ where
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send directory list: {:?}", e);
-                                })
+                                }),
                         );
                     }
                     Some(ExternalCommand(Command::Nlst { path })) => {
@@ -239,10 +218,12 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.nlst(path)
+                            storage
+                                .nlst(path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
-                                    tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
+                                    tx_ok
+                                        .send(InternalMsg::DirectorySuccessfullyListed)
                                         .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
                                 })
                                 .or_else(|e| {
@@ -259,21 +240,18 @@ where
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send directory list: {:?}", e);
-                                })
+                                }),
                         );
                     }
                     // TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(ExternalCommand(_)) => unimplemented!(),
-                    Some(DataCommand::Abort) => {
-                        unreachable!()
-                    }
+                    Some(DataCommand::Abort) => unreachable!(),
                     None => { /* This probably happened because the control channel was closed before we got here */ }
                 }
             })
             .into_future()
             .map_err(|_| ())
-            .map(|_| ())
-            ;
+            .map(|_| ());
 
         tokio::spawn(task);
     }

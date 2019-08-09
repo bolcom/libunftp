@@ -168,7 +168,7 @@ pub enum Command {
     /// The `ALLO` command
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
-    // as noop, we won't even parse it.
+        // as noop, we won't even parse it.
     },
     /// The `ABOR` command
     Abor,
@@ -484,15 +484,15 @@ impl Command {
                     .to_string()
                     .to_uppercase()
                     .as_str()
-                {
-                    "TLS" => Command::Auth {
-                        protocol: AuthParam::Tls,
-                    },
-                    "SSL" => Command::Auth {
-                        protocol: AuthParam::Ssl,
-                    },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
-                }
+                    {
+                        "TLS" => Command::Auth {
+                            protocol: AuthParam::Tls,
+                        },
+                        "SSL" => Command::Auth {
+                            protocol: AuthParam::Ssl,
+                        },
+                        _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    }
             }
             b"PBSZ" | b"pbsz" => {
                 let params = parse_to_eol(cmd_params)?;

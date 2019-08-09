@@ -41,21 +41,13 @@ enum TlsIoType {
 }
 
 impl<S: SecuritySwitch> SwitchingTlsStream<S> {
-    pub fn new(
-        delegate: TcpStream,
-        switch: Arc<Mutex<S>>,
-        channel: u8,
-        certs_file: &str,
-        key_file: &str,
-    ) -> SwitchingTlsStream<S> {
+    pub fn new(delegate: TcpStream, switch: Arc<Mutex<S>>, channel: u8, certs_file: &str, key_file: &str) -> SwitchingTlsStream<S> {
         let certs = <SwitchingTlsStream<S>>::load_certs(certs_file);
         let privkey = <SwitchingTlsStream<S>>::load_private_key(key_file);
 
         let mut config = rustls::ServerConfig::new(NoClientAuth::new());
         config.key_log = Arc::new(rustls::KeyLogFile::new());
-        config
-            .set_single_cert(certs, privkey)
-            .expect("Failed to setup TLS certificate chain and key");
+        config.set_single_cert(certs, privkey).expect("Failed to setup TLS certificate chain and key");
         let config = Arc::new(config);
 
         SwitchingTlsStream {
@@ -77,15 +69,13 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
         let rsa_keys = {
             let keyfile = File::open(filename).expect("cannot open private key file");
             let mut reader = BufReader::new(keyfile);
-            rustls::internal::pemfile::rsa_private_keys(&mut reader)
-                .expect("file contains invalid rsa private key")
+            rustls::internal::pemfile::rsa_private_keys(&mut reader).expect("file contains invalid rsa private key")
         };
 
         let pkcs8_keys = {
             let keyfile = File::open(filename).expect("cannot open private key file");
             let mut reader = BufReader::new(keyfile);
-            rustls::internal::pemfile::pkcs8_private_keys(&mut reader)
-                .expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
+            rustls::internal::pemfile::pkcs8_private_keys(&mut reader).expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
         };
 
         // prefer to load pkcs8 keys
@@ -102,10 +92,7 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
 
         let result = self.tls.process_new_packets();
         if result.is_err() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                result.unwrap_err(),
-            ));
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, result.unwrap_err()));
         }
 
         Ok(len)
@@ -224,9 +211,7 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
                 while self.tls.wants_write() {
                     match self.tls_io(TlsIoType::Write) {
                         Ok(_) => (),
-                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock && len != 0 => {
-                            break
-                        }
+                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock && len != 0 => break,
                         Err(err) => return Err(err),
                     }
                 }
@@ -234,13 +219,9 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
                 if len != 0 || buf.is_empty() {
                     Ok(len)
                 } else {
-                    self.tls.write(buf).and_then(|len| {
-                        if len != 0 {
-                            Ok(len)
-                        } else {
-                            Err(io::ErrorKind::WouldBlock.into())
-                        }
-                    })
+                    self.tls
+                        .write(buf)
+                        .and_then(|len| if len != 0 { Ok(len) } else { Err(io::ErrorKind::WouldBlock.into()) })
                 }
             }
             SecurityState::Off => self.tcp.write(buf),
@@ -296,19 +277,13 @@ impl<'a> Future for Handshake<'a> {
 
             let r = self.tls.process_new_packets();
             if r.is_err() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    r.unwrap_err(),
-                ));
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, r.unwrap_err()));
             }
 
             while self.tls.wants_write() {
                 let res = self.tls.write_tls(&mut self.tcp);
                 if res.is_err() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        res.unwrap_err(),
-                    ));
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, res.unwrap_err()));
                 }
             }
         }

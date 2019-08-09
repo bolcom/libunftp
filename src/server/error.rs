@@ -68,9 +68,7 @@ impl fmt::Display for FTPError {
 
 impl From<FTPErrorKind> for FTPError {
     fn from(kind: FTPErrorKind) -> FTPError {
-        FTPError {
-            inner: Context::new(kind),
-        }
+        FTPError { inner: Context::new(kind) }
     }
 }
 

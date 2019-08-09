@@ -1,22 +1,33 @@
 /// Contains the `FTPError` struct that that defines the firetrap custom error type.
 pub mod error;
 
-pub use error::{FTPError, FTPErrorKind};
+// Contains code pertaining to the FTP *control* channel
+mod controlchan;
 
+// Contains code pertaining to the communication between the data and control channels.
+mod chancomms;
+
+// The session module implements per-connection session handling and currently also
+// implements the control loop for the *data* channel.
 mod session;
 
+// Implements a stream that can change between TCP and TLS on the fly.
+mod stream;
+
+pub use chancomms::InternalMsg;
+pub use controlchan::Event;
+pub use error::{FTPError, FTPErrorKind};
+
 use std::io::ErrorKind;
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use bytes::BytesMut;
 use failure::Fail;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use futures::Sink;
 use log::{error, info, warn};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_codec::{Decoder, Encoder};
+use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
 
@@ -25,142 +36,12 @@ use crate::commands;
 use crate::commands::{AuthParam, Command, ProtParam};
 use crate::metrics;
 use crate::reply::{Reply, ReplyCode};
+use crate::server::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::storage;
-use crate::stream::{SecuritySwitch, SwitchingTlsStream};
 use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the firetrap FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
-
-/// InternalMsg represents a status message from the data channel handler to our main (per connection)
-/// event handler.
-#[derive(PartialEq, Debug)]
-pub enum InternalMsg {
-    /// Permission Denied
-    PermissionDenied,
-    /// File not found
-    NotFound,
-    /// Send the data to the client
-    SendData {
-        /// The number of bytes transferred
-        bytes: i64,
-    },
-    /// We've written the data from the client to the StorageBackend
-    WrittenData {
-        /// The number of bytes transferred
-        bytes: i64,
-    },
-    /// Data connection was unexpectedly closed
-    ConnectionReset,
-    /// Data connection was closed on purpose or not on purpose. We don't know, but that is FTP
-    DataConnectionClosedAfterStor,
-    /// Failed to write data to disk
-    WriteFailed,
-    /// Started sending data to the client
-    SendingData,
-    /// Unknown Error retrieving file
-    UnknownRetrieveError,
-    /// Listed the directory successfully
-    DirectorySuccessfullyListed,
-    /// File successfully deleted
-    DelSuccess,
-    /// Failed to delete file
-    DelFail,
-    /// Quit the client connection
-    Quit,
-    /// Successfully created directory
-    MkdirSuccess(std::path::PathBuf),
-    /// Failed to crate directory
-    MkdirFail,
-    /// Authentication successful
-    AuthSuccess,
-    /// Authentication failed
-    AuthFailed,
-    /// Sent to switch the control channel to TLS/SSL mode.
-    SecureControlChannel,
-    /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
-    PlaintextControlChannel,
-}
-
-/// Event represents an `Event` that will be handled by our per-client event loop. It can be either
-/// a command from the client, or a status message from the data channel handler.
-#[derive(PartialEq, Debug)]
-pub enum Event {
-    /// A command from a client (e.g. `USER` or `PASV`)
-    Command(commands::Command),
-    /// A status message from the data channel handler
-    InternalMsg(InternalMsg),
-}
-
-// FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
-// use to decode FTP commands and encode their responses.
-struct FTPCodec {
-    // Stored index of the next index to examine for a '\n' character. This is used to optimize
-    // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
-    // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
-    // look at `de\n` before returning.
-    next_index: usize,
-}
-
-impl FTPCodec {
-    fn new() -> Self {
-        FTPCodec { next_index: 0 }
-    }
-}
-
-impl Decoder for FTPCodec {
-    type Item = Command;
-    type Error = FTPError;
-
-    // Here we decode the incoming bytes into a meaningful command. We'll split on newlines, and
-    // parse the resulting line using `Command::parse()`. This method will be called by tokio.
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, Self::Error> {
-        if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
-            let newline_index = newline_offset + self.next_index;
-            let line = buf.split_to(newline_index + 1);
-            self.next_index = 0;
-            Ok(Some(Command::parse(line)?))
-        } else {
-            self.next_index = buf.len();
-            Ok(None)
-        }
-    }
-}
-
-impl Encoder for FTPCodec {
-    type Item = Reply;
-    type Error = FTPError;
-
-    // Here we encode the outgoing response
-    fn encode(&mut self, reply: Reply, buf: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut buffer = vec![];
-        match reply {
-            Reply::None => {
-                return Ok(());
-            }
-            Reply::CodeAndMsg { code, msg } => {
-                if msg.is_empty() {
-                    write!(buffer, "{}\r\n", code as u32)?;
-                } else {
-                    write!(buffer, "{} {}\r\n", code as u32, msg)?;
-                }
-            }
-            Reply::MultiLine { code, mut lines } => {
-                let s = lines.pop().unwrap();
-                write!(
-                    buffer,
-                    "{}-{}\r\n{} {}\r\n",
-                    code as u32,
-                    lines.join("\r\n"), // TODO: Handle when line starts with a number
-                    code as u32,
-                    s
-                )?;
-            }
-        }
-        buf.extend(&buffer);
-        Ok(())
-    }
-}
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
@@ -170,12 +51,8 @@ impl From<commands::ParseError> for FTPError {
                 err.context(FTPErrorKind::UnknownCommand { command }).into()
             }
             commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            commands::ParseErrorKind::InvalidCommand => {
-                err.context(FTPErrorKind::InvalidCommand).into()
-            }
-            commands::ParseErrorKind::InvalidToken { .. } => {
-                err.context(FTPErrorKind::UTF8Error).into()
-            }
+            commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
+            commands::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
             _ => err.context(FTPErrorKind::InvalidCommand).into(),
         }
     }
@@ -424,17 +301,11 @@ where
         let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
-        let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
+        let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(
-                tcp_stream,
-                session.clone(),
-                CONTROL_CHANNEL_ID,
-                certs,
-                keys,
-            )),
+            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
             _ => Box::new(tcp_stream),
         };
 
@@ -455,10 +326,7 @@ where
             (  ) => {{
                 let session = session.lock()?;
                 if session.state != SessionState::WaitCmd {
-                    return Ok(Reply::new(
-                        ReplyCode::NotLoggedIn,
-                        "Please authenticate with USER and PASS first",
-                    ));
+                    return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate with USER and PASS first"));
                 }
             }};
         }
@@ -481,10 +349,7 @@ where
                                     session.state = SessionState::WaitPass;
                                     Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
                                 }
-                                _ => Ok(Reply::new(
-                                    ReplyCode::BadCommandSequence,
-                                    "Please create a new connection to switch user",
-                                )),
+                                _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
                             }
                         }
                         Command::Pass { password } => {
@@ -509,93 +374,53 @@ where
                                     );
                                     Ok(Reply::none())
                                 }
-                                New => Ok(Reply::new(
-                                    ReplyCode::BadCommandSequence,
-                                    "Please give me a username first",
-                                )),
-                                _ => Ok(Reply::new(
-                                    ReplyCode::NotLoggedIn,
-                                    "Please open a new connection to re-authenticate",
-                                )),
+                                New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please give me a username first")),
+                                _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate")),
                             }
                         }
                         // This response is kind of like the User-Agent in http: very much mis-used to gauge
                         // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
                         // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => {
-                            respond!(|| Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8")))
-                        }
+                        Command::Syst => respond!(|| Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8"))),
                         Command::Stat { path } => {
                             ensure_authenticated!();
                             match path {
-                                None => Ok(Reply::new(
-                                    ReplyCode::SystemStatus,
-                                    "I'm just a humble FTP server",
-                                )),
+                                None => Ok(Reply::new(ReplyCode::SystemStatus, "I'm just a humble FTP server")),
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path)?;
                                     // TODO: Implement :)
                                     info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok(Reply::new(
-                                        ReplyCode::CommandNotImplementedForParameter,
-                                        "Stat with paths unsupported atm",
-                                    ))
+                                    Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Stat with paths unsupported atm"))
                                 }
                             }
                         }
-                        Command::Acct { .. } => respond!(|| Ok(Reply::new(
-                            ReplyCode::NotLoggedIn,
-                            "I don't know accounting man"
-                        ))),
-                        Command::Type => respond!(|| Ok(Reply::new(
-                            ReplyCode::CommandOkay,
-                            "I'm always in binary mode, dude..."
-                        ))),
+                        Command::Acct { .. } => respond!(|| Ok(Reply::new(ReplyCode::NotLoggedIn, "I don't know accounting man"))),
+                        Command::Type => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "I'm always in binary mode, dude..."))),
                         Command::Stru { structure } => {
                             ensure_authenticated!();
                             match structure {
-                                commands::StruParam::File => Ok(Reply::new(
-                                    ReplyCode::CommandOkay,
-                                    "We're in File structure mode",
-                                )),
-                                _ => Ok(Reply::new(
-                                    ReplyCode::CommandNotImplementedForParameter,
-                                    "Only File structure is supported",
-                                )),
+                                commands::StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "We're in File structure mode")),
+                                _ => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Only File structure is supported")),
                             }
                         }
                         Command::Mode { mode } => respond!(|| match mode {
-                            commands::ModeParam::Stream => Ok(Reply::new(
-                                ReplyCode::CommandOkay,
-                                "Using Stream transfer mode"
-                            )),
+                            commands::ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
                             _ => Ok(Reply::new(
                                 ReplyCode::CommandNotImplementedForParameter,
                                 "Only Stream transfer mode is supported"
                             )),
                         }),
-                        Command::Help => respond!(|| Ok(Reply::new(
-                            ReplyCode::HelpMessage,
-                            "We haven't implemented a useful HELP command, sorry"
-                        ))),
-                        Command::Noop => respond!(|| Ok(Reply::new(
-                            ReplyCode::CommandOkay,
-                            "Successfully did nothing"
-                        ))),
+                        Command::Help => respond!(|| Ok(Reply::new(ReplyCode::HelpMessage, "We haven't implemented a useful HELP command, sorry"))),
+                        Command::Noop => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing"))),
                         Command::Pasv => {
                             ensure_authenticated!();
 
                             let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
                             let addr = match listener.local_addr()? {
                                 std::net::SocketAddr::V4(addr) => addr,
-                                std::net::SocketAddr::V6(_) => {
-                                    panic!("we only listen on ipv4, so this shouldn't happen")
-                                }
+                                std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
                             };
-                            let listener = TcpListener::from_std(
-                                listener,
-                                &tokio::reactor::Handle::default(),
-                            )?;
+                            let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
                             let octets = addr.ip().octets();
                             let port = addr.port();
@@ -603,12 +428,8 @@ where
                             let p2 = port - (p1 * 256);
                             let tx = tx.clone();
 
-                            let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) =
-                                mpsc::channel(1);
-                            let (data_abort_tx, data_abort_rx): (
-                                mpsc::Sender<()>,
-                                mpsc::Receiver<()>,
-                            ) = mpsc::channel(1);
+                            let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
+                            let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
                             {
                                 let mut session = session.lock()?;
                                 session.data_cmd_tx = Some(cmd_tx);
@@ -639,10 +460,7 @@ where
 
                             Ok(Reply::new_with_string(
                                 ReplyCode::EnteringPassiveMode,
-                                format!(
-                                    "Entering Passive Mode ({},{},{},{},{},{})",
-                                    octets[0], octets[1], octets[2], octets[3], p1, p2
-                                ),
+                                format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
                             ))
                         }
                         Command::Port => {
@@ -668,17 +486,11 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok(Reply::new(
-                                        ReplyCode::CantOpenDataConnection,
-                                        "No data connection established",
-                                    ));
+                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(
-                                ReplyCode::FileStatusOkay,
-                                "Ready to receive data",
-                            ))
+                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
                         }
                         Command::List { .. } => {
                             ensure_authenticated!();
@@ -687,17 +499,11 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok(Reply::new(
-                                        ReplyCode::CantOpenDataConnection,
-                                        "No data connection established",
-                                    ));
+                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(
-                                ReplyCode::FileStatusOkay,
-                                "Sending directory list",
-                            ))
+                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
                         }
                         Command::Nlst { .. } => {
                             ensure_authenticated!();
@@ -705,17 +511,11 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok(Reply::new(
-                                        ReplyCode::CantOpenDataConnection,
-                                        "No data connection established",
-                                    ));
+                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
                                 }
                             };
                             spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(
-                                ReplyCode::FileStatusOkay,
-                                "Sending directory list",
-                            ))
+                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
                         }
                         Command::Feat => {
                             let mut feat_text = vec!["Extensions supported:"];
@@ -754,10 +554,7 @@ where
                         Command::Opts { option } => {
                             ensure_authenticated!();
                             match option {
-                                commands::Opt::UTF8 => Ok(Reply::new(
-                                    ReplyCode::FileActionOkay,
-                                    "Okay, I'm always in UTF8 mode.",
-                                )),
+                                commands::Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Okay, I'm always in UTF8 mode.")),
                             }
                         }
                         Command::Dele { path } => {
@@ -770,27 +567,16 @@ where
                             tokio::spawn(
                                 storage
                                     .del(path)
-                                    .map_err(|_| {
-                                        std::io::Error::new(
-                                            ErrorKind::Other,
-                                            "Failed to delete file",
-                                        )
-                                    })
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
                                     .and_then(|_| {
-                                        tx_success.send(InternalMsg::DelSuccess).map_err(|_| {
-                                            std::io::Error::new(
-                                                ErrorKind::Other,
-                                                "Failed to send 'DelSuccess' to data channel",
-                                            )
-                                        })
+                                        tx_success
+                                            .send(InternalMsg::DelSuccess)
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
                                     })
                                     .or_else(|_| {
-                                        tx_fail.send(InternalMsg::DelFail).map_err(|_| {
-                                            std::io::Error::new(
-                                                ErrorKind::Other,
-                                                "Failed to send 'DelFail' to data channel",
-                                            )
-                                        })
+                                        tx_fail
+                                            .send(InternalMsg::DelFail)
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
                                     })
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -808,27 +594,16 @@ where
                             tokio::spawn(
                                 storage
                                     .rmd(path)
-                                    .map_err(|_| {
-                                        std::io::Error::new(
-                                            ErrorKind::Other,
-                                            "Failed to delete directory",
-                                        )
-                                    })
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
                                     .and_then(|_| {
-                                        tx_success.send(InternalMsg::DelSuccess).map_err(|_| {
-                                            std::io::Error::new(
-                                                ErrorKind::Other,
-                                                "Failed to send 'DelSuccess' to data channel",
-                                            )
-                                        })
+                                        tx_success
+                                            .send(InternalMsg::DelSuccess)
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
                                     })
                                     .or_else(|_| {
-                                        tx_fail.send(InternalMsg::DelFail).map_err(|_| {
-                                            std::io::Error::new(
-                                                ErrorKind::Other,
-                                                "Failed to send 'DelFail' to data channel",
-                                            )
-                                        })
+                                        tx_fail
+                                            .send(InternalMsg::DelFail)
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
                                     })
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -852,29 +627,16 @@ where
                             tokio::spawn(
                                 storage
                                     .mkd(&path)
-                                    .map_err(|_| {
-                                        std::io::Error::new(
-                                            ErrorKind::Other,
-                                            "Failed to create directory",
-                                        )
-                                    })
+                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
                                     .and_then(|_| {
-                                        tx_success.send(InternalMsg::MkdirSuccess(path)).map_err(
-                                            |_| {
-                                                std::io::Error::new(
-                                                    ErrorKind::Other,
-                                                    "Failed to send 'MkdirSuccess' message",
-                                                )
-                                            },
-                                        )
+                                        tx_success
+                                            .send(InternalMsg::MkdirSuccess(path))
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirSuccess' message"))
                                     })
                                     .or_else(|_| {
-                                        tx_fail.send(InternalMsg::MkdirFail).map_err(|_| {
-                                            std::io::Error::new(
-                                                ErrorKind::Other,
-                                                "Failed to send 'MkdirFail' message",
-                                            )
-                                        })
+                                        tx_fail
+                                            .send(InternalMsg::MkdirFail)
+                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirFail' message"))
                                     })
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -886,10 +648,7 @@ where
                         Command::Allo { .. } => {
                             ensure_authenticated!();
                             // ALLO is obsolete and we'll just ignore it.
-                            Ok(Reply::new(
-                                ReplyCode::CommandOkayNotImplemented,
-                                "I don't need to allocate anything",
-                            ))
+                            Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "I don't need to allocate anything"))
                         }
                         Command::Abor => {
                             ensure_authenticated!();
@@ -897,15 +656,9 @@ where
                             match session.data_abort_tx.take() {
                                 Some(tx) => {
                                     spawn!(tx.send(()));
-                                    Ok(Reply::new(
-                                        ReplyCode::ClosingDataConnection,
-                                        "Closed data channel",
-                                    ))
+                                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel"))
                                 }
-                                None => Ok(Reply::new(
-                                    ReplyCode::ClosingDataConnection,
-                                    "Data channel already closed",
-                                )),
+                                None => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Data channel already closed")),
                             }
                         }
                         // TODO: Write functional test for STOU command.
@@ -915,10 +668,7 @@ where
                             let tx = match session.data_cmd_tx.take() {
                                 Some(tx) => tx,
                                 None => {
-                                    return Ok(Reply::new(
-                                        ReplyCode::CantOpenDataConnection,
-                                        "No data connection established",
-                                    ));
+                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
                                 }
                             };
 
@@ -926,10 +676,7 @@ where
                             let filename = std::path::Path::new(&uuid);
                             let path = session.cwd.join(&filename).to_string_lossy().to_string();
                             spawn!(tx.send(Command::Stor { path: path }));
-                            Ok(Reply::new_with_string(
-                                ReplyCode::FileStatusOkay,
-                                filename.to_string_lossy().to_string(),
-                            ))
+                            Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
                         }
                         Command::Rnfr { file } => {
                             ensure_authenticated!();
@@ -952,29 +699,17 @@ where
                                         "sure, it shall be known",
                                     ))
                                 }
-                                None => Ok(Reply::new(
-                                    ReplyCode::TransientFileError,
-                                    "Please tell me what file you want to rename first",
-                                )),
+                                None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
                             }
                         }
                         Command::Auth { protocol } => match (tls_configured, protocol) {
                             (true, AuthParam::Tls) => {
                                 let tx = tx.clone();
                                 spawn!(tx.send(InternalMsg::SecureControlChannel));
-                                Ok(Reply::new(
-                                    ReplyCode::AuthOkayNoDataNeeded,
-                                    "Upgrading to TLS",
-                                ))
+                                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
                             }
-                            (true, AuthParam::Ssl) => Ok(Reply::new(
-                                ReplyCode::CommandNotImplementedForParameter,
-                                "Auth SSL not implemented",
-                            )),
-                            (false, _) => Ok(Reply::new(
-                                ReplyCode::CommandNotImplemented,
-                                "TLS/SSL not configured",
-                            )),
+                            (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
+                            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
                         },
                         Command::PBSZ {} => {
                             ensure_authenticated!();
@@ -986,15 +721,9 @@ where
                             let session = session.lock()?;
                             if session.cmd_tls {
                                 spawn!(tx.send(InternalMsg::PlaintextControlChannel));
-                                Ok(Reply::new(
-                                    ReplyCode::CommandOkay,
-                                    "control channel in plaintext now",
-                                ))
+                                Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))
                             } else {
-                                Ok(Reply::new(
-                                    ReplyCode::Resp533,
-                                    "control channel already in plaintext mode",
-                                ))
+                                Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
                             }
                         }
                         Command::CDC {} => {
@@ -1007,80 +736,34 @@ where
                                 (true, ProtParam::Clear) => {
                                     let mut session = session.lock()?;
                                     session.data_tls = false;
-                                    Ok(Reply::new(
-                                        ReplyCode::CommandOkay,
-                                        "PROT OK. Switching data channel to plaintext",
-                                    ))
+                                    Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Switching data channel to plaintext"))
                                 }
                                 (true, ProtParam::Private) => {
                                     let mut session = session.lock().unwrap();
                                     session.data_tls = true;
-                                    Ok(Reply::new(
-                                        ReplyCode::CommandOkay,
-                                        "PROT OK. Securing data channel",
-                                    ))
+                                    Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Securing data channel"))
                                 }
-                                (true, _) => Ok(Reply::new(
-                                    ReplyCode::CommandNotImplementedForParameter,
-                                    "PROT S/E not implemented",
-                                )),
-                                (false, _) => Ok(Reply::new(
-                                    ReplyCode::CommandNotImplemented,
-                                    "TLS/SSL not configured",
-                                )),
+                                (true, _) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "PROT S/E not implemented")),
+                                (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
                             }
                         }
                     }
                 }
-                Event::InternalMsg(NotFound) => {
-                    Ok(Reply::new(ReplyCode::FileError, "File not found"))
-                }
-                Event::InternalMsg(PermissionDenied) => {
-                    Ok(Reply::new(ReplyCode::FileError, "Permision denied"))
-                }
-                Event::InternalMsg(SendingData) => {
-                    Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data"))
-                }
-                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(
-                    ReplyCode::ClosingDataConnection,
-                    "Send you something nice",
-                )),
-                Event::InternalMsg(WriteFailed) => Ok(Reply::new(
-                    ReplyCode::TransientFileError,
-                    "Failed to write file",
-                )),
-                Event::InternalMsg(ConnectionReset) => Ok(Reply::new(
-                    ReplyCode::ConnectionClosed,
-                    "Datachannel unexpectedly closed",
-                )),
-                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(
-                    ReplyCode::ClosingDataConnection,
-                    "File successfully written",
-                )),
-                Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(
-                    ReplyCode::FileActionOkay,
-                    "unFTP holds your data for you",
-                )),
-                Event::InternalMsg(UnknownRetrieveError) => {
-                    Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error"))
-                }
-                Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(
-                    ReplyCode::ClosingDataConnection,
-                    "Listed the directory",
-                )),
-                Event::InternalMsg(DelSuccess) => Ok(Reply::new(
-                    ReplyCode::FileActionOkay,
-                    "File successfully removed",
-                )),
-                Event::InternalMsg(DelFail) => Ok(Reply::new(
-                    ReplyCode::TransientFileError,
-                    "Failed to delete the file",
-                )),
+                Event::InternalMsg(NotFound) => Ok(Reply::new(ReplyCode::FileError, "File not found")),
+                Event::InternalMsg(PermissionDenied) => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
+                Event::InternalMsg(SendingData) => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
+                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Send you something nice")),
+                Event::InternalMsg(WriteFailed) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
+                Event::InternalMsg(ConnectionReset) => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
+                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written")),
+                Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
+                Event::InternalMsg(UnknownRetrieveError) => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
+                Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
+                Event::InternalMsg(DelSuccess) => Ok(Reply::new(ReplyCode::FileActionOkay, "File successfully removed")),
+                Event::InternalMsg(DelFail) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
                 // The InternalMsg::Quit will never be reached, because we catch it in the task before
                 // this closure is called (because we have to close the connection).
-                Event::InternalMsg(Quit) => {
-                    Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
-                }
+                Event::InternalMsg(Quit) => Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!")),
                 Event::InternalMsg(SecureControlChannel) => {
                     let mut session = session.lock()?;
                     session.cmd_tls = true;
@@ -1091,29 +774,18 @@ where
                     session.cmd_tls = false;
                     Ok(Reply::none())
                 }
-                Event::InternalMsg(MkdirSuccess(path)) => Ok(Reply::new_with_string(
-                    ReplyCode::DirCreated,
-                    path.to_string_lossy().to_string(),
-                )),
-                Event::InternalMsg(MkdirFail) => Ok(Reply::new(
-                    ReplyCode::FileError,
-                    "Failed to create directory",
-                )),
+                Event::InternalMsg(MkdirSuccess(path)) => Ok(Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string())),
+                Event::InternalMsg(MkdirFail) => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
                 Event::InternalMsg(AuthSuccess) => {
                     let mut session = session.lock()?;
                     session.state = WaitCmd;
-                    Ok(Reply::new(
-                        ReplyCode::UserLoggedIn,
-                        "User logged in, proceed",
-                    ))
+                    Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
                 }
-                Event::InternalMsg(AuthFailed) => {
-                    Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed"))
-                }
+                Event::InternalMsg(AuthFailed) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
             }
         };
 
-        let codec = FTPCodec::new();
+        let codec = controlchan::FTPCodec::new();
         let (sink, stream) = codec.framed(tcp_tls_stream).split();
         let task = sink
             .send(Reply::new(ReplyCode::ServiceReady, self.greeting))
@@ -1122,10 +794,7 @@ where
                 sink.send_all(
                     stream
                         .map(Event::Command)
-                        .select(
-                            rx.map(Event::InternalMsg)
-                                .map_err(|_| FTPErrorKind::InternalMsgError.into()),
-                        )
+                        .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
                         .take_while(move |event| {
                             if with_metrics {
                                 metrics::add_event_metric(event);
@@ -1140,21 +809,10 @@ where
                             };
                             warn!("Failed to process command: {}", e);
                             let response = match e.kind() {
-                                FTPErrorKind::UnknownCommand { .. } => Reply::new(
-                                    ReplyCode::CommandSyntaxError,
-                                    "Command not implemented",
-                                ),
-                                FTPErrorKind::UTF8Error => Reply::new(
-                                    ReplyCode::CommandSyntaxError,
-                                    "Invalid UTF8 in command",
-                                ),
-                                FTPErrorKind::InvalidCommand => {
-                                    Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter")
-                                }
-                                _ => Reply::new(
-                                    ReplyCode::LocalError,
-                                    "Unknown internal server error, please try again later",
-                                ),
+                                FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
+                                FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
+                                FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
+                                _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
                             };
                             futures::future::ok(response)
                         })

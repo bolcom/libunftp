@@ -78,8 +78,8 @@ impl StorageBackend for Filesystem {
         &self,
         path: P,
     ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
-    where
-        <Self as StorageBackend>::Metadata: Metadata,
+        where
+            <Self as StorageBackend>::Metadata: Metadata,
     {
         // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
@@ -352,7 +352,7 @@ mod tests {
                 Err(())
             }
         }))
-        .unwrap();
+            .unwrap();
     }
 
     #[test]
