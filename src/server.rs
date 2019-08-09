@@ -1125,7 +1125,7 @@ where
                         Command::Rnfr { file } => {
                             ensure_authenticated!();
                             let mut session = session.lock()?;
-                            session.rename_from = Some(file);
+                            session.rename_from = Some(session.cwd.join(file));
                             Ok(Reply::new(
                                 ReplyCode::FileActionPending,
                                 "Tell me, what would you like the new name to be?",
@@ -1137,7 +1137,7 @@ where
                             let storage = Arc::clone(&session.storage);
                             match session.rename_from.take() {
                                 Some(from) => {
-                                    spawn!(storage.rename(from, file));
+                                    spawn!(storage.rename(from, session.cwd.join(file)));
                                     Ok(Reply::new(
                                         ReplyCode::FileActionOkay,
                                         "sure, it shall be known",
