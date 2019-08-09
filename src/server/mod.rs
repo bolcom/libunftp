@@ -708,7 +708,6 @@ where
                             ))
                         }
                         Command::Feat => {
-                            ensure_authenticated!();
                             let reply = Reply::new_multiline(
                                 ReplyCode::SystemStatus,
                                 &vec![
