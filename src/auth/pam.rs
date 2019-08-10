@@ -24,7 +24,6 @@ impl Authenticator for PAMAuthenticator {
         _username: &str,
         _password: &str,
     ) -> Box<Future<Item = bool, Error = ()> + Send> {
-
         let service = self.service.clone();
         let username = _username.to_string();
         let password = _password.to_string();

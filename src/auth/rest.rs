@@ -121,7 +121,6 @@ impl Authenticator for RestAuthenticator {
         _username: &str,
         _password: &str,
     ) -> Box<Future<Item = bool, Error = ()> + Send> {
-
         let username_url =
             utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let password_url =

@@ -1053,10 +1053,9 @@ where
                         "User logged in, proceed",
                     ))
                 }
-                Event::InternalMsg(AuthFailed) => Ok(Reply::new(
-                    ReplyCode::NotLoggedIn,
-                    "Authentication failed",
-                )),
+                Event::InternalMsg(AuthFailed) => {
+                    Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed"))
+                }
             }
         };
 
