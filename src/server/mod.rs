@@ -1,5 +1,6 @@
 /// Contains the `FTPError` struct that that defines the firetrap custom error type.
 pub mod error;
+
 pub use error::{FTPError, FTPErrorKind};
 
 mod session;
@@ -408,6 +409,7 @@ where
     /// Does TCP processing when a FTP client connects
     fn process(&self, tcp_stream: TcpStream) {
         let with_metrics = self.with_metrics;
+        let tls_configured = self.key_file.is_some();
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
@@ -912,8 +914,8 @@ where
                                 )),
                             }
                         }
-                        Command::Auth { protocol } => match protocol {
-                            AuthParam::Tls => {
+                        Command::Auth { protocol } => match (tls_configured, protocol) {
+                            (true, AuthParam::Tls) => {
                                 let tx = tx.clone();
                                 spawn!(tx.send(InternalMsg::SecureControlChannel));
                                 Ok(Reply::new(
@@ -921,14 +923,18 @@ where
                                     "Upgrading to TLS",
                                 ))
                             }
-                            AuthParam::Ssl => Ok(Reply::new(
+                            (true, AuthParam::Ssl) => Ok(Reply::new(
                                 ReplyCode::CommandNotImplementedForParameter,
                                 "Auth SSL not implemented",
+                            )),
+                            (false, _) => Ok(Reply::new(
+                                ReplyCode::CommandNotImplemented,
+                                "TLS/SSL not configured",
                             )),
                         },
                         Command::PBSZ {} => {
                             ensure_authenticated!();
-                            Ok(Reply::new(ReplyCode::CommandOkay, "happiness..."))
+                            Ok(Reply::new(ReplyCode::CommandOkay, "OK"))
                         }
                         Command::CCC {} => {
                             ensure_authenticated!();
@@ -953,8 +959,8 @@ where
                         }
                         Command::PROT { param } => {
                             ensure_authenticated!();
-                            match param {
-                                ProtParam::Clear => {
+                            match (tls_configured, param) {
+                                (true, ProtParam::Clear) => {
                                     let mut session = session.lock()?;
                                     session.data_tls = false;
                                     Ok(Reply::new(
@@ -962,7 +968,7 @@ where
                                         "PROT OK. Switching data channel to plaintext",
                                     ))
                                 }
-                                ProtParam::Private => {
+                                (true, ProtParam::Private) => {
                                     let mut session = session.lock().unwrap();
                                     session.data_tls = true;
                                     Ok(Reply::new(
@@ -970,9 +976,13 @@ where
                                         "PROT OK. Securing data channel",
                                     ))
                                 }
-                                _ => Ok(Reply::new(
+                                (true, _) => Ok(Reply::new(
                                     ReplyCode::CommandNotImplementedForParameter,
                                     "PROT S/E not implemented",
+                                )),
+                                (false, _) => Ok(Reply::new(
+                                    ReplyCode::CommandNotImplemented,
+                                    "TLS/SSL not configured",
                                 )),
                             }
                         }
