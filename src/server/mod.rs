@@ -409,7 +409,15 @@ where
     /// Does TCP processing when a FTP client connects
     fn process(&self, tcp_stream: TcpStream) {
         let with_metrics = self.with_metrics;
-        let tls_configured = self.key_file.is_some();
+        let tls_configured = if let (Some(certs), Some(key)) = (self.certs_file, self.key_file) {
+            if certs.is_empty() || key.is_empty() {
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
@@ -710,15 +718,13 @@ where
                             ))
                         }
                         Command::Feat => {
-                            let reply = Reply::new_multiline(
-                                ReplyCode::SystemStatus,
-                                &vec![
-                                    "Extensions supported:",
-                                    "AUTH (Authentication/Security Mechanism)",
-                                    "PROT (Data Channel Protection Level)",
-                                    "PBSZ (Protection Buffer Size)",
-                                ],
-                            );
+                            let mut feat_text = vec!["Extensions supported:"];
+                            if tls_configured {
+                                feat_text.push("AUTH (Authentication/Security Mechanism)");
+                                feat_text.push("PROT (Data Channel Protection Level)");
+                                feat_text.push("PBSZ (Protection Buffer Size)");
+                            }
+                            let reply = Reply::new_multiline(ReplyCode::SystemStatus, feat_text);
                             Ok(reply)
                         }
                         Command::Pwd => {
