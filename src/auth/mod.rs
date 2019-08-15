@@ -50,9 +50,10 @@ pub mod rest;
 ///
 /// ```rust
 /// use firetrap::auth::{Authenticator, AnonymousAuthenticator};
+/// use futures::future::Future;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(my_auth.authenticate("Finn", "I ❤️ PB").unwrap(), true);
+/// assert_eq!(my_auth.authenticate("Finn", "I ❤️ PB").wait().unwrap(), true);
 /// ```
 pub struct AnonymousAuthenticator;
 

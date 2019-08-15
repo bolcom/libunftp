@@ -799,6 +799,44 @@ where
                             );
                             Ok(Reply::none())
                         }
+                        Command::Rmd { path } => {
+                            ensure_authenticated!();
+                            let session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            let tx_success = tx.clone();
+                            let tx_fail = tx.clone();
+                            tokio::spawn(
+                                storage
+                                    .rmd(path)
+                                    .map_err(|_| {
+                                        std::io::Error::new(
+                                            ErrorKind::Other,
+                                            "Failed to delete directory",
+                                        )
+                                    })
+                                    .and_then(|_| {
+                                        tx_success.send(InternalMsg::DelSuccess).map_err(|_| {
+                                            std::io::Error::new(
+                                                ErrorKind::Other,
+                                                "Failed to send 'DelSuccess' to data channel",
+                                            )
+                                        })
+                                    })
+                                    .or_else(|_| {
+                                        tx_fail.send(InternalMsg::DelFail).map_err(|_| {
+                                            std::io::Error::new(
+                                                ErrorKind::Other,
+                                                "Failed to send 'DelFail' to data channel",
+                                            )
+                                        })
+                                    })
+                                    .map(|_| ())
+                                    .map_err(|e| {
+                                        warn!("Failed to delete directory: {}", e);
+                                    }),
+                            );
+                            Ok(Reply::none())
+                        }
                         Command::Quit => {
                             let tx = tx.clone();
                             spawn!(tx.send(InternalMsg::Quit));

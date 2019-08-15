@@ -154,6 +154,10 @@ pub enum Command {
         /// The (regular) file to delete.
         path: String,
     },
+    Rmd {
+        /// The (regular) directory to delete.
+        path: String,
+    },
     /// The `QUIT` command
     Quit,
     /// The `MKD` command
@@ -395,6 +399,15 @@ impl Command {
 
                 let path = String::from_utf8_lossy(&path).to_string();
                 Command::Dele { path }
+            }
+            b"RMD" | b"rmd" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+
+                let path = String::from_utf8_lossy(&path).to_string();
+                Command::Rmd { path }
             }
             b"QUIT" | b"quit" => {
                 let params = parse_to_eol(cmd_params)?;
@@ -1105,6 +1118,25 @@ mod tests {
             Command::parse(input),
             Ok(Command::Dele {
                 path: "some_file".into()
+            })
+        );
+    }
+
+    #[test]
+    fn parse_rmd() {
+        let input = "RMD\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Err(ParseError {
+                inner: Context::new(ParseErrorKind::InvalidCommand)
+            })
+        );
+
+        let input = "RMD some_directory\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Rmd {
+                path: "some_directory".into()
             })
         );
     }
