@@ -39,3 +39,7 @@ pub mod storage;
 
 /// Contains the `add...metric` functions that are used for gathering metrics.
 pub mod metrics;
+
+#[cfg(any(feature = "rest", feature = "pam"))]
+#[macro_use]
+extern crate log;
