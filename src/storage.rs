@@ -214,6 +214,9 @@ pub trait StorageBackend {
     /// Delete the given file.
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
+    /// Delete the given directory.
+    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+
     /// Create the given directory.
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
@@ -372,6 +375,14 @@ impl StorageBackend for Filesystem {
             Err(e) => return Box::new(future::err(e)),
         };
         Box::new(tokio::fs::remove_file(full_path).map_err(|e| Error::IOError(e.kind())))
+    }
+
+    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Box::new(future::err(e)),
+        };
+        Box::new(tokio::fs::remove_dir(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
     fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {

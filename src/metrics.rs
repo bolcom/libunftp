@@ -175,6 +175,9 @@ fn add_command_metric(cmd: &Command) {
         Command::Dele { .. } => {
             FTP_COMMAND_TOTAL.with_label_values(&["dele"]).inc();
         }
+        Command::Rmd { .. } => {
+            FTP_COMMAND_TOTAL.with_label_values(&["rmd"]).inc();
+        }
         Command::Quit => {
             FTP_COMMAND_TOTAL.with_label_values(&["quit"]).inc();
         }
