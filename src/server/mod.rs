@@ -221,7 +221,7 @@ where
     with_metrics: bool,
 }
 
-impl Server<storage::Filesystem> {
+impl Server<storage::filesystem::Filesystem> {
     /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example
@@ -236,7 +236,7 @@ impl Server<storage::Filesystem> {
         let server = Server {
             storage: Box::new(move || {
                 let p = &p.clone();
-                storage::Filesystem::new(p)
+                storage::filesystem::Filesystem::new(p)
             }),
             greeting: DEFAULT_GREETING,
             authenticator: Arc::new(auth::AnonymousAuthenticator {}),
@@ -934,7 +934,7 @@ where
                         Command::Rnfr { file } => {
                             ensure_authenticated!();
                             let mut session = session.lock()?;
-                            session.rename_from = Some(file);
+                            session.rename_from = Some(session.cwd.join(file));
                             Ok(Reply::new(
                                 ReplyCode::FileActionPending,
                                 "Tell me, what would you like the new name to be?",
@@ -946,7 +946,7 @@ where
                             let storage = Arc::clone(&session.storage);
                             match session.rename_from.take() {
                                 Some(from) => {
-                                    spawn!(storage.rename(from, file));
+                                    spawn!(storage.rename(from, session.cwd.join(file)));
                                     Ok(Reply::new(
                                         ReplyCode::FileActionOkay,
                                         "sure, it shall be known",
