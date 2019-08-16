@@ -147,7 +147,7 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
             };
         }
 
-        return Ok((rdlen, wrlen));
+        Ok((rdlen, wrlen))
     }
 }
 

@@ -287,11 +287,7 @@ where
     fn process(&self, tcp_stream: TcpStream) {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(certs), Some(key)) = (self.certs_file, self.key_file) {
-            if certs.is_empty() || key.is_empty() {
-                false
-            } else {
-                true
-            }
+            !(certs.is_empty() || key.is_empty())
         } else {
             false
         };
