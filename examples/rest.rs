@@ -1,13 +1,13 @@
-use firetrap::auth::{rest, Authenticator};
+use firetrap::auth::rest;
 use log::*;
 use std::env;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub fn main() {
     pretty_env_logger::init();
 
-    let args: Vec<String> = env::args().collect();
+    let _args: Vec<String> = env::args().collect();
 
     let authenticator: rest::RestAuthenticator = rest::Builder::new()
         .with_username_placeholder("{USER}".to_string())

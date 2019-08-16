@@ -6,7 +6,6 @@ use std::string::String;
 
 use futures::stream::Stream;
 use futures::Future;
-use tokio::runtime::current_thread::Runtime;
 
 use http::uri::InvalidUri;
 use hyper::{Body, Client, Request};
@@ -165,7 +164,7 @@ impl Authenticator for RestAuthenticator {
                     Result::Ok(regex.is_match(&parsed))
                 })
                 .map_err(|err| {
-                    info!("RestError: {}", err);
+                    info!("RestError: {:?}", err);
                     ()
                 }),
         )
@@ -180,7 +179,7 @@ fn encode_string_json(string: &str) -> String {
         match i {
             '\\' => res.push_str("\\\\"),
             '"' => res.push_str("\\\""),
-            ' '...'~' => res.push(i),
+            ' '..='~' => res.push(i),
             _ => {
                 error!("special character {} is not supported", i);
             }
