@@ -90,7 +90,7 @@ where
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
-pub trait StorageBackend {
+pub trait StorageBackend<U: Send> {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
@@ -103,32 +103,35 @@ pub trait StorageBackend {
     /// [`Metadata`]: ./trait.Metadata.html
     fn stat<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
     /// Returns the list of files in the given directory.
     fn list<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         path: P,
     ) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata;
+        <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the
     /// client.
     fn list_fmt<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata + 'static,
-        <Self as StorageBackend>::Error: Send + 'static,
+        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
         let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
         let stream: Box<
             Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send,
-        > = self.list(path);
+        > = self.list(user, path);
         let res_work = res.clone();
         let fut = stream
             .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
@@ -155,17 +158,18 @@ pub trait StorageBackend {
     /// immediately be sent to the client.
     fn nlst<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata + 'static,
-        <Self as StorageBackend>::Error: Send + 'static,
+        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
         let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
         let stream: Box<
             Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send,
-        > = self.list(path);
+        > = self.list(user, path);
         let res_work = res.clone();
         let fut = stream
             .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
@@ -201,28 +205,43 @@ pub trait StorageBackend {
     // Trait.
     fn get<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to the given file.
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
+        user: &Option<U>,
         bytes: R,
         path: P,
     ) -> Box<Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+    fn del<P: AsRef<Path>>(
+        &self,
+        user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+    fn rmd<P: AsRef<Path>>(
+        &self,
+        user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+    fn mkd<P: AsRef<Path>>(
+        &self,
+        user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 
     /// Rename the given file to the given filename.
     fn rename<P: AsRef<Path>>(
         &self,
+        user: &Option<U>,
         from: P,
         to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send>;
@@ -278,13 +297,14 @@ impl Filesystem {
     }
 }
 
-impl StorageBackend for Filesystem {
+impl<U: Send> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
     type Error = Error;
 
     fn stat<P: AsRef<Path>>(
         &self,
+        _user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
@@ -297,10 +317,11 @@ impl StorageBackend for Filesystem {
 
     fn list<P: AsRef<Path>>(
         &self,
+        _user: &Option<U>,
         path: P,
     ) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata,
+        <Self as StorageBackend<U>>::Metadata: Metadata,
     {
         // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
@@ -332,6 +353,7 @@ impl StorageBackend for Filesystem {
 
     fn get<P: AsRef<Path>>(
         &self,
+        _user: &Option<U>,
         path: P,
     ) -> Box<Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
@@ -347,6 +369,7 @@ impl StorageBackend for Filesystem {
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
+        _user: &Option<U>,
         bytes: R,
         path: P,
     ) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
@@ -369,7 +392,11 @@ impl StorageBackend for Filesystem {
         Box::new(fut)
     }
 
-    fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -377,7 +404,11 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::remove_file(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn rmd<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -385,7 +416,11 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::remove_dir(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn mkd<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -399,6 +434,7 @@ impl StorageBackend for Filesystem {
 
     fn rename<P: AsRef<Path>>(
         &self,
+        _user: &Option<U>,
         from: P,
         to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
@@ -528,6 +564,7 @@ type Result<T> = result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
     use std::fs::File;
     use std::io::prelude::*;
@@ -548,7 +585,9 @@ mod tests {
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         let filename = path.file_name().unwrap();
-        let my_meta = rt.block_on(fs.stat(filename)).unwrap();
+        let my_meta = rt
+            .block_on(fs.stat(&Some(AnonymousUser {}), filename))
+            .unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
@@ -572,7 +611,9 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list("/").collect()).unwrap();
+        let my_list = rt
+            .block_on(fs.list(&Some(AnonymousUser {}), "/").collect())
+            .unwrap();
 
         assert_eq!(my_list.len(), 1);
 
@@ -601,7 +642,9 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list_fmt("/")).unwrap();
+        let my_list = rt
+            .block_on(fs.list_fmt(&Some(AnonymousUser {}), "/"))
+            .unwrap();
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
 
@@ -624,7 +667,9 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut my_file = rt.block_on(fs.get(filename)).unwrap();
+        let mut my_file = rt
+            .block_on(fs.get(&Some(AnonymousUser {}), filename))
+            .unwrap();
         let mut my_content = Vec::new();
         rt.block_on(future::lazy(move || {
             tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
@@ -650,8 +695,12 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt"))
-            .expect("Failed to `put` file");
+        rt.block_on(fs.put(
+            &Some(AnonymousUser {}),
+            orig_content.as_ref(),
+            "greeting.txt",
+        ))
+        .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
         let mut f = File::open(root.join("greeting.txt")).unwrap();
@@ -718,7 +767,8 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.mkd(new_dir_name)).expect("Failed to mkd");
+        rt.block_on(fs.mkd(&Some(AnonymousUser {}), new_dir_name))
+            .expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -737,7 +787,7 @@ mod tests {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        rt.block_on(fs.rename(&old_filename, &new_filename))
+        rt.block_on(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename))
             .expect("Failed to rename");
 
         let new_full_path = root.join(new_filename);

@@ -30,13 +30,14 @@ enum DataCommand {
 }
 
 // This is where we keep the state for a ftp session.
-pub(super) struct Session<S>
+pub(super) struct Session<S, U: Send + Sync>
 where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U>,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
+    pub(super) user: Arc<Option<U>>,
     pub(super) username: Option<String>,
     pub(super) storage: Arc<S>,
     pub(super) data_cmd_tx: Option<mpsc::Sender<Command>>,
@@ -54,15 +55,16 @@ where
     pub(super) data_tls: bool,
 }
 
-impl<S> Session<S>
+impl<S, U: Send + Sync + 'static> Session<S, U>
 where
-    S: storage::StorageBackend + Send + Sync + 'static,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
         Session {
+            user: Arc::new(None),
             username: None,
             storage,
             data_cmd_tx: None,
@@ -96,8 +98,9 @@ where
     /// tx: channel to send the result of our operation to the control process
     pub(super) fn process_data(
         &mut self,
+        user: Arc<Option<U>>,
         socket: TcpStream,
-        sec_switch: Arc<Mutex<Session<S>>>,
+        sec_switch: Arc<Mutex<Session<S, U>>>,
         tx: mpsc::Sender<InternalMsg>,
     ) {
         let tcp_tls_stream: Box<dyn crate::server::AsyncStream> =
@@ -138,7 +141,7 @@ where
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.get(path)
+                            storage.get(&user, path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                                 .and_then(|f| {
                                     tx_sending.send(InternalMsg::SendingData)
@@ -172,7 +175,7 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.put(tcp_tls_stream, path)
+                            storage.put(&user, tcp_tls_stream, path)
                                 .map_err(|e| {
                                     if let Some(kind) = e.io_error_kind() {
                                         std::io::Error::new(kind, "Failed to put file")
@@ -208,7 +211,7 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.list_fmt(path)
+                            storage.list_fmt(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
@@ -239,7 +242,7 @@ where
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
                         tokio::spawn(
-                            storage.nlst(path)
+                            storage.nlst(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok.send(InternalMsg::DirectorySuccessfullyListed)
@@ -279,12 +282,12 @@ where
     }
 }
 
-impl<S> SecuritySwitch for Session<S>
+impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U>,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
         match channel {
