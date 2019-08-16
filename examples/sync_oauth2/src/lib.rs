@@ -3,7 +3,7 @@ pub fn get_token(
 ) -> Result<(String, String), Box<dyn std::error::Error>> {
     use hyper::{net::HttpsConnector, Client};
     use hyper_rustls::TlsClient;
-    use yup_oauth2::{self, GetToken, ServiceAccountAccess};
+    use yup_oauth2::{GetToken, ServiceAccountAccess};
 
     let token = ServiceAccountAccess::new(
         service_account_key,

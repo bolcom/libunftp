@@ -90,9 +90,8 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
     fn tls_read_io(&mut self) -> io::Result<usize> {
         let len = self.tls.read_tls(&mut self.tcp)?;
 
-        let result = self.tls.process_new_packets();
-        if result.is_err() {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, result.unwrap_err()));
+        if let Err(e) = self.tls.process_new_packets() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
 
         Ok(len)
@@ -267,23 +266,20 @@ impl<'a> Future for Handshake<'a> {
         debug!("Performing handshake <<{}>>", self.channel);
         while self.tls.is_handshaking() {
             let rc = self.tls.read_tls(&mut self.tcp);
-            if rc.is_err() {
-                let err = rc.unwrap_err();
-                if let io::ErrorKind::WouldBlock = err.kind() {
+            if let Err(err) = rc {
+                if io::ErrorKind::WouldBlock == err.kind() {
                     return Ok(Async::NotReady);
                 }
                 return Err(err);
             }
 
-            let r = self.tls.process_new_packets();
-            if r.is_err() {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, r.unwrap_err()));
+            if let Err(e) = self.tls.process_new_packets() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
             }
 
             while self.tls.wants_write() {
-                let res = self.tls.write_tls(&mut self.tcp);
-                if res.is_err() {
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, res.unwrap_err()));
+                if let Err(e) = self.tls.write_tls(&mut self.tcp) {
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
                 }
             }
         }

@@ -250,25 +250,25 @@ impl Command {
             b"STRU" | b"stru" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.len() > 1 {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 match params.first() {
                     Some(b'F') => Command::Stru { structure: StruParam::File },
                     Some(b'R') => Command::Stru { structure: StruParam::Record },
                     Some(b'P') => Command::Stru { structure: StruParam::Page },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
             b"MODE" | b"mode" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.len() > 1 {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 match params.first() {
                     Some(b'S') => Command::Mode { mode: ModeParam::Stream },
                     Some(b'B') => Command::Mode { mode: ModeParam::Block },
                     Some(b'C') => Command::Mode { mode: ModeParam::Compressed },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
             b"HELP" | b"help" => Command::Help,
@@ -276,28 +276,28 @@ impl Command {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
                     // NOOP params are prohibited
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Noop
             }
             b"PASV" | b"pasv" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Pasv
             }
             b"PORT" | b"port" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Port
             }
             b"RETR" | b"retr" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 let path = String::from_utf8_lossy(&path);
                 // TODO: Can we do this without allocation?
@@ -306,7 +306,7 @@ impl Command {
             b"STOR" | b"stor" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 // TODO:: Can we do this without allocation?
                 let path = String::from_utf8_lossy(&path);
@@ -333,21 +333,21 @@ impl Command {
             b"FEAT" | b"feat" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Feat
             }
             b"PWD" | b"XPWD" | b"pwd" | b"xpwd" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Pwd
             }
             b"CWD" | b"XCWD" | b"cwd" | b"xcwd" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 let path = String::from_utf8_lossy(&path).to_string();
                 let path = path.into();
@@ -356,25 +356,25 @@ impl Command {
             b"CDUP" | b"cdup" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Cdup
             }
             b"OPTS" | b"opts" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 match &params[..] {
                     b"UTF8" => Command::Opts { option: Opt::UTF8 },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
             b"DELE" | b"dele" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let path = String::from_utf8_lossy(&path).to_string();
@@ -383,7 +383,7 @@ impl Command {
             b"RMD" | b"rmd" => {
                 let path = parse_to_eol(cmd_params)?;
                 if path.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let path = String::from_utf8_lossy(&path).to_string();
@@ -392,7 +392,7 @@ impl Command {
             b"QUIT" | b"quit" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 Command::Quit
@@ -400,7 +400,7 @@ impl Command {
             b"MKD" | b"XMKD" | b"mkd" | b"xmkd" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let path = String::from_utf8_lossy(&params).to_string();
@@ -411,28 +411,28 @@ impl Command {
             b"ABOR" | b"abor" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Abor
             }
             b"STOU" | b"stou" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::Stou
             }
             b"RNFR" | b"rnfr" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
                 // We really match on "/" and not some cross-OS-portable delimiter, because RFC
                 // 3659 actually defines "/" as the standard delimiter.
                 if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let file = file.into();
@@ -441,14 +441,14 @@ impl Command {
             b"RNTO" | b"rnto" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
                 // We really match on "/" and not some cross-OS-portable delimiter, because RFC
                 // 3659 actually defines "/" as the standard delimiter.
                 if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let file = file.into();
@@ -457,7 +457,7 @@ impl Command {
             b"AUTH" | b"auth" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.len() > 3 {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 match std::str::from_utf8(&params)
                     .context(ParseErrorKind::InvalidUTF8)?
@@ -467,18 +467,18 @@ impl Command {
                 {
                     "TLS" => Command::Auth { protocol: AuthParam::Tls },
                     "SSL" => Command::Auth { protocol: AuthParam::Ssl },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
             b"PBSZ" | b"pbsz" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 let size = String::from_utf8_lossy(&params).to_string();
                 if size != "0" {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
 
                 Command::PBSZ {}
@@ -486,10 +486,10 @@ impl Command {
             b"PROT" | b"prot" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 if params.len() > 1 {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 match params.first() {
                     Some(b'C') => Command::PROT { param: ProtParam::Clear },
@@ -498,27 +498,28 @@ impl Command {
                         param: ProtParam::Confidential,
                     },
                     Some(b'P') => Command::PROT { param: ProtParam::Private },
-                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                    _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
             b"CCC" | b"ccc" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CCC
             }
             b"CDC" | b"cdc" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand)?;
+                    return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CDC
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {
                     command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string(),
-                })?;
+                }
+                .into());
             }
         };
 
@@ -535,13 +536,13 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
     loop {
         let b = match iter.next() {
             Some(b) => b,
-            _ => return Err(ParseErrorKind::InvalidEOL)?,
+            _ => return Err(ParseErrorKind::InvalidEOL.into()),
         };
 
         if *b == b'\r' {
             match iter.next() {
                 Some(b'\n') => return Ok(bytes.split_to(pos)),
-                _ => return Err(ParseErrorKind::InvalidEOL)?,
+                _ => return Err(ParseErrorKind::InvalidEOL.into()),
             }
         }
 
@@ -550,7 +551,7 @@ fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
         }
 
         if !is_valid_token_char(*b) {
-            return Err(ParseErrorKind::InvalidToken { token: *b })?;
+            return Err(ParseErrorKind::InvalidToken { token: *b }.into());
         }
 
         // We don't have to be afraid of an overflow here, since a `Bytes` can never be bigger than
@@ -1155,5 +1156,4 @@ mod tests {
         let input = "AUTH tls\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Auth { protocol: AuthParam::Tls }));
     }
-
 }
