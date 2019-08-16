@@ -168,7 +168,7 @@ pub enum Command {
     /// The `ALLO` command
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
-        // as noop, we won't even parse it.
+    // as noop, we won't even parse it.
     },
     /// The `ABOR` command
     Abor,
@@ -239,11 +239,7 @@ impl Command {
             b"SYST" | b"syst" => Command::Syst,
             b"STAT" => {
                 let params = parse_to_eol(cmd_params)?;
-                let path = if !params.is_empty() {
-                    Some(params)
-                } else {
-                    None
-                };
+                let path = if !params.is_empty() { Some(params) } else { None };
                 Command::Stat { path }
             }
             b"TYPE" | b"type" => {
@@ -257,15 +253,9 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 match params.first() {
-                    Some(b'F') => Command::Stru {
-                        structure: StruParam::File,
-                    },
-                    Some(b'R') => Command::Stru {
-                        structure: StruParam::Record,
-                    },
-                    Some(b'P') => Command::Stru {
-                        structure: StruParam::Page,
-                    },
+                    Some(b'F') => Command::Stru { structure: StruParam::File },
+                    Some(b'R') => Command::Stru { structure: StruParam::Record },
+                    Some(b'P') => Command::Stru { structure: StruParam::Page },
                     _ => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             }
@@ -275,15 +265,9 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 match params.first() {
-                    Some(b'S') => Command::Mode {
-                        mode: ModeParam::Stream,
-                    },
-                    Some(b'B') => Command::Mode {
-                        mode: ModeParam::Block,
-                    },
-                    Some(b'C') => Command::Mode {
-                        mode: ModeParam::Compressed,
-                    },
+                    Some(b'S') => Command::Mode { mode: ModeParam::Stream },
+                    Some(b'B') => Command::Mode { mode: ModeParam::Block },
+                    Some(b'C') => Command::Mode { mode: ModeParam::Compressed },
                     _ => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             }
@@ -317,9 +301,7 @@ impl Command {
                 }
                 let path = String::from_utf8_lossy(&path);
                 // TODO: Can we do this without allocation?
-                Command::Retr {
-                    path: path.to_string(),
-                }
+                Command::Retr { path: path.to_string() }
             }
             b"STOR" | b"stor" => {
                 let path = parse_to_eol(cmd_params)?;
@@ -328,9 +310,7 @@ impl Command {
                 }
                 // TODO:: Can we do this without allocation?
                 let path = String::from_utf8_lossy(&path);
-                Command::Stor {
-                    path: path.to_string(),
-                }
+                Command::Stor { path: path.to_string() }
             }
             b"LIST" | b"list" => {
                 let path = parse_to_eol(cmd_params)?;
@@ -484,15 +464,11 @@ impl Command {
                     .to_string()
                     .to_uppercase()
                     .as_str()
-                    {
-                        "TLS" => Command::Auth {
-                            protocol: AuthParam::Tls,
-                        },
-                        "SSL" => Command::Auth {
-                            protocol: AuthParam::Ssl,
-                        },
-                        _ => return Err(ParseErrorKind::InvalidCommand)?,
-                    }
+                {
+                    "TLS" => Command::Auth { protocol: AuthParam::Tls },
+                    "SSL" => Command::Auth { protocol: AuthParam::Ssl },
+                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                }
             }
             b"PBSZ" | b"pbsz" => {
                 let params = parse_to_eol(cmd_params)?;
@@ -516,18 +492,12 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand)?;
                 }
                 match params.first() {
-                    Some(b'C') => Command::PROT {
-                        param: ProtParam::Clear,
-                    },
-                    Some(b'S') => Command::PROT {
-                        param: ProtParam::Safe,
-                    },
+                    Some(b'C') => Command::PROT { param: ProtParam::Clear },
+                    Some(b'S') => Command::PROT { param: ProtParam::Safe },
                     Some(b'E') => Command::PROT {
                         param: ProtParam::Confidential,
                     },
-                    Some(b'P') => Command::PROT {
-                        param: ProtParam::Private,
-                    },
+                    Some(b'P') => Command::PROT { param: ProtParam::Private },
                     _ => return Err(ParseErrorKind::InvalidCommand)?,
                 }
             }
@@ -547,9 +517,7 @@ impl Command {
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {
-                    command: std::str::from_utf8(cmd_token)
-                        .context(ParseErrorKind::InvalidUTF8)?
-                        .to_string(),
+                    command: std::str::from_utf8(cmd_token).context(ParseErrorKind::InvalidUTF8)?.to_string(),
                 })?;
             }
         };
@@ -658,9 +626,7 @@ impl ParseError {
 
 impl From<ParseErrorKind> for ParseError {
     fn from(kind: ParseErrorKind) -> ParseError {
-        ParseError {
-            inner: Context::new(kind),
-        }
+        ParseError { inner: Context::new(kind) }
     }
 }
 
@@ -687,12 +653,7 @@ mod tests {
     #[test]
     fn parse_user_cmd_crnl() {
         let input = "USER Dolores\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::User {
-                username: "Dolores".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::User { username: "Dolores".into() });
     }
 
     #[test]
@@ -702,9 +663,7 @@ mod tests {
         assert_eq!(
             Command::parse(input),
             Err(ParseError {
-                inner: Context::new(ParseErrorKind::UnknownCommand {
-                    command: "uSeR".into()
-                })
+                inner: Context::new(ParseErrorKind::UnknownCommand { command: "uSeR".into() })
             })
         );
     }
@@ -712,24 +671,14 @@ mod tests {
     #[test]
     fn parse_user_lowercase() {
         let input = "user Dolores\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::User {
-                username: "Dolores".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::User { username: "Dolores".into() });
     }
 
     #[test]
     // Not all clients include the (actually mandatory) '\r'
     fn parse_user_cmd_nl() {
         let input = "USER Dolores\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::User {
-                username: "Dolores".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::User { username: "Dolores".into() });
     }
 
     #[test]
@@ -760,12 +709,7 @@ mod tests {
     // We should skip only one space after a token, to allow for tokens starting with a space.
     fn parse_user_cmd_double_space() {
         let input = "USER  Dolores\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::User {
-                username: " Dolores".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::User { username: " Dolores".into() });
     }
 
     #[test]
@@ -782,12 +726,7 @@ mod tests {
     #[test]
     fn parse_pass_cmd_crnl() {
         let input = "PASS s3cr3t\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Pass {
-                password: "s3cr3t".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Pass { password: "s3cr3t".into() });
     }
 
     #[test]
@@ -804,12 +743,7 @@ mod tests {
     #[test]
     fn parse_acct() {
         let input = "ACCT Teddy\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Acct {
-                account: "Teddy".into()
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Acct { account: "Teddy".into() });
     }
 
     #[test]
@@ -826,34 +760,19 @@ mod tests {
     #[test]
     fn parse_stru_f() {
         let input = "STRU F\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Stru {
-                structure: StruParam::File
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru { structure: StruParam::File });
     }
 
     #[test]
     fn parse_stru_r() {
         let input = "STRU R\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Stru {
-                structure: StruParam::Record
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru { structure: StruParam::Record });
     }
 
     #[test]
     fn parse_stru_p() {
         let input = "STRU P\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Stru {
-                structure: StruParam::Page
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Stru { structure: StruParam::Page });
     }
 
     #[test]
@@ -886,34 +805,19 @@ mod tests {
     #[test]
     fn parse_mode_s() {
         let input = "MODE S\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Mode {
-                mode: ModeParam::Stream
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode { mode: ModeParam::Stream });
     }
 
     #[test]
     fn parse_mode_b() {
         let input = "MODE B\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Mode {
-                mode: ModeParam::Block
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode { mode: ModeParam::Block });
     }
 
     #[test]
     fn parse_mode_c() {
         let input = "MODE C\r\n";
-        assert_eq!(
-            Command::parse(input).unwrap(),
-            Command::Mode {
-                mode: ModeParam::Compressed
-            }
-        );
+        assert_eq!(Command::parse(input).unwrap(), Command::Mode { mode: ModeParam::Compressed });
     }
 
     #[test]
@@ -1001,12 +905,7 @@ mod tests {
 
         let input = "LIST tmp\r\n";
         let expected_path = Some("tmp".to_string());
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::List {
-                path: expected_path
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::List { path: expected_path }));
     }
 
     #[test]
@@ -1048,20 +947,10 @@ mod tests {
         );
 
         let input = "CWD /tmp\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Cwd {
-                path: "/tmp".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Cwd { path: "/tmp".into() }));
 
         let input = "CWD public\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Cwd {
-                path: "public".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Cwd { path: "public".into() }));
     }
 
     #[test]
@@ -1097,10 +986,7 @@ mod tests {
         );
 
         let input = "OPTS UTF8\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Opts { option: Opt::UTF8 })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Opts { option: Opt::UTF8 }));
     }
 
     #[test]
@@ -1114,12 +1000,7 @@ mod tests {
         );
 
         let input = "DELE some_file\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Dele {
-                path: "some_file".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Dele { path: "some_file".into() }));
     }
 
     #[test]
@@ -1133,12 +1014,7 @@ mod tests {
         );
 
         let input = "RMD some_directory\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Rmd {
-                path: "some_directory".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Rmd { path: "some_directory".into() }));
     }
 
     #[test]
@@ -1166,10 +1042,7 @@ mod tests {
         );
 
         let input = "MKD bla\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Mkd { path: "bla".into() })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Mkd { path: "bla".into() }));
     }
 
     #[test]
@@ -1233,20 +1106,10 @@ mod tests {
         );
 
         let input = "RNFR myfile\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Rnfr {
-                file: "myfile".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "myfile".into() }));
 
         let input = "RNFR this file\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Rnfr {
-                file: "this file".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "this file".into() }));
     }
 
     #[test]
@@ -1276,12 +1139,7 @@ mod tests {
         );
 
         let input = "RNTO new_name\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Rnto {
-                file: "new_name".into()
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Rnto { file: "new_name".into() }));
     }
 
     #[test]
@@ -1295,12 +1153,7 @@ mod tests {
         );
 
         let input = "AUTH tls\r\n";
-        assert_eq!(
-            Command::parse(input),
-            Ok(Command::Auth {
-                protocol: AuthParam::Tls,
-            })
-        );
+        assert_eq!(Command::parse(input), Ok(Command::Auth { protocol: AuthParam::Tls }));
     }
 
 }

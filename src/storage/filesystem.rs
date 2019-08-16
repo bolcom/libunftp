@@ -62,10 +62,7 @@ impl StorageBackend for Filesystem {
     type Metadata = std::fs::Metadata;
     type Error = Error;
 
-    fn stat<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
+    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(err) => return Box::new(future::err(err)),
@@ -74,12 +71,9 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::symlink_metadata(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn list<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
-        where
-            <Self as StorageBackend>::Metadata: Metadata,
+    fn list<P: AsRef<Path>>(&self, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    where
+        <Self as StorageBackend>::Metadata: Metadata,
     {
         // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
@@ -89,30 +83,22 @@ impl StorageBackend for Filesystem {
 
         let prefix = self.root.clone();
 
-        let fut = tokio::fs::read_dir(full_path)
-            .flatten_stream()
-            .filter_map(move |dir_entry| {
-                let prefix = prefix.clone();
-                let path = dir_entry.path();
-                let relpath = path.strip_prefix(prefix).unwrap();
-                let relpath = std::path::PathBuf::from(relpath);
-                match std::fs::symlink_metadata(dir_entry.path()) {
-                    Ok(stat) => Some(Fileinfo {
-                        path: relpath,
-                        metadata: stat,
-                    }),
-                    Err(_) => None,
-                }
-            });
+        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(move |dir_entry| {
+            let prefix = prefix.clone();
+            let path = dir_entry.path();
+            let relpath = path.strip_prefix(prefix).unwrap();
+            let relpath = std::path::PathBuf::from(relpath);
+            match std::fs::symlink_metadata(dir_entry.path()) {
+                Ok(stat) => Some(Fileinfo { path: relpath, metadata: stat }),
+                Err(_) => None,
+            }
+        });
 
         // TODO: Some more useful error reporting
         Box::new(fut.map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn get<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -124,11 +110,7 @@ impl StorageBackend for Filesystem {
         }))
     }
 
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
-        &self,
-        bytes: R,
-        path: P,
-    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -176,11 +158,7 @@ impl StorageBackend for Filesystem {
         }))
     }
 
-    fn rename<P: AsRef<Path>>(
-        &self,
-        from: P,
-        to: P,
-    ) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let from = match self.full_path(from) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -195,9 +173,7 @@ impl StorageBackend for Filesystem {
             .map_err(|e| Error::IOError(e.kind()))
             .and_then(move |metadata| {
                 if metadata.is_file() {
-                    future::Either::A(
-                        tokio::fs::rename(from_rename, to).map_err(|e| Error::IOError(e.kind())),
-                    )
+                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|e| Error::IOError(e.kind())))
                 } else {
                     future::Either::B(future::err(Error::MetadataError))
                 }
@@ -297,10 +273,7 @@ mod tests {
         assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
         assert_eq!(my_fileinfo.metadata.is_symlink(), meta.is_symlink());
         assert_eq!(my_fileinfo.metadata.len(), meta.len());
-        assert_eq!(
-            my_fileinfo.metadata.modified().unwrap(),
-            meta.modified().unwrap()
-        );
+        assert_eq!(my_fileinfo.metadata.modified().unwrap(), meta.modified().unwrap());
     }
 
     #[test]
@@ -352,7 +325,7 @@ mod tests {
                 Err(())
             }
         }))
-            .unwrap();
+        .unwrap();
     }
 
     #[test]
@@ -365,8 +338,7 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt"))
-            .expect("Failed to `put` file");
+        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt")).expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
         let mut f = File::open(root.join("greeting.txt")).unwrap();
@@ -412,14 +384,8 @@ mod tests {
             metadata: meta,
         };
         let my_format = format!("{}", fileinfo);
-        let basename = std::path::Path::new(&dir)
-            .file_name()
-            .unwrap()
-            .to_string_lossy();
-        let format = format!(
-            "-rwxr-xr-x            1            2              5 Jan 01 00:00 {}",
-            basename
-        );
+        let basename = std::path::Path::new(&dir).file_name().unwrap().to_string_lossy();
+        let format = format!("-rwxr-xr-x            1            2              5 Jan 01 00:00 {}", basename);
         assert_eq!(my_format, format);
     }
 
@@ -452,16 +418,12 @@ mod tests {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        rt.block_on(fs.rename(&old_filename, &new_filename))
-            .expect("Failed to rename");
+        rt.block_on(fs.rename(&old_filename, &new_filename)).expect("Failed to rename");
 
         let new_full_path = root.join(new_filename);
-        assert!(std::fs::metadata(new_full_path)
-            .expect("new filename not found")
-            .is_file());
+        assert!(std::fs::metadata(new_full_path).expect("new filename not found").is_file());
 
         let old_full_path = root.join(old_filename);
-        std::fs::symlink_metadata(old_full_path)
-            .expect_err("Old filename should not exists anymore");
+        std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
     }
 }

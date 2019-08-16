@@ -19,11 +19,7 @@ impl PAMAuthenticator {
 }
 
 impl Authenticator for PAMAuthenticator {
-    fn authenticate(
-        &self,
-        _username: &str,
-        _password: &str,
-    ) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
         let service = self.service.clone();
         let username = _username.to_string();
         let password = _password.to_string();

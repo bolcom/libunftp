@@ -3,58 +3,23 @@ use crate::reply::{Reply, ReplyCode};
 use crate::server::error::FTPErrorKind;
 use crate::server::{Event, InternalMsg};
 use lazy_static::*;
-use prometheus::{
-    __register_counter_vec, opts, register_int_counter, register_int_counter_vec, IntCounter,
-    IntCounterVec, __register_counter,
-};
+use prometheus::{__register_counter_vec, opts, register_int_counter, register_int_counter_vec, IntCounter, IntCounterVec, __register_counter};
 
 lazy_static! {
-    static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!(
-        "ftp_auth_failures",
-        "Total number of authentication failures."
-    ))
-    .unwrap();
-    static ref FTP_SESSIONS: IntCounter =
-        register_int_counter!(opts!("ftp_sessions_total", "Total number of FTP sessions."))
-            .unwrap();
-    static ref FTP_BACKEND_WRITE_BYTES: IntCounter = register_int_counter!(opts!(
-        "ftp_backend_write_bytes",
-        "Total number of bytes written to the backend."
-    ))
-    .unwrap();
-    static ref FTP_BACKEND_READ_BYTES: IntCounter = register_int_counter!(opts!(
-        "ftp_backend_read_bytes",
-        "Total number of bytes retrieved from the backend."
-    ))
-    .unwrap();
-    static ref FTP_BACKEND_WRITE_FILES: IntCounter = register_int_counter!(opts!(
-        "ftp_backend_write_files",
-        "Total number of files written to the backend."
-    ))
-    .unwrap();
-    static ref FTP_BACKEND_READ_FILES: IntCounter = register_int_counter!(opts!(
-        "ftp_backend_read_files",
-        "Total number of files retrieved from the backend."
-    ))
-    .unwrap();
-    static ref FTP_COMMAND_TOTAL: IntCounterVec = register_int_counter_vec!(
-        "ftp_command_total",
-        "Total number of commands received.",
-        &["command"]
-    )
-    .unwrap();
-    static ref FTP_REPLY_TOTAL: IntCounterVec = register_int_counter_vec!(
-        "ftp_reply_total",
-        "Total number of reply codes server sent to clients.",
-        &["range"]
-    )
-    .unwrap();
-    static ref FTP_ERROR_TOTAL: IntCounterVec = register_int_counter_vec!(
-        "ftp_error_total",
-        "Total number of errors encountered.",
-        &["type"]
-    )
-    .unwrap();
+    static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
+    static ref FTP_SESSIONS: IntCounter = register_int_counter!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
+    static ref FTP_BACKEND_WRITE_BYTES: IntCounter =
+        register_int_counter!(opts!("ftp_backend_write_bytes", "Total number of bytes written to the backend.")).unwrap();
+    static ref FTP_BACKEND_READ_BYTES: IntCounter =
+        register_int_counter!(opts!("ftp_backend_read_bytes", "Total number of bytes retrieved from the backend.")).unwrap();
+    static ref FTP_BACKEND_WRITE_FILES: IntCounter =
+        register_int_counter!(opts!("ftp_backend_write_files", "Total number of files written to the backend.")).unwrap();
+    static ref FTP_BACKEND_READ_FILES: IntCounter =
+        register_int_counter!(opts!("ftp_backend_read_files", "Total number of files retrieved from the backend.")).unwrap();
+    static ref FTP_COMMAND_TOTAL: IntCounterVec = register_int_counter_vec!("ftp_command_total", "Total number of commands received.", &["command"]).unwrap();
+    static ref FTP_REPLY_TOTAL: IntCounterVec =
+        register_int_counter_vec!("ftp_reply_total", "Total number of reply codes server sent to clients.", &["range"]).unwrap();
+    static ref FTP_ERROR_TOTAL: IntCounterVec = register_int_counter_vec!("ftp_error_total", "Total number of errors encountered.", &["type"]).unwrap();
 }
 
 /// Add a metric for an event.

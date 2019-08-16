@@ -20,8 +20,7 @@ pub fn main() {
         .build();
 
     let addr = "127.0.0.1:8080";
-    let server =
-        libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
+    let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
     server.listen(addr);
