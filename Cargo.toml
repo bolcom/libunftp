@@ -3,7 +3,7 @@ name = "libunftp"
 version = "0.1.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
-    "David Kosztka <dkosztka@bol.com>",
+    "Dávid Kosztka <dkosztka@bol.com>",
     "Hannes de Jager <hdejager@bol.com>",
     "Koen Wilde <koen@chillheid.nl>",
     "Maarten Dirkse <mdirkse@bol.com>",
