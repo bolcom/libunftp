@@ -1,6 +1,6 @@
 use futures::sync::mpsc;
 
-use crate::commands::Command;
+use super::commands::Command;
 
 // Commands that can be send to the data channel.
 #[derive(PartialEq)]

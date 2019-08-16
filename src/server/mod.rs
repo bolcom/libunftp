@@ -1,6 +1,10 @@
 /// Contains the `FTPError` struct that that defines the libunftp custom error type.
 pub mod error;
 
+pub(crate) mod commands;
+
+pub(crate) mod reply;
+
 // Contains code pertaining to the FTP *control* channel
 mod controlchan;
 
@@ -14,9 +18,9 @@ mod session;
 // Implements a stream that can change between TCP and TLS on the fly.
 mod stream;
 
-pub use chancomms::InternalMsg;
-pub use controlchan::Event;
-pub use error::{FTPError, FTPErrorKind};
+pub(crate) use chancomms::InternalMsg;
+pub(crate) use controlchan::Event;
+pub(crate) use error::{FTPError, FTPErrorKind};
 
 use std::io::ErrorKind;
 use std::sync::{Arc, Mutex};
@@ -31,12 +35,11 @@ use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
 
+use self::commands::{AuthParam, Command, ProtParam};
+use self::reply::{Reply, ReplyCode};
+use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth;
-use crate::commands;
-use crate::commands::{AuthParam, Command, ProtParam};
 use crate::metrics;
-use crate::reply::{Reply, ReplyCode};
-use crate::server::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::storage;
 use session::{Session, SessionState};
 

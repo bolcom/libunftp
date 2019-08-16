@@ -1,7 +1,9 @@
-use crate::commands::Command;
-use crate::reply::{Reply, ReplyCode};
-use crate::server::error::FTPErrorKind;
-use crate::server::{Event, InternalMsg};
+use crate::server::{
+    commands::Command,
+    reply::{Reply, ReplyCode},
+    Event, FTPErrorKind, InternalMsg,
+};
+
 use lazy_static::*;
 use prometheus::{__register_counter_vec, opts, register_int_counter, register_int_counter_vec, IntCounter, IntCounterVec, __register_counter};
 

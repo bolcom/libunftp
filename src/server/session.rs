@@ -7,45 +7,43 @@ use futures::Sink;
 use log::warn;
 use tokio::net::TcpStream;
 
-use crate::commands::Command;
-use crate::server::chancomms::DataCommand;
-use crate::server::chancomms::InternalMsg;
-use crate::server::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
-use crate::storage;
-use crate::storage::ErrorSemantics;
+use super::chancomms::{DataCommand, InternalMsg};
+use super::commands::Command;
+use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
+use crate::storage::{self, ErrorSemantics};
 
 const DATA_CHANNEL_ID: u8 = 1;
 
 #[derive(PartialEq)]
-pub(super) enum SessionState {
+pub enum SessionState {
     New,
     WaitPass,
     WaitCmd,
 }
 
 // This is where we keep the state for a ftp session.
-pub(super) struct Session<S>
+pub struct Session<S>
 where
     S: storage::StorageBackend,
     <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
     <S as storage::StorageBackend>::Metadata: storage::Metadata,
     <S as storage::StorageBackend>::Error: Send,
 {
-    pub(super) username: Option<String>,
-    pub(super) storage: Arc<S>,
-    pub(super) data_cmd_tx: Option<mpsc::Sender<Command>>,
-    pub(super) data_cmd_rx: Option<mpsc::Receiver<Command>>,
-    pub(super) data_abort_tx: Option<mpsc::Sender<()>>,
-    pub(super) data_abort_rx: Option<mpsc::Receiver<()>>,
-    pub(super) cwd: std::path::PathBuf,
-    pub(super) rename_from: Option<std::path::PathBuf>,
-    pub(super) state: SessionState,
-    pub(super) certs_file: Option<&'static str>,
-    pub(super) key_file: Option<&'static str>,
+    pub username: Option<String>,
+    pub storage: Arc<S>,
+    pub data_cmd_tx: Option<mpsc::Sender<Command>>,
+    pub data_cmd_rx: Option<mpsc::Receiver<Command>>,
+    pub data_abort_tx: Option<mpsc::Sender<()>>,
+    pub data_abort_rx: Option<mpsc::Receiver<()>>,
+    pub cwd: std::path::PathBuf,
+    pub rename_from: Option<std::path::PathBuf>,
+    pub state: SessionState,
+    pub certs_file: Option<&'static str>,
+    pub key_file: Option<&'static str>,
     // True if the command channel is in secure mode
-    pub(super) cmd_tls: bool,
+    pub cmd_tls: bool,
     // True if the data channel is in secure mode.
-    pub(super) data_tls: bool,
+    pub data_tls: bool,
 }
 
 impl<S> Session<S>

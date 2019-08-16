@@ -16,7 +16,7 @@ pub enum Event {
 
 // FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
 // use to decode FTP commands and encode their responses.
-pub(super) struct FTPCodec {
+pub struct FTPCodec {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
     // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
@@ -25,7 +25,7 @@ pub(super) struct FTPCodec {
 }
 
 impl FTPCodec {
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         FTPCodec { next_index: 0 }
     }
 }
