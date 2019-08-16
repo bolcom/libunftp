@@ -44,9 +44,7 @@ pub struct Builder {
 impl Builder {
     ///
     pub fn new() -> Builder {
-        Builder {
-            ..Default::default()
-        }
+        Builder { ..Default::default() }
     }
 
     /// specify the placeholder string in the rest of the fields that would be replaced by the username
@@ -115,15 +113,9 @@ impl RestAuthenticator {
 }
 
 impl Authenticator for RestAuthenticator {
-    fn authenticate(
-        &self,
-        _username: &str,
-        _password: &str,
-    ) -> Box<dyn Future<Item=bool, Error=()> + Send> {
-        let username_url =
-            utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        let password_url =
-            utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
+        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
 
         let username_json = encode_string_json(_username);

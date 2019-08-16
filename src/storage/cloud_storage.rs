@@ -187,32 +187,19 @@ where
     type Metadata = ObjectMetadata;
     type Error = Error;
 
-    fn stat<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
+    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
-            .path_and_query(
-                format!(
-                    "/storage/v1/b/{}/o/{}",
-                    self.bucket,
-                    path.as_ref().to_str().expect("path should be a unicode")
-                )
-                .as_str(),
-            )
+            .path_and_query(format!("/storage/v1/b/{}/o/{}", self.bucket, path.as_ref().to_str().expect("path should be a unicode")).as_str())
             .build()
             .expect("invalid uri");
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .method(Method::GET)
             .body(Body::empty())
             .expect("borked");
@@ -221,12 +208,7 @@ where
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
                 .and_then(move |body_string| {
                     serde_json::from_slice::<Item>(&body_string)
                         .map_err(|_| Error::IOError(ErrorKind::Other))
@@ -235,10 +217,7 @@ where
         )
     }
 
-    fn list<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(&self, path: P) -> Box<Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
         <Self as StorageBackend>::Metadata: Metadata,
     {
@@ -260,10 +239,7 @@ where
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .method(Method::GET)
             .body(Body::empty())
             .expect("borked");
@@ -272,9 +248,7 @@ where
             path: PathBuf::from(item.name),
             metadata: ObjectMetadata {
                 last_updated: match u64::try_from(item.updated.timestamp_millis()) {
-                    Ok(timestamp) => {
-                        SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp))
-                    }
+                    Ok(timestamp) => SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp)),
                     _ => None,
                 },
                 is_file: true,
@@ -290,12 +264,7 @@ where
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(std::io::ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(std::io::ErrorKind::Other)).concat2())
                 .and_then(|body_string| {
                     serde_json::from_slice::<ResponseBody>(&body_string)
                         .map_err(|_| Error::IOError(ErrorKind::Other))
@@ -309,14 +278,10 @@ where
         )
     }
 
-    fn get<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Box<Future<Item = Self::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = Self::File, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
-        let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET)
-            .collect::<String>();
+        let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
 
         let uri = &Uri::builder()
             .scheme(Scheme::HTTPS)
@@ -327,10 +292,7 @@ where
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .method(Method::GET)
             .body(Body::empty())
             .expect("borked");
@@ -339,21 +301,12 @@ where
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
                 .and_then(move |body| future::ok(Object::new(body.to_vec()))),
         )
     }
 
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
-        &self,
-        bytes: R,
-        path: P,
-    ) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<Future<Item = u64, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let uri = Uri::builder()
@@ -363,10 +316,7 @@ where
                 format!(
                     "/upload/storage/v1/b/{}/o?uploadType=media&name={}",
                     self.bucket,
-                    path.as_ref()
-                        .to_str()
-                        .expect("path should be a unicode")
-                        .trim_end_matches('/')
+                    path.as_ref().to_str().expect("path should be a unicode").trim_end_matches('/')
                 )
                 .as_str(),
             )
@@ -375,27 +325,17 @@ where
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
-            .body(Body::wrap_stream(
-                FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze()),
-            ))
+            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
             .expect("borked");
 
         Box::new(
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
                 .and_then(move |body_string| {
                     serde_json::from_slice::<Item>(&body_string)
                         .map_err(|_| Error::IOError(ErrorKind::Other))
@@ -408,8 +348,7 @@ where
     fn del<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
-        let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET)
-            .collect::<String>();
+        let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
 
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
@@ -420,10 +359,7 @@ where
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .method(Method::DELETE)
             .body(Body::empty())
             .expect("borked");
@@ -432,12 +368,7 @@ where
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
                 .map(|_body_string| {}),
         )
     }
@@ -452,10 +383,7 @@ where
                 format!(
                     "/upload/storage/v1/b/{}/o?uploadType=media&name={}/",
                     self.bucket,
-                    path.as_ref()
-                        .to_str()
-                        .expect("path should be a unicode")
-                        .trim_end_matches('/')
+                    path.as_ref().to_str().expect("path should be a unicode").trim_end_matches('/')
                 )
                 .as_str(),
             )
@@ -464,10 +392,7 @@ where
 
         let request = Request::builder()
             .uri(uri)
-            .header(
-                header::AUTHORIZATION,
-                format!("{} {}", token.token_type, token.access_token),
-            )
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .header(header::CONTENT_LENGTH, "0")
             .method(Method::POST)
@@ -478,21 +403,12 @@ where
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| {
-                    response
-                        .into_body()
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .concat2()
-                })
+                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
                 .map(|_body_string| {}),
         )
     }
 
-    fn rename<P: AsRef<Path>>(
-        &self,
-        _from: P,
-        _to: P,
-    ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+    fn rename<P: AsRef<Path>>(&self, _from: P, _to: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }

@@ -678,10 +678,7 @@ where
                             ensure_authenticated!();
                             let mut session = session.lock()?;
                             session.rename_from = Some(session.cwd.join(file));
-                            Ok(Reply::new(
-                                ReplyCode::FileActionPending,
-                                "Tell me, what would you like the new name to be?",
-                            ))
+                            Ok(Reply::new(ReplyCode::FileActionPending, "Tell me, what would you like the new name to be?"))
                         }
                         Command::Rnto { file } => {
                             ensure_authenticated!();
@@ -690,10 +687,7 @@ where
                             match session.rename_from.take() {
                                 Some(from) => {
                                     spawn!(storage.rename(from, session.cwd.join(file)));
-                                    Ok(Reply::new(
-                                        ReplyCode::FileActionOkay,
-                                        "sure, it shall be known",
-                                    ))
+                                    Ok(Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
                                 }
                                 None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
                             }
