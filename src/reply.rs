@@ -5,7 +5,7 @@ pub enum Reply {
     MultiLine { code: ReplyCode, lines: Vec<String> },
 }
 
-/// The reply codes accoding to RFC 959.
+/// The reply codes according to RFC 959.
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 #[allow(dead_code)]
@@ -60,6 +60,8 @@ pub enum ReplyCode {
     PageTypeUnknown = 551,
     ExceededStorageAllocation = 552,
     BadFileName = 553,
+
+    Resp533 = 533,
 }
 
 impl Reply {

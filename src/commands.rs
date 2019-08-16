@@ -31,6 +31,26 @@ pub enum ModeParam {
     Compressed,
 }
 
+// The parameter that can be given to the `AUTH` command.
+#[derive(Debug, PartialEq, Clone)]
+pub enum AuthParam {
+    Ssl,
+    Tls,
+}
+
+// The parameter that can be given to the `PROT` command.
+#[derive(Debug, PartialEq, Clone)]
+pub enum ProtParam {
+    // 'C' - Clear - neither Integrity nor Privacy
+    Clear,
+    // 'S' - Safe - Integrity without Privacy
+    Safe,
+    // 'E' - Confidential - Privacy without Integrity
+    Confidential,
+    // 'P' - Private - Integrity and Privacy
+    Private,
+}
+
 /// The parameter that can be given to the `OPTS` command, specifying the option the client wants
 /// to set.
 #[derive(Debug, PartialEq, Clone)]
@@ -134,6 +154,10 @@ pub enum Command {
         /// The (regular) file to delete.
         path: String,
     },
+    Rmd {
+        /// The (regular) directory to delete.
+        path: String,
+    },
     /// The `QUIT` command
     Quit,
     /// The `MKD` command
@@ -159,6 +183,31 @@ pub enum Command {
     Rnto {
         /// The filename to rename to
         file: std::path::PathBuf,
+    },
+    /// The `AUTH` command used to support TLS
+    /// A client requests TLS with the AUTH command and then decides if it
+    /// wishes to secure the data connections by use of the PBSZ and PROT
+    /// commands.
+    Auth {
+        protocol: AuthParam,
+    },
+    // The `Clear Command Channel` command
+    CCC,
+    // The `Clear Data Channel` command
+    CDC,
+    // Protection Buffer Size
+    // To protect the data channel as well, the PBSZ command, followed by the PROT command
+    // sequence, MUST be used. The PBSZ (protection buffer size) command, as detailed
+    // in [RFC-2228], is compulsory prior to any PROT command.
+    //
+    // For FTP-TLS, which appears to the FTP application as a streaming protection mechanism, this
+    // is not required. Thus, the PBSZ command MUST still be issued, but must have a parameter
+    // of '0' to indicate that no buffering is taking place and the data connection should
+    // not be encapsulated.
+    PBSZ {},
+    // Data Channel Protection Level
+    PROT {
+        param: ProtParam,
     },
 }
 
@@ -351,6 +400,15 @@ impl Command {
                 let path = String::from_utf8_lossy(&path).to_string();
                 Command::Dele { path }
             }
+            b"RMD" | b"rmd" => {
+                let path = parse_to_eol(cmd_params)?;
+                if path.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+
+                let path = String::from_utf8_lossy(&path).to_string();
+                Command::Rmd { path }
+            }
             b"QUIT" | b"quit" => {
                 let params = parse_to_eol(cmd_params)?;
                 if !params.is_empty() {
@@ -415,6 +473,77 @@ impl Command {
 
                 let file = file.into();
                 Command::Rnto { file }
+            }
+            b"AUTH" | b"auth" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.len() > 3 {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+                match std::str::from_utf8(&params)
+                    .context(ParseErrorKind::InvalidUTF8)?
+                    .to_string()
+                    .to_uppercase()
+                    .as_str()
+                {
+                    "TLS" => Command::Auth {
+                        protocol: AuthParam::Tls,
+                    },
+                    "SSL" => Command::Auth {
+                        protocol: AuthParam::Ssl,
+                    },
+                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                }
+            }
+            b"PBSZ" | b"pbsz" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+
+                let size = String::from_utf8_lossy(&params).to_string();
+                if size != "0" {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+
+                Command::PBSZ {}
+            }
+            b"PROT" | b"prot" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+                if params.len() > 1 {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+                match params.first() {
+                    Some(b'C') => Command::PROT {
+                        param: ProtParam::Clear,
+                    },
+                    Some(b'S') => Command::PROT {
+                        param: ProtParam::Safe,
+                    },
+                    Some(b'E') => Command::PROT {
+                        param: ProtParam::Confidential,
+                    },
+                    Some(b'P') => Command::PROT {
+                        param: ProtParam::Private,
+                    },
+                    _ => return Err(ParseErrorKind::InvalidCommand)?,
+                }
+            }
+            b"CCC" | b"ccc" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+                Command::CCC
+            }
+            b"CDC" | b"cdc" => {
+                let params = parse_to_eol(cmd_params)?;
+                if !params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand)?;
+                }
+                Command::CDC
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {
@@ -994,6 +1123,25 @@ mod tests {
     }
 
     #[test]
+    fn parse_rmd() {
+        let input = "RMD\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Err(ParseError {
+                inner: Context::new(ParseErrorKind::InvalidCommand)
+            })
+        );
+
+        let input = "RMD some_directory\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Rmd {
+                path: "some_directory".into()
+            })
+        );
+    }
+
+    #[test]
     fn parse_quit() {
         let input = "QUIT\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Quit));
@@ -1135,4 +1283,24 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn parse_auth() {
+        let input = "AUTH xx\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Err(ParseError {
+                inner: Context::new(ParseErrorKind::InvalidCommand)
+            })
+        );
+
+        let input = "AUTH tls\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Auth {
+                protocol: AuthParam::Tls,
+            })
+        );
+    }
+
 }
