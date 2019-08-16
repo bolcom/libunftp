@@ -5,7 +5,9 @@ authors = [
     "Koen Wilde <koen@chillheid.nl>",
     "Hannes de Jager <hdejager@bol.com>",
     "Steven Meunier <smeunier@bol.com",
-    "Agoston Horvath <ahorvath@bol.com>"
+    "Agoston Horvath <ahorvath@bol.com>",
+    "David Kosztka <dkosztka@bol.com>",
+    "Maarten Dirkse <mdirkse@bol.com>"
    ]
 description = "Modern, safe and extensible FTP server library for Rust"
 documentation = "https://docs.rs/firetrap/"
