@@ -38,9 +38,10 @@ use uuid::Uuid;
 use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
-use crate::auth;
+use crate::auth::{AnonymousAuthenticator, AnonymousUser, Authenticator};
 use crate::metrics;
 use crate::storage;
+use crate::storage::filesystem::Filesystem;
 use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
@@ -87,21 +88,19 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-pub struct Server<S>
+pub struct Server<S, U: Send + Sync + 'static>
 where
-    S: storage::StorageBackend,
+    S: storage::StorageBackend<U>,
 {
     storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
-    // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
-    authenticator: Arc<dyn auth::Authenticator + Send + Sync>,
+    authenticator: &'static (Authenticator<U> + Send + Sync),
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
     with_metrics: bool,
 }
-
-impl Server<storage::filesystem::Filesystem> {
+impl Server<Filesystem, AnonymousUser> {
     /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example
@@ -116,10 +115,10 @@ impl Server<storage::filesystem::Filesystem> {
         let server = Server {
             storage: Box::new(move || {
                 let p = &p.clone();
-                storage::filesystem::Filesystem::new(p)
+                Filesystem::new(p)
             }),
             greeting: DEFAULT_GREETING,
-            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
+            authenticator: &AnonymousAuthenticator {},
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
@@ -129,23 +128,55 @@ impl Server<storage::filesystem::Filesystem> {
     }
 }
 
-impl<S> Server<S>
+impl<S, U: Send + Sync + 'static> Server<S, U>
 where
-    S: 'static + storage::StorageBackend + Sync + Send,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Self {
+    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Server<S, AnonymousUser>
+    where
+        S: 'static + storage::StorageBackend<AnonymousUser> + Sync + Send,
+        <S as storage::StorageBackend<AnonymousUser>>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend<AnonymousUser>>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend<AnonymousUser>>::Error: Send,
+    {
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
-            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
+            authenticator: &AnonymousAuthenticator {},
+            passive_addrs: Arc::new(vec![]),
+            certs_file: Option::None,
+            key_file: Option::None,
+            with_metrics: false,
+        };
+        server.passive_ports(49152..65535)
+    }
+
+    /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
+    /// set to defaults.
+    ///
+    /// [`Server`]: struct.Server.html
+    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
+    pub fn with_authenticator<A>(s: Box<Fn() -> S + Send>, a: &'static A) -> Server<S, U>
+    where
+        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        A: Authenticator<U> + Send + Sync,
+        // U: 'static + auth::Authenticator<U> + Send + Sync,
+        <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend<U>>::Error: Send,
+    {
+        let server = Server {
+            storage: s,
+            greeting: DEFAULT_GREETING,
+            authenticator: a,
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
@@ -231,25 +262,6 @@ where
     /// ```
     pub fn with_metrics(mut self) -> Self {
         self.with_metrics = true;
-        self
-    }
-
-    /// Set the [`Authenticator`] that will be used for authentication.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
-    /// use std::sync::Arc;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp")
-    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
-    /// ```
-    ///
-    /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator + Send + Sync>) -> Self {
-        self.authenticator = authenticator;
         self
     }
 
@@ -352,19 +364,24 @@ where
                             }
                         }
                         Command::Pass { password } => {
-                            let session = session.lock()?;
-                            match session.state {
+                            let session3 = Arc::clone(&session);
+                            let session2 = session.lock()?;
+                            match session2.state {
                                 SessionState::WaitPass => {
                                     let pass = std::str::from_utf8(&password)?;
-                                    let user = session.username.clone().unwrap();
+                                    let user = session2.username.clone().unwrap();
                                     let tx = tx.clone();
 
                                     tokio::spawn(
                                         authenticator
                                             .authenticate(&user, pass)
-                                            .then(|x| {
-                                                match x {
-                                                    Ok(true) => tx.send(InternalMsg::AuthSuccess),
+                                            .then(move |user| {
+                                                match user {
+                                                    Ok(user) => {
+                                                        let mut session = session3.lock().unwrap();
+                                                        session.user = Arc::new(Some(user));
+                                                        tx.send(InternalMsg::AuthSuccess)
+                                                    }
                                                     _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
                                                 }
                                             })
@@ -452,7 +469,8 @@ where
                                             error!("session lock() result: {}", res);
                                             panic!()
                                         });
-                                        session2.process_data(socket, session.clone(), tx);
+                                        let user = session2.user.clone();
+                                        session2.process_data(user, socket, session.clone(), tx);
                                         Ok(())
                                     }),
                             ));
@@ -565,7 +583,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .del(path)
+                                    .del(&session.user, path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
                                     .and_then(|_| {
                                         tx_success
@@ -592,7 +610,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .rmd(path)
+                                    .rmd(&session.user, path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
                                     .and_then(|_| {
                                         tx_success
@@ -625,7 +643,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .mkd(&path)
+                                    .mkd(&session.user, &path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
                                     .and_then(|_| {
                                         tx_success
@@ -689,7 +707,7 @@ where
                             let storage = Arc::clone(&session.storage);
                             match session.rename_from.take() {
                                 Some(from) => {
-                                    spawn!(storage.rename(from, session.cwd.join(file)));
+                                    spawn!(storage.rename(&session.user, from, session.cwd.join(file)));
                                     Ok(Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
                                 }
                                 None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),

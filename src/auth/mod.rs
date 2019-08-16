@@ -12,19 +12,21 @@
 ///
 /// struct RandomAuthenticator;
 ///
-/// impl Authenticator for RandomAuthenticator {
-///     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=bool, Error=()> + Send> {
-///         Box::new(futures::future::ok(rand::random()))
+/// impl Authenticator<RandomUser> for RandomAuthenticator {
+///     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=RandomUser, Error=()> + Send> {
+///         Box::new(futures::future::ok(RandomUser{}))
 ///     }
 /// }
+///
+/// struct RandomUser;
 /// ```
 /// [`Server`]: ../server/struct.Server.html
 use futures::Future;
 
 /// Async authenticator interface (error reporting not supported yet)
-pub trait Authenticator {
+pub trait Authenticator<U> {
     /// Authenticate the given user with the given password.
-    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send>;
+    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
 }
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
@@ -45,16 +47,20 @@ pub mod rest;
 /// # Example
 ///
 /// ```rust
-/// use libunftp::auth::{Authenticator, AnonymousAuthenticator};
+/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, AnonymousUser};
 /// use futures::future::Future;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(my_auth.authenticate("Finn", "I ❤️ PB").wait().unwrap(), true);
+/// assert_eq!(my_auth.authenticate("Finn", "I ❤️ PB").wait().unwrap(), AnonymousUser{});
 /// ```
 pub struct AnonymousAuthenticator;
 
-impl Authenticator for AnonymousAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
-        Box::new(futures::future::ok(true))
+impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
+        Box::new(futures::future::ok(AnonymousUser {}))
     }
 }
+
+/// AnonymousUser
+#[derive(Debug, PartialEq)]
+pub struct AnonymousUser;

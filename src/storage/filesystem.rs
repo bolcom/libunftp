@@ -7,7 +7,9 @@ use log::debug;
 
 use crate::storage::{Error, Fileinfo, Metadata, Result, StorageBackend};
 
-/// StorageBackend that uses a local filesystem, like a traditional FTP server.
+/// Filesystem contains the PathBuf.
+///
+/// [`Filesystem`]: ./trait.Filesystem.html
 pub struct Filesystem {
     root: PathBuf,
 }
@@ -57,12 +59,12 @@ impl Filesystem {
     }
 }
 
-impl StorageBackend for Filesystem {
+impl<U: Send> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
     type Error = Error;
 
-    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
+    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(err) => return Box::new(future::err(err)),
@@ -71,9 +73,13 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::symlink_metadata(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn list<P: AsRef<Path>>(&self, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata,
+        <Self as StorageBackend<U>>::Metadata: Metadata,
     {
         // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
@@ -98,7 +104,7 @@ impl StorageBackend for Filesystem {
         Box::new(fut.map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn get<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -110,7 +116,12 @@ impl StorageBackend for Filesystem {
         }))
     }
 
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
+        &self,
+        _user: &Option<U>,
+        bytes: R,
+        path: P,
+    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -130,7 +141,7 @@ impl StorageBackend for Filesystem {
         Box::new(fut)
     }
 
-    fn del<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -138,7 +149,7 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::remove_file(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -146,7 +157,7 @@ impl StorageBackend for Filesystem {
         Box::new(tokio::fs::remove_dir(full_path).map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -158,7 +169,7 @@ impl StorageBackend for Filesystem {
         }))
     }
 
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let from = match self.full_path(from) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
@@ -219,6 +230,7 @@ impl Metadata for std::fs::Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
     use std::fs::File;
     use std::io::prelude::*;
@@ -239,7 +251,7 @@ mod tests {
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         let filename = path.file_name().unwrap();
-        let my_meta = rt.block_on(fs.stat(filename)).unwrap();
+        let my_meta = rt.block_on(fs.stat(&Some(AnonymousUser {}), filename)).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
@@ -263,7 +275,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list("/").collect()).unwrap();
+        let my_list = rt.block_on(fs.list(&Some(AnonymousUser {}), "/").collect()).unwrap();
 
         assert_eq!(my_list.len(), 1);
 
@@ -289,7 +301,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let my_list = rt.block_on(fs.list_fmt("/")).unwrap();
+        let my_list = rt.block_on(fs.list_fmt(&Some(AnonymousUser {}), "/")).unwrap();
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
 
@@ -312,7 +324,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut my_file = rt.block_on(fs.get(filename)).unwrap();
+        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(future::lazy(move || {
             tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
@@ -338,7 +350,8 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(orig_content.as_ref(), "greeting.txt")).expect("Failed to `put` file");
+        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt"))
+            .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
         let mut f = File::open(root.join("greeting.txt")).unwrap();
@@ -399,7 +412,7 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.mkd(new_dir_name)).expect("Failed to mkd");
+        rt.block_on(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -418,7 +431,8 @@ mod tests {
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        rt.block_on(fs.rename(&old_filename, &new_filename)).expect("Failed to rename");
+        rt.block_on(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename))
+            .expect("Failed to rename");
 
         let new_full_path = root.join(new_filename);
         assert!(std::fs::metadata(new_full_path).expect("new filename not found").is_file());

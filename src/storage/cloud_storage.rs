@@ -26,8 +26,6 @@ use tokio::{
 
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
-use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
-
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
     items: Option<Vec<Item>>,
