@@ -7,7 +7,7 @@ authors = [
     "Hannes de Jager <hdejager@bol.com>",
     "Koen Wilde <koen@chillheid.nl>",
     "Maarten Dirkse <mdirkse@bol.com>",
-    "Steven Meunier <smeunier@bol.com"
+    "Steven Meunier <smeunier@bol.com>"
    ]
 description = "Safe, fast and extensible FTP server library for Rust."
 documentation = "https://docs.rs/libunftp/"
