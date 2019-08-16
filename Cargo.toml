@@ -42,7 +42,7 @@ prometheus = "0.4"
 uuid = { version = "0.7", features = ["v4"] }
 
 hyper-tls = "0.3.2"
-sync_oauth2 = {path = "./examples/sync_oauth2", optional = true}
+#sync_oauth2 = {path = "./examples/sync_oauth2", version = "0.1.0", optional = true}
 mime = {version = "0.3.13", optional = true}
 
 [dev-dependencies]
@@ -54,7 +54,7 @@ rand = "0.6"
 
 [features]
 pam = ["pam-auth"]
-oauth2 = ["sync_oauth2"]
+#oauth2 = ["sync_oauth2"]
 cloud_storage = ["mime", "url"]
 rest = ["hyper", "url", "http", "serde", "serde_json"]
 
