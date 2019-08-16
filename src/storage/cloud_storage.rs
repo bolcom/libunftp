@@ -15,7 +15,7 @@ use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
     convert::TryFrom,
-    io::Read,
+    io::{ErrorKind, Read},
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -162,7 +162,7 @@ impl Metadata for ObjectMetadata {
     fn modified(&self) -> Result<SystemTime, Error> {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
-            None => Err(Error::IOError),
+            None => Err(Error::IOError(ErrorKind::Other)),
         }
     }
 
@@ -220,11 +220,16 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
+                        .concat2()
+                })
                 .and_then(move |body_string| {
                     serde_json::from_slice::<Item>(&body_string)
-                        .map_err(|_| Error::IOError)
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
                         .map(|item| item_to_metadata(item))
                 }),
         )
@@ -284,11 +289,16 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(std::io::ErrorKind::Other))
+                        .concat2()
+                })
                 .and_then(|body_string| {
                     serde_json::from_slice::<ResponseBody>(&body_string)
-                        .map_err(|_| Error::IOError)
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
                         .map(|response_body| {
                             //TODO: map prefixes
                             stream::iter_ok(response_body.items.map_or(vec![], |items| items))
@@ -328,8 +338,13 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
+                        .concat2()
+                })
                 .and_then(move |body| future::ok(Object::new(body.to_vec()))),
         )
     }
@@ -374,11 +389,16 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
+                        .concat2()
+                })
                 .and_then(move |body_string| {
                     serde_json::from_slice::<Item>(&body_string)
-                        .map_err(|_| Error::IOError)
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
                         .map(|item| item_to_metadata(item))
                 })
                 .and_then(|meta_data| future::ok(meta_data.len())),
@@ -411,8 +431,13 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
+                        .concat2()
+                })
                 .map(|_body_string| {}),
         )
     }
@@ -452,8 +477,13 @@ where
         Box::new(
             self.client
                 .request(request)
-                .map_err(|_| Error::IOError)
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError).concat2())
+                .map_err(|_| Error::IOError(ErrorKind::Other))
+                .and_then(|response| {
+                    response
+                        .into_body()
+                        .map_err(|_| Error::IOError(ErrorKind::Other))
+                        .concat2()
+                })
                 .map(|_body_string| {}),
         )
     }
@@ -463,6 +493,11 @@ where
         _from: P,
         _to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send> {
+        //TODO: implement this
+        unimplemented!();
+    }
+
+    fn rmd<P: AsRef<Path>>(&self, _path: P) -> Box<Future<Item = (), Error = Self::Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }

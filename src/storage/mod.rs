@@ -5,20 +5,41 @@ use std::{fmt, result};
 use chrono::prelude::*;
 use futures::{Future, Stream};
 
+/// `Error` variants that can be produced by the [`StorageBackend`] implementations must implement
+/// this ErrorSemantics trait.
+///
+/// [`StorageBackend`]: ./trait.StorageBackend.html
+pub trait ErrorSemantics {
+    /// If there was an `std::io::Error` this should return its kind otherwise None.
+    fn io_error_kind(&self) -> Option<std::io::ErrorKind>;
+}
+
 #[derive(Debug, PartialEq)]
 /// The `Error` variants that can be produced by the [`StorageBackend`] implementations.
 ///
 /// [`StorageBackend`]: ./trait.StorageBackend.html
 pub enum Error {
     /// An IO Error
-    IOError,
+    IOError(std::io::ErrorKind),
     /// Path error
     PathError,
+    /// Metadata error
+    MetadataError,
 }
 
 impl Error {
     fn description_str(&self) -> &'static str {
         ""
+    }
+}
+
+impl ErrorSemantics for Error {
+    fn io_error_kind(&self) -> Option<std::io::ErrorKind> {
+        if let Error::IOError(kind) = self {
+            Some(*kind)
+        } else {
+            None
+        }
     }
 }
 
@@ -35,8 +56,8 @@ impl std::error::Error for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(_err: std::io::Error) -> Error {
-        Error::IOError
+    fn from(err: std::io::Error) -> Error {
+        Error::IOError(err.kind())
     }
 }
 
@@ -136,9 +157,9 @@ pub trait StorageBackend {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
-    type Metadata;
+    type Metadata: Metadata;
     /// The concrete type of the error returned by this StorageBackend.
-    type Error;
+    type Error: ErrorSemantics;
 
     /// Returns the `Metadata` for the given file.
     ///
@@ -265,6 +286,9 @@ pub trait StorageBackend {
         from: P,
         to: P,
     ) -> Box<Future<Item = (), Error = Self::Error> + Send>;
+
+    /// Delete the given directory.
+    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<Future<Item = (), Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
