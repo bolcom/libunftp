@@ -7,7 +7,7 @@
 ///
 /// ```rust
 /// use rand::prelude::*;
-/// use firetrap::auth::Authenticator;
+/// use libunftp::auth::Authenticator;
 /// use futures::Future;
 ///
 /// struct RandomAuthenticator;
@@ -49,7 +49,7 @@ pub mod rest;
 /// # Example
 ///
 /// ```rust
-/// use firetrap::auth::{Authenticator, AnonymousAuthenticator};
+/// use libunftp::auth::{Authenticator, AnonymousAuthenticator};
 /// use futures::future::Future;
 ///
 /// let my_auth = AnonymousAuthenticator{};

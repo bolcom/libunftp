@@ -1,4 +1,4 @@
-/// Contains the `FTPError` struct that that defines the firetrap custom error type.
+/// Contains the `FTPError` struct that that defines the libunftp custom error type.
 pub mod error;
 
 // Contains code pertaining to the FTP *control* channel
@@ -40,7 +40,7 @@ use crate::server::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::storage;
 use session::{Session, SessionState};
 
-const DEFAULT_GREETING: &str = "Welcome to the firetrap FTP server";
+const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
 
 impl From<commands::ParseError> for FTPError {
@@ -73,7 +73,7 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 /// # Example
 ///
 /// ```rust
-/// use firetrap::Server;
+/// use libunftp::Server;
 /// # use std::thread;
 ///
 /// let server = Server::with_root("/srv/ftp");
@@ -104,7 +104,7 @@ impl Server<storage::filesystem::Filesystem> {
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     ///
     /// let server = Server::with_root("/srv/ftp");
     /// ```
@@ -156,7 +156,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_root("/tmp").greeting("Welcome to my FTP Server");
@@ -175,7 +175,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_root("/tmp").passive_ports(49152..65535);
@@ -202,7 +202,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     ///
     /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
     /// ```
@@ -217,7 +217,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_root("/tmp").with_metrics();
@@ -236,7 +236,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::{auth, auth::AnonymousAuthenticator, Server};
+    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
@@ -255,7 +255,7 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use firetrap::Server;
+    /// use libunftp::Server;
     /// # use std::thread;
     ///
     /// let mut server = Server::with_root("/srv/ftp");

@@ -2,8 +2,8 @@
 
 #[macro_use]
 extern crate libfuzzer_sys;
-extern crate firetrap;
+extern crate libunftp;
 
 fuzz_target!(|data: &[u8]| {
-    let _ = firetrap::commands::Command::parse(data);
+    let _ = libunftp::commands::Command::parse(data);
 });

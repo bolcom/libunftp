@@ -5,7 +5,7 @@ use std::{thread, time};
 macro_rules! start_server {
     ( $addr:expr, $path:expr ) => {
         thread::spawn(move || {
-            let server = firetrap::Server::with_root($path);
+            let server = libunftp::Server::with_root($path);
             server.listen($addr.clone());
         });
 

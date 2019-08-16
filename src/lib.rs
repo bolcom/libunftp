@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 //! FTP server library for Rust
 //!
-//! Firetrap helps you create modern, safe and extensible FTP servers in Rust.
+//! The libunftp library is a safe, fast and extensible FTP server implementation in Rust.
 //!
 //! Because of its plugable authentication and storage backends (e.g. local filesystem, Google
 //! Buckets) it's more flexible than traditional FTP servers and a perfect match for the cloud.
@@ -11,10 +11,10 @@
 //! # Quick Start
 //!
 //! ```rust
-//! extern crate firetrap;
+//! extern crate libunftp;
 //!
 //! fn main() {
-//!  let server = firetrap::Server::with_root(std::env::temp_dir());
+//!  let server = libunftp::Server::with_root(std::env::temp_dir());
 //!  # if false { // We don't want to actually start the server in an example.
 //!  server.listen("127.0.0.1:2121");
 //!  # }

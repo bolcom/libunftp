@@ -1,18 +1,18 @@
 [package]
-name = "firetrap"
+name = "libunftp"
 version = "0.1.0"
 authors = [
-    "Koen Wilde <koen@chillheid.nl>",
-    "Hannes de Jager <hdejager@bol.com>",
-    "Steven Meunier <smeunier@bol.com",
     "Agoston Horvath <ahorvath@bol.com>",
     "David Kosztka <dkosztka@bol.com>",
-    "Maarten Dirkse <mdirkse@bol.com>"
+    "Hannes de Jager <hdejager@bol.com>",
+    "Koen Wilde <koen@chillheid.nl>",
+    "Maarten Dirkse <mdirkse@bol.com>",
+    "Steven Meunier <smeunier@bol.com"
    ]
-description = "Modern, safe and extensible FTP server library for Rust"
-documentation = "https://docs.rs/firetrap/"
-repository = "https://github.com/koenw/firetrap"
-license = "MIT OR Apache-2.0"
+description = "Safe, fast and extensible FTP server library for Rust."
+documentation = "https://docs.rs/libunftp/"
+repository = "https://github.com/bolcom/libunftp"
+license = "Apache-2.0"
 readme = "README.md"
 keywords = ["ftp"]
 categories = ["network-programming"]

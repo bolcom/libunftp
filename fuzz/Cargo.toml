@@ -1,5 +1,5 @@
 [package]
-name = "firetrap-fuzz"
+name = "libunftp-fuzz"
 version = "0.0.1"
 authors = ["Automatically generated"]
 publish = false
@@ -7,7 +7,7 @@ publish = false
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies.firetrap]
+[dependencies.libunftp]
 path = ".."
 
 [dependencies.libfuzzer-sys]

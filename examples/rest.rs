@@ -1,4 +1,4 @@
-use firetrap::auth::rest;
+use libunftp::auth::rest;
 use log::*;
 use std::env;
 
@@ -21,7 +21,7 @@ pub fn main() {
 
     let addr = "127.0.0.1:8080";
     let server =
-        firetrap::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
+        libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
     server.listen(addr);
