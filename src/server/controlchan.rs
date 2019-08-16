@@ -62,9 +62,9 @@ impl Encoder for FTPCodec {
             }
             Reply::CodeAndMsg { code, msg } => {
                 if msg.is_empty() {
-                    write!(buffer, "{}\r\n", code as u32)?;
+                    writeln!(buffer, "{}\r", code as u32)?;
                 } else {
-                    write!(buffer, "{} {}\r\n", code as u32, msg)?;
+                    writeln!(buffer, "{} {}\r", code as u32, msg)?;
                 }
             }
             Reply::MultiLine { code, mut lines } => {

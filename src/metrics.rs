@@ -219,14 +219,14 @@ fn add_command_metric(cmd: &Command) {
 
 /// Add a metric for a reply.
 pub fn add_reply_metric(reply: &Reply) {
-    match reply {
+    match *reply {
         Reply::None => {}
-        Reply::CodeAndMsg { code, msg: _ } => add_replycode_metric(&code),
-        Reply::MultiLine { code, lines: _ } => add_replycode_metric(&code),
+        Reply::CodeAndMsg { code, .. } => add_replycode_metric(code),
+        Reply::MultiLine { code, .. } => add_replycode_metric(code),
     }
 }
 
-fn add_replycode_metric(code: &ReplyCode) {
-    let range = format!("{}xx", *code as u32 / 100 % 10);
+fn add_replycode_metric(code: ReplyCode) {
+    let range = format!("{}xx", code as u32 / 100 % 10);
     FTP_REPLY_TOTAL.with_label_values(&[&range]).inc();
 }
