@@ -211,10 +211,10 @@ pub struct Server<S>
 where
     S: storage::StorageBackend,
 {
-    storage: Box<(Fn() -> S) + Send>,
+    storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
-    authenticator: Arc<auth::Authenticator + Send + Sync>,
+    authenticator: Arc<dyn auth::Authenticator + Send + Sync>,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
@@ -261,7 +261,7 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<Fn() -> S + Send>) -> Self {
+    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Self {
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
@@ -368,7 +368,7 @@ where
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<auth::Authenticator + Send + Sync>) -> Self {
+    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator + Send + Sync>) -> Self {
         self.authenticator = authenticator;
         self
     }

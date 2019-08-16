@@ -28,7 +28,7 @@ pub trait Authenticator {
         &self,
         username: &str,
         password: &str,
-    ) -> Box<Future<Item = bool, Error = ()> + Send>;
+    ) -> Box<dyn Future<Item = bool, Error = ()> + Send>;
 }
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
@@ -62,7 +62,7 @@ impl Authenticator for AnonymousAuthenticator {
         &self,
         _username: &str,
         _password: &str,
-    ) -> Box<Future<Item = bool, Error = ()> + Send> {
+    ) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
         Box::new(futures::future::ok(true))
     }
 }

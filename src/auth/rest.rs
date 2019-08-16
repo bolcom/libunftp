@@ -120,7 +120,7 @@ impl Authenticator for RestAuthenticator {
         &self,
         _username: &str,
         _password: &str,
-    ) -> Box<Future<Item = bool, Error = ()> + Send> {
+    ) -> Box<dyn Future<Item=bool, Error=()> + Send> {
         let username_url =
             utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let password_url =
@@ -158,15 +158,14 @@ impl Authenticator for RestAuthenticator {
                     let parsed = response
                         .pointer(&selector)
                         .map(|x| {
-                            //                        println!("pointer: {:?}", x);
+                            debug!("pointer: {:?}", x);
                             format!("{:?}", x)
                         })
                         .unwrap_or("null".to_string());
                     Result::Ok(regex.is_match(&parsed))
                 })
                 .map_err(|err| {
-                    // FIXME: log error
-                    //                println!("RestError: {:?}", err);
+                    info!("RestError: {}", err);
                     ()
                 }),
         )
@@ -183,7 +182,7 @@ fn encode_string_json(string: &str) -> String {
             '"' => res.push_str("\\\""),
             ' '...'~' => res.push(i),
             _ => {
-                // FIXME: no support for non-ASCII right now
+                error!("special character {} is not supported", i);
             }
         }
     }
