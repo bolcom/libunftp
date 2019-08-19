@@ -38,6 +38,7 @@ use uuid::Uuid;
 use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
+use crate::auth;
 use crate::auth::{AnonymousAuthenticator, AnonymousUser, Authenticator};
 use crate::metrics;
 use crate::storage;
@@ -140,12 +141,9 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Server<S, AnonymousUser>
+    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Self
     where
-        S: 'static + storage::StorageBackend<AnonymousUser> + Sync + Send,
-        <S as storage::StorageBackend<AnonymousUser>>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend<AnonymousUser>>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend<AnonymousUser>>::Error: Send,
+        auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
         let server = Server {
             storage: s,
@@ -309,7 +307,7 @@ where
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
-        let authenticator = self.authenticator.clone();
+        let authenticator = self.authenticator;
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx) = chancomms::create_internal_msg_channel();
