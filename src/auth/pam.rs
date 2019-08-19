@@ -18,7 +18,7 @@ impl PAMAuthenticator {
     }
 }
 
-impl Authenticator for PAMAuthenticator {
+impl Authenticator<AnonymousUser> for PAMAuthenticator {
     fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
         let service = self.service.clone();
         let username = _username.to_string();
@@ -45,3 +45,6 @@ impl Authenticator for PAMAuthenticator {
         )
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct AnonymousUser;

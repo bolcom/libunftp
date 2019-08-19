@@ -13,6 +13,8 @@ use hyper::{Body, Client, Request};
 use serde_json::Value;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
+use crate::auth::pam::AnonymousUser;
+
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
 /// [`Authenticator`]: ../trait.Authenticator.html
@@ -112,7 +114,7 @@ impl RestAuthenticator {
     }
 }
 
-impl Authenticator for RestAuthenticator {
+impl Authenticator<AnonymousUser> for RestAuthenticator {
     fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
         let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
