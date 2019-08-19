@@ -94,7 +94,7 @@ where
 {
     storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
-    authenticator: &'static (Authenticator<U> + Send + Sync),
+    authenticator: &'static (dyn Authenticator<U> + Send + Sync),
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
@@ -164,7 +164,7 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn with_authenticator<A>(s: Box<Fn() -> S + Send>, a: &'static A) -> Server<S, U>
+    pub fn with_authenticator<A>(s: Box<dyn Fn() -> S + Send>, a: &'static A) -> Server<S, U>
     where
         S: 'static + storage::StorageBackend<U> + Sync + Send,
         A: Authenticator<U> + Send + Sync,
