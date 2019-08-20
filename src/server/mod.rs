@@ -8,9 +8,6 @@ pub(crate) mod reply;
 // Contains code pertaining to the FTP *control* channel
 mod controlchan;
 
-// Contains code pertaining to the communication between the data and control channels.
-mod chancomms;
-
 // The session module implements per-connection session handling and currently also
 // implements the control loop for the *data* channel.
 mod session;
@@ -18,7 +15,6 @@ mod session;
 // Implements a stream that can change between TCP and TLS on the fly.
 mod stream;
 
-pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
@@ -27,9 +23,8 @@ use std::sync::{Arc, Mutex};
 
 use failure::Fail;
 use futures::prelude::*;
-use futures::sync::mpsc;
 use futures::Sink;
-use log::{error, info, warn};
+use log::{info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -47,6 +42,7 @@ use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
+const DATA_CHANNEL_ID: u8 = 1;
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
@@ -63,8 +59,8 @@ impl From<commands::ParseError> for FTPError {
     }
 }
 
-// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
-trait AsyncStream: AsyncRead + AsyncWrite + Send {}
+/// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
+pub trait AsyncStream: AsyncRead + AsyncWrite + Send {}
 
 impl AsyncStream for TcpStream {}
 
@@ -310,488 +306,11 @@ where
         let authenticator = self.authenticator;
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
-        let (tx, rx) = chancomms::create_internal_msg_channel();
-        let passive_addrs = self.passive_addrs.clone();
+        let passive_addrs = Arc::clone(&self.passive_addrs);
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
             _ => Box::new(tcp_stream),
-        };
-
-        macro_rules! respond {
-            ($closure:expr) => {{
-                ensure_authenticated!();
-                $closure()
-            }};
-        }
-
-        macro_rules! spawn {
-            ($future:expr) => {
-                tokio::spawn($future.map(|_| ()).map_err(|_| ()));
-            };
-        }
-
-        macro_rules! ensure_authenticated {
-            (  ) => {{
-                let session = session.lock()?;
-                if session.state != SessionState::WaitCmd {
-                    return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate with USER and PASS first"));
-                }
-            }};
-        }
-
-        let respond = move |event: Event| -> Result<Reply, FTPError> {
-            use self::InternalMsg::*;
-            use session::SessionState::*;
-
-            info!("Processing event {:?}", event);
-
-            match event {
-                Event::Command(cmd) => {
-                    match cmd {
-                        Command::User { username } => {
-                            let mut session = session.lock()?;
-                            match session.state {
-                                SessionState::New | SessionState::WaitPass => {
-                                    let user = std::str::from_utf8(&username)?;
-                                    session.username = Some(user.to_string());
-                                    session.state = SessionState::WaitPass;
-                                    Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
-                                }
-                                _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
-                            }
-                        }
-                        Command::Pass { password } => {
-                            let session3 = Arc::clone(&session);
-                            let session2 = session.lock()?;
-                            match session2.state {
-                                SessionState::WaitPass => {
-                                    let pass = std::str::from_utf8(&password)?;
-                                    let user = session2.username.clone().unwrap();
-                                    let tx = tx.clone();
-
-                                    tokio::spawn(
-                                        authenticator
-                                            .authenticate(&user, pass)
-                                            .then(move |user| {
-                                                match user {
-                                                    Ok(user) => {
-                                                        let mut session = session3.lock().unwrap();
-                                                        session.user = Arc::new(Some(user));
-                                                        tx.send(InternalMsg::AuthSuccess)
-                                                    }
-                                                    _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
-                                                }
-                                            })
-                                            .map(|_| ())
-                                            .map_err(|_| ()),
-                                    );
-                                    Ok(Reply::none())
-                                }
-                                New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please give me a username first")),
-                                _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate")),
-                            }
-                        }
-                        // This response is kind of like the User-Agent in http: very much mis-used to gauge
-                        // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
-                        // `UNIX Type: L8` for greatest compatibility.
-                        Command::Syst => respond!(|| Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8"))),
-                        Command::Stat { path } => {
-                            ensure_authenticated!();
-                            match path {
-                                None => Ok(Reply::new(ReplyCode::SystemStatus, "I'm just a humble FTP server")),
-                                Some(path) => {
-                                    let path = std::str::from_utf8(&path)?;
-                                    // TODO: Implement :)
-                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Stat with paths unsupported atm"))
-                                }
-                            }
-                        }
-                        Command::Acct { .. } => respond!(|| Ok(Reply::new(ReplyCode::NotLoggedIn, "I don't know accounting man"))),
-                        Command::Type => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "I'm always in binary mode, dude..."))),
-                        Command::Stru { structure } => {
-                            ensure_authenticated!();
-                            match structure {
-                                commands::StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "We're in File structure mode")),
-                                _ => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Only File structure is supported")),
-                            }
-                        }
-                        Command::Mode { mode } => respond!(|| match mode {
-                            commands::ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
-                            _ => Ok(Reply::new(
-                                ReplyCode::CommandNotImplementedForParameter,
-                                "Only Stream transfer mode is supported"
-                            )),
-                        }),
-                        Command::Help => respond!(|| Ok(Reply::new(ReplyCode::HelpMessage, "We haven't implemented a useful HELP command, sorry"))),
-                        Command::Noop => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing"))),
-                        Command::Pasv => {
-                            ensure_authenticated!();
-
-                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
-                            let addr = match listener.local_addr()? {
-                                std::net::SocketAddr::V4(addr) => addr,
-                                std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
-                            };
-                            let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
-
-                            let octets = addr.ip().octets();
-                            let port = addr.port();
-                            let p1 = port >> 8;
-                            let p2 = port - (p1 * 256);
-                            let tx = tx.clone();
-
-                            let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
-                            let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
-                            {
-                                let mut session = session.lock()?;
-                                session.data_cmd_tx = Some(cmd_tx);
-                                session.data_cmd_rx = Some(cmd_rx);
-                                session.data_abort_tx = Some(data_abort_tx);
-                                session.data_abort_rx = Some(data_abort_rx);
-                            }
-
-                            let session = session.clone();
-                            tokio::spawn(Box::new(
-                                listener
-                                    .incoming()
-                                    .take(1)
-                                    .map_err(|e| warn!("Failed to accept data socket: {:?}", e))
-                                    .for_each(move |socket| {
-                                        let tx = tx.clone();
-                                        let session2 = session.clone();
-                                        let mut session2 = session2.lock().unwrap_or_else(|res| {
-                                            // TODO: Send signal to `tx` here, so we can handle the
-                                            // error
-                                            error!("session lock() result: {}", res);
-                                            panic!()
-                                        });
-                                        let user = session2.user.clone();
-                                        session2.process_data(user, socket, session.clone(), tx);
-                                        Ok(())
-                                    }),
-                            ));
-
-                            Ok(Reply::new_with_string(
-                                ReplyCode::EnteringPassiveMode,
-                                format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
-                            ))
-                        }
-                        Command::Port => {
-                            ensure_authenticated!();
-                            Ok(Reply::new(
-                                ReplyCode::CommandNotImplemented,
-                                "ACTIVE mode is not supported - use PASSIVE instead",
-                            ))
-                        }
-                        Command::Retr { .. } => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            let tx = match session.data_cmd_tx.take() {
-                                Some(tx) => tx,
-                                None => return Err(FTPErrorKind::InternalServerError.into()),
-                            };
-                            spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::none())
-                        }
-                        Command::Stor { .. } => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            let tx = match session.data_cmd_tx.take() {
-                                Some(tx) => tx,
-                                None => {
-                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                                }
-                            };
-                            spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
-                        }
-                        Command::List { .. } => {
-                            ensure_authenticated!();
-                            // TODO: Map this error so we can give more meaningful error messages.
-                            let mut session = session.lock()?;
-                            let tx = match session.data_cmd_tx.take() {
-                                Some(tx) => tx,
-                                None => {
-                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                                }
-                            };
-                            spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
-                        }
-                        Command::Nlst { .. } => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            let tx = match session.data_cmd_tx.take() {
-                                Some(tx) => tx,
-                                None => {
-                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                                }
-                            };
-                            spawn!(tx.send(cmd.clone()));
-                            Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
-                        }
-                        Command::Feat => {
-                            let mut feat_text = vec!["Extensions supported:"];
-                            if tls_configured {
-                                feat_text.push("AUTH (Authentication/Security Mechanism)");
-                                feat_text.push("PROT (Data Channel Protection Level)");
-                                feat_text.push("PBSZ (Protection Buffer Size)");
-                            }
-                            let reply = Reply::new_multiline(ReplyCode::SystemStatus, feat_text);
-                            Ok(reply)
-                        }
-                        Command::Pwd => {
-                            ensure_authenticated!();
-                            let session = session.lock()?;
-                            // TODO: properly escape double quotes in `cwd`
-                            Ok(Reply::new_with_string(
-                                ReplyCode::DirCreated,
-                                format!("\"{}\"", session.cwd.as_path().display()),
-                            ))
-                        }
-                        Command::Cwd { path } => {
-                            // TODO: We current accept all CWD requests. Consider only allowing
-                            // this if the directory actually exists and the user has the proper
-                            // permission.
-                            respond!(|| {
-                                let mut session = session.lock()?;
-                                session.cwd.push(path);
-                                Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
-                            })
-                        }
-                        Command::Cdup => respond!(|| {
-                            let mut session = session.lock()?;
-                            session.cwd.pop();
-                            Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
-                        }),
-                        Command::Opts { option } => {
-                            ensure_authenticated!();
-                            match option {
-                                commands::Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Okay, I'm always in UTF8 mode.")),
-                            }
-                        }
-                        Command::Dele { path } => {
-                            ensure_authenticated!();
-                            let session = session.lock()?;
-                            let storage = Arc::clone(&session.storage);
-                            let path = session.cwd.join(path);
-                            let tx_success = tx.clone();
-                            let tx_fail = tx.clone();
-                            tokio::spawn(
-                                storage
-                                    .del(&session.user, path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::DelFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
-                                    .map(|_| ())
-                                    .map_err(|e| {
-                                        warn!("Failed to delete file: {}", e);
-                                    }),
-                            );
-                            Ok(Reply::none())
-                        }
-                        Command::Rmd { path } => {
-                            ensure_authenticated!();
-                            let session = session.lock()?;
-                            let storage = Arc::clone(&session.storage);
-                            let tx_success = tx.clone();
-                            let tx_fail = tx.clone();
-                            tokio::spawn(
-                                storage
-                                    .rmd(&session.user, path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::DelFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
-                                    .map(|_| ())
-                                    .map_err(|e| {
-                                        warn!("Failed to delete directory: {}", e);
-                                    }),
-                            );
-                            Ok(Reply::none())
-                        }
-                        Command::Quit => {
-                            let tx = tx.clone();
-                            spawn!(tx.send(InternalMsg::Quit));
-                            Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
-                        }
-                        Command::Mkd { path } => {
-                            ensure_authenticated!();
-                            let session = session.lock()?;
-                            let storage = Arc::clone(&session.storage);
-                            let path = session.cwd.join(path);
-                            let tx_success = tx.clone();
-                            let tx_fail = tx.clone();
-                            tokio::spawn(
-                                storage
-                                    .mkd(&session.user, &path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::MkdirSuccess(path))
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirSuccess' message"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::MkdirFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirFail' message"))
-                                    })
-                                    .map(|_| ())
-                                    .map_err(|e| {
-                                        warn!("Failed to create directory: {}", e);
-                                    }),
-                            );
-                            Ok(Reply::none())
-                        }
-                        Command::Allo { .. } => {
-                            ensure_authenticated!();
-                            // ALLO is obsolete and we'll just ignore it.
-                            Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "I don't need to allocate anything"))
-                        }
-                        Command::Abor => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            match session.data_abort_tx.take() {
-                                Some(tx) => {
-                                    spawn!(tx.send(()));
-                                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel"))
-                                }
-                                None => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Data channel already closed")),
-                            }
-                        }
-                        // TODO: Write functional test for STOU command.
-                        Command::Stou => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            let tx = match session.data_cmd_tx.take() {
-                                Some(tx) => tx,
-                                None => {
-                                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                                }
-                            };
-
-                            let uuid = Uuid::new_v4().to_string();
-                            let filename = std::path::Path::new(&uuid);
-                            let path = session.cwd.join(&filename).to_string_lossy().to_string();
-                            spawn!(tx.send(Command::Stor { path: path }));
-                            Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
-                        }
-                        Command::Rnfr { file } => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            session.rename_from = Some(session.cwd.join(file));
-                            Ok(Reply::new(ReplyCode::FileActionPending, "Tell me, what would you like the new name to be?"))
-                        }
-                        Command::Rnto { file } => {
-                            ensure_authenticated!();
-                            let mut session = session.lock()?;
-                            let storage = Arc::clone(&session.storage);
-                            match session.rename_from.take() {
-                                Some(from) => {
-                                    spawn!(storage.rename(&session.user, from, session.cwd.join(file)));
-                                    Ok(Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
-                                }
-                                None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
-                            }
-                        }
-                        Command::Auth { protocol } => match (tls_configured, protocol) {
-                            (true, AuthParam::Tls) => {
-                                let tx = tx.clone();
-                                spawn!(tx.send(InternalMsg::SecureControlChannel));
-                                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
-                            }
-                            (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
-                            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
-                        },
-                        Command::PBSZ {} => {
-                            ensure_authenticated!();
-                            Ok(Reply::new(ReplyCode::CommandOkay, "OK"))
-                        }
-                        Command::CCC {} => {
-                            ensure_authenticated!();
-                            let tx = tx.clone();
-                            let session = session.lock()?;
-                            if session.cmd_tls {
-                                spawn!(tx.send(InternalMsg::PlaintextControlChannel));
-                                Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))
-                            } else {
-                                Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
-                            }
-                        }
-                        Command::CDC {} => {
-                            ensure_authenticated!();
-                            Ok(Reply::new(ReplyCode::CommandSyntaxError, "coming soon..."))
-                        }
-                        Command::PROT { param } => {
-                            ensure_authenticated!();
-                            match (tls_configured, param) {
-                                (true, ProtParam::Clear) => {
-                                    let mut session = session.lock()?;
-                                    session.data_tls = false;
-                                    Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Switching data channel to plaintext"))
-                                }
-                                (true, ProtParam::Private) => {
-                                    let mut session = session.lock().unwrap();
-                                    session.data_tls = true;
-                                    Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Securing data channel"))
-                                }
-                                (true, _) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "PROT S/E not implemented")),
-                                (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
-                            }
-                        }
-                    }
-                }
-                Event::InternalMsg(NotFound) => Ok(Reply::new(ReplyCode::FileError, "File not found")),
-                Event::InternalMsg(PermissionDenied) => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
-                Event::InternalMsg(SendingData) => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
-                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Send you something nice")),
-                Event::InternalMsg(WriteFailed) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
-                Event::InternalMsg(ConnectionReset) => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
-                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written")),
-                Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
-                Event::InternalMsg(UnknownRetrieveError) => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
-                Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
-                Event::InternalMsg(DelSuccess) => Ok(Reply::new(ReplyCode::FileActionOkay, "File successfully removed")),
-                Event::InternalMsg(DelFail) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
-                // The InternalMsg::Quit will never be reached, because we catch it in the task before
-                // this closure is called (because we have to close the connection).
-                Event::InternalMsg(Quit) => Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!")),
-                Event::InternalMsg(SecureControlChannel) => {
-                    let mut session = session.lock()?;
-                    session.cmd_tls = true;
-                    Ok(Reply::none())
-                }
-                Event::InternalMsg(PlaintextControlChannel) => {
-                    let mut session = session.lock()?;
-                    session.cmd_tls = false;
-                    Ok(Reply::none())
-                }
-                Event::InternalMsg(MkdirSuccess(path)) => Ok(Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string())),
-                Event::InternalMsg(MkdirFail) => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
-                Event::InternalMsg(AuthSuccess) => {
-                    let mut session = session.lock()?;
-                    session.state = WaitCmd;
-                    Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
-                }
-                Event::InternalMsg(AuthFailed) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
-            }
         };
 
         let codec = controlchan::FTPCodec::new();
@@ -803,32 +322,44 @@ where
                 sink.send_all(
                     stream
                         .map(Event::Command)
-                        .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
-                        .take_while(move |event| {
+                        .map(move |event| {
+                            info!("Command received: {:?}", event);
+
                             if with_metrics {
-                                metrics::add_event_metric(event);
+                                metrics::add_event_metric(&event);
                             };
-                            // TODO: Make sure data connections are closed
-                            Ok(*event != Event::InternalMsg(InternalMsg::Quit))
+
+                            let Event::Command(cmd) = event;
+                            Self::respond(cmd, Arc::clone(&session), authenticator, tls_configured, Arc::clone(&passive_addrs))
                         })
-                        .and_then(respond)
+                        .flatten()
                         .or_else(move |e| {
+                            warn!("Failed to process command: {}", e);
+
                             if with_metrics {
                                 metrics::add_error_metric(e.kind());
                             };
-                            warn!("Failed to process command: {}", e);
+
                             let response = match e.kind() {
                                 FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
                                 FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
                                 FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
                                 _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
                             };
-                            futures::future::ok(response)
+
+                            Ok(response)
+                        })
+                        .take_while(|reply| match reply {
+                            Reply::CodeAndMsg { code: ReplyCode::__Quit__, .. } => Ok(false),
+                            _ => Ok(true),
                         })
                         .map(move |reply| {
+                            info!("Reply send: {:?}", reply);
+
                             if with_metrics {
                                 metrics::add_reply_metric(&reply);
                             }
+
                             reply
                         })
                         // Needed for type annotation, we can possible remove this once the compiler is
@@ -843,6 +374,575 @@ where
 
                 Ok(())
             });
+
         tokio::spawn(task);
+    }
+
+    fn respond(
+        cmd: Command,
+        session: Arc<Mutex<Session<S, U>>>,
+        authenticator: &'static (dyn Authenticator<U> + Send + Sync),
+        tls_configured: bool,
+        passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    ) -> impl futures::stream::Stream<Item = Reply, Error = FTPError> {
+        use futures::future::{err, lazy, ok, Either};
+
+        let authenticated: Option<Box<dyn futures::stream::Stream<Item = _, Error = _> + Send>> = match cmd {
+            Command::Stat { .. }
+            | Command::Stru { .. }
+            | Command::Noop
+            | Command::Pasv
+            | Command::Port
+            | Command::Retr { .. }
+            | Command::Stor { .. }
+            | Command::Stou
+            | Command::List { .. }
+            | Command::Nlst { .. }
+            | Command::Pwd
+            | Command::Cwd { .. }
+            | Command::Cdup
+            | Command::Opts { .. }
+            | Command::Dele { .. }
+            | Command::Rmd { .. }
+            | Command::Mkd { .. }
+            | Command::Allo { .. }
+            | Command::Abor
+            | Command::Rnfr { .. }
+            | Command::Rnto { .. }
+            | Command::PBSZ {}
+            | Command::CCC {}
+            | Command::CDC {}
+            | Command::PROT { .. } => {
+                let session = session.lock().map_err(FTPError::from);
+
+                match session {
+                    Ok(session) => {
+                        if session.state != SessionState::WaitCmd {
+                            let future = ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate with USER and PASS first"));
+
+                            Some(Box::new(future.into_stream()))
+                        } else {
+                            None
+                        }
+                    }
+                    Err(e) => {
+                        let future = err(e);
+
+                        Some(Box::new(future.into_stream()))
+                    }
+                }
+            }
+            _ => None,
+        };
+
+        if let Some(stream) = authenticated {
+            return stream;
+        }
+
+        let stream: Box<dyn futures::stream::Stream<Item = _, Error = _> + Send> = match cmd {
+            Command::User { username } => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+
+                    match &session.state {
+                        SessionState::New | SessionState::WaitPass => {
+                            let user = std::str::from_utf8(&username).unwrap();
+                            session.username = Some(user.to_string());
+                            session.state = SessionState::WaitPass;
+
+                            Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
+                        }
+                        _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Pass { password } => {
+                let session_for_logged = Arc::clone(&session);
+                let future = lazy(move || {
+                    let session = session.lock()?;
+                    let password = std::str::from_utf8(&password)?.to_owned();
+
+                    Ok((session.state.clone(), session.username.clone(), password))
+                })
+                .and_then(move |(state, username, password)| {
+                    match state {
+                        SessionState::WaitPass => {
+                            let future = authenticator
+                                .authenticate(&username.unwrap_or_else(|| unreachable!()), &password)
+                                .then(move |authenticated| {
+                                    match authenticated {
+                                        Ok(_) => {
+                                            let mut session = session_for_logged.lock()?;
+                                            session.state = SessionState::WaitCmd;
+
+                                            Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
+                                        }
+                                        _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")), // FIXME: log
+                                    }
+                                });
+
+                            Either::A(future)
+                        }
+                        SessionState::New => Either::B(ok(Reply::new(ReplyCode::BadCommandSequence, "Please give me a username first"))),
+                        _ => Either::B(ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"))),
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Syst => {
+                // This response is kind of like the User-Agent in http: very much mis-used to gauge
+                // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
+                // `UNIX Type: L8` for greatest compatibility.
+
+                let future = ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8"));
+
+                Box::new(future.into_stream())
+            }
+            Command::Stat { path } => {
+                let future = lazy(|| {
+                    match path {
+                        None => Ok(Reply::new(ReplyCode::SystemStatus, "I'm just a humble FTP server")),
+                        Some(path) => {
+                            let path = std::str::from_utf8(&path)?;
+                            // TODO: Implement :)
+                            info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
+                            Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Stat with paths unsupported atm"))
+                        }
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Acct { .. } => {
+                let future = ok(Reply::new(ReplyCode::NotLoggedIn, "I don't know accounting man"));
+
+                Box::new(future.into_stream())
+            }
+            Command::Type => {
+                let future = ok(Reply::new(ReplyCode::CommandOkay, "I'm always in binary mode, dude..."));
+
+                Box::new(future.into_stream())
+            }
+            Command::Stru { structure } => {
+                let future = match structure {
+                    commands::StruParam::File => ok(Reply::new(ReplyCode::CommandOkay, "We're in File structure mode")),
+                    _ => ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Only File structure is supported")),
+                };
+
+                Box::new(future.into_stream())
+            }
+            Command::Mode { mode } => {
+                let future = match mode {
+                    commands::ModeParam::Stream => ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
+                    _ => ok(Reply::new(
+                        ReplyCode::CommandNotImplementedForParameter,
+                        "Only Stream transfer mode is supported",
+                    )),
+                };
+
+                Box::new(future.into_stream())
+            }
+            Command::Help => {
+                let future = ok(Reply::new(ReplyCode::HelpMessage, "We haven't implemented a useful HELP command, sorry"));
+
+                Box::new(future.into_stream())
+            }
+            Command::Noop => {
+                let future = ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing"));
+
+                Box::new(future.into_stream())
+            }
+            Command::Pasv => {
+                let listener = std::net::TcpListener::bind(passive_addrs.as_slice()).unwrap();
+                let addr = match listener.local_addr().unwrap() {
+                    std::net::SocketAddr::V4(addr) => addr,
+                    std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
+                };
+                let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default()).unwrap();
+                let octets = addr.ip().octets();
+                let port = addr.port();
+                let p1 = port >> 8;
+                let p2 = port - (p1 * 256);
+
+                let stream = ok(Reply::new_with_string(
+                    ReplyCode::EnteringPassiveMode,
+                    format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
+                ))
+                .into_stream()
+                .chain(listener.incoming().take(1).map_err(FTPError::from).and_then(move |socket| {
+                    let session_for_tls = Arc::clone(&session);
+
+                    session.lock().map_err(FTPError::from).map(|mut session| {
+                        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (session.certs_file, session.key_file) {
+                            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, session_for_tls, DATA_CHANNEL_ID, certs, keys)),
+                            _ => Box::new(socket),
+                        };
+
+                        session.data_channel = Some(tcp_tls_stream);
+
+                        Reply::None
+                    })
+                }));
+
+                Box::new(stream)
+            }
+            Command::Port => {
+                let future = ok(Reply::new(
+                    ReplyCode::CommandNotImplemented,
+                    "ACTIVE mode is not supported - use PASSIVE instead",
+                ));
+
+                Box::new(future.into_stream())
+            }
+            Command::Retr { path } => {
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|mut session| {
+                        let data_channel = session.data_channel.take();
+
+                        session
+                            .storage
+                            .get(&session.user, session.cwd.join(path))
+                            .map_err(|_| FTPError::from(std::io::Error::new(ErrorKind::Other, "Failed to get file")))
+                            .map(|content| (content, data_channel))
+                            .into_stream()
+                            .map(|(content, data_channel)| match data_channel {
+                                Some(data_channel) => {
+                                    let stream = ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")).into_stream().chain(
+                                        tokio::io::copy(content, data_channel)
+                                            .map(|_| Reply::new(ReplyCode::ClosingDataConnection, "Send you something nice"))
+                                            .or_else(|e| {
+                                                let reply = match e.kind() {
+                                                    ErrorKind::NotFound => Reply::new(ReplyCode::FileError, "File not found"),
+                                                    ErrorKind::PermissionDenied => Reply::new(ReplyCode::FileError, "Permision denied"),
+                                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => {
+                                                        Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")
+                                                    }
+                                                    _ => Reply::new(ReplyCode::TransientFileError, "Unknown Error"),
+                                                };
+
+                                                Ok(reply)
+                                            })
+                                            .into_stream(),
+                                    );
+
+                                    Either::A(stream)
+                                }
+                                None => Either::B(ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")).into_stream()),
+                            })
+                            .flatten()
+                    })
+                });
+
+                Box::new(future.flatten_stream())
+            }
+            Command::Stor { .. } | Command::Stou => {
+                // TODO: Write functional test for STOU comman
+
+                use storage::ErrorSemantics;
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|mut session| {
+                        let path = match cmd {
+                            Command::Stor { path } => path,
+                            Command::Stou => Uuid::new_v4().to_string(),
+                            _ => unreachable!(),
+                        };
+
+                        let path = session.cwd.join(path);
+
+                        match session.data_channel.take() {
+                            Some(data_channel) => {
+                                let stream = ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data")).into_stream().chain(
+                                    session
+                                        .storage
+                                        .put(&session.user, data_channel, path)
+                                        .map_err(|e| {
+                                            let e = if let Some(kind) = e.io_error_kind() {
+                                                std::io::Error::new(kind, "Failed to put file")
+                                            } else {
+                                                std::io::Error::new(std::io::ErrorKind::Other, "Failed to put file")
+                                            };
+
+                                            FTPError::from(e)
+                                        })
+                                        .map(|_| Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
+                                        .into_stream(),
+                                );
+
+                                Either::A(stream)
+                            }
+                            None => Either::B(ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")).into_stream()),
+                        }
+                    })
+                });
+
+                Box::new(future.flatten_stream())
+            }
+            Command::List { .. } | Command::Nlst { .. } => {
+                // TODO: Map this error so we can give more meaningful error messages.
+
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|mut session| {
+                        let data_channel = session.data_channel.take();
+                        let list = match cmd {
+                            Command::List { path } => session
+                                .storage
+                                .list_fmt(&session.user, session.cwd.join(path.unwrap_or_else(|| "".to_string()))),
+                            Command::Nlst { path } => session.storage.nlst(&session.user, session.cwd.join(path.unwrap_or_else(|| "".to_string()))),
+                            _ => unreachable!(),
+                        };
+
+                        list.map_err(FTPError::from)
+                            .map(|list| (list, data_channel))
+                            .into_stream()
+                            .map(|(list, data_channel)| match data_channel {
+                                Some(data_channel) => {
+                                    let stream = ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list")).into_stream().chain(
+                                        tokio::io::copy(list, data_channel)
+                                            .map(|_| Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory"))
+                                            .or_else(|e| {
+                                                let reply = match e.kind() {
+                                                    ErrorKind::NotFound => Reply::new(ReplyCode::FileError, "File not found"),
+                                                    ErrorKind::PermissionDenied => Reply::new(ReplyCode::FileError, "Permision denied"),
+                                                    ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => {
+                                                        Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")
+                                                    }
+                                                    _ => Reply::new(ReplyCode::TransientFileError, "Unknown Error"),
+                                                };
+
+                                                Ok(reply)
+                                            })
+                                            .into_stream(),
+                                    );
+
+                                    Either::A(stream)
+                                }
+                                None => Either::B(ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")).into_stream()),
+                            })
+                            .flatten()
+                    })
+                });
+
+                Box::new(future.flatten_stream())
+            }
+            Command::Feat => {
+                let mut feat_text = vec!["Extensions supported:"];
+                if tls_configured {
+                    feat_text.push("AUTH (Authentication/Security Mechanism)");
+                    feat_text.push("PROT (Data Channel Protection Level)");
+                    feat_text.push("PBSZ (Protection Buffer Size)");
+                }
+                let future = ok(Reply::new_multiline(ReplyCode::SystemStatus, feat_text));
+
+                Box::new(future.into_stream())
+            }
+            Command::Pwd => {
+                let future = lazy(move || {
+                    let session = session.lock()?;
+                    // TODO: properly escape double quotes in `cwd`
+                    Ok(Reply::new_with_string(
+                        ReplyCode::DirCreated,
+                        format!("\"{}\"", session.cwd.as_path().display()),
+                    ))
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Cwd { path } => {
+                // TODO: We current accept all CWD requests. Consider only allowing
+                // this if the directory actually exists and the user has the proper
+                // permission.
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+                    session.cwd.push(path);
+
+                    Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Cdup => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+                    session.cwd.pop();
+
+                    Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Opts { option } => {
+                let future = match option {
+                    commands::Opt::UTF8 => ok(Reply::new(ReplyCode::FileActionOkay, "Okay, I'm always in UTF8 mode.")),
+                };
+
+                Box::new(future.into_stream())
+            }
+            Command::Dele { path } => {
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|session| {
+                        session
+                            .storage
+                            .del(&session.user, session.cwd.join(path))
+                            .map(|_| Reply::new(ReplyCode::FileActionOkay, "File successfully removed"))
+                            .or_else(|_| Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")))
+                    })
+                })
+                .flatten();
+
+                Box::new(future.into_stream())
+            }
+            Command::Rmd { path } => {
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|session| {
+                        session
+                            .storage
+                            .rmd(&session.user, session.cwd.join(path))
+                            .map(|_| Reply::new(ReplyCode::FileActionOkay, "File successfully removed"))
+                            .or_else(|_| Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")))
+                    })
+                })
+                .flatten();
+
+                Box::new(future.into_stream())
+            }
+            Command::Quit => {
+                let stream = ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
+                    .into_stream()
+                    .chain(ok(Reply::new(ReplyCode::__Quit__, "")).into_stream());
+
+                Box::new(stream)
+            }
+            Command::Mkd { path } => {
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|session| {
+                        session
+                            .storage
+                            .mkd(&session.user, session.cwd.join(&path))
+                            .map(move |_| Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string()))
+                            .or_else(|_| Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")))
+                    })
+                })
+                .flatten();
+
+                Box::new(future.into_stream())
+            }
+            Command::Allo { .. } => {
+                // ALLO is obsolete and we'll just ignore it.
+                let future = ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "I don't need to allocate anything"));
+
+                Box::new(future.into_stream())
+            }
+            Command::Abor => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+
+                    match session.data_channel.take() {
+                        Some(_) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel")),
+                        None => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Data channel already closed")),
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Rnfr { file } => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+                    session.rename_from = Some(session.cwd.join(file));
+
+                    Ok(Reply::new(ReplyCode::FileActionPending, "Tell me, what would you like the new name to be?"))
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::Rnto { file } => {
+                let future = lazy(move || {
+                    session.lock().map_err(FTPError::from).map(|mut session| match session.rename_from.take() {
+                        Some(from) => Either::A(
+                            session
+                                .storage
+                                .rename(&session.user, from, session.cwd.join(file))
+                                .map(|_| Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
+                                .or_else(|_| Ok(Reply::new(ReplyCode::TransientFileError, "Failed to rename the file"))),
+                        ),
+                        None => Either::B(ok(Reply::new(
+                            ReplyCode::TransientFileError,
+                            "Please tell me what file you want to rename first",
+                        ))),
+                    })
+                })
+                .flatten();
+
+                Box::new(future.into_stream())
+            }
+            Command::Auth { protocol } => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+
+                    match (tls_configured, protocol) {
+                        (true, AuthParam::Tls) => {
+                            session.cmd_tls = true;
+
+                            Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
+                        }
+                        (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
+                        (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::PBSZ {} => {
+                let future = ok(Reply::new(ReplyCode::CommandOkay, "OK"));
+
+                Box::new(future.into_stream())
+            }
+            Command::CCC {} => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+
+                    if session.cmd_tls {
+                        session.cmd_tls = false;
+
+                        Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))
+                    } else {
+                        Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+            Command::CDC {} => {
+                let future = ok(Reply::new(ReplyCode::CommandSyntaxError, "coming soon..."));
+
+                Box::new(future.into_stream())
+            }
+            Command::PROT { param } => {
+                let future = lazy(move || {
+                    let mut session = session.lock()?;
+
+                    match (tls_configured, param) {
+                        (true, ProtParam::Clear) => {
+                            session.data_tls = false;
+
+                            Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Switching data channel to plaintext"))
+                        }
+                        (true, ProtParam::Private) => {
+                            session.data_tls = true;
+
+                            Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Securing data channel"))
+                        }
+                        (true, _) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "PROT S/E not implemented")),
+                        (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+                    }
+                });
+
+                Box::new(future.into_stream())
+            }
+        };
+
+        stream
     }
 }

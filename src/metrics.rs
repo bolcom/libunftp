@@ -1,7 +1,7 @@
 use crate::server::{
     commands::Command,
     reply::{Reply, ReplyCode},
-    Event, FTPErrorKind, InternalMsg,
+    Event, FTPErrorKind,
 };
 
 use lazy_static::*;
@@ -30,17 +30,6 @@ pub fn add_event_metric(event: &Event) {
         Event::Command(cmd) => {
             add_command_metric(&cmd);
         }
-        Event::InternalMsg(msg) => match msg {
-            InternalMsg::SendData { bytes } => {
-                FTP_BACKEND_READ_BYTES.inc_by(*bytes);
-                FTP_BACKEND_READ_FILES.inc();
-            }
-            InternalMsg::WrittenData { bytes } => {
-                FTP_BACKEND_WRITE_BYTES.inc_by(*bytes);
-                FTP_BACKEND_WRITE_FILES.inc();
-            }
-            _ => {}
-        },
     }
 }
 

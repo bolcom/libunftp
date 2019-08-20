@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use std::io::Write;
 use tokio_codec::{Decoder, Encoder};
 
-use crate::server::{Command, FTPError, InternalMsg, Reply};
+use crate::server::{Command, FTPError, Reply};
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
@@ -10,8 +10,6 @@ use crate::server::{Command, FTPError, InternalMsg, Reply};
 pub enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(Command),
-    /// A status message from the data channel handler
-    InternalMsg(InternalMsg),
 }
 
 // FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll

@@ -1,5 +1,7 @@
 /// A reply to the FTP client
+#[derive(Debug)]
 pub enum Reply {
+    //
     None,
     CodeAndMsg { code: ReplyCode, msg: String },
     MultiLine { code: ReplyCode, lines: Vec<String> },
@@ -62,6 +64,9 @@ pub enum ReplyCode {
     BadFileName = 553,
 
     Resp533 = 533,
+
+    // Breaking connection message for after Quit.
+    __Quit__ = 9999,
 }
 
 impl Reply {
