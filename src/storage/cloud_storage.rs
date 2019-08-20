@@ -15,7 +15,6 @@ use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
     convert::TryFrom,
-    error::Error,
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -25,7 +24,8 @@ use tokio::{
     io::AsyncRead,
 };
 
-use crate::storage::{Fileinfo, Metadata, StorageBackend};
+use crate::storage;
+use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
@@ -68,7 +68,7 @@ pub struct Token {
 /// A trait to obtain valid Token
 pub trait TokenProvider {
     /// returns the Token or an Error
-    fn get_token(&self) -> Result<Token, Box<dyn Error>>;
+    fn get_token(&self) -> Result<Token, Box<std::io::Error>>;
 }
 /// StorageBackend that uses Cloud storage from Google
 pub struct CloudStorage<T>
@@ -160,10 +160,10 @@ impl Metadata for ObjectMetadata {
     }
 
     /// Returns the last modified time of the path.
-    fn modified(&self) -> Result<SystemTime, dyn Error> {
+    fn modified(&self) -> Result<SystemTime, storage::Error> {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
-            None => Err(Error::IOError(ErrorKind::Other)),
+            None => Err(storage::Error::IOError(ErrorKind::Other)),
         }
     }
 
@@ -186,9 +186,9 @@ where
 {
     type File = Object;
     type Metadata = ObjectMetadata;
-    type Error = dyn Error;
+    type Error = Error;
 
-    fn stat(&self, _user: &Option<U>, path: dyn AsRef<Path>) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
+    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let uri = Uri::builder()
@@ -218,7 +218,11 @@ where
         )
     }
 
-    fn list(&self, _user: &Option<U>, path: dyn AsRef<Path>) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
@@ -279,7 +283,7 @@ where
         )
     }
 
-    fn get(&self, _user: &Option<U>, path: dyn AsRef<Path>) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
@@ -307,11 +311,11 @@ where
         )
     }
 
-    fn put(
+    fn put<P: AsRef<Path>, B: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         _user: &Option<U>,
-        bytes: dyn tokio::prelude::AsyncRead + Send + 'static,
-        path: dyn AsRef<Path>,
+        bytes: B,
+        path: P,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
@@ -351,7 +355,7 @@ where
         )
     }
 
-    fn del(&self, _user: &Option<U>, path: dyn AsRef<Path>) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
@@ -379,7 +383,7 @@ where
         )
     }
 
-    fn mkd(&self, _user: &Option<U>, path: dyn AsRef<Path>) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         let token = self.token_provider.get_token().expect("borked");
 
         let uri = Uri::builder()
@@ -414,12 +418,12 @@ where
         )
     }
 
-    fn rename(&self, _user: &Option<U>, _from: dyn AsRef<Path>, _to: dyn AsRef<Path>) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, _from: P, _to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }
 
-    fn rmd(&self, _user: &Option<U>, _path: dyn AsRef<Path>) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }
