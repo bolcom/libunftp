@@ -5,7 +5,7 @@ use crate::server::{
 };
 
 use lazy_static::*;
-use prometheus::{__register_counter_vec, opts, register_int_counter, register_int_counter_vec, IntCounter, IntCounterVec, __register_counter};
+use prometheus::{__register_counter_vec, opts, register_counter, register_int_counter, register_int_counter_vec, IntCounter, IntCounterVec};
 
 lazy_static! {
     static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
