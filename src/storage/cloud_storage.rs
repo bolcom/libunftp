@@ -396,27 +396,24 @@ Response { status: 204, version: HTTP/1.1, headers: {"x-guploader-uploadid": "",
 
 */
 
+
         Box::new(
             self.client
                 .request(request)
                 .map_err(|_| Error::IOError(ErrorKind::Other))
-                // .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-
                 .and_then(|response| {
                     if ! response.status().is_success() {
-                        return future::err(Error::IOError)
+                        return future::err(Error::IOError(ErrorKind::Other))
                     }
                     future::ok(response)
                 })
                 .and_then(|response| {
-                    response.into_body().map_err(|_| Error::IOError).concat2()
+                    response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2()
                         .and_then(|body| {
                             match body.iter().count() {
                                 0 => {
-                                    // according the Google Storage
-                                    // API for the delete endpoint, an
-                                    // empty reply means it is
-                                    // successful
+                                    // According the Google Storage API for the delete endpoint, an
+                                    // empty reply means it is successful.
                                     return future::ok(body);
                                 }
                                 _ => {
@@ -427,11 +424,11 @@ Response { status: 204, version: HTTP/1.1, headers: {"x-guploader-uploadid": "",
                                             if result.error.errors[0].reason == "notFound" {
                                                 return future::err(Error::PathError);
                                             } else {
-                                                return future::err(Error::IOError);
+                                                return future::err(Error::IOError(ErrorKind::Other));
                                             }
                                         }
                                         Err(_) => {
-                                            return future::err(Error::IOError);
+                                            return future::err(Error::IOError(ErrorKind::Other));
                                         }
                                     }
                                 }
