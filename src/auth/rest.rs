@@ -1,7 +1,6 @@
 use crate::auth::Authenticator;
 
 use regex::Regex;
-use std::result::Result;
 use std::string::String;
 
 use futures::stream::Stream;
@@ -12,6 +11,8 @@ use hyper::{Body, Client, Request};
 
 use serde_json::Value;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+
+use crate::auth::pam::AnonymousUser;
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -112,8 +113,8 @@ impl RestAuthenticator {
     }
 }
 
-impl Authenticator for RestAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
+impl Authenticator<AnonymousUser> for RestAuthenticator {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
         let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
@@ -145,6 +146,10 @@ impl Authenticator for RestAuthenticator {
                     //                println!("resp: {:?}", body);
                     serde_json::from_slice(&body).map_err(RestError::JSONDeserializationError)
                 })
+                .map_err(|err| {
+                    info!("RestError: {:?}", err);
+                    ()
+                })
                 .and_then(move |response: Value| {
                     let parsed = response
                         .pointer(&selector)
@@ -153,11 +158,11 @@ impl Authenticator for RestAuthenticator {
                             format!("{:?}", x)
                         })
                         .unwrap_or("null".to_string());
-                    Result::Ok(regex.is_match(&parsed))
-                })
-                .map_err(|err| {
-                    info!("RestError: {:?}", err);
-                    ()
+
+                    match regex.is_match(&parsed) {
+                        true => Ok(AnonymousUser {}),
+                        false => Err(()),
+                    }
                 }),
         )
     }

@@ -145,7 +145,7 @@ where
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
-pub trait StorageBackend {
+pub trait StorageBackend<U: Send> {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
@@ -156,23 +156,27 @@ pub trait StorageBackend {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn stat<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send>;
+    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(&self, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(
+        &self,
+        user: &Option<U>,
+        path: P,
+    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata;
+        <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the
     /// client.
-    fn list_fmt<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata + 'static,
-        <Self as StorageBackend>::Error: Send + 'static,
+        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
         let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(path);
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
         let res_work = res.clone();
         let fut = stream
             .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
@@ -192,14 +196,14 @@ pub trait StorageBackend {
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be sent to the client.
-    fn nlst<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend>::Metadata: Metadata + 'static,
-        <Self as StorageBackend>::Error: Send + 'static,
+        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
         let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(path);
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
         let res_work = res.clone();
         let fut = stream
             .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
@@ -224,22 +228,27 @@ pub trait StorageBackend {
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
-    fn get<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send>;
+    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send>;
 
     /// Write the given bytes to the given file.
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, bytes: R, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
+    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
+        &self,
+        user: &Option<U>,
+        bytes: R,
+        path: P,
+    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
 
     /// Rename the given file to the given filename.
-    fn rename<P: AsRef<Path>>(&self, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
