@@ -10,7 +10,7 @@ use hyper::{
     },
     Body, Client, Request,
 };
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
@@ -23,11 +23,10 @@ use tokio::{
     codec::{BytesCodec, FramedRead},
     io::AsyncRead,
 };
-
-use crate::storage;
-use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
-
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+use yup_oauth2::{GetToken, ServiceAccountAccess, ServiceAccountKey};
+
+use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
@@ -65,33 +64,22 @@ pub struct Token {
     pub access_token: String,
 }
 
-/// A trait to obtain valid Token
-pub trait TokenProvider {
-    /// returns the Token or an Error
-    fn get_token(&self) -> Result<Token, Box<std::io::Error>>;
-}
 /// StorageBackend that uses Cloud storage from Google
-pub struct CloudStorage<T>
-where
-    T: TokenProvider,
-{
+pub struct CloudStorage {
     bucket: &'static str,
-    client: Client<HttpsConnector<HttpConnector>>,
-    token_provider: T,
+    client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
+    service_account_key: ServiceAccountKey,
 }
 
-impl<T> CloudStorage<T>
-where
-    T: TokenProvider,
-{
+impl CloudStorage {
     /// Create a new CloudStorage backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
-    pub fn new(bucket: &'static str, token_provider: T) -> Self {
+    pub fn new(bucket: &'static str, service_account_key: ServiceAccountKey) -> Self {
         CloudStorage {
             bucket,
-            client: Client::builder().build(HttpsConnector::new(4).unwrap()),
-            token_provider,
+            client: Client::builder().build(HttpsConnector::new(4)),
+            service_account_key,
         }
     }
 }
@@ -160,10 +148,10 @@ impl Metadata for ObjectMetadata {
     }
 
     /// Returns the last modified time of the path.
-    fn modified(&self) -> Result<SystemTime, storage::Error> {
+    fn modified(&self) -> Result<SystemTime, Error> {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
-            None => Err(storage::Error::IOError(ErrorKind::Other)),
+            None => Err(Error::IOError(ErrorKind::Other)),
         }
     }
 
@@ -180,17 +168,12 @@ impl Metadata for ObjectMetadata {
     }
 }
 
-impl<U: Send, T> StorageBackend<U> for CloudStorage<T>
-where
-    T: TokenProvider,
-{
+impl<U: Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
     type Error = Error;
 
     fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
-        let token = self.token_provider.get_token().expect("borked");
-
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
@@ -198,24 +181,31 @@ where
             .build()
             .expect("invalid uri");
 
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .method(Method::GET)
-            .body(Body::empty())
-            .expect("borked");
+        let client = self.client.clone();
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .and_then(move |body_string| {
-                    serde_json::from_slice::<Item>(&body_string)
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .map(|item| item_to_metadata(item))
-                }),
-        )
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .method(Method::GET)
+                    .body(Body::empty())
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .and_then(|body_string| {
+                        serde_json::from_slice::<Item>(&body_string)
+                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map(|item| item_to_metadata(item))
+                    })
+            });
+        Box::new(result)
     }
 
     fn list<P: AsRef<Path>>(
@@ -226,29 +216,6 @@ where
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let token = self.token_provider.get_token().expect("borked");
-
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(
-                format!(
-                    "/storage/v1/b/{}/o?delimiter=/&prefix={}",
-                    self.bucket,
-                    path.as_ref().to_str().expect("path should be a unicode")
-                )
-                .as_str(),
-            )
-            .build()
-            .expect("invalid uri");
-
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .method(Method::GET)
-            .body(Body::empty())
-            .expect("borked");
-
         let item_to_file_info = |item: Item| Fileinfo {
             path: PathBuf::from(item.name),
             metadata: ObjectMetadata {
@@ -265,50 +232,83 @@ where
             },
         };
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(std::io::ErrorKind::Other)).concat2())
-                .and_then(|body_string| {
-                    serde_json::from_slice::<ResponseBody>(&body_string)
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .map(|response_body| {
-                            //TODO: map prefixes
-                            stream::iter_ok(response_body.items.map_or(vec![], |items| items))
-                        })
-                })
-                .flatten_stream()
-                .map(item_to_file_info),
-        )
+        let uri = Uri::builder()
+            .scheme(Scheme::HTTPS)
+            .authority("www.googleapis.com")
+            .path_and_query(
+                format!(
+                    "/storage/v1/b/{}/o?delimiter=/&prefix={}",
+                    self.bucket,
+                    path.as_ref().to_str().expect("path should be a unicode")
+                )
+                .as_str(),
+            )
+            .build()
+            .expect("invalid uri");
+
+        let client = self.client.clone();
+
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .method(Method::GET)
+                    .body(Body::empty())
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(std::io::ErrorKind::Other)).concat2())
+                    .and_then(|body_string| {
+                        serde_json::from_slice::<ResponseBody>(&body_string)
+                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map(|response_body| {
+                                //TODO: map prefixes
+                                stream::iter_ok(response_body.items.map_or(vec![], |items| items))
+                            })
+                    })
+            })
+            .flatten_stream()
+            .map(item_to_file_info);
+        Box::new(result)
     }
 
     fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
-        let token = self.token_provider.get_token().expect("borked");
-
         let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
 
-        let uri = &Uri::builder()
+        let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
             .path_and_query(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path).as_str())
             .build()
             .expect("invalid uri");
 
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .method(Method::GET)
-            .body(Body::empty())
-            .expect("borked");
+        let client = self.client.clone();
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .and_then(move |body| future::ok(Object::new(body.to_vec()))),
-        )
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .method(Method::GET)
+                    .body(Body::empty())
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .and_then(move |body| future::ok(Object::new(body.to_vec())))
+            });
+        Box::new(result)
     }
 
     fn put<P: AsRef<Path>, B: tokio::prelude::AsyncRead + Send + 'static>(
@@ -317,8 +317,6 @@ where
         bytes: B,
         path: P,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
-        let token = self.token_provider.get_token().expect("borked");
-
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
@@ -333,31 +331,36 @@ where
             .build()
             .expect("invalid uri");
 
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-            .method(Method::POST)
-            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
-            .expect("borked");
+        let client = self.client.clone();
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .and_then(move |body_string| {
-                    serde_json::from_slice::<Item>(&body_string)
-                        .map_err(|_| Error::IOError(ErrorKind::Other))
-                        .map(|item| item_to_metadata(item))
-                })
-                .and_then(|meta_data| future::ok(meta_data.len())),
-        )
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+                    .method(Method::POST)
+                    .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .and_then(move |body_string| {
+                        serde_json::from_slice::<Item>(&body_string)
+                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map(|item| item_to_metadata(item))
+                    })
+                    .and_then(|meta_data| future::ok(meta_data.len()))
+            });
+        Box::new(result)
     }
 
     fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
-        let token = self.token_provider.get_token().expect("borked");
-
         let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
 
         let uri = Uri::builder()
@@ -367,25 +370,30 @@ where
             .build()
             .expect("invalid uri");
 
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .method(Method::DELETE)
-            .body(Body::empty())
-            .expect("borked");
+        let client = self.client.clone();
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .map(|_body_string| {}),
-        )
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .method(Method::DELETE)
+                    .body(Body::empty())
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map(|_body_string| {})
+            });
+        Box::new(result)
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
-        let token = self.token_provider.get_token().expect("borked");
-
         let uri = Uri::builder()
             .scheme(Scheme::HTTPS)
             .authority("www.googleapis.com")
@@ -400,22 +408,29 @@ where
             .build()
             .expect("invalid uri");
 
-        let request = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-            .header(header::CONTENT_LENGTH, "0")
-            .method(Method::POST)
-            .body(Body::empty())
-            .expect("borked");
+        let client = self.client.clone();
 
-        Box::new(
-            self.client
-                .request(request)
-                .map_err(|_| Error::IOError(ErrorKind::Other))
-                .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                .map(|_body_string| {}),
-        )
+        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .and_then(|token| {
+                Request::builder()
+                    .uri(uri)
+                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+                    .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+                    .header(header::CONTENT_LENGTH, "0")
+                    .method(Method::POST)
+                    .body(Body::empty())
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+            })
+            .and_then(move |request| {
+                client
+                    .request(request)
+                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map(|_body_string| {})
+            });
+        Box::new(result)
     }
 
     fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, _from: P, _to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
