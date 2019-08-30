@@ -8,7 +8,7 @@ pub fn main() {
     let server = libunftp::Server::new(Box::new(move || libunftp::storage::cloud_storage::CloudStorage::new("your-bucket-name", Tp {})));
 
     info!("Starting ftp server on {}", addr);
-    server.listen(addr);
+    tokio::run(server.listen(addr));
 }
 
 struct Tp {}

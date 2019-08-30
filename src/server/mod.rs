@@ -113,19 +113,10 @@ impl Server<storage::filesystem::Filesystem> {
     /// ```
     pub fn with_root<P: Into<std::path::PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
-        let server = Server {
-            storage: Box::new(move || {
-                let p = &p.clone();
-                storage::filesystem::Filesystem::new(p)
-            }),
-            greeting: DEFAULT_GREETING,
-            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
-            passive_addrs: Arc::new(vec![]),
-            certs_file: Option::None,
-            key_file: Option::None,
-            with_metrics: false,
-        };
-        server.passive_ports(49152..65535)
+        Server::new(Box::new(move || {
+            let p = &p.clone();
+            storage::filesystem::Filesystem::new(p)
+        }))
     }
 }
 
@@ -254,36 +245,34 @@ where
     }
 
     /// Start the server and listen for connections on the given address.
+    /// Blocks execution of current thread.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// # use std::thread;
     ///
-    /// let mut server = Server::with_root("/srv/ftp");
-    /// # thread::spawn(move || {
-    /// server.listen("127.0.0.1:2000");
-    /// # });
+    /// let mut server = Server::with_root("/srv/ftp").listen("127.0.0.1:2000");
+    /// tokio::run(server);
     /// ```
     ///
     /// # Panics
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listen(self, addr: &str) {
+    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
-        tokio::run({
+        Box::new(
             listener
-                .incoming()
-                .map_err(|e| warn!("Failed to accept socket: {}", e))
-                .for_each(move |socket| {
-                    self.process(socket);
-                    Ok(())
-                })
-        });
+            .incoming()
+            .map_err(|e| warn!("Failed to accept socket: {}", e))
+            .for_each( move |socket| {
+                self.process(socket);
+                Ok(())
+            })
+        )
     }
 
     /// Does TCP processing when a FTP client connects
