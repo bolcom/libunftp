@@ -132,7 +132,7 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Self {
+    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self {
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
