@@ -191,6 +191,28 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             });
         Box::new(fut)
     }
+
+    /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
+    /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
+    /// amount of octets.
+    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(err) => return Box::new(future::err(err)),
+        };
+
+        let fut = tokio::fs::symlink_metadata(full_path)
+            .map_err(|e| Error::IOError(e.kind()))
+            .and_then(move |metadata| {
+                if metadata.is_file() {
+                    future::Either::A(future::ok(metadata.len()))
+                } else {
+                    future::Either::B(future::err(Error::MetadataError))
+                }
+            });
+
+        Box::new(fut)
+    }
 }
 
 impl Metadata for std::fs::Metadata {
@@ -228,7 +250,8 @@ mod tests {
     use super::*;
     use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
-    use std::fs::File;
+    use std::fs::{self, File};
+    use std::io::{BufWriter, Write};
     use std::io::prelude::*;
 
     #[test]
@@ -435,5 +458,26 @@ mod tests {
 
         let old_full_path = root.join(old_filename);
         std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
+    }
+
+    #[test]
+    fn size() {
+        let root = tempfile::TempDir::new().unwrap().into_path();
+        let file = tempfile::NamedTempFile::new_in(&root).unwrap();
+        let filename = file.path().file_name().unwrap().to_str().unwrap();
+
+        // Write something to the file so it has a size
+        let mut w = BufWriter::new(&file);
+        w.write_all(b"Hello unftp").expect("Should be able to write to the temp file.");
+        w.flush().expect("Should be able to flush the temp file.");
+
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
+        // to completion
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+        let fs = Filesystem::new(&root);
+        let size = rt.block_on(fs.size(&Some(AnonymousUser {}), &filename)).expect("Failed to rename");
+
+        assert_eq!(size, fs::metadata(&file).unwrap().len(), "Wrong size returned.");
     }
 }

@@ -235,6 +235,9 @@ pub trait StorageBackend<U: Send> {
 
     /// Delete the given directory.
     fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+
+    /// Get the size of a file in octets.    
+    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
