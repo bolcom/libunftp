@@ -1,4 +1,4 @@
-use crate::auth::Authenticator;
+use crate::auth::*;
 
 use futures::Future;
 
@@ -18,8 +18,8 @@ impl PAMAuthenticator {
     }
 }
 
-impl Authenticator for PAMAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = bool, Error = ()> + Send> {
+impl Authenticator<AnonymousUser> for PAMAuthenticator {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item=AnonymousUser, Error=()> + Send> {
         let service = self.service.clone();
         let username = _username.to_string();
         let password = _password.to_string();
@@ -34,8 +34,8 @@ impl Authenticator for PAMAuthenticator {
 
                     auth.set_credentials(&username, &password);
                     match auth.authenticate() {
-                        Ok(()) => Ok(true),
-                        Err(_) => Ok(false),
+                        Ok(()) => Ok(AnonymousUser {}),
+                        Err(_) => Err(()),
                     }
                 })
                 .map_err(|err| {

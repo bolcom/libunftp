@@ -39,8 +39,10 @@ use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth;
+use crate::auth::{AnonymousAuthenticator, AnonymousUser, Authenticator};
 use crate::metrics;
 use crate::storage;
+use crate::storage::filesystem::Filesystem;
 use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
@@ -87,21 +89,21 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-pub struct Server<S>
-where
-    S: storage::StorageBackend,
+pub struct Server<S, U: Send + Sync>
+    where
+        S: storage::StorageBackend<U>,
 {
     storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
-    authenticator: Arc<dyn auth::Authenticator + Send + Sync>,
+    authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
     with_metrics: bool,
 }
 
-impl Server<storage::filesystem::Filesystem> {
+impl Server<Filesystem, AnonymousUser> {
     /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example
@@ -120,19 +122,22 @@ impl Server<storage::filesystem::Filesystem> {
     }
 }
 
-impl<S> Server<S>
-where
-    S: 'static + storage::StorageBackend + Sync + Send,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+impl<S, U: Send + Sync + 'static> Server<S, U>
+    where
+        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+        <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+        <S as storage::StorageBackend<U>>::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self {
+    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self
+        where
+            auth::AnonymousAuthenticator: auth::Authenticator<U>,
+    {
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
@@ -161,6 +166,25 @@ where
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
         self.greeting = greeting;
+        self
+    }
+
+    /// Set the [`Authenticator`] that will be used for authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
+    /// use std::sync::Arc;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_root("/tmp")
+    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
+    /// ```
+    ///
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>) -> Self {
+        self.authenticator = authenticator;
         self
     }
 
@@ -225,25 +249,6 @@ where
         self
     }
 
-    /// Set the [`Authenticator`] that will be used for authentication.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
-    /// use std::sync::Arc;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp")
-    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
-    /// ```
-    ///
-    /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator + Send + Sync>) -> Self {
-        self.authenticator = authenticator;
-        self
-    }
-
     /// Start the server and listen for connections on the given address.
     /// Blocks execution of current thread.
     ///
@@ -260,18 +265,18 @@ where
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
+    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item=(), Error=()> + Send + 'a> {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
         Box::new(
             listener
-            .incoming()
-            .map_err(|e| warn!("Failed to accept socket: {}", e))
-            .for_each( move |socket| {
-                self.process(socket);
-                Ok(())
-            })
+                .incoming()
+                .map_err(|e| warn!("Failed to accept socket: {}", e))
+                .for_each(move |socket| {
+                    self.process(socket);
+                    Ok(())
+                })
         )
     }
 
@@ -341,6 +346,7 @@ where
                             }
                         }
                         Command::Pass { password } => {
+                            let session_arc = session.clone();
                             let session = session.lock()?;
                             match session.state {
                                 SessionState::WaitPass => {
@@ -351,9 +357,13 @@ where
                                     tokio::spawn(
                                         authenticator
                                             .authenticate(&user, pass)
-                                            .then(|x| {
-                                                match x {
-                                                    Ok(true) => tx.send(InternalMsg::AuthSuccess),
+                                            .then( move |user| {
+                                                match user {
+                                                    Ok(user) => {
+                                                        let mut session = session_arc.lock().unwrap();
+                                                        session.user = Arc::new(Some(user));
+                                                        tx.send(InternalMsg::AuthSuccess)
+                                                    }
                                                     _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
                                                 }
                                             })
@@ -441,7 +451,8 @@ where
                                             error!("session lock() result: {}", res);
                                             panic!()
                                         });
-                                        session2.process_data(socket, session.clone(), tx);
+                                        let user = session2.user.clone();
+                                        session2.process_data(user, socket, session.clone(), tx);
                                         Ok(())
                                     }),
                             ));
@@ -554,7 +565,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .del(path)
+                                    .del(&session.user, path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
                                     .and_then(|_| {
                                         tx_success
@@ -581,7 +592,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .rmd(path)
+                                    .rmd(&session.user, path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
                                     .and_then(|_| {
                                         tx_success
@@ -614,7 +625,7 @@ where
                             let tx_fail = tx.clone();
                             tokio::spawn(
                                 storage
-                                    .mkd(&path)
+                                    .mkd(&session.user, &path)
                                     .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
                                     .and_then(|_| {
                                         tx_success
@@ -678,7 +689,7 @@ where
                             let storage = Arc::clone(&session.storage);
                             match session.rename_from.take() {
                                 Some(from) => {
-                                    spawn!(storage.rename(from, session.cwd.join(file)));
+                                    spawn!(storage.rename(&session.user, from, session.cwd.join(file)));
                                     Ok(Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
                                 }
                                 None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),

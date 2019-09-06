@@ -22,13 +22,14 @@ pub enum SessionState {
 }
 
 // This is where we keep the state for a ftp session.
-pub struct Session<S>
+pub struct Session<S, U: Send + Sync>
 where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U>,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
+    pub user: Arc<Option<U>>,
     pub username: Option<String>,
     pub storage: Arc<S>,
     pub data_cmd_tx: Option<mpsc::Sender<Command>>,
@@ -46,15 +47,16 @@ where
     pub data_tls: bool,
 }
 
-impl<S> Session<S>
+impl<S, U: Send + Sync + 'static> Session<S, U>
 where
-    S: storage::StorageBackend + Send + Sync + 'static,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
         Session {
+            user: Arc::new(None),
             username: None,
             storage,
             data_cmd_tx: None,
@@ -82,7 +84,7 @@ where
     /// socket: the data socket we'll be working with
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, socket: TcpStream, sec_switch: Arc<Mutex<Session<S>>>, tx: mpsc::Sender<InternalMsg>) {
+    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: mpsc::Sender<InternalMsg>) {
         let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (self.certs_file, self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
@@ -111,7 +113,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .get(path)
+                                .get(&user, path)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                                 .and_then(|f| {
                                     tx_sending
@@ -146,7 +148,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .put(tcp_tls_stream, path)
+                                .put(&user, tcp_tls_stream, path)
                                 .map_err(|e| {
                                     if let Some(kind) = e.io_error_kind() {
                                         std::io::Error::new(kind, "Failed to put file")
@@ -184,7 +186,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .list_fmt(path)
+                                .list_fmt(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok
@@ -217,7 +219,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .nlst(path)
+                                .nlst(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
                                 .and_then(|_| {
                                     tx_ok
@@ -255,12 +257,12 @@ where
     }
 }
 
-impl<S> SecuritySwitch for Session<S>
+impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
-    S: storage::StorageBackend,
-    <S as storage::StorageBackend>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend>::Error: Send,
+    S: storage::StorageBackend<U>,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
         match channel {
