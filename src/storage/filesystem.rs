@@ -192,9 +192,6 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         Box::new(fut)
     }
 
-    /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
-    /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
-    /// amount of octets.
     fn size<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
@@ -251,8 +248,8 @@ mod tests {
     use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
     use std::fs::{self, File};
-    use std::io::{BufWriter, Write};
     use std::io::prelude::*;
+    use std::io::{BufWriter, Write};
 
     #[test]
     fn fs_stat() {

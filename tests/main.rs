@@ -1,10 +1,12 @@
 use ftp::types::Result;
 use ftp::FtpStream;
 use pretty_assertions::assert_eq;
-use std::fs;
+use regex::Regex;
 use std::fmt::Debug;
-use std::io::{BufWriter, Write};
+use std::fs;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
+use std::str;
 use tokio::runtime::Runtime;
 
 fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
@@ -22,6 +24,27 @@ fn ensure_login_required<T: Debug>(r: Result<T>) {
     if !err.contains("530 Please authenticate") {
         panic!("Could execute command without logging in!");
     }
+}
+
+fn ensure_feat_support(s: &mut FtpStream, c: &str) {
+    let mut tcps = s.get_ref();
+    tcps.write_all("FEAT\r\n".as_bytes()).expect(format!("Couldn't issue command {}.", c).as_str());
+
+    let mut reader = BufReader::new(tcps);
+    let mut r = String::new();
+    let mut f = String::new();
+
+    loop {
+        reader.read_line(&mut r).unwrap();
+        f.push_str(r.as_str());
+        if r.starts_with("211 END") {
+            break;
+        }
+        r.clear();
+    }
+
+    let re = Regex::new(format!("(?m)^ {}", c).as_str()).unwrap();
+    assert!(re.is_match(f.as_str()), "FEAT response did not contain the {} command!", c);
 }
 
 #[test]
@@ -319,7 +342,7 @@ fn rename() {
 
 #[test]
 fn size() {
-    let addr = "127.0.0.1:1243";
+    let addr = "127.0.0.1:1248";
     let root = std::env::temp_dir();
     test_with(addr, root.clone(), || {
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
@@ -332,7 +355,7 @@ fn size() {
 
         // Make sure we fail if we're not logged in
         ensure_login_required(ftp_stream.size(file_name));
-
+        ensure_feat_support(&mut ftp_stream, "SIZE");
         ftp_stream.login("hoi", "jij").unwrap();
 
         // Make sure we fail if we don't supply a path

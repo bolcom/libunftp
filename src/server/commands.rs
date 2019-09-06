@@ -548,7 +548,7 @@ impl Command {
                 }
                 Command::CDC
             }
-            b"SIZE" | b"size" => {
+            "SIZE" => {
                 let params = parse_to_eol(cmd_params)?;
                 if params.is_empty() {
                     return Err(ParseErrorKind::InvalidCommand.into());
