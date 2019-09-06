@@ -68,7 +68,7 @@ pub struct Token {
 pub struct CloudStorage {
     bucket: &'static str,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    service_account_key: ServiceAccountKey,
+    service_account_access: ServiceAccountAccess<HttpsConnector<HttpConnector>>,
 }
 
 impl CloudStorage {
@@ -76,10 +76,11 @@ impl CloudStorage {
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new(bucket: &'static str, service_account_key: ServiceAccountKey) -> Self {
+        let client = Client::builder().build(HttpsConnector::new(4));
         CloudStorage {
             bucket,
-            client: Client::builder().build(HttpsConnector::new(4)),
-            service_account_key,
+            client: client.clone(),
+            service_account_access: ServiceAccountAccess::new(service_account_key, client),
         }
     }
 }
@@ -183,7 +184,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -248,7 +251,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -290,7 +295,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -333,7 +340,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -372,7 +381,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -388,7 +399,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .request(request)
                     .map_err(|_| Error::IOError(ErrorKind::Other))
                     .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                    .map(|_body_string| {})
+                    .map(|_body_string| {}) //TODO: implement error handling
             });
         Box::new(result)
     }
@@ -410,7 +421,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = ServiceAccountAccess::new(self.service_account_key.clone(), self.client.clone())
+        let result = self
+            .service_account_access
+            .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
@@ -428,7 +441,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .request(request)
                     .map_err(|_| Error::IOError(ErrorKind::Other))
                     .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                    .map(|_body_string| {})
+                    .map(|_body_string| {}) //TODO: implement error handling
             });
         Box::new(result)
     }
