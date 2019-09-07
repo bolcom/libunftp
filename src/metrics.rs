@@ -46,142 +46,15 @@ pub fn add_event_metric(event: &Event) {
 
 /// Add a metric for an FTP server error.
 pub fn add_error_metric(error: &FTPErrorKind) {
-    match error {
-        FTPErrorKind::IOError => {
-            FTP_ERROR_TOTAL.with_label_values(&["io"]).inc();
-        }
-        FTPErrorKind::ParseError => {
-            FTP_ERROR_TOTAL.with_label_values(&["parse"]).inc();
-        }
-        FTPErrorKind::InternalServerError => {
-            FTP_ERROR_TOTAL.with_label_values(&["internal"]).inc();
-        }
-        FTPErrorKind::AuthenticationError => {
-            FTP_ERROR_TOTAL.with_label_values(&["authentication"]).inc();
-        }
-        FTPErrorKind::InternalMsgError => {
-            FTP_ERROR_TOTAL.with_label_values(&["internalmsg"]).inc();
-        }
-        FTPErrorKind::UTF8Error => {
-            FTP_ERROR_TOTAL.with_label_values(&["utf8"]).inc();
-        }
-        FTPErrorKind::UnknownCommand { .. } => {
-            FTP_ERROR_TOTAL.with_label_values(&["unknown_cmd"]).inc();
-        }
-        FTPErrorKind::InvalidCommand => {
-            FTP_ERROR_TOTAL.with_label_values(&["invalid_cmd"]).inc();
-        }
-    }
+    let error_str = error.to_string();
+    let label = error_str.split_whitespace().nth(0).unwrap_or("unknown").to_lowercase();
+    FTP_ERROR_TOTAL.with_label_values(&[&label]).inc();
 }
 
 fn add_command_metric(cmd: &Command) {
-    match cmd {
-        Command::User { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["user"]).inc();
-        }
-        Command::Pass { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["pass"]).inc();
-        }
-        Command::Acct { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["acct"]).inc();
-        }
-        Command::Syst => {
-            FTP_COMMAND_TOTAL.with_label_values(&["syst"]).inc();
-        }
-        Command::Stat { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["stat"]).inc();
-        }
-        Command::Type => {
-            FTP_COMMAND_TOTAL.with_label_values(&["type"]).inc();
-        }
-        Command::Stru { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["stru"]).inc();
-        }
-        Command::Mode { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["mode"]).inc();
-        }
-        Command::Help => {
-            FTP_COMMAND_TOTAL.with_label_values(&["help"]).inc();
-        }
-        Command::Noop => {
-            FTP_COMMAND_TOTAL.with_label_values(&["noop"]).inc();
-        }
-        Command::Pasv => {
-            FTP_COMMAND_TOTAL.with_label_values(&["pasv"]).inc();
-        }
-        Command::Port => {
-            FTP_COMMAND_TOTAL.with_label_values(&["port"]).inc();
-        }
-        Command::Retr { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["retr"]).inc();
-        }
-        Command::Stor { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["stor"]).inc();
-        }
-        Command::List { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["list"]).inc();
-        }
-        Command::Nlst { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["nlst"]).inc();
-        }
-        Command::Feat => {
-            FTP_COMMAND_TOTAL.with_label_values(&["feat"]).inc();
-        }
-        Command::Pwd => {
-            FTP_COMMAND_TOTAL.with_label_values(&["pwd"]).inc();
-        }
-        Command::Cwd { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["cwd"]).inc();
-        }
-        Command::Cdup => {
-            FTP_COMMAND_TOTAL.with_label_values(&["cdup"]).inc();
-        }
-        Command::Opts { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["opts"]).inc();
-        }
-        Command::Dele { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["dele"]).inc();
-        }
-        Command::Rmd { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["rmd"]).inc();
-        }
-        Command::Quit => {
-            FTP_COMMAND_TOTAL.with_label_values(&["quit"]).inc();
-        }
-        Command::Mkd { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["mkd"]).inc();
-        }
-        Command::Allo {} => {
-            FTP_COMMAND_TOTAL.with_label_values(&["allo"]).inc();
-        }
-        Command::Abor => {
-            FTP_COMMAND_TOTAL.with_label_values(&["abor"]).inc();
-        }
-        Command::Stou => {
-            FTP_COMMAND_TOTAL.with_label_values(&["stou"]).inc();
-        }
-        Command::Rnfr { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["rnfr"]).inc();
-        }
-        Command::Rnto { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["rnto"]).inc();
-        }
-        Command::Auth { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["auth"]).inc();
-        }
-        Command::PBSZ { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["pbsz"]).inc();
-        }
-        Command::CCC { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["ccc"]).inc();
-        }
-        Command::CDC { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["cdc"]).inc();
-        }
-        Command::PROT { .. } => {
-            FTP_COMMAND_TOTAL.with_label_values(&["prot"]).inc();
-        }
-    }
+    let cmd_str = cmd.to_string();
+    let label = cmd_str.split_whitespace().nth(0).unwrap_or("unknown").to_lowercase();
+    FTP_COMMAND_TOTAL.with_label_values(&[&label]).inc();
 }
 
 /// Add a metric for a reply.
