@@ -39,7 +39,7 @@ use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth;
-use crate::auth::{AnonymousAuthenticator, AnonymousUser, Authenticator};
+use crate::auth::AnonymousUser;
 use crate::metrics;
 use crate::storage;
 use crate::storage::filesystem::Filesystem;
