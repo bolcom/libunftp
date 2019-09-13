@@ -8,7 +8,7 @@ use hyper::{
         uri::{Scheme, Uri},
         Method,
     },
-    Body, Client, Request,
+    Body, Client, Request, StatusCode,
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
@@ -39,6 +39,27 @@ struct Item {
     name: String,
     updated: DateTime<Utc>,
     size: String,
+}
+
+// JSON error response format:
+// https://cloud.google.com/storage/docs/json_api/v1/status-codes
+#[derive(Deserialize, Debug)]
+struct ErrorBodyErrors {
+    domain: String,
+    reason: String,
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ErrorBodyError {
+    errors: Vec<ErrorBodyErrors>,
+    code: u32,
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct ErrorBody {
+    error: ErrorBodyError,
 }
 
 fn item_to_metadata(item: Item) -> ObjectMetadata {
@@ -369,7 +390,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send> {
         let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
 
         let uri = Uri::builder()
@@ -385,22 +406,51 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .service_account_access
             .clone()
             .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again."))
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
                     .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
                     .method(Method::DELETE)
                     .body(Body::empty())
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again."))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
-                    .map(|_body_string| {}) //TODO: implement error handling
+                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again."))
+                    .and_then(|response| {
+                        let status = response.status();
+                        response
+                            .into_body()
+                            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again"))
+                            .concat2()
+                            .and_then(move |body| {
+                                match (body.iter().count(), status) {
+                                    (0, StatusCode::NO_CONTENT) => {
+                                        // According the Google Storage API for the delete endpoint, an
+                                        // empty reply means it is successful.
+                                        future::ok(())
+                                    }
+                                    _ => {
+                                        match serde_json::from_slice::<ErrorBody>(&body) {
+                                            Ok(result) => {
+                                                if result.error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
+                                                    future::err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"))
+                                                } else {
+                                                    // let's see later how we will reply in different situations...
+                                                    // because we don't want to give a transient error in many cases
+                                                    future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong"))
+                                                }
+                                            }
+                                            Err(_) => future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again")),
+                                        }
+                                    }
+                                }
+                            })
+                    })
             });
+
         Box::new(result)
     }
 

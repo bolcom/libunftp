@@ -141,12 +141,12 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         Box::new(fut)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
+            Err(_) => return Box::new(future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong"))),
         };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|e| Error::IOError(e.kind())))
+        Box::new(tokio::fs::remove_file(full_path).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong")))
     }
 
     fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {

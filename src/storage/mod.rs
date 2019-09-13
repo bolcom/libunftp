@@ -239,7 +239,7 @@ pub trait StorageBackend<U: Send> {
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send>;
 
     /// Create the given directory.
     fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
