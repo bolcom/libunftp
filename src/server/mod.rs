@@ -258,7 +258,9 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
     /// use libunftp::Server;
     ///
     /// let mut server = Server::with_root("/srv/ftp").listen("127.0.0.1:2000");
-    /// tokio::run(server);
+    ///
+    /// // for simple use cases:
+    /// //tokio::run(server);
     /// ```
     ///
     /// # Panics
@@ -273,6 +275,7 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
             listener
                 .incoming()
                 .map_err(|e| warn!("Failed to accept socket: {}", e))
+                .map_err(drop)
                 .for_each(move |socket| {
                     self.process(socket);
                     Ok(())
