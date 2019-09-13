@@ -643,6 +643,12 @@ impl fmt::Display for ParseError {
     }
 }
 
+impl fmt::Display for Command {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
 /// The Result type used in this module.
 pub type Result<T> = result::Result<T, ParseError>;
 
