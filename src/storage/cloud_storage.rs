@@ -81,6 +81,10 @@ impl CloudStorage {
             }),
         }
     }
+
+    fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
+        Box::new((Arc::clone(&self.get_token))().map_err(|_| Error::IOError(ErrorKind::Other)))
+    }
 }
 
 /// The File type for the CloudStorage
@@ -182,8 +186,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (*Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
@@ -246,8 +250,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
@@ -287,8 +291,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
@@ -329,8 +333,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
@@ -367,8 +371,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
@@ -404,8 +408,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = (Arc::clone(&self.get_token))()
-            .map_err(|_| Error::IOError(ErrorKind::Other))
+        let result = self
+            .get_token()
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
