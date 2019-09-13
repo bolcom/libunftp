@@ -17,7 +17,7 @@ use std::{
     convert::TryFrom,
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::Mutex,
     time::{Duration, SystemTime},
 };
 use tokio::{
@@ -61,7 +61,7 @@ fn item_to_metadata(item: Item) -> ObjectMetadata {
 pub struct CloudStorage {
     bucket: &'static str,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    get_token: Arc<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
+    get_token: Box<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
 }
 
 impl CloudStorage {
@@ -70,20 +70,21 @@ impl CloudStorage {
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new(bucket: &'static str, service_account_key: ServiceAccountKey) -> Self {
         let client = Client::builder().build(HttpsConnector::new(4));
+        let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
         CloudStorage {
             bucket,
             client: client.clone(),
-            get_token: Arc::new(move || {
-                ServiceAccountAccess::new(service_account_key.clone())
-                    .hyper_client(client.clone())
-                    .build()
+            get_token: Box::new(move || {
+                service_account_access
+                    .lock()
+                    .unwrap() //TODO: remove this unwrap
                     .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
             }),
         }
     }
 
     fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
-        Box::new((Arc::clone(&self.get_token))().map_err(|_| Error::IOError(ErrorKind::Other)))
+        Box::new((self.get_token)().map_err(|_| Error::IOError(ErrorKind::Other)))
     }
 }
 
