@@ -60,7 +60,6 @@ fn get() {
     let mut filename = root.clone();
 
     test_with(addr, root, || {
-
         // Create a temporary file in the FTP root that we'll retrieve
         filename.push("bla.txt");
         let mut f = std::fs::File::create(filename.clone()).unwrap();
@@ -116,7 +115,6 @@ fn list() {
     let addr = "127.0.0.1:1239";
     let root = std::env::temp_dir();
     test_with(addr, root.clone(), || {
-
         // Create a filename in the ftp root that we will look for in the `LIST` output
         let path = root.join("test.txt");
         {

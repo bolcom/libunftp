@@ -90,8 +90,8 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
 pub struct Server<S, U: Send + Sync>
-    where
-        S: storage::StorageBackend<U>,
+where
+    S: storage::StorageBackend<U>,
 {
     storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
@@ -123,11 +123,11 @@ impl Server<Filesystem, AnonymousUser> {
 }
 
 impl<S, U: Send + Sync + 'static> Server<S, U>
-    where
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
-        <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend<U>>::Error: Send,
+where
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
@@ -135,8 +135,8 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self
-        where
-            auth::AnonymousAuthenticator: auth::Authenticator<U>,
+    where
+        auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
         let server = Server {
             storage: s,
@@ -267,7 +267,7 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item=(), Error=()> + Send + 'a> {
+    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
@@ -279,7 +279,7 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
                 .for_each(move |socket| {
                     self.process(socket);
                     Ok(())
-                })
+                }),
         )
     }
 
@@ -360,7 +360,7 @@ impl<S, U: Send + Sync + 'static> Server<S, U>
                                     tokio::spawn(
                                         authenticator
                                             .authenticate(&user, pass)
-                                            .then( move |user| {
+                                            .then(move |user| {
                                                 match user {
                                                     Ok(user) => {
                                                         let mut session = session_arc.lock().unwrap();
