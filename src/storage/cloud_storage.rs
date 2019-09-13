@@ -17,6 +17,7 @@ use std::{
     convert::TryFrom,
     io::{ErrorKind, Read},
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 use tokio::{
@@ -24,7 +25,7 @@ use tokio::{
     io::AsyncRead,
 };
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
-use yup_oauth2::{GetToken, ServiceAccountAccess, ServiceAccountKey};
+use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
 
 use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
@@ -56,19 +57,11 @@ fn item_to_metadata(item: Item) -> ObjectMetadata {
     }
 }
 
-/// A token that describes the type and the accesss token
-pub struct Token {
-    /// The token type
-    pub token_type: String,
-    /// The token himself
-    pub access_token: String,
-}
-
 /// StorageBackend that uses Cloud storage from Google
 pub struct CloudStorage {
     bucket: &'static str,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    service_account_access: ServiceAccountAccess<HttpsConnector<HttpConnector>>,
+    get_token: Arc<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
 }
 
 impl CloudStorage {
@@ -80,7 +73,12 @@ impl CloudStorage {
         CloudStorage {
             bucket,
             client: client.clone(),
-            service_account_access: ServiceAccountAccess::new(service_account_key, client),
+            get_token: Arc::new(move || {
+                ServiceAccountAccess::new(service_account_key.clone())
+                    .hyper_client(client.clone())
+                    .build()
+                    .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            }),
         }
     }
 }
@@ -184,10 +182,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (*Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
@@ -251,10 +246,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
@@ -295,10 +287,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
@@ -340,10 +329,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
@@ -381,10 +367,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
@@ -421,10 +404,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
 
         let client = self.client.clone();
 
-        let result = self
-            .service_account_access
-            .clone()
-            .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+        let result = (Arc::clone(&self.get_token))()
             .map_err(|_| Error::IOError(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
