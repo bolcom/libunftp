@@ -74,11 +74,9 @@ impl CloudStorage {
         CloudStorage {
             bucket,
             client: client.clone(),
-            get_token: Box::new(move || {
-                service_account_access
-                    .lock()
-                    .unwrap() //TODO: remove this unwrap
-                    .token(vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            get_token: Box::new(move || match &mut service_account_access.lock() {
+                Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
+                Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(ErrorKind::Other)))),
             }),
         }
     }
@@ -86,6 +84,15 @@ impl CloudStorage {
     fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
         Box::new((self.get_token)().map_err(|_| Error::IOError(ErrorKind::Other)))
     }
+}
+
+fn make_uri(path_and_query: String) -> Result<Uri, Error> {
+    Uri::builder()
+        .scheme(Scheme::HTTPS)
+        .authority("www.googleapis.com")
+        .path_and_query(path_and_query.as_str())
+        .build()
+        .map_err(|_| Error::PathError)
 }
 
 /// The File type for the CloudStorage
@@ -178,12 +185,15 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     type Error = Error;
 
     fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(format!("/storage/v1/b/{}/o/{}", self.bucket, path.as_ref().to_str().expect("path should be a unicode")).as_str())
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(future::err(err)),
+        };
 
         let client = self.client.clone();
 
@@ -235,19 +245,15 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             },
         };
 
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(
-                format!(
-                    "/storage/v1/b/{}/o?delimiter=/&prefix={}",
-                    self.bucket,
-                    path.as_ref().to_str().expect("path should be a unicode")
-                )
-                .as_str(),
-            )
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/storage/v1/b/{}/o?delimiter=/&prefix={}", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(stream::once(Err(err))),
+        };
 
         let client = self.client.clone();
 
@@ -281,14 +287,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 
     fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
-        let path = &utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
-
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path).as_str())
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(future::err(err)),
+        };
 
         let client = self.client.clone();
 
@@ -318,19 +326,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         bytes: B,
         path: P,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(
-                format!(
-                    "/upload/storage/v1/b/{}/o?uploadType=media&name={}",
-                    self.bucket,
-                    path.as_ref().to_str().expect("path should be a unicode").trim_end_matches('/')
-                )
-                .as_str(),
-            )
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .map(|x| x.trim_end_matches('/'))
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(future::err(err)),
+        };
 
         let client = self.client.clone();
 
@@ -361,14 +366,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 
     fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
-        let path = utf8_percent_encode(path.as_ref().to_str().unwrap(), PATH_SEGMENT_ENCODE_SET).collect::<String>();
-
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(format!("/storage/v1/b/{}/o/{}", self.bucket, path).as_str())
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(future::err(err)),
+        };
 
         let client = self.client.clone();
 
@@ -393,19 +400,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
-        let uri = Uri::builder()
-            .scheme(Scheme::HTTPS)
-            .authority("www.googleapis.com")
-            .path_and_query(
-                format!(
-                    "/upload/storage/v1/b/{}/o?uploadType=media&name={}/",
-                    self.bucket,
-                    path.as_ref().to_str().expect("path should be a unicode").trim_end_matches('/')
-                )
-                .as_str(),
-            )
-            .build()
-            .expect("invalid uri");
+        let uri = match path
+            .as_ref()
+            .to_str()
+            .map(|x| x.trim_end_matches('/'))
+            .ok_or(Error::PathError)
+            .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}/", self.bucket, path)))
+        {
+            Ok(uri) => uri,
+            Err(err) => return Box::new(future::err(err)),
+        };
 
         let client = self.client.clone();
 
