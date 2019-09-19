@@ -75,7 +75,9 @@ pub trait Metadata {
     fn len(&self) -> u64;
 
     /// Returns `self.len() == 0`.
-    fn is_empty(&self) -> bool;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     /// Returns true if the path is a directory.
     fn is_dir(&self) -> bool;
