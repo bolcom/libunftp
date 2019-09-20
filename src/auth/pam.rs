@@ -1,4 +1,4 @@
-use crate::auth::Authenticator;
+use crate::auth::*;
 
 use futures::Future;
 
@@ -45,7 +45,3 @@ impl Authenticator<AnonymousUser> for PAMAuthenticator {
         )
     }
 }
-
-/// AnonymousUser
-#[derive(Clone, Debug)]
-pub struct AnonymousUser;

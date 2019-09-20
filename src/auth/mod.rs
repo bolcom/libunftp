@@ -64,3 +64,5 @@ impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
 /// AnonymousUser
 #[derive(Debug, PartialEq)]
 pub struct AnonymousUser;
+
+// FIXME: add support for authenticated user

@@ -7,5 +7,5 @@ pub fn main() {
     let server = libunftp::Server::with_root(std::env::temp_dir());
 
     info!("Starting ftp server on {}", addr);
-    server.listen(addr);
+    tokio::run(server.listener(addr));
 }

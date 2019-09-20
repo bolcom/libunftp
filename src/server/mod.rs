@@ -39,7 +39,7 @@ use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth;
-use crate::auth::{AnonymousAuthenticator, AnonymousUser, Authenticator};
+use crate::auth::AnonymousUser;
 use crate::metrics;
 use crate::storage;
 use crate::storage::filesystem::Filesystem;
@@ -83,24 +83,26 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// let server = Server::with_root("/srv/ftp");
 /// # thread::spawn(move || {
-/// server.listen("127.0.0.1:2121");
+/// server.listener("127.0.0.1:2121");
 /// # });
 /// ```
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-pub struct Server<S, U: Send + Sync + 'static>
+pub struct Server<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
 {
     storage: Box<dyn (Fn() -> S) + Send>,
     greeting: &'static str,
-    authenticator: &'static (dyn Authenticator<U> + Send + Sync),
+    // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
+    authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
     certs_file: Option<&'static str>,
     key_file: Option<&'static str>,
     with_metrics: bool,
 }
+
 impl Server<Filesystem, AnonymousUser> {
     /// Create a new `Server` with the given filesystem root.
     ///
@@ -113,19 +115,10 @@ impl Server<Filesystem, AnonymousUser> {
     /// ```
     pub fn with_root<P: Into<std::path::PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
-        let server = Server {
-            storage: Box::new(move || {
-                let p = &p.clone();
-                Filesystem::new(p)
-            }),
-            greeting: DEFAULT_GREETING,
-            authenticator: &AnonymousAuthenticator {},
-            passive_addrs: Arc::new(vec![]),
-            certs_file: Option::None,
-            key_file: Option::None,
-            with_metrics: false,
-        };
-        server.passive_ports(49152..65535)
+        Server::new(Box::new(move || {
+            let p = &p.clone();
+            storage::filesystem::Filesystem::new(p)
+        }))
     }
 }
 
@@ -141,40 +134,14 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn Fn() -> S + Send>) -> Self
+    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self
     where
         auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
         let server = Server {
             storage: s,
             greeting: DEFAULT_GREETING,
-            authenticator: &AnonymousAuthenticator {},
-            passive_addrs: Arc::new(vec![]),
-            certs_file: Option::None,
-            key_file: Option::None,
-            with_metrics: false,
-        };
-        server.passive_ports(49152..65535)
-    }
-
-    /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
-    /// set to defaults.
-    ///
-    /// [`Server`]: struct.Server.html
-    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn with_authenticator<A>(s: Box<dyn Fn() -> S + Send>, a: &'static A) -> Server<S, U>
-    where
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
-        A: Authenticator<U> + Send + Sync,
-        // U: 'static + auth::Authenticator<U> + Send + Sync,
-        <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-        <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-        <S as storage::StorageBackend<U>>::Error: Send,
-    {
-        let server = Server {
-            storage: s,
-            greeting: DEFAULT_GREETING,
-            authenticator: a,
+            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
             passive_addrs: Arc::new(vec![]),
             certs_file: Option::None,
             key_file: Option::None,
@@ -199,6 +166,25 @@ where
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
         self.greeting = greeting;
+        self
+    }
+
+    /// Set the [`Authenticator`] that will be used for authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
+    /// use std::sync::Arc;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_root("/tmp")
+    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
+    /// ```
+    ///
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>) -> Self {
+        self.authenticator = authenticator;
         self
     }
 
@@ -263,37 +249,37 @@ where
         self
     }
 
-    /// Start the server and listen for connections on the given address.
+    /// Returns a tokio future that is the main ftp process. Should be started in a tokio context.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// # use std::thread;
     ///
-    /// let mut server = Server::with_root("/srv/ftp");
-    /// # thread::spawn(move || {
-    /// server.listen("127.0.0.1:2000");
-    /// # });
+    /// let mut server = Server::with_root("/srv/ftp").listener("127.0.0.1:2000");
+    ///
+    /// // for simple use cases:
+    /// //tokio::run(server);   // commented out, otherwise never returns
     /// ```
     ///
     /// # Panics
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listen(self, addr: &str) {
+    pub fn listener<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
-        tokio::run({
+        Box::new(
             listener
                 .incoming()
                 .map_err(|e| warn!("Failed to accept socket: {}", e))
+                .map_err(drop)
                 .for_each(move |socket| {
                     self.process(socket);
                     Ok(())
-                })
-        });
+                }),
+        )
     }
 
     /// Does TCP processing when a FTP client connects
@@ -307,7 +293,7 @@ where
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
-        let authenticator = self.authenticator;
+        let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx) = chancomms::create_internal_msg_channel();
@@ -362,12 +348,12 @@ where
                             }
                         }
                         Command::Pass { password } => {
-                            let session3 = Arc::clone(&session);
-                            let session2 = session.lock()?;
-                            match session2.state {
+                            let session_arc = session.clone();
+                            let session = session.lock()?;
+                            match session.state {
                                 SessionState::WaitPass => {
                                     let pass = std::str::from_utf8(&password)?;
-                                    let user = session2.username.clone().unwrap();
+                                    let user = session.username.clone().unwrap();
                                     let tx = tx.clone();
 
                                     tokio::spawn(
@@ -376,7 +362,7 @@ where
                                             .then(move |user| {
                                                 match user {
                                                     Ok(user) => {
-                                                        let mut session = session3.lock().unwrap();
+                                                        let mut session = session_arc.lock().unwrap();
                                                         session.user = Arc::new(Some(user));
                                                         tx.send(InternalMsg::AuthSuccess)
                                                     }

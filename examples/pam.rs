@@ -1,13 +1,7 @@
+use std::sync::Arc;
+
 use libunftp::auth::pam;
-use libunftp::storage::filesystem::Filesystem;
-
 use log::*;
-
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref AUTHENTICATOR: pam::PAMAuthenticator = pam::PAMAuthenticator::new("hello");
-}
 
 pub fn main() {
     pretty_env_logger::init();
@@ -15,7 +9,11 @@ pub fn main() {
     let addr = "127.0.0.1:8181";
 
     info!("Starting ftp server on {}", addr);
-    let storage = Box::new(move || Filesystem::new(std::env::temp_dir()));
+    let authenticator = pam::PAMAuthenticator::new("hello");
 
-    libunftp::Server::with_authenticator(storage, &*AUTHENTICATOR).listen(addr);
+    tokio::run(
+        libunftp::Server::with_root(std::env::temp_dir())
+            .authenticator(Arc::new(authenticator))
+            .listener(addr),
+    );
 }
