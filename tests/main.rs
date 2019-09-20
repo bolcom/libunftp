@@ -6,7 +6,7 @@ use tokio::runtime::Runtime;
 fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
     let mut rt = Runtime::new().unwrap();
     let server = libunftp::Server::with_root(path.into());
-    let _thread = rt.spawn(server.listen(addr));
+    let _thread = rt.spawn(server.listener(addr));
 
     test();
 

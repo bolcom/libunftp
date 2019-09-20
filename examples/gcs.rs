@@ -13,5 +13,5 @@ pub fn main() {
     }));
 
     info!("Starting ftp server on {}", addr);
-    tokio::run(server.listen(addr));
+    tokio::run(server.listener(addr));
 }

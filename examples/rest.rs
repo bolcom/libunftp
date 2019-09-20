@@ -23,5 +23,5 @@ pub fn main() {
     let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
-    tokio::run(server.listen(addr));
+    tokio::run(server.listener(addr));
 }

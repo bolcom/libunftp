@@ -83,7 +83,7 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// let server = Server::with_root("/srv/ftp");
 /// # thread::spawn(move || {
-/// server.listen("127.0.0.1:2121");
+/// server.listener("127.0.0.1:2121");
 /// # });
 /// ```
 ///
@@ -249,25 +249,24 @@ where
         self
     }
 
-    /// Start the server and listen for connections on the given address.
-    /// Blocks execution of current thread.
+    /// Returns a tokio future that is the main ftp process. Should be started in a tokio context.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::with_root("/srv/ftp").listen("127.0.0.1:2000");
+    /// let mut server = Server::with_root("/srv/ftp").listener("127.0.0.1:2000");
     ///
     /// // for simple use cases:
-    /// //tokio::run(server);
+    /// //tokio::run(server);   // commented out, otherwise never returns
     /// ```
     ///
     /// # Panics
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listen<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
+    pub fn listener<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 

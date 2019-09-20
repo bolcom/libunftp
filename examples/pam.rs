@@ -14,6 +14,6 @@ pub fn main() {
     tokio::run(
         libunftp::Server::with_root(std::env::temp_dir())
             .authenticator(Arc::new(authenticator))
-            .listen(addr),
+            .listener(addr),
     );
 }
