@@ -60,9 +60,8 @@ pub enum Opt {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-/// The FTP commands.
-// TODO: Write a short description of what the command should do according to the FTP spec in the
-// docstring.
+/// This enum represents parsed versions of the FTP commands defined in
+/// [RFC 959](https://tools.ietf.org/html/rfc959)
 pub enum Command {
     /// The `USER` command
     User {
@@ -124,11 +123,37 @@ pub enum Command {
         path: String,
     },
     /// The `LIST` command
+    // This command causes a list to be sent from the server to the
+    // passive DTP.  If the pathname specifies a directory or other
+    // group of files, the server should transfer a list of files
+    // in the specified directory.  If the pathname specifies a
+    // file then the server should send current information on the
+    // file.  A null argument implies the user's current working or
+    // default directory.  The data transfer is over the data
+    // connection in type ASCII or type EBCDIC.  (The user must
+    // ensure that the TYPE is appropriately ASCII or EBCDIC).
+    // Since the information on a file may vary widely from system
+    // to system, this information may be hard to use automatically
+    // in a program, but may be quite useful to a human user.
     List {
+        /// Arguments passed along with the list command.
+        options: Option<String>,
         /// The path of the file/directory the clients wants to list
         path: Option<String>,
     },
-    /// The `NLST` command
+    /// The `NAME LIST (NLST)` command
+    // This command causes a directory listing to be sent from
+    // server to user site.  The pathname should specify a
+    // directory or other system-specific file group descriptor; a
+    // null argument implies the current directory.  The server
+    // will return a stream of names of files and no other
+    // information.  The data will be transferred in ASCII or
+    // EBCDIC type over the data connection as valid pathname
+    // strings separated by <CRLF> or <NL>.  (Again the user must
+    // ensure that the TYPE is correct.)  This command is intended
+    // to return information that can be used by a program to
+    // further process the files automatically.  For example, in
+    // the implementation of a "multiple get" function.
     Nlst {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
@@ -313,13 +338,14 @@ impl Command {
                 Command::Stor { path: path.to_string() }
             }
             b"LIST" | b"list" => {
-                let path = parse_to_eol(cmd_params)?;
-                let path = if path.is_empty() {
-                    None
-                } else {
-                    Some(String::from_utf8_lossy(&path).to_string())
-                };
-                Command::List { path }
+                let line = parse_to_eol(cmd_params)?;
+                let path = line
+                    .split(|&b| b == b' ')
+                    .filter(|s| !line.is_empty() && !s.starts_with(b"-"))
+                    .map(|s| String::from_utf8_lossy(&s).to_string())
+                    .next();
+                // Note that currently we just throw arguments away.
+                Command::List { options: None, path }
             }
             b"NLST" | b"nlst" => {
                 let path = parse_to_eol(cmd_params)?;
@@ -907,12 +933,47 @@ mod tests {
 
     #[test]
     fn parse_list() {
-        let input = "LIST\r\n";
-        assert_eq!(Command::parse(input), Ok(Command::List { path: None }));
+        struct Test {
+            input: &'static str,
+            expected_path: Option<&'static str>,
+        }
 
-        let input = "LIST tmp\r\n";
-        let expected_path = Some("tmp".to_string());
-        assert_eq!(Command::parse(input), Ok(Command::List { path: expected_path }));
+        let tests = [
+            Test {
+                input: "LIST\r\n",
+                expected_path: None,
+            },
+            Test {
+                input: "LIST tmp\r\n",
+                expected_path: Some("tmp"),
+            },
+            Test {
+                input: "LIST -la\r\n",
+                expected_path: None,
+            },
+            Test {
+                input: "LIST -la tmp\r\n",
+                expected_path: Some("tmp"),
+            },
+            Test {
+                input: "LIST -la -x tmp\r\n",
+                expected_path: Some("tmp"),
+            },
+            Test {
+                input: "LIST -la -x tmp*\r\n",
+                expected_path: Some("tmp*"),
+            },
+        ];
+
+        for test in tests.iter() {
+            assert_eq!(
+                Command::parse(test.input),
+                Ok(Command::List {
+                    options: None,
+                    path: test.expected_path.map(|s| s.to_string()),
+                })
+            );
+        }
     }
 
     #[test]

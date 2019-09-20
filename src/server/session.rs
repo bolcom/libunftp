@@ -177,7 +177,7 @@ where
                                 }),
                         );
                     }
-                    Some(ExternalCommand(Command::List { path })) => {
+                    Some(ExternalCommand(Command::List { path, .. })) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
