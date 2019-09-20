@@ -1,4 +1,4 @@
-use log::info;
+use log::*;
 
 pub fn main() {
     pretty_env_logger::init();
@@ -13,5 +13,5 @@ pub fn main() {
     }));
 
     info!("Starting ftp server on {}", addr);
-    server.listen(addr);
+    tokio::run(server.listener(addr));
 }

@@ -1,4 +1,4 @@
-use crate::auth::Authenticator;
+use crate::auth::*;
 
 use regex::Regex;
 use std::string::String;
@@ -11,8 +11,6 @@ use hyper::{Body, Client, Request};
 
 use serde_json::Value;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
-
-use crate::auth::pam::AnonymousUser;
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -113,6 +111,7 @@ impl RestAuthenticator {
     }
 }
 
+// FIXME: add support for authenticated user
 impl Authenticator<AnonymousUser> for RestAuthenticator {
     fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
         let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();

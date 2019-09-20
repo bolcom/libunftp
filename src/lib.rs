@@ -16,7 +16,7 @@
 //! fn main() {
 //!  let server = libunftp::Server::with_root(std::env::temp_dir());
 //!  # if false { // We don't want to actually start the server in an example.
-//!  server.listen("127.0.0.1:2121");
+//!  server.listener("127.0.0.1:2121");
 //!  # }
 //! }
 //! ```
