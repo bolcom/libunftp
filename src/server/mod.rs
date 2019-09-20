@@ -79,12 +79,13 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// ```rust
 /// use libunftp::Server;
-/// # use std::thread;
+/// use tokio::runtime::Runtime;
 ///
+/// let mut rt = Runtime::new().unwrap();
 /// let server = Server::with_root("/srv/ftp");
-/// # thread::spawn(move || {
-/// server.listener("127.0.0.1:2121");
-/// # });
+/// rt.spawn(server.listener("127.0.0.1:2121"));
+/// // ...
+/// drop(rt);
 /// ```
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
@@ -255,11 +256,13 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use tokio::runtime::Runtime;
     ///
-    /// let mut server = Server::with_root("/srv/ftp").listener("127.0.0.1:2000");
-    ///
-    /// // for simple use cases:
-    /// //tokio::run(server);   // commented out, otherwise never returns
+    /// let mut rt = Runtime::new().unwrap();
+    /// let server = Server::with_root("/srv/ftp");
+    /// rt.spawn(server.listener("127.0.0.1:2121"));
+    /// // ...
+    /// drop(rt);
     /// ```
     ///
     /// # Panics
