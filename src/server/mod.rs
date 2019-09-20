@@ -571,15 +571,18 @@ where
                             tokio::spawn(
                                 storage
                                     .del(&session.user, path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete file"))
                                     .and_then(|_| {
                                         tx_success
                                             .send(InternalMsg::DelSuccess)
                                             .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
                                     })
-                                    .or_else(|_| {
+                                    .or_else(|e| {
+                                        let msg = match e.kind() {
+                                            ErrorKind::NotFound => InternalMsg::NotFound,
+                                            _ => InternalMsg::DelFail,
+                                        };
                                         tx_fail
-                                            .send(InternalMsg::DelFail)
+                                            .send(msg)
                                             .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
                                     })
                                     .map(|_| ())
