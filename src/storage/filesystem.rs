@@ -198,10 +198,6 @@ impl Metadata for std::fs::Metadata {
         self.len()
     }
 
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     fn is_dir(&self) -> bool {
         self.is_dir()
     }
