@@ -169,8 +169,7 @@ pub trait StorageBackend<U: Send> {
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
-    /// Returns some bytes that make up a directory listing that can immediately be sent to the
-    /// client.
+    /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
     fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
@@ -178,10 +177,10 @@ pub trait StorageBackend<U: Send> {
     {
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
         let fut = stream
-            .map(move |file| format!("{}\r\n", file).into_bytes())
+            .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
-            .map(|v| std::io::Cursor::new(v))
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "shut up"));
+            .map(std::io::Cursor::new)
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
 
         Box::new(fut)
     }
