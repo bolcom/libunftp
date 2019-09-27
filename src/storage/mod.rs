@@ -197,11 +197,11 @@ pub trait StorageBackend<U: Send> {
 
         let fut = stream
             .map(|file| {
-                format!("{}\r\n", file.path.file_name()
-                            .unwrap_or_else(|| std::ffi::OsStr::new(""))
-                            .to_str()
-                            .unwrap_or(""))
-                    .into_bytes()
+                format!(
+                    "{}\r\n",
+                    file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("")
+                )
+                .into_bytes()
             })
             .concat2()
             .map(std::io::Cursor::new)
