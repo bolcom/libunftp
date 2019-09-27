@@ -176,6 +176,7 @@ pub trait StorageBackend<U: Send> {
         <Self as StorageBackend<U>>::Error: Send + 'static,
     {
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
+
         let fut = stream
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
@@ -192,25 +193,19 @@ pub trait StorageBackend<U: Send> {
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
         <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
-        let res_work = res.clone();
+
         let fut = stream
-            .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
-                let mut res = res_work.lock().unwrap();
-                let fmt = format!(
-                    "{}\r\n",
-                    file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("")
-                );
-                let fmt_vec = fmt.into_bytes();
-                res.extend_from_slice(&fmt_vec);
-                Ok(())
+            .map(|file| {
+                format!("{}\r\n", file.path.file_name()
+                            .unwrap_or_else(|| std::ffi::OsStr::new(""))
+                            .to_str()
+                            .unwrap_or(""))
+                    .into_bytes()
             })
-            .and_then(|_| Ok(()))
-            .map(move |_| std::sync::Arc::try_unwrap(res).expect("failed try_unwrap").into_inner().unwrap())
+            .concat2()
             .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "shut up"));
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
 
         Box::new(fut)
     }
