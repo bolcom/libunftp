@@ -298,7 +298,9 @@ where
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let authenticator = self.authenticator.clone();
-        let session = Session::with_storage(storage).certs(self.certs_file.clone(), self.key_file.clone());
+        let session = Session::with_storage(storage)
+            .certs(self.certs_file.clone(), self.key_file.clone())
+            .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
@@ -800,7 +802,7 @@ where
                         .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
                         .take_while(move |event| {
                             if with_metrics {
-                                metrics::add_event_metric(event);
+                                metrics::add_event_metric(&event);
                             };
                             // TODO: Make sure data connections are closed
                             Ok(*event != Event::InternalMsg(InternalMsg::Quit))

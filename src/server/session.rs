@@ -11,6 +11,7 @@ use tokio::net::TcpStream;
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
+use crate::metrics;
 use crate::storage::{self, ErrorSemantics};
 
 const DATA_CHANNEL_ID: u8 = 1;
@@ -46,6 +47,7 @@ where
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
     pub data_tls: bool,
+    pub with_metrics: bool,
 }
 
 impl<S, U: Send + Sync + 'static> Session<S, U>
@@ -71,12 +73,21 @@ where
             key_file: Option::None,
             cmd_tls: false,
             data_tls: false,
+            with_metrics: false,
         }
     }
 
     pub(super) fn certs(mut self, certs_file: Option<PathBuf>, key_file: Option<PathBuf>) -> Self {
         self.certs_file = certs_file;
         self.key_file = key_file;
+        self
+    }
+
+    pub(super) fn with_metrics(mut self, with_metrics: bool) -> Self {
+        if with_metrics {
+            metrics::inc_session();
+        }
+        self.with_metrics = with_metrics;
         self
     }
 
@@ -280,6 +291,21 @@ where
                 SecurityState::Off
             }
             _ => SecurityState::Off,
+        }
+    }
+}
+
+impl<S, U: Send + Sync> Drop for Session<S, U>
+where
+    S: storage::StorageBackend<U>,
+    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
+    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
+    <S as storage::StorageBackend<U>>::Error: Send,
+{
+    fn drop(&mut self) {
+        if self.with_metrics {
+            // Decrease the sessions metrics gauge when the session goes out of scope.
+            metrics::dec_session();
         }
     }
 }
