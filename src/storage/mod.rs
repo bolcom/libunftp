@@ -176,21 +176,11 @@ pub trait StorageBackend<U: Send> {
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
         <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let res = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
-        let res_work = res.clone();
         let fut = stream
-            .for_each(move |file: Fileinfo<std::path::PathBuf, Self::Metadata>| {
-                let mut res = res_work.lock().unwrap();
-                let fmt = format!("{}\r\n", file);
-                let fmt_vec = fmt.into_bytes();
-                res.extend_from_slice(&fmt_vec);
-                Ok(())
-            })
-            .and_then(|_| Ok(()))
-            .map(move |_| std::sync::Arc::try_unwrap(res).expect("failed try_unwrap").into_inner().unwrap())
-            .map(std::io::Cursor::new)
+            .map(move |file| format!("{}\r\n", file).into_bytes())
+            .concat2()
+            .map(|v| std::io::Cursor::new(v))
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "shut up"));
 
         Box::new(fut)
