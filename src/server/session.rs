@@ -1,4 +1,5 @@
 use std::io::ErrorKind;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use futures::prelude::*;
@@ -37,10 +38,10 @@ where
     pub data_abort_tx: Option<mpsc::Sender<()>>,
     pub data_abort_rx: Option<mpsc::Receiver<()>>,
     pub cwd: std::path::PathBuf,
-    pub rename_from: Option<std::path::PathBuf>,
+    pub rename_from: Option<PathBuf>,
     pub state: SessionState,
-    pub certs_file: Option<&'static str>,
-    pub key_file: Option<&'static str>,
+    pub certs_file: Option<PathBuf>,
+    pub key_file: Option<PathBuf>,
     // True if the command channel is in secure mode
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
@@ -73,7 +74,7 @@ where
         }
     }
 
-    pub(super) fn certs(mut self, certs_file: Option<&'static str>, key_file: Option<&'static str>) -> Self {
+    pub(super) fn certs(mut self, certs_file: Option<PathBuf>, key_file: Option<PathBuf>) -> Self {
         self.certs_file = certs_file;
         self.key_file = key_file;
         self
@@ -85,7 +86,7 @@ where
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
     pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: mpsc::Sender<InternalMsg>) {
-        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (self.certs_file, self.key_file) {
+        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
         };

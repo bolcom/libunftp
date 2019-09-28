@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use futures::Future;
@@ -41,7 +42,7 @@ enum TlsIoType {
 }
 
 impl<S: SecuritySwitch> SwitchingTlsStream<S> {
-    pub fn new(delegate: TcpStream, switch: Arc<Mutex<S>>, channel: u8, certs_file: &str, key_file: &str) -> SwitchingTlsStream<S> {
+    pub fn new<P: AsRef<Path>>(delegate: TcpStream, switch: Arc<Mutex<S>>, channel: u8, certs_file: P, key_file: P) -> SwitchingTlsStream<S> {
         let certs = <SwitchingTlsStream<S>>::load_certs(certs_file);
         let privkey = <SwitchingTlsStream<S>>::load_private_key(key_file);
 
@@ -59,21 +60,21 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
         }
     }
 
-    fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
+    fn load_certs<P: AsRef<Path>>(filename: P) -> Vec<rustls::Certificate> {
         let certfile = File::open(filename).expect("cannot open certificate file");
         let mut reader = BufReader::new(certfile);
         rustls::internal::pemfile::certs(&mut reader).unwrap()
     }
 
-    fn load_private_key(filename: &str) -> rustls::PrivateKey {
+    fn load_private_key<P: AsRef<Path>>(filename: P) -> rustls::PrivateKey {
         let rsa_keys = {
-            let keyfile = File::open(filename).expect("cannot open private key file");
+            let keyfile = File::open(&filename).expect("cannot open private key file");
             let mut reader = BufReader::new(keyfile);
             rustls::internal::pemfile::rsa_private_keys(&mut reader).expect("file contains invalid rsa private key")
         };
 
         let pkcs8_keys = {
-            let keyfile = File::open(filename).expect("cannot open private key file");
+            let keyfile = File::open(&filename).expect("cannot open private key file");
             let mut reader = BufReader::new(keyfile);
             rustls::internal::pemfile::pkcs8_private_keys(&mut reader).expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
         };

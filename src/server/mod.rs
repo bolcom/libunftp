@@ -23,6 +23,7 @@ pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
 use std::io::ErrorKind;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use failure::Fail;
@@ -99,8 +100,8 @@ where
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-    certs_file: Option<&'static str>,
-    key_file: Option<&'static str>,
+    certs_file: Option<PathBuf>,
+    key_file: Option<PathBuf>,
     with_metrics: bool,
 }
 
@@ -114,7 +115,7 @@ impl Server<Filesystem, AnonymousUser> {
     ///
     /// let server = Server::with_root("/srv/ftp");
     /// ```
-    pub fn with_root<P: Into<std::path::PathBuf> + Send + 'static>(path: P) -> Self {
+    pub fn with_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
         Server::new(Box::new(move || {
             let p = &p.clone();
@@ -225,9 +226,9 @@ where
     ///
     /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
     /// ```
-    pub fn certs(mut self, certs_file: &'static str, key_file: &'static str) -> Self {
-        self.certs_file = Option::Some(certs_file);
-        self.key_file = Option::Some(key_file);
+    pub fn certs<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
+        self.certs_file = Option::Some(certs_file.into());
+        self.key_file = Option::Some(key_file.into());
         self
     }
 
@@ -288,8 +289,8 @@ where
     /// Does TCP processing when a FTP client connects
     fn process(&self, tcp_stream: TcpStream) {
         let with_metrics = self.with_metrics;
-        let tls_configured = if let (Some(certs), Some(key)) = (self.certs_file, self.key_file) {
-            !(certs.is_empty() || key.is_empty())
+        let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
+            true
         } else {
             false
         };
@@ -297,12 +298,12 @@ where
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let authenticator = self.authenticator.clone();
-        let session = Session::with_storage(storage).certs(self.certs_file, self.key_file);
+        let session = Session::with_storage(storage).certs(self.certs_file.clone(), self.key_file.clone());
         let session = Arc::new(Mutex::new(session));
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
-        let tcp_tls_stream: Box<dyn AsyncStream> = match (self.certs_file, self.key_file) {
+        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
             _ => Box::new(tcp_stream),
         };
