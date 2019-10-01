@@ -399,7 +399,7 @@ where
                             }
                         }
                         Command::Acct { .. } => respond!(|| Ok(Reply::new(ReplyCode::NotLoggedIn, "I don't know accounting man"))),
-                        Command::Type => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "I'm always in binary mode, dude..."))),
+                        Command::Type => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "Always in binary mode"))),
                         Command::Stru { structure } => {
                             ensure_authenticated!();
                             match structure {
