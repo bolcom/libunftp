@@ -5,6 +5,10 @@
 [![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
 
+When you need to FTP, but don't want to.
+
+![logo](logo.png)
+
 The libunftp library is a safe, fast and extensible FTP server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
 Because of its plugable authentication and storage backends (e.g. local filesystem, [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a perfect match for the cloud.
