@@ -48,6 +48,9 @@ where
     // True if the data channel is in secure mode.
     pub data_tls: bool,
     pub with_metrics: bool,
+    // The starting byte for a STOR or RETR command. Set by the _Restart of Interrupted Transfer (REST)_
+    // command to support resume functionality.
+    pub start_pos: u64,
 }
 
 impl<S, U: Send + Sync + 'static> Session<S, U>
@@ -74,6 +77,7 @@ where
             cmd_tls: false,
             data_tls: false,
             with_metrics: false,
+            start_pos: 0,
         }
     }
 
