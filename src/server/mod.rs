@@ -127,9 +127,9 @@ impl Server<Filesystem, AnonymousUser> {
 impl<S, U: Send + Sync + 'static> Server<S, U>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend<U>>::Error: Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+    S::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
