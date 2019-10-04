@@ -2,6 +2,8 @@ use futures::sync::mpsc;
 
 use super::commands::Command;
 
+use crate::storage::Error;
+
 // Commands that can be send to the data channel.
 #[derive(PartialEq)]
 pub enum DataCommand {
@@ -64,4 +66,6 @@ pub enum InternalMsg {
     SecureControlChannel,
     /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
     PlaintextControlChannel,
+    /// Errors comming from the storage
+    StorageError(Error),
 }

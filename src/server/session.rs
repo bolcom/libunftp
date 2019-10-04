@@ -1,4 +1,3 @@
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -12,7 +11,7 @@ use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
-use crate::storage::{self, ErrorSemantics};
+use crate::storage::{self, Error};
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -27,9 +26,8 @@ pub enum SessionState {
 pub struct Session<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
-    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend<U>>::Error: Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
     pub username: Option<String>,
@@ -53,9 +51,8 @@ where
 impl<S, U: Send + Sync + 'static> Session<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
-    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend<U>>::Error: Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
         Session {
@@ -126,28 +123,14 @@ where
                         tokio::spawn(
                             storage
                                 .get(&user, path)
-                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                                 .and_then(|f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendingData' message to data channel"))
-                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream))
-                                        .and_then(|(bytes, _, _)| {
-                                            tx.send(InternalMsg::SendData { bytes: bytes as i64 })
-                                                .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'SendData' message to data channel"))
-                                        })
+                                        .map_err(|_| Error::LocalError)
+                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream).map_err(|_| Error::LocalError))
+                                        .and_then(|(bytes, _, _)| tx.send(InternalMsg::SendData { bytes: bytes as i64 }).map_err(|_| Error::LocalError))
                                 })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::UnknownRetrieveError,
-                                    };
-                                    tx_error
-                                        .send(msg)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send ErrorMessage to data channel"))
-                                })
+                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
@@ -161,28 +144,8 @@ where
                         tokio::spawn(
                             storage
                                 .put(&user, tcp_tls_stream, path)
-                                .map_err(|e| {
-                                    if let Some(kind) = e.io_error_kind() {
-                                        std::io::Error::new(kind, "Failed to put file")
-                                    } else {
-                                        std::io::Error::new(std::io::ErrorKind::Other, "Failed to put file")
-                                    }
-                                })
-                                .and_then(|bytes| {
-                                    tx_ok
-                                        .send(InternalMsg::WrittenData { bytes: bytes as i64 })
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send WrittenData to the control channel"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset => InternalMsg::ConnectionReset,
-                                        ErrorKind::ConnectionAborted => InternalMsg::DataConnectionClosedAfterStor,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
+                                .and_then(|bytes| tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).map_err(|_| Error::LocalError))
+                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
@@ -200,22 +163,9 @@ where
                             storage
                                 .list_fmt(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .and_then(|_| {
-                                    tx_ok
-                                        .send(InternalMsg::DirectorySuccessfullyListed)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        // TODO: Consider making these events unique (so don't reuse
-                                        // the `Stor` messages here)
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
+                                .map_err(|_| Error::LocalError)
+                                .and_then(|_| tx_ok.send(InternalMsg::DirectorySuccessfullyListed).map_err(|_| Error::LocalError))
+                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send directory list: {:?}", e);
@@ -233,22 +183,9 @@ where
                             storage
                                 .nlst(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .and_then(|_| {
-                                    tx_ok
-                                        .send(InternalMsg::DirectorySuccessfullyListed)
-                                        .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to Send `DirectorySuccesfullyListed` event"))
-                                })
-                                .or_else(|e| {
-                                    let msg = match e.kind() {
-                                        // TODO: Consider making these events unique (so don't reuse
-                                        // the `Stor` messages here)
-                                        ErrorKind::NotFound => InternalMsg::NotFound,
-                                        ErrorKind::PermissionDenied => InternalMsg::PermissionDenied,
-                                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => InternalMsg::ConnectionReset,
-                                        _ => InternalMsg::WriteFailed,
-                                    };
-                                    tx_error.send(msg)
-                                })
+                                .map_err(|_| Error::LocalError)
+                                .and_then(|_| tx_ok.send(InternalMsg::DirectorySuccessfullyListed).map_err(|_| Error::LocalError))
+                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send directory list: {:?}", e);
@@ -272,9 +209,8 @@ where
 impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend<U>>::Error: Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
         match channel {
@@ -298,9 +234,8 @@ where
 impl<S, U: Send + Sync> Drop for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    <S as storage::StorageBackend<U>>::File: tokio_io::AsyncRead + Send,
-    <S as storage::StorageBackend<U>>::Metadata: storage::Metadata,
-    <S as storage::StorageBackend<U>>::Error: Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
 {
     fn drop(&mut self) {
         if self.with_metrics {

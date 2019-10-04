@@ -22,14 +22,15 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use failure::Fail;
-use futures::prelude::*;
-use futures::sync::mpsc;
 use futures::Sink;
+use futures::{
+    prelude::{Future, Stream},
+    sync::mpsc,
+};
 use log::{error, info, warn};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::Decoder;
@@ -39,11 +40,9 @@ use uuid::Uuid;
 use self::commands::{AuthParam, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
-use crate::auth;
-use crate::auth::AnonymousUser;
+use crate::auth::{self, AnonymousUser};
 use crate::metrics;
-use crate::storage;
-use crate::storage::filesystem::Filesystem;
+use crate::storage::{self, filesystem::Filesystem, Error};
 use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
@@ -129,7 +128,6 @@ where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio_io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
-    S::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
@@ -574,20 +572,8 @@ where
                             tokio::spawn(
                                 storage
                                     .del(&session.user, path)
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|e| {
-                                        let msg = match e.kind() {
-                                            ErrorKind::NotFound => InternalMsg::NotFound,
-                                            _ => InternalMsg::DelFail,
-                                        };
-                                        tx_fail
-                                            .send(msg)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::LocalError))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to delete file: {}", e);
@@ -605,17 +591,8 @@ where
                             tokio::spawn(
                                 storage
                                     .rmd(&session.user, path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::DelFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::LocalError))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to delete directory: {}", e);
@@ -638,17 +615,8 @@ where
                             tokio::spawn(
                                 storage
                                     .mkd(&session.user, &path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::MkdirSuccess(path))
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirSuccess' message"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::MkdirFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirFail' message"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::MkdirSuccess(path)).map_err(|_| Error::LocalError))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to create directory: {}", e);
@@ -787,6 +755,15 @@ where
                     Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
                 }
                 Event::InternalMsg(AuthFailed) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
+                Event::InternalMsg(StorageError(error_type)) => match error_type {
+                    Error::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
+                    Error::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
+                    Error::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
+                    Error::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
+                    Error::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
+                    Error::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
+                    Error::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
+                },
             }
         };
 

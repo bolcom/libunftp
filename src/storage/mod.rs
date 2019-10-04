@@ -2,70 +2,43 @@ use std::path::Path;
 use std::time::SystemTime;
 use std::{fmt, result};
 
-use chrono::prelude::*;
+use chrono::prelude::{DateTime, Utc};
 use futures::{Future, Stream};
-
-/// `Error` variants that can be produced by the [`StorageBackend`] implementations must implement
-/// this ErrorSemantics trait.
-///
-/// [`StorageBackend`]: ./trait.StorageBackend.html
-pub trait ErrorSemantics {
-    /// If there was an `std::io::Error` this should return its kind otherwise None.
-    fn io_error_kind(&self) -> Option<std::io::ErrorKind>;
-}
 
 #[derive(Debug, PartialEq)]
 /// The `Error` variants that can be produced by the [`StorageBackend`] implementations.
 ///
 /// [`StorageBackend`]: ./trait.StorageBackend.html
 pub enum Error {
-    /// An IO Error
-    IOError(std::io::ErrorKind),
-    /// Path error
-    PathError,
-    /// Metadata error
-    MetadataError,
-}
-
-impl Error {
-    fn description_str(&self) -> &'static str {
-        ""
-    }
-}
-
-impl ErrorSemantics for Error {
-    fn io_error_kind(&self) -> Option<std::io::ErrorKind> {
-        if let Error::IOError(kind) = self {
-            Some(*kind)
-        } else {
-            None
-        }
-    }
+    /// 450 Requested file action not taken.
+    ///     File unavailable (e.g., file busy).
+    TransientFileNotAvailable,
+    /// 550 Requested action not taken.
+    ///     File unavailable (e.g., file not found, no access).
+    PermanentFileNotAvailable,
+    /// 451 Requested action aborted. Local error in processing.
+    LocalError,
+    /// 551 Requested action aborted. Page type unknown.
+    PageTypeUnknown,
+    /// 452 Requested action not taken.
+    ///     Insufficient storage space in system.
+    InsufficientStorageSpaceError,
+    /// 552 Requested file action aborted.
+    ///     Exceeded storage allocation (for current directory or
+    ///     dataset).
+    ExceededStorageAllocationError,
+    /// 553 Requested action not taken.
+    ///     File name not allowed.
+    FileNameNotAllowedError,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&self.description_str())
+        write!(f, "TODO") //TODO: get the cause here
     }
 }
 
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        self.description_str()
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::IOError(err.kind())
-    }
-}
-
-impl From<path_abs::Error> for Error {
-    fn from(_err: path_abs::Error) -> Error {
-        Error::PathError
-    }
-}
+impl std::error::Error for Error {}
 
 type Result<T> = result::Result<T, Error>;
 
@@ -152,20 +125,14 @@ pub trait StorageBackend<U: Send> {
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata: Metadata;
-    /// The concrete type of the error returned by this StorageBackend.
-    type Error: ErrorSemantics;
 
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send>;
+    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(
-        &self,
-        user: &Option<U>,
-        path: P,
-    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
@@ -173,10 +140,8 @@ pub trait StorageBackend<U: Send> {
     fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
-        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
-
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
         let fut = stream
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
@@ -191,9 +156,8 @@ pub trait StorageBackend<U: Send> {
     fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
-        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
 
         let fut = stream
             .map(|file| {
@@ -214,7 +178,7 @@ pub trait StorageBackend<U: Send> {
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
-    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send>;
+    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
 
     /// Write the given bytes to the given file.
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
@@ -222,19 +186,19 @@ pub trait StorageBackend<U: Send> {
         user: &Option<U>,
         bytes: R,
         path: P,
-    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
+    ) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send>;
+    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Rename the given file to the given filename.
-    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
