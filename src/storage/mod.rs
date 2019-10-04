@@ -5,6 +5,10 @@ use std::{fmt, result};
 use chrono::prelude::*;
 use futures::{Future, Stream};
 
+/// Tells if STOR/RETR restarts are supported by the storage back-end
+/// i.e. starting from a different byte offset.
+pub const FEATURE_RESTART: u32 = 0b0000_0001;
+
 /// `Error` variants that can be produced by the [`StorageBackend`] implementations must implement
 /// this ErrorSemantics trait.
 ///
@@ -154,6 +158,12 @@ pub trait StorageBackend<U: Send> {
     type Metadata: Metadata;
     /// The concrete type of the error returned by this StorageBackend.
     type Error: ErrorSemantics;
+
+    /// Tells which optional features are supported by the storage back-end
+    /// Return a value with bits set according to the FEATURE_* constants.
+    fn supported_features(&self) -> u32 {
+        0
+    }
 
     /// Returns the `Metadata` for the given file.
     ///

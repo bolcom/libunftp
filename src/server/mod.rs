@@ -301,6 +301,7 @@ where
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
+        let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage)
             .certs(self.certs_file.clone(), self.key_file.clone())
@@ -577,6 +578,9 @@ where
                                 feat_text.push(" PBSZ");
                                 feat_text.push(" PROT");
                             }
+                            if storage_features & storage::FEATURE_RESTART > 0 {
+                                feat_text.push("REST STREAM");
+                            }
 
                             // Show them in alphabetical order.
                             feat_text.sort();
@@ -814,6 +818,16 @@ where
                                 Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*size.to_string())),
                                 Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get size.")),
                             }
+                        }
+                        Command::Rest { offset } => {
+                            ensure_authenticated!();
+                            if storage_features & storage::FEATURE_RESTART == 0 {
+                                return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+                            }
+                            let mut session = session.lock()?;
+                            session.start_pos = offset;
+                            let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", offset);
+                            Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
                         }
                     }
                 }
