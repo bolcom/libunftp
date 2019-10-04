@@ -126,15 +126,15 @@ impl Object {
 
 impl Read for Object {
     fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-        for i in 0..buffer.len() {
+        for (i, item) in buffer.iter_mut().enumerate() {
             if i + self.index < self.data.len() {
-                buffer[i] = self.data[i + self.index];
+                *item = self.data[i + self.index];
             } else {
-                self.index = self.index + i;
+                self.index += i;
                 return Ok(i);
             }
         }
-        self.index = self.index + buffer.len();
+        self.index += buffer.len();
         Ok(buffer.len())
     }
 }
@@ -225,7 +225,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .and_then(|body_string| {
                         serde_json::from_slice::<Item>(&body_string)
                             .map_err(|_| Error::PermanentFileNotAvailable)
-                            .map(|item| item_to_metadata(item))
+                            .map(item_to_metadata)
                     })
             });
         Box::new(result)
@@ -364,7 +364,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .and_then(move |body_string| {
                         serde_json::from_slice::<Item>(&body_string)
                             .map_err(|_| Error::PermanentFileNotAvailable)
-                            .map(|item| item_to_metadata(item))
+                            .map(item_to_metadata)
                     })
                     .and_then(|meta_data| future::ok(meta_data.len()))
             });
@@ -409,25 +409,19 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                                     // empty reply means it is successful.
                                     future::ok(())
                                 }
-                                _ => {
-                                    match serde_json::from_slice::<ResponseBody>(&body) {
-                                        Ok(result) => {
-                                            match result.error {
-                                                Some(error) => {
-                                                    if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
-                                                        future::err(Error::PermanentFileNotAvailable)
-                                                    } else {
-                                                        // let's see later how we will reply in different situations...
-                                                        // because we don't want to give a transient error in many cases
-                                                        future::err(Error::PermanentFileNotAvailable)
-                                                    }
-                                                }
-                                                _ => future::err(Error::LocalError),
+                                _ => match serde_json::from_slice::<ResponseBody>(&body) {
+                                    Ok(result) => match result.error {
+                                        Some(error) => {
+                                            if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
+                                                future::err(Error::PermanentFileNotAvailable)
+                                            } else {
+                                                future::err(Error::TransientFileNotAvailable)
                                             }
                                         }
-                                        Err(_) => future::err(Error::LocalError),
-                                    }
-                                }
+                                        _ => future::err(Error::LocalError),
+                                    },
+                                    Err(_) => future::err(Error::LocalError),
+                                },
                             }
                         })
                 })
