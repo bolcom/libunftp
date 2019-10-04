@@ -597,6 +597,7 @@ where
                             ensure_authenticated!();
                             let session = session.lock()?;
                             let storage = Arc::clone(&session.storage);
+                            let path = session.cwd.join(path);
                             let tx_success = tx.clone();
                             let tx_fail = tx.clone();
                             tokio::spawn(
