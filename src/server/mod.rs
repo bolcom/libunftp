@@ -46,8 +46,12 @@ use crate::storage;
 use crate::storage::filesystem::Filesystem;
 use session::{Session, SessionState};
 
+use rand::Rng;
+
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
+
+const BIND_RETRIES: u8 = 10;
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
@@ -419,7 +423,24 @@ where
                         Command::Pasv => {
                             ensure_authenticated!();
 
-                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
+                            let mut rng = rand::thread_rng();
+
+                            let mut listener: Option<std::net::TcpListener> = None;
+                            for _ in 1..BIND_RETRIES {
+                                let i = rng.gen_range(0, passive_addrs.len()-1);
+                                match std::net::TcpListener::bind(passive_addrs[i]) {
+                                    Ok(x) => {
+                                        listener = Some(x);
+                                    }
+                                    Err(_) => continue,
+                                };
+                            };
+
+                            if listener.is_none() {
+                                return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
+                            }
+
+                            let listener = listener.unwrap();
                             let addr = match listener.local_addr()? {
                                 std::net::SocketAddr::V4(addr) => addr,
                                 std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
