@@ -105,6 +105,10 @@ pub enum Command {
         mode: ModeParam,
     },
     /// The `HELP` command
+    // A HELP request asks for human-readable information from the server. The server may accept this request with code 211 or 214, or reject it with code 502.
+    //
+    // A HELP request may include a parameter. The meaning of the parameter is defined by the server. Some servers interpret the parameter as an FTP verb,
+    // and respond by briefly explaining the syntax of the verb.
     Help,
     /// The `NOOP` command
     Noop,
