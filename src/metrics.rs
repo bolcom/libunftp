@@ -5,11 +5,14 @@ use crate::server::{
 };
 
 use lazy_static::*;
-use prometheus::{__register_counter_vec, opts, register_int_counter, register_int_counter_vec, IntCounter, IntCounterVec, __register_counter};
+use prometheus::{
+    __register_counter_vec, __register_gauge, opts, register_counter, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter,
+    IntCounterVec, IntGauge,
+};
 
 lazy_static! {
     static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
-    static ref FTP_SESSIONS: IntCounter = register_int_counter!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
+    static ref FTP_SESSIONS: IntGauge = register_int_gauge!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
     static ref FTP_BACKEND_WRITE_BYTES: IntCounter =
         register_int_counter!(opts!("ftp_backend_write_bytes", "Total number of bytes written to the backend.")).unwrap();
     static ref FTP_BACKEND_READ_BYTES: IntCounter =
@@ -42,6 +45,16 @@ pub fn add_event_metric(event: &Event) {
             _ => {}
         },
     }
+}
+
+/// Increase the metrics gauge for client sessions
+pub fn inc_session() {
+    FTP_SESSIONS.inc();
+}
+
+/// Decrease the metrics gauge for client sessions
+pub fn dec_session() {
+    FTP_SESSIONS.dec();
 }
 
 /// Add a metric for an FTP server error.
