@@ -147,7 +147,6 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
                 })
                 .map_err(|err| {
                     info!("RestError: {:?}", err);
-                    ()
                 })
                 .and_then(move |response: Value| {
                     let parsed = response
@@ -156,11 +155,12 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
                             debug!("pointer: {:?}", x);
                             format!("{:?}", x)
                         })
-                        .unwrap_or("null".to_string());
+                        .unwrap_or_else(|| "null".to_string());
 
-                    match regex.is_match(&parsed) {
-                        true => Ok(AnonymousUser {}),
-                        false => Err(()),
+                    if regex.is_match(&parsed) {
+                        Ok(AnonymousUser {})
+                    } else {
+                        Err(())
                     }
                 }),
         )
@@ -182,7 +182,7 @@ fn encode_string_json(string: &str) -> String {
         }
     }
 
-    return res;
+    res
 }
 
 /// Possible errors while doing REST lookup

@@ -40,7 +40,6 @@ impl Authenticator<AnonymousUser> for PAMAuthenticator {
                 })
                 .map_err(|err| {
                     debug!("RestError: {:?}", err);
-                    ()
                 }),
         )
     }
