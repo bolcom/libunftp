@@ -673,7 +673,9 @@ impl From<Context<ParseErrorKind>> for ParseError {
 
 impl From<str::Utf8Error> for ParseError {
     fn from(_: str::Utf8Error) -> ParseError {
-        ParseError{ inner: Context::new(ParseErrorKind::InvalidUTF8) }
+        ParseError {
+            inner: Context::new(ParseErrorKind::InvalidUTF8),
+        }
     }
 }
 
