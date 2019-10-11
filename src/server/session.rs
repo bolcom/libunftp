@@ -114,6 +114,7 @@ where
         let abort_rx = self.data_abort_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
+        let start_pos = self.start_pos;
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
@@ -129,7 +130,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .get(&user, path)
+                                .get(&user, path, start_pos)
                                 .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to get file"))
                                 .and_then(|f| {
                                     tx_sending
