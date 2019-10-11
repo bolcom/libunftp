@@ -16,14 +16,14 @@ jobs:
     - name: Install rustup
       run: curl --proto '=https' --tlsv1.2 -sSf -o rustup-init.sh https://sh.rustup.rs && sh rustup-init.sh -y
     - name: Switch toolchain
-      run: rustup default ${{matrix.toolchain}}
+      run: $HOME/.cargo/bin/rustup default ${{matrix.toolchain}}
     - name: Add rustfmt and clippy
-      run: rustup component add rustfmt clippy
+      run: $HOME/.cargo/bin/rustup component add rustfmt clippy
     - name: Rustfmt
-      run: cargo fmt --all -- --check
+      run: $HOME/.cargo/bin/cargo fmt --all -- --check
     - name: Clippy
-      run: cargo clippy --all-features -- -D warnings
+      run: $HOME/.cargo/bin/cargo clippy --all-features -- -D warnings
     - name: Build
-      run: cargo build --verbose --all --all-features
+      run: $HOME/.cargo/bin/cargo build --verbose --all --all-features
     - name: Run tests
-      run: cargo test --verbose --all --all-features
+      run: $HOME/.cargo/bin/cargo test --verbose --all --all-features
