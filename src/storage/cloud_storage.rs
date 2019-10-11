@@ -126,15 +126,15 @@ impl Object {
 
 impl Read for Object {
     fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-        for i in 0..buffer.len() {
+        for (i, item) in buffer.iter_mut().enumerate() {
             if i + self.index < self.data.len() {
-                buffer[i] = self.data[i + self.index];
+                *item = self.data[i + self.index];
             } else {
-                self.index = self.index + i;
+                self.index += i;
                 return Ok(i);
             }
         }
-        self.index = self.index + buffer.len();
+        self.index += buffer.len();
         Ok(buffer.len())
     }
 }
@@ -226,7 +226,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .and_then(|body_string| {
                         serde_json::from_slice::<Item>(&body_string)
                             .map_err(|_| Error::IOError(ErrorKind::Other))
-                            .map(|item| item_to_metadata(item))
+                            .map(item_to_metadata)
                     })
             });
         Box::new(result)
@@ -369,7 +369,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .and_then(move |body_string| {
                         serde_json::from_slice::<Item>(&body_string)
                             .map_err(|_| Error::IOError(ErrorKind::Other))
-                            .map(|item| item_to_metadata(item))
+                            .map(item_to_metadata)
                     })
                     .and_then(|meta_data| future::ok(meta_data.len()))
             });

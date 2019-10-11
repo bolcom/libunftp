@@ -1,17 +1,22 @@
-name: Rust
+name: Rust build on linux
 
 on: [push]
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} with ${{matrix.toolchain}} toolchain
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
+        toolchain: [stable, beta]
 
     steps:
     - uses: actions/checkout@v1
+    - name: Install pam
+      run: sudo apt-get install libpam0g-dev
+    - name: Switch toolchain
+      run: rustup default ${{matrix.toolchain}}
     - name: Add rustfmt and clippy
       run: rustup component add rustfmt clippy
     - name: Rustfmt
