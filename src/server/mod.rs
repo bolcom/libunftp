@@ -834,10 +834,18 @@ where
                 Event::InternalMsg(NotFound) => Ok(Reply::new(ReplyCode::FileError, "File not found")),
                 Event::InternalMsg(PermissionDenied) => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
                 Event::InternalMsg(SendingData) => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
-                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Send you something nice")),
+                Event::InternalMsg(SendData { .. }) => {
+                    let mut session = session.lock()?;
+                    session.start_pos = 0;
+                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
+                }
                 Event::InternalMsg(WriteFailed) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
                 Event::InternalMsg(ConnectionReset) => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
-                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written")),
+                Event::InternalMsg(WrittenData { .. }) => {
+                    let mut session = session.lock()?;
+                    session.start_pos = 0;
+                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
+                }
                 Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
                 Event::InternalMsg(UnknownRetrieveError) => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
                 Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
