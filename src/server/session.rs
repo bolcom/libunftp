@@ -165,7 +165,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .put(&user, tcp_tls_stream, path)
+                                .put(&user, tcp_tls_stream, path, start_pos)
                                 .map_err(|e| {
                                     if let Some(kind) = e.io_error_kind() {
                                         std::io::Error::new(kind, "Failed to put file")

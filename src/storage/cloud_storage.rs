@@ -336,6 +336,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         _user: &Option<U>,
         bytes: B,
         path: P,
+        start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         let uri = match path
             .as_ref()
