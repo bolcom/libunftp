@@ -22,7 +22,7 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -398,12 +398,14 @@ where
                                 }
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path)?;
-                                    // TODO: Implement :)
-                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok(Reply::new(
-                                        ReplyCode::CommandNotImplementedForParameter,
-                                        "STAT with paths not supported at the moment.",
-                                    ))
+
+                                    let session = session.lock()?;
+                                    let storage = Arc::clone(&session.storage);
+                                    storage.list_fmt(&session.user, path).wait().map(move |mut cursor| {
+                                        let mut result = String::new();
+                                        cursor.read_to_string(&mut result)?;
+                                        Ok(Reply::new(ReplyCode::CommandOkay, &result))
+                                    })?
                                 }
                             }
                         }
