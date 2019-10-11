@@ -4,14 +4,17 @@ on: [push]
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.os }} with ${{matrix.toolchain}} toolchain
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
+        toolchain: [stable, beta, nightly]
 
     steps:
     - uses: actions/checkout@v1
+    - name: Switch toolchain
+      run: rustup default ${{matrix.toolchain}}
     - name: Add rustfmt and clippy
       run: rustup component add rustfmt clippy
     - name: Rustfmt
