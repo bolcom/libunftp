@@ -230,12 +230,13 @@ pub trait StorageBackend<U: Send> {
     // Trait.
     fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send>;
 
-    /// Write the given bytes to the given file.
+    /// Write the given bytes to the given file starting at offset
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         user: &Option<U>,
         bytes: R,
         path: P,
+        start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
 
     /// Delete the given file.

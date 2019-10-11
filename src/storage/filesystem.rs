@@ -130,6 +130,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         _user: &Option<U>,
         bytes: R,
         path: P,
+        start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         // TODO: Add permission checks
         let path = path.as_ref();
@@ -139,7 +140,16 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        let fut = tokio::fs::file::File::create(full_path)
+        use futures::future::IntoFuture;
+
+        let file = std::fs::OpenOptions::new().write(true).create(true).open(full_path);
+
+        let fut = file
+            .into_future()
+            .map(|f| tokio::fs::file::File::from_std(f))
+            .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
+            .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
+            .map(|f| f.0)
             .and_then(|f| tokio_io::io::copy(bytes, f))
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
