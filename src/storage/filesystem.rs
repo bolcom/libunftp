@@ -64,6 +64,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
     type Metadata = std::fs::Metadata;
     type Error = Error;
 
+    fn supported_features(&self) -> u32 {
+        crate::storage::FEATURE_RESTART
+    }
+
     fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
@@ -104,16 +108,21 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         Box::new(fut.map_err(|e| Error::IOError(e.kind())))
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio::fs::File, Error = Self::Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::file::File::open(full_path).map_err(|e| {
-            debug!("{:?}", e);
-            Error::IOError(e.kind())
-        }))
+        Box::new(
+            tokio::fs::file::File::open(full_path)
+                .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
+                .map(|res| res.0)
+                .map_err(|e| {
+                    debug!("{:?}", e);
+                    Error::IOError(e.kind())
+                }),
+        )
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
