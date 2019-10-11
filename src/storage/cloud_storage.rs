@@ -297,7 +297,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
@@ -336,7 +336,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         _user: &Option<U>,
         bytes: B,
         path: P,
-        start_pos: u64,
+        _start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
         let uri = match path
             .as_ref()

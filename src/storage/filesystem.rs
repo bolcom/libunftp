@@ -146,7 +146,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
 
         let fut = file
             .into_future()
-            .map(|f| tokio::fs::file::File::from_std(f))
+            .map(tokio::fs::file::File::from_std)
             .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
             .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
             .map(|f| f.0)
@@ -359,7 +359,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename)).unwrap();
+        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(future::lazy(move || {
             tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
@@ -385,7 +385,7 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt"))
+        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
