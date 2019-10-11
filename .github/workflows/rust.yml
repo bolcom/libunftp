@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Install pam
-      run: apt-get install libpam0g-dev
+      run: sudo apt-get install libpam0g-dev
     - name: Switch toolchain
       run: rustup default ${{matrix.toolchain}}
     - name: Add rustfmt and clippy
