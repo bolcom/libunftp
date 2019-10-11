@@ -309,6 +309,8 @@ where
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
+        let local_addr = tcp_stream.local_addr().unwrap().clone();
+
         let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
             _ => Box::new(tcp_stream),
@@ -439,6 +441,12 @@ where
                         Command::Pasv => {
                             ensure_authenticated!();
 
+                            // obtain the ip address the client is connected to
+                            let conn_addr = match local_addr {
+                                std::net::SocketAddr::V4(addr) => addr,
+                                std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
+                            };
+
                             let mut rng = rand::thread_rng();
 
                             let mut listener: Option<std::net::TcpListener> = None;
@@ -464,7 +472,7 @@ where
                             };
                             let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
-                            let octets = addr.ip().octets();
+                            let octets = conn_addr.ip().octets();
                             let port = addr.port();
                             let p1 = port >> 8;
                             let p2 = port - (p1 * 256);
