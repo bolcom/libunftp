@@ -6,6 +6,36 @@ pub enum Reply {
 }
 
 /// The reply codes according to RFC 959.
+//
+// From: https://cr.yp.to/ftp/request.html#response
+//
+// The three digits form a code. Codes between 100 and 199 indicate marks; codes between 200
+// and 399 indicate acceptance; codes between 400 and 599 indicate rejection.
+//
+// RFC 959 prohibited all codes other than 110, 120, 125, 150, 200, 202, 211, 212, 213, 214, 215,
+// 220, 221, 225, 226, 227, 230, 250, 257, 331, 332, 350, 421, 425, 426, 450, 451, 452, 500, 501,
+// 502, 503, 504, 530, 532, 550, 551, 552, and 553.
+//
+// Typically the second digit is:
+// - 0 for a syntax error
+// - 1 for a human-oriented help message,
+// - 2 for a hello/goodbye message
+// - 3 for an accounting message
+// - 5 for a filesystem-related message.
+//
+// However, clients cannot take this list seriously; the IETF adds new codes at its whim. I
+// recommend that clients avoid looking past the first digit of the code,
+// either 1, 2, 3, 4, or 5. The other two digits, and all other portions of the response,
+// are primarily for human consumption. (Exceptions: Greetings, responses with code 227,
+// and responses with code 257 have a special format.)
+//
+// Servers must not send marks except where they are explicitly allowed. Many clients cannot
+// handle unusual marks. Typical requests do not permit any marks.
+//
+// The server can reject any request with code
+// - 421 if the server is about to close the connection;
+// - 500, 501, 502, or 504 for unacceptable syntax; or
+// - 530 if permission is denied.
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 #[allow(dead_code)]

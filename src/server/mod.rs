@@ -378,7 +378,7 @@ where
                                     );
                                     Ok(Reply::none())
                                 }
-                                New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please give me a username first")),
+                                New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please supply a username first")),
                                 _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate")),
                             }
                         }
@@ -389,22 +389,32 @@ where
                         Command::Stat { path } => {
                             ensure_authenticated!();
                             match path {
-                                None => Ok(Reply::new(ReplyCode::SystemStatus, "I'm just a humble FTP server")),
+                                None => {
+                                    let text = vec!["Status:", "Powered by libunftp"];
+                                    // TODO: Add useful information here lik libunftp version, auth type, storage type, IP etc.
+                                    Ok(Reply::new_multiline(ReplyCode::SystemStatus, text))
+                                }
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path)?;
                                     // TODO: Implement :)
                                     info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Stat with paths unsupported atm"))
+                                    Ok(Reply::new(
+                                        ReplyCode::CommandNotImplementedForParameter,
+                                        "STAT with paths not supported at the moment.",
+                                    ))
                                 }
                             }
                         }
-                        Command::Acct { .. } => respond!(|| Ok(Reply::new(ReplyCode::NotLoggedIn, "I don't know accounting man"))),
+                        Command::Acct { .. } => respond!(|| Ok(Reply::new(ReplyCode::NotLoggedIn, "Rejected"))),
                         Command::Type => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "Always in binary mode"))),
                         Command::Stru { structure } => {
                             ensure_authenticated!();
                             match structure {
-                                commands::StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "We're in File structure mode")),
-                                _ => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Only File structure is supported")),
+                                commands::StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
+                                _ => Ok(Reply::new(
+                                    ReplyCode::CommandNotImplementedForParameter,
+                                    "Only File structure mode is supported",
+                                )),
                             }
                         }
                         Command::Mode { mode } => respond!(|| match mode {
@@ -414,7 +424,11 @@ where
                                 "Only Stream transfer mode is supported"
                             )),
                         }),
-                        Command::Help => respond!(|| Ok(Reply::new(ReplyCode::HelpMessage, "We haven't implemented a useful HELP command, sorry"))),
+                        Command::Help => {
+                            let text = vec!["Help:", "Powered by libunftp"];
+                            // TODO: Add useful information here like operating server type and app name.
+                            Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))
+                        }
                         Command::Noop => respond!(|| Ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing"))),
                         Command::Pasv => {
                             ensure_authenticated!();
@@ -548,18 +562,18 @@ where
                             respond!(|| {
                                 let mut session = session.lock()?;
                                 session.cwd.push(path);
-                                Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
+                                Ok(Reply::new(ReplyCode::FileActionOkay, "OK"))
                             })
                         }
                         Command::Cdup => respond!(|| {
                             let mut session = session.lock()?;
                             session.cwd.pop();
-                            Ok(Reply::new(ReplyCode::FileActionOkay, "Okay."))
+                            Ok(Reply::new(ReplyCode::FileActionOkay, "OK"))
                         }),
                         Command::Opts { option } => {
                             ensure_authenticated!();
                             match option {
-                                commands::Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Okay, I'm always in UTF8 mode.")),
+                                commands::Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
                             }
                         }
                         Command::Dele { path } => {
@@ -603,7 +617,7 @@ where
                         Command::Quit => {
                             let tx = tx.clone();
                             spawn!(tx.send(InternalMsg::Quit));
-                            Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!"))
+                            Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
                         }
                         Command::Mkd { path } => {
                             ensure_authenticated!();
@@ -627,7 +641,7 @@ where
                         Command::Allo { .. } => {
                             ensure_authenticated!();
                             // ALLO is obsolete and we'll just ignore it.
-                            Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "I don't need to allocate anything"))
+                            Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
                         }
                         Command::Abor => {
                             ensure_authenticated!();
@@ -701,7 +715,7 @@ where
                         }
                         Command::CDC {} => {
                             ensure_authenticated!();
-                            Ok(Reply::new(ReplyCode::CommandSyntaxError, "coming soon..."))
+                            Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not implemented."))
                         }
                         Command::PROT { param } => {
                             ensure_authenticated!();
@@ -736,7 +750,7 @@ where
                 Event::InternalMsg(DelFail) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
                 // The InternalMsg::Quit will never be reached, because we catch it in the task before
                 // this closure is called (because we have to close the connection).
-                Event::InternalMsg(Quit) => Ok(Reply::new(ReplyCode::ClosingControlConnection, "bye!")),
+                Event::InternalMsg(Quit) => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
                 Event::InternalMsg(SecureControlChannel) => {
                     let mut session = session.lock()?;
                     session.cmd_tls = true;
