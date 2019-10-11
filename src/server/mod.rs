@@ -309,7 +309,7 @@ where
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
-        let local_addr = tcp_stream.local_addr().unwrap().clone();
+        let local_addr = tcp_stream.local_addr().unwrap();
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
