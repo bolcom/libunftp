@@ -69,14 +69,10 @@ impl Encoder for FTPCodec {
             }
             Reply::MultiLine { code, mut lines } => {
                 let s = lines.pop().unwrap();
-                write!(
-                    buffer,
-                    "{}-{}\r\n{} {}\r\n",
-                    code as u32,
-                    lines.join("\r\n"), // TODO: Handle when line starts with a number
-                    code as u32,
-                    s
-                )?;
+                // Note that this will produce incorrect output if lines is empty
+                // after the first pop. It should never be though as we implement
+                // several features that are "always on".
+                write!(buffer, "{}-{}\r\n {}\r\n{} END\r\n", code as u32, s, lines.join("\r\n"), code as u32)?;
             }
         }
         buf.extend(&buffer);

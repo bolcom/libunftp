@@ -238,6 +238,9 @@ pub enum Command {
     PROT {
         param: ProtParam,
     },
+    SIZE {
+        file: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -544,6 +547,14 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CDC
+            }
+            "SIZE" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+                let file = String::from_utf8_lossy(&params).to_string().into();
+                Command::SIZE { file }
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {

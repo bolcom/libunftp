@@ -1,6 +1,12 @@
+use ftp::types::Result;
 use ftp::FtpStream;
 use pretty_assertions::assert_eq;
+use regex::Regex;
+use std::fmt::Debug;
+use std::fs;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
+use std::str;
 use tokio::runtime::Runtime;
 
 fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
@@ -11,6 +17,34 @@ fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() ->
     test();
 
     rt.shutdown_now();
+}
+
+fn ensure_login_required<T: Debug>(r: Result<T>) {
+    let err = r.unwrap_err().to_string();
+    if !err.contains("530 Please authenticate") {
+        panic!("Could execute command without logging in!");
+    }
+}
+
+fn ensure_feat_support(s: &mut FtpStream, c: &str) {
+    let mut tcps = s.get_ref();
+    tcps.write_all("FEAT\r\n".as_bytes()).expect(format!("Couldn't issue command {}.", c).as_str());
+
+    let mut reader = BufReader::new(tcps);
+    let mut r = String::new();
+    let mut f = String::new();
+
+    loop {
+        reader.read_line(&mut r).unwrap();
+        f.push_str(r.as_str());
+        if r.starts_with("211 END") {
+            break;
+        }
+        r.clear();
+    }
+
+    let re = Regex::new(format!("(?m)^ {}", c).as_str()).unwrap();
+    assert!(re.is_match(f.as_str()), "FEAT response did not contain the {} command!", c);
 }
 
 #[test]
@@ -43,8 +77,7 @@ fn noop() {
     test_with(addr, path, || {
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.noop().unwrap_err();
+        ensure_login_required(ftp_stream.noop());
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.noop().unwrap();
@@ -74,8 +107,7 @@ fn get() {
         // Retrieve the remote file
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.simple_retr("bla.txt").unwrap_err();
+        ensure_login_required(ftp_stream.simple_retr("bla.txt"));
 
         ftp_stream.login("hoi", "jij").unwrap();
         let remote_file = ftp_stream.simple_retr("bla.txt").unwrap();
@@ -98,8 +130,7 @@ fn put() {
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
         let mut reader = Cursor::new(content);
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.put("greeting.txt", &mut reader).unwrap_err();
+        ensure_login_required(ftp_stream.put("greeting.txt", &mut reader));
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.put("greeting.txt", &mut reader).unwrap();
@@ -123,8 +154,7 @@ fn list() {
 
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
-        // Make sure we fail if we're not logged in
-        let _list = ftp_stream.list(None).unwrap_err();
+        ensure_login_required(ftp_stream.list(None));
 
         ftp_stream.login("hoi", "jij").unwrap();
         let list = ftp_stream.list(None).unwrap();
@@ -147,7 +177,7 @@ fn pwd() {
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
         // Make sure we fail if we're not logged in
-        let _pwd = ftp_stream.pwd().unwrap_err();
+        ensure_login_required(ftp_stream.pwd());
 
         ftp_stream.login("hoi", "jij").unwrap();
         let pwd = ftp_stream.pwd().unwrap();
@@ -166,8 +196,7 @@ fn cwd() {
         let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
         let basename = dir_in_root.path().file_name().unwrap();
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.cwd(basename.to_str().unwrap()).unwrap_err();
+        ensure_login_required(ftp_stream.cwd(basename.to_str().unwrap()));
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
@@ -187,8 +216,7 @@ fn cdup() {
         let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
         let basename = dir_in_root.path().file_name().unwrap();
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.cdup().unwrap_err();
+        ensure_login_required(ftp_stream.cdup());
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.cwd(basename.to_str().unwrap()).unwrap();
@@ -210,8 +238,7 @@ fn dele() {
         let file_in_root = tempfile::NamedTempFile::new().unwrap();
         let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
 
-        // Make sure we fail if we're not logged in
-        ftp_stream.rm(file_name).unwrap_err();
+        ensure_login_required(ftp_stream.rm(file_name));
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.rm(file_name).unwrap();
@@ -249,8 +276,7 @@ fn nlst() {
 
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
 
-        // Make sure we fail if we're not logged in
-        let _list = ftp_stream.nlst(None).unwrap_err();
+        ensure_login_required(ftp_stream.nlst(None));
 
         ftp_stream.login("hoi", "jij").unwrap();
         let list = ftp_stream.nlst(None).unwrap();
@@ -266,8 +292,8 @@ fn mkdir() {
     test_with(addr, root.clone(), || {
         let mut ftp_stream = FtpStream::connect(addr).unwrap();
         let new_dir_name = "hallo";
-        // Make sure we fail if we're not logged in
-        ftp_stream.mkdir(new_dir_name).unwrap_err();
+
+        ensure_login_required(ftp_stream.mkdir(new_dir_name));
 
         ftp_stream.login("hoi", "jij").unwrap();
         ftp_stream.mkdir(new_dir_name).unwrap();
@@ -296,7 +322,7 @@ fn rename() {
         let mut ftp_stream = FtpStream::connect(addr).expect("Failed to connect");
 
         // Make sure we fail if we're not logged in
-        ftp_stream.rename(&from_filename, &to_filename).expect_err("Rename accepted without logging in");
+        ensure_login_required(ftp_stream.rename(&from_filename, &to_filename));
 
         // Do the renaming
         ftp_stream.login("some", "user").unwrap();
@@ -311,5 +337,32 @@ fn rename() {
         // Make sure the new filename exists
         let metadata = std::fs::metadata(full_to).expect("New filename not created");
         assert!(metadata.is_file());
+    });
+}
+
+#[test]
+fn size() {
+    let addr = "127.0.0.1:1248";
+    let root = std::env::temp_dir();
+    test_with(addr, root.clone(), || {
+        let mut ftp_stream = FtpStream::connect(addr).unwrap();
+        let file_in_root = tempfile::NamedTempFile::new_in(root).unwrap();
+        let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
+
+        let mut w = BufWriter::new(&file_in_root);
+        w.write_all(b"Hello unftp").expect("Should be able to write to the temp file.");
+        w.flush().expect("Should be able to flush the temp file.");
+
+        // Make sure we fail if we're not logged in
+        ensure_login_required(ftp_stream.size(file_name));
+        ensure_feat_support(&mut ftp_stream, "SIZE");
+        ftp_stream.login("hoi", "jij").unwrap();
+
+        // Make sure we fail if we don't supply a path
+        ftp_stream.size("").unwrap_err();
+        let size1 = ftp_stream.size(file_name);
+        let size2 = size1.unwrap();
+        let size3 = size2.unwrap();
+        assert_eq!(size3, fs::metadata(&file_in_root).unwrap().len() as usize, "Wrong size returned.");
     });
 }

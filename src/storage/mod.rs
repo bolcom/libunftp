@@ -235,6 +235,11 @@ pub trait StorageBackend<U: Send> {
 
     /// Delete the given directory.
     fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+
+    /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
+    /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
+    /// amount of octets.    
+    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

@@ -490,4 +490,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         //TODO: implement this
         unimplemented!();
     }
+
+    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+        //TODO: implement this
+        unimplemented!();
+    }
 }

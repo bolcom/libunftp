@@ -572,9 +572,12 @@ where
                             let mut feat_text = vec!["Extensions supported:"];
                             if tls_configured {
                                 feat_text.push("AUTH (Authentication/Security Mechanism)");
-                                feat_text.push("PROT (Data Channel Protection Level)");
                                 feat_text.push("PBSZ (Protection Buffer Size)");
+                                feat_text.push("PROT (Data Channel Protection Level)");
                             }
+                            feat_text.push("SIZE (File Transfer Size)");
+                            // Now make sure everything is in the right order for printing to the client
+                            feat_text.reverse();
                             let reply = Reply::new_multiline(ReplyCode::SystemStatus, feat_text);
                             Ok(reply)
                         }
@@ -794,6 +797,17 @@ where
                                 }
                                 (true, _) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "PROT S/E not implemented")),
                                 (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+                            }
+                        }
+                        Command::SIZE { file } => {
+                            ensure_authenticated!();
+
+                            let session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+
+                            match storage.size(&session.user, &file).wait() {
+                                Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*size.to_string())),
+                                Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get size.")),
                             }
                         }
                     }
