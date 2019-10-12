@@ -579,7 +579,7 @@ where
                                 feat_text.push(" PROT");
                             }
                             if storage_features & storage::FEATURE_RESTART > 0 {
-                                feat_text.push("REST STREAM");
+                                feat_text.push(" REST STREAM");
                             }
 
                             // Show them in alphabetical order.
@@ -815,7 +815,7 @@ where
                             let storage = Arc::clone(&session.storage);
 
                             match storage.size(&session.user, &file).wait() {
-                                Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*size.to_string())),
+                                Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*(size - session.start_pos).to_string())),
                                 Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get size.")),
                             }
                         }
