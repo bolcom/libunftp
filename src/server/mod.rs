@@ -33,6 +33,7 @@ use futures::prelude::*;
 use futures::sync::mpsc;
 use futures::Sink;
 use log::{error, info, warn};
+use rand::Rng;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -44,16 +45,13 @@ use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth;
 use crate::auth::AnonymousUser;
 use crate::metrics;
-use crate::storage;
-use crate::storage::filesystem::Filesystem;
+use crate::storage::{self, filesystem::Filesystem, Metadata};
 use session::{Session, SessionState};
-
-use rand::Rng;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
-
 const BIND_RETRIES: u8 = 10;
+const RFC3659_TIME: &str = "%Y%m%d%H%M%S";
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
@@ -574,7 +572,7 @@ where
                             Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
                         }
                         Command::Feat => {
-                            let mut feat_text = vec![" SIZE"];
+                            let mut feat_text = vec![" SIZE", " MDTM"];
                             // Add the features. According to the spec each feature line must be
                             // indented by a space.
                             if tls_configured {
@@ -832,6 +830,25 @@ where
                             session.start_pos = offset;
                             let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", offset);
                             Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
+                        }
+                        Command::MDTM { file } => {
+                            ensure_authenticated!();
+                            let session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            match storage.stat(&session.user, &file).wait() {
+                                Ok(meta) => match meta.modified() {
+                                    Ok(system_time) => {
+                                        let chrono_time: chrono::DateTime<chrono::offset::Utc> = system_time.into();
+                                        let formatted = chrono_time.format(RFC3659_TIME);
+                                        Ok(Reply::new(ReplyCode::FileStatus, formatted.to_string().as_str()))
+                                    }
+                                    Err(err) => {
+                                        error!("could not get file modification time: {:?}", err);
+                                        Ok(Reply::new(ReplyCode::FileError, "Could not get file modification time."))
+                                    }
+                                },
+                                Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get file metadata.")),
+                            }
                         }
                     }
                 }
