@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use std::io::Write;
 use tokio_codec::{Decoder, Encoder};
 
-use crate::server::{Command, FTPError, InternalMsg, Reply};
+use crate::server::{commands::Command, reply::Reply, FTPError, InternalMsg};
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
@@ -68,11 +68,19 @@ impl Encoder for FTPCodec {
                 }
             }
             Reply::MultiLine { code, mut lines } => {
-                let s = lines.pop().unwrap();
-                // Note that this will produce incorrect output if lines is empty
-                // after the first pop. It should never be though as we implement
-                // several features that are "always on".
-                write!(buffer, "{}-{}\r\n {}\r\n{} END\r\n", code as u32, s, lines.join("\r\n"), code as u32)?;
+                // Get the last line since it needs to be preceded by the response code.
+                let last_line = lines.pop().unwrap();
+                // Lines starting with a digit should be indented
+                for it in lines.iter_mut() {
+                    if it.chars().nth(0).unwrap().is_digit(10) {
+                        it.insert(0, ' ');
+                    }
+                }
+                if lines.is_empty() {
+                    writeln!(buffer, "{} {}\r", code as u32, last_line)?;
+                } else {
+                    write!(buffer, "{}-{}\r\n{} {}\r\n", code as u32, lines.join("\r\n"), code as u32, last_line)?;
+                }
             }
         }
         buf.extend(&buffer);
