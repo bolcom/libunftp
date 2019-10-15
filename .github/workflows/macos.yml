@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Install rustup
-      run: curl --proto '=https' --tlsv1.2 -sSf -o rustup-init.sh https://sh.rustup.rs && sh rustup-init.sh -y
+      run: curl --proto '=https' --tlsv1.2 -sSf -o rustup-init.sh https://sh.rustup.rs && sh rustup-init.sh -y --profile=minimal
     - name: Switch toolchain
       run: $HOME/.cargo/bin/rustup default ${{matrix.toolchain}}
     - name: Add rustfmt and clippy
