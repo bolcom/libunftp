@@ -9,7 +9,7 @@ pub struct Password {
 
 impl Password {
     pub fn new(bytes: Bytes) -> Self {
-        Password { bytes: bytes }
+        Password { bytes }
     }
 }
 
