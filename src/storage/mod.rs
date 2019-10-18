@@ -54,7 +54,7 @@ impl Fail for Error {
 pub enum ErrorKind {
     /// 450 Requested file action not taken.
     ///     File unavailable (e.g., file busy).
-    #[fail(display = "450 Tranisent file not available")]
+    #[fail(display = "450 Transient file not available")]
     TransientFileNotAvailable,
     /// 550 Requested action not taken.
     ///     File unavailable (e.g., file not found, no access).
