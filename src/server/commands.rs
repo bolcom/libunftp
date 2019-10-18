@@ -1,3 +1,5 @@
+use crate::server::password::Password;
+
 use bytes::Bytes;
 use failure::*;
 use std::{fmt, result, str};
@@ -78,7 +80,7 @@ pub enum Command {
     /// The `PASS` command
     Pass {
         /// The bytes making up the actual password.
-        password: Bytes,
+        password: Password,
     },
     /// The `ACCT` command
     Acct {
@@ -274,7 +276,9 @@ impl Command {
             }
             "PASS" => {
                 let password = parse_to_eol(cmd_params)?;
-                Command::Pass { password }
+                Command::Pass {
+                    password: Password::new(password),
+                }
             }
             "ACCT" => {
                 let account = parse_to_eol(cmd_params)?;

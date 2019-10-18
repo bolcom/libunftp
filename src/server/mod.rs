@@ -5,6 +5,8 @@ pub(crate) mod commands;
 
 pub(crate) mod reply;
 
+pub(crate) mod password;
+
 // Contains code pertaining to the FTP *control* channel
 mod controlchan;
 
@@ -365,7 +367,7 @@ where
                             let session = session.lock()?;
                             match session.state {
                                 SessionState::WaitPass => {
-                                    let pass = std::str::from_utf8(&password)?;
+                                    let pass = std::str::from_utf8(&password.as_ref())?;
                                     let user = session.username.clone().unwrap();
                                     let tx = tx.clone();
 
