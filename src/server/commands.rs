@@ -255,6 +255,11 @@ pub enum Command {
     Rest {
         offset: u64,
     },
+    /// Modification Time (MDTM) as specified in RFC 3659.
+    /// This command can be used to determine when a file in the server NVFS was last modified.
+    MDTM {
+        file: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -584,6 +589,15 @@ impl Command {
                 } else {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
+            }
+            "MDTM" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+
+                let file = String::from_utf8_lossy(&params).to_string().into();
+                Command::MDTM { file }
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {
@@ -1301,6 +1315,27 @@ mod tests {
             },
         ];
 
+        for test in tests.iter() {
+            assert_eq!(Command::parse(test.input), test.expected);
+        }
+    }
+
+    #[test]
+    fn parse_mdtm() {
+        struct Test {
+            input: &'static str,
+            expected: Result<Command>,
+        }
+        let tests = [
+            Test {
+                input: "MDTM\r\n",
+                expected: Err(ParseErrorKind::InvalidCommand.into()),
+            },
+            Test {
+                input: "MDTM file.txt\r\n",
+                expected: Ok(Command::MDTM { file: "file.txt".into() }),
+            },
+        ];
         for test in tests.iter() {
             assert_eq!(Command::parse(test.input), test.expected);
         }
