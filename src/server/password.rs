@@ -21,7 +21,7 @@ impl fmt::Display for Password {
 
 impl fmt::Debug for Password {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Password (*******)")
+        write!(f, "Password {{ bytes: ******* }}")
     }
 }
 
@@ -51,8 +51,7 @@ mod tests {
 
     #[test]
     fn password_obscures_debug() {
-        assert_eq!("Password (*******)", format!("{:?}", password()));
-        assert_eq!("Password (*******)", format!("{:#?}", password()));
+        assert_eq!("Password { bytes: ******* }", format!("{:?}", password()));
     }
 
     #[test]
