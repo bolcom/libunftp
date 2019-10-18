@@ -1,8 +1,6 @@
-use futures::sync::mpsc;
-
 use super::commands::Command;
-
 use crate::storage::Error;
+use futures::sync::mpsc;
 
 // Commands that can be send to the data channel.
 #[derive(PartialEq)]
@@ -20,7 +18,7 @@ pub fn create_internal_msg_channel() -> InternalMsgChannel {
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum InternalMsg {
     /// Permission Denied
     PermissionDenied,

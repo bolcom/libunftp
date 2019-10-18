@@ -22,9 +22,12 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
+use self::commands::{AuthParam, Command, ProtParam};
+use self::reply::{Reply, ReplyCode};
+use self::stream::{SecuritySwitch, SwitchingTlsStream};
+use crate::auth::{self, AnonymousUser};
+use crate::metrics;
+use crate::storage::{self, filesystem::Filesystem, Error, ErrorKind};
 use failure::Fail;
 use futures::Sink;
 use futures::{
@@ -32,18 +35,13 @@ use futures::{
     sync::mpsc,
 };
 use log::{error, info, warn};
+use session::{Session, SessionState};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
-
-use self::commands::{AuthParam, Command, ProtParam};
-use self::reply::{Reply, ReplyCode};
-use self::stream::{SecuritySwitch, SwitchingTlsStream};
-use crate::auth::{self, AnonymousUser};
-use crate::metrics;
-use crate::storage::{self, filesystem::Filesystem, Error};
-use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
@@ -586,7 +584,7 @@ where
                             tokio::spawn(
                                 storage
                                     .del(&session.user, path)
-                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::LocalError))
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::from(ErrorKind::LocalError)))
                                     .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -605,7 +603,7 @@ where
                             tokio::spawn(
                                 storage
                                     .rmd(&session.user, path)
-                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::LocalError))
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::from(ErrorKind::LocalError)))
                                     .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -629,7 +627,7 @@ where
                             tokio::spawn(
                                 storage
                                     .mkd(&session.user, &path)
-                                    .and_then(|_| tx_success.send(InternalMsg::MkdirSuccess(path)).map_err(|_| Error::LocalError))
+                                    .and_then(|_| tx_success.send(InternalMsg::MkdirSuccess(path)).map_err(|_| Error::from(ErrorKind::LocalError)))
                                     .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
@@ -769,14 +767,14 @@ where
                     Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
                 }
                 Event::InternalMsg(AuthFailed) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
-                Event::InternalMsg(StorageError(error_type)) => match error_type {
-                    Error::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
-                    Error::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
-                    Error::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
-                    Error::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
-                    Error::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
-                    Error::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
-                    Error::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
+                Event::InternalMsg(StorageError(error_type)) => match error_type.kind() {
+                    ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
+                    ErrorKind::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
+                    ErrorKind::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
+                    ErrorKind::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
+                    ErrorKind::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
+                    ErrorKind::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
+                    ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
                 },
             }
         };
@@ -796,7 +794,10 @@ where
                                 metrics::add_event_metric(&event);
                             };
                             // TODO: Make sure data connections are closed
-                            Ok(*event != Event::InternalMsg(InternalMsg::Quit))
+                            match *event {
+                                Event::InternalMsg(InternalMsg::Quit) => return Ok(false),
+                                _ => return Ok(true),
+                            }
                         })
                         .and_then(respond)
                         .or_else(move |e| {

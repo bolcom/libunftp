@@ -1,11 +1,9 @@
+use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use futures::{future, Future, Stream};
+use log::debug;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-
-use futures::{future, Future, Stream};
-use log::debug;
-
-use crate::storage::{Error, Fileinfo, Metadata, Result, StorageBackend};
 
 /// Filesystem contains the PathBuf.
 ///
@@ -21,7 +19,7 @@ pub struct Filesystem {
 /// filesystem... hmm...
 fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
     use path_abs::PathAbs;
-    let p = PathAbs::new(path).map_err(|_| Error::FileNameNotAllowedError)?;
+    let p = PathAbs::new(path).map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))?;
     Ok(p.as_path().to_path_buf())
 }
 
@@ -54,7 +52,7 @@ impl Filesystem {
         if real_full_path.starts_with(&self.root) {
             Ok(real_full_path)
         } else {
-            Err(Error::PermanentFileNotAvailable)
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
         }
     }
 }
@@ -69,7 +67,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             Err(err) => return Box::new(future::err(err)),
         };
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::PermanentFileNotAvailable))
+        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 
     fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
@@ -96,7 +94,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         });
 
         // TODO: Some more useful error reporting
-        Box::new(fut.map_err(|_| Error::PermanentFileNotAvailable))
+        Box::new(fut.map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 
     fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
@@ -107,7 +105,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         // TODO: Some more useful error reporting
         Box::new(tokio::fs::file::File::open(full_path).map_err(|e| {
             debug!("{:?}", e);
-            Error::PermanentFileNotAvailable
+            Error::from(ErrorKind::PermanentFileNotAvailable)
         }))
     }
 
@@ -131,7 +129,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             // TODO: Some more useful error reporting
             .map_err(|e| {
                 debug!("{:?}", e);
-                Error::PermanentFileNotAvailable
+                Error::from(ErrorKind::PermanentFileNotAvailable)
             });
         Box::new(fut)
     }
@@ -139,9 +137,9 @@ impl<U: Send> StorageBackend<U> for Filesystem {
     fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(_) => return Box::new(future::err(Error::PermanentFileNotAvailable)),
+            Err(_) => return Box::new(future::err(Error::from(ErrorKind::PermanentFileNotAvailable))),
         };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|_| Error::LocalError))
+        Box::new(tokio::fs::remove_file(full_path).map_err(|_| Error::from(ErrorKind::LocalError)))
     }
 
     fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
@@ -149,7 +147,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
-        Box::new(tokio::fs::remove_dir(full_path).map_err(|_| Error::PermanentFileNotAvailable))
+        Box::new(tokio::fs::remove_dir(full_path).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
@@ -160,7 +158,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
 
         Box::new(tokio::fs::create_dir(full_path).map_err(|e| {
             debug!("error: {}", e);
-            Error::PermanentFileNotAvailable
+            Error::from(ErrorKind::PermanentFileNotAvailable)
         }))
     }
 
@@ -176,12 +174,12 @@ impl<U: Send> StorageBackend<U> for Filesystem {
 
         let from_rename = from.clone(); // Alright, borrow checker, have it your way.
         let fut = tokio::fs::symlink_metadata(from)
-            .map_err(|_| Error::PermanentFileNotAvailable)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             .and_then(move |metadata| {
                 if metadata.is_file() {
-                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|_| Error::PermanentFileNotAvailable))
+                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
                 } else {
-                    future::Either::B(future::err(Error::PermanentFileNotAvailable))
+                    future::Either::B(future::err(Error::from(ErrorKind::PermanentFileNotAvailable)))
                 }
             });
         Box::new(fut)
@@ -206,7 +204,7 @@ impl Metadata for std::fs::Metadata {
     }
 
     fn modified(&self) -> Result<SystemTime> {
-        self.modified().map_err(|_| Error::PermanentFileNotAvailable)
+        self.modified().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 
     fn gid(&self) -> u32 {

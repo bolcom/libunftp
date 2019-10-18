@@ -1,17 +1,15 @@
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use futures::prelude::*;
-use futures::sync::mpsc;
-use futures::Sink;
-use log::warn;
-use tokio::net::TcpStream;
-
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
-use crate::storage::{self, Error};
+use crate::storage::{self, Error, ErrorKind};
+use futures::prelude::*;
+use futures::sync::mpsc;
+use futures::Sink;
+use log::warn;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tokio::net::TcpStream;
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -126,9 +124,12 @@ where
                                 .and_then(|f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
-                                        .map_err(|_| Error::LocalError)
-                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream).map_err(|_| Error::LocalError))
-                                        .and_then(|(bytes, _, _)| tx.send(InternalMsg::SendData { bytes: bytes as i64 }).map_err(|_| Error::LocalError))
+                                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                        .and_then(|(bytes, _, _)| {
+                                            tx.send(InternalMsg::SendData { bytes: bytes as i64 })
+                                                .map_err(|_| Error::from(ErrorKind::LocalError))
+                                        })
                                 })
                                 .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
@@ -144,7 +145,11 @@ where
                         tokio::spawn(
                             storage
                                 .put(&user, tcp_tls_stream, path)
-                                .and_then(|bytes| tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).map_err(|_| Error::LocalError))
+                                .and_then(|bytes| {
+                                    tx_ok
+                                        .send(InternalMsg::WrittenData { bytes: bytes as i64 })
+                                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                                })
                                 .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
@@ -163,8 +168,12 @@ where
                             storage
                                 .list_fmt(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .map_err(|_| Error::LocalError)
-                                .and_then(|_| tx_ok.send(InternalMsg::DirectorySuccessfullyListed).map_err(|_| Error::LocalError))
+                                .map_err(|_| Error::from(ErrorKind::LocalError))
+                                .and_then(|_| {
+                                    tx_ok
+                                        .send(InternalMsg::DirectorySuccessfullyListed)
+                                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                                })
                                 .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
@@ -183,8 +192,12 @@ where
                             storage
                                 .nlst(&user, path)
                                 .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .map_err(|_| Error::LocalError)
-                                .and_then(|_| tx_ok.send(InternalMsg::DirectorySuccessfullyListed).map_err(|_| Error::LocalError))
+                                .map_err(|_| Error::from(ErrorKind::LocalError))
+                                .and_then(|_| {
+                                    tx_ok
+                                        .send(InternalMsg::DirectorySuccessfullyListed)
+                                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                                })
                                 .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
                                 .map(|_| ())
                                 .map_err(|e| {
