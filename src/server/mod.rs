@@ -5,6 +5,8 @@ pub(crate) mod commands;
 
 pub(crate) mod reply;
 
+pub(crate) mod password;
+
 // Contains code pertaining to the FTP *control* channel
 mod controlchan;
 
@@ -27,7 +29,7 @@ use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth::{self, AnonymousUser};
 use crate::metrics;
-use crate::storage::{self, filesystem::Filesystem, Error, ErrorKind};
+use crate::storage::{self, filesystem::Filesystem, Error, ErrorKind, Metadata};
 use failure::Fail;
 use futures::Sink;
 use futures::{
@@ -35,7 +37,9 @@ use futures::{
     sync::mpsc,
 };
 use log::{error, info, warn};
+use rand::Rng;
 use session::{Session, SessionState};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
@@ -45,6 +49,8 @@ use uuid::Uuid;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
+const BIND_RETRIES: u8 = 10;
+const RFC3659_TIME: &str = "%Y%m%d%H%M%S";
 
 impl From<commands::ParseError> for FTPError {
     fn from(err: commands::ParseError) -> FTPError {
@@ -293,6 +299,7 @@ where
         // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
         // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
+        let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage)
             .certs(self.certs_file.clone(), self.key_file.clone())
@@ -300,6 +307,8 @@ where
         let session = Arc::new(Mutex::new(session));
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
+
+        let local_addr = tcp_stream.local_addr().unwrap();
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
@@ -354,7 +363,7 @@ where
                             let session = session.lock()?;
                             match session.state {
                                 SessionState::WaitPass => {
-                                    let pass = std::str::from_utf8(&password)?;
+                                    let pass = std::str::from_utf8(&password.as_ref())?;
                                     let user = session.username.clone().unwrap();
                                     let tx = tx.clone();
 
@@ -394,12 +403,14 @@ where
                                 }
                                 Some(path) => {
                                     let path = std::str::from_utf8(&path)?;
-                                    // TODO: Implement :)
-                                    info!("Got command STAT {}, but we don't support parameters yet\r\n", path);
-                                    Ok(Reply::new(
-                                        ReplyCode::CommandNotImplementedForParameter,
-                                        "STAT with paths not supported at the moment.",
-                                    ))
+
+                                    let session = session.lock()?;
+                                    let storage = Arc::clone(&session.storage);
+                                    storage.list_fmt(&session.user, path).wait().map(move |mut cursor| {
+                                        let mut result = String::new();
+                                        cursor.read_to_string(&mut result)?;
+                                        Ok(Reply::new(ReplyCode::CommandOkay, &result))
+                                    })?
                                 }
                             }
                         }
@@ -431,14 +442,38 @@ where
                         Command::Pasv => {
                             ensure_authenticated!();
 
-                            let listener = std::net::TcpListener::bind(&passive_addrs.as_slice())?;
+                            // obtain the ip address the client is connected to
+                            let conn_addr = match local_addr {
+                                std::net::SocketAddr::V4(addr) => addr,
+                                std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
+                            };
+
+                            let mut rng = rand::thread_rng();
+
+                            let mut listener: Option<std::net::TcpListener> = None;
+                            for _ in 1..BIND_RETRIES {
+                                let i = rng.gen_range(0, passive_addrs.len() - 1);
+                                match std::net::TcpListener::bind(passive_addrs[i]) {
+                                    Ok(x) => {
+                                        listener = Some(x);
+                                        break;
+                                    }
+                                    Err(_) => continue,
+                                };
+                            }
+
+                            let listener = match listener {
+                                None => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+                                Some(l) => l,
+                            };
+
                             let addr = match listener.local_addr()? {
                                 std::net::SocketAddr::V4(addr) => addr,
                                 std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
                             };
                             let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
-                            let octets = addr.ip().octets();
+                            let octets = conn_addr.ip().octets();
                             let port = addr.port();
                             let p1 = port >> 8;
                             let p2 = port - (p1 * 256);
@@ -535,12 +570,23 @@ where
                             Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
                         }
                         Command::Feat => {
-                            let mut feat_text = vec!["Extensions supported:"];
+                            let mut feat_text = vec![" SIZE", " MDTM"];
+                            // Add the features. According to the spec each feature line must be
+                            // indented by a space.
                             if tls_configured {
-                                feat_text.push("AUTH (Authentication/Security Mechanism)");
-                                feat_text.push("PROT (Data Channel Protection Level)");
-                                feat_text.push("PBSZ (Protection Buffer Size)");
+                                feat_text.push(" AUTH TLS");
+                                feat_text.push(" PBSZ");
+                                feat_text.push(" PROT");
                             }
+                            if storage_features & storage::FEATURE_RESTART > 0 {
+                                feat_text.push(" REST STREAM");
+                            }
+
+                            // Show them in alphabetical order.
+                            feat_text.sort();
+                            feat_text.insert(0, "Extensions supported:");
+                            feat_text.push("END");
+
                             let reply = Reply::new_multiline(ReplyCode::SystemStatus, feat_text);
                             Ok(reply)
                         }
@@ -732,15 +778,63 @@ where
                                 (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
                             }
                         }
+                        Command::SIZE { file } => {
+                            ensure_authenticated!();
+
+                            let session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+
+                            match storage.size(&session.user, &file).wait() {
+                                Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*(size - session.start_pos).to_string())),
+                                Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get size.")),
+                            }
+                        }
+                        Command::Rest { offset } => {
+                            ensure_authenticated!();
+                            if storage_features & storage::FEATURE_RESTART == 0 {
+                                return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+                            }
+                            let mut session = session.lock()?;
+                            session.start_pos = offset;
+                            let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", offset);
+                            Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
+                        }
+                        Command::MDTM { file } => {
+                            ensure_authenticated!();
+                            let session = session.lock()?;
+                            let storage = Arc::clone(&session.storage);
+                            match storage.stat(&session.user, &file).wait() {
+                                Ok(meta) => match meta.modified() {
+                                    Ok(system_time) => {
+                                        let chrono_time: chrono::DateTime<chrono::offset::Utc> = system_time.into();
+                                        let formatted = chrono_time.format(RFC3659_TIME);
+                                        Ok(Reply::new(ReplyCode::FileStatus, formatted.to_string().as_str()))
+                                    }
+                                    Err(err) => {
+                                        error!("could not get file modification time: {:?}", err);
+                                        Ok(Reply::new(ReplyCode::FileError, "Could not get file modification time."))
+                                    }
+                                },
+                                Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get file metadata.")),
+                            }
+                        }
                     }
                 }
                 Event::InternalMsg(NotFound) => Ok(Reply::new(ReplyCode::FileError, "File not found")),
                 Event::InternalMsg(PermissionDenied) => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
                 Event::InternalMsg(SendingData) => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
-                Event::InternalMsg(SendData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Send you something nice")),
+                Event::InternalMsg(SendData { .. }) => {
+                    let mut session = session.lock()?;
+                    session.start_pos = 0;
+                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
+                }
                 Event::InternalMsg(WriteFailed) => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
                 Event::InternalMsg(ConnectionReset) => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
-                Event::InternalMsg(WrittenData { .. }) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written")),
+                Event::InternalMsg(WrittenData { .. }) => {
+                    let mut session = session.lock()?;
+                    session.start_pos = 0;
+                    Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
+                }
                 Event::InternalMsg(DataConnectionClosedAfterStor) => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
                 Event::InternalMsg(UnknownRetrieveError) => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
                 Event::InternalMsg(DirectorySuccessfullyListed) => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
@@ -795,8 +889,8 @@ where
                             };
                             // TODO: Make sure data connections are closed
                             match *event {
-                                Event::InternalMsg(InternalMsg::Quit) => return Ok(false),
-                                _ => return Ok(true),
+                                Event::InternalMsg(InternalMsg::Quit) => Ok(false),
+                                _ => Ok(true),
                             }
                         })
                         .and_then(respond)

@@ -8,6 +8,10 @@ use std::{
     result,
 };
 
+/// Tells if STOR/RETR restarts are supported by the storage back-end
+/// i.e. starting from a different byte offset.
+pub const FEATURE_RESTART: u32 = 0b0000_0001;
+
 /// The Failure that describes what went wrong in the storage backend
 #[derive(Debug)]
 pub struct Error {
@@ -163,6 +167,12 @@ pub trait StorageBackend<U: Send> {
     /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata: Metadata;
 
+    /// Tells which optional features are supported by the storage back-end
+    /// Return a value with bits set according to the FEATURE_* constants.
+    fn supported_features(&self) -> u32 {
+        0
+    }
+
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
@@ -211,18 +221,23 @@ pub trait StorageBackend<U: Send> {
         Box::new(fut)
     }
 
-    /// Returns the content of the given file.
+    /// Returns the content of the given file from offset start_pos.
+    /// The starting position can only be greater than zero if the storage back-end implementation
+    /// advertises to support partial reads through the supported_features method i.e. the result
+    /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
+    ///
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
-    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
+    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
 
-    /// Write the given bytes to the given file.
+    /// Write the given bytes to the given file starting at offset
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         user: &Option<U>,
         bytes: R,
         path: P,
+        start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 
     /// Delete the given file.
@@ -236,6 +251,11 @@ pub trait StorageBackend<U: Send> {
 
     /// Delete the given directory.
     fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+
+    /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
+    /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
+    /// amount of octets.    
+    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

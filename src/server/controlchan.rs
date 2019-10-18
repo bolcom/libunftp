@@ -67,15 +67,19 @@ impl Encoder for FTPCodec {
                 }
             }
             Reply::MultiLine { code, mut lines } => {
-                let s = lines.pop().unwrap();
-                write!(
-                    buffer,
-                    "{}-{}\r\n{} {}\r\n",
-                    code as u32,
-                    lines.join("\r\n"), // TODO: Handle when line starts with a number
-                    code as u32,
-                    s
-                )?;
+                // Get the last line since it needs to be preceded by the response code.
+                let last_line = lines.pop().unwrap();
+                // Lines starting with a digit should be indented
+                for it in lines.iter_mut() {
+                    if it.chars().nth(0).unwrap().is_digit(10) {
+                        it.insert(0, ' ');
+                    }
+                }
+                if lines.is_empty() {
+                    writeln!(buffer, "{} {}\r", code as u32, last_line)?;
+                } else {
+                    write!(buffer, "{}-{}\r\n{} {}\r\n", code as u32, lines.join("\r\n"), code as u32, last_line)?;
+                }
             }
         }
         buf.extend(&buffer);

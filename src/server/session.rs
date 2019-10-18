@@ -44,6 +44,9 @@ where
     // True if the data channel is in secure mode.
     pub data_tls: bool,
     pub with_metrics: bool,
+    // The starting byte for a STOR or RETR command. Set by the _Restart of Interrupted Transfer (REST)_
+    // command to support resume functionality.
+    pub start_pos: u64,
 }
 
 impl<S, U: Send + Sync + 'static> Session<S, U>
@@ -69,6 +72,7 @@ where
             cmd_tls: false,
             data_tls: false,
             with_metrics: false,
+            start_pos: 0,
         }
     }
 
@@ -105,6 +109,7 @@ where
         let abort_rx = self.data_abort_rx.take().unwrap();
         let storage = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
+        let start_pos = self.start_pos;
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
@@ -120,7 +125,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .get(&user, path)
+                                .get(&user, path, start_pos)
                                 .and_then(|f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
@@ -144,7 +149,7 @@ where
                         let tx_error = tx.clone();
                         tokio::spawn(
                             storage
-                                .put(&user, tcp_tls_stream, path)
+                                .put(&user, tcp_tls_stream, path, start_pos)
                                 .and_then(|bytes| {
                                     tx_ok
                                         .send(InternalMsg::WrittenData { bytes: bytes as i64 })

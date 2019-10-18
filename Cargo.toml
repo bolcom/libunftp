@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.2.2"
+version = "0.4.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -42,6 +42,7 @@ serde_json = { version = "1.0.40", optional = true }
 path_abs = "0.4"
 prometheus = "0.7"
 uuid = { version = "0.7", features = ["v4"] }
+rand = "0.6"
 
 hyper-rustls = {version = "0.16.0", optional = true}
 yup-oauth2 = {version = "3.1.0", optional = true}

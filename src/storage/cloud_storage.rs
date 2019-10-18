@@ -197,7 +197,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         let uri = match path
             .as_ref()
             .to_str()
-            .ok_or(Error::from(ErrorKind::PermanentFileNotAvailable))
+            .ok_or_else(|| Error::from(ErrorKind::PermanentFileNotAvailable))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -253,7 +253,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         let uri = match path
             .as_ref()
             .to_str()
-            .ok_or(Error::from(ErrorKind::FileNameNotAllowedError))
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o?delimiter=/&prefix={}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -291,12 +291,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
-            .ok_or(Error::from(ErrorKind::FileNameNotAllowedError))
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -330,12 +330,13 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         _user: &Option<U>,
         bytes: B,
         path: P,
+        _start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| x.trim_end_matches('/'))
-            .ok_or(Error::from(ErrorKind::FileNameNotAllowedError))
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -375,7 +376,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .as_ref()
             .to_str()
             .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
-            .ok_or(Error::from(ErrorKind::FileNameNotAllowedError))
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -437,7 +438,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .as_ref()
             .to_str()
             .map(|x| x.trim_end_matches('/'))
-            .ok_or(Error::from(ErrorKind::FileNameNotAllowedError))
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}/", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -474,6 +475,11 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 
     fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+        //TODO: implement this
+        unimplemented!();
+    }
+
+    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }

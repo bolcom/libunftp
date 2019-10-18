@@ -1,3 +1,5 @@
+use crate::server::password::Password;
+
 use bytes::Bytes;
 use failure::*;
 use std::{fmt, result, str};
@@ -61,7 +63,9 @@ pub enum Opt {
 
 #[derive(Debug, PartialEq, Clone)]
 /// This enum represents parsed versions of the FTP commands defined in
-/// [RFC 959](https://tools.ietf.org/html/rfc959)
+/// - [RFC 959 - FTP](https://tools.ietf.org/html/rfc959)
+/// - [RFC 3659 - Extensions to FTP](https://tools.ietf.org/html/rfc3659)
+/// - [RFC 2228 - FTP Security Extensions](https://tools.ietf.org/html/rfc2228)
 pub enum Command {
     /// The `USER` command
     User {
@@ -76,7 +80,7 @@ pub enum Command {
     /// The `PASS` command
     Pass {
         /// The bytes making up the actual password.
-        password: Bytes,
+        password: Password,
     },
     /// The `ACCT` command
     Acct {
@@ -238,6 +242,24 @@ pub enum Command {
     PROT {
         param: ProtParam,
     },
+    SIZE {
+        file: std::path::PathBuf,
+    },
+    // Restart of Interrupted Transfer (REST)
+    // To avoid having to resend the entire file if the file is only
+    // partially transferred, both sides need some way to agree on where in
+    // the data stream to restart the data transfer.
+    //
+    // See also: https://cr.yp.to/ftp/retr.html
+    //
+    Rest {
+        offset: u64,
+    },
+    /// Modification Time (MDTM) as specified in RFC 3659.
+    /// This command can be used to determine when a file in the server NVFS was last modified.
+    MDTM {
+        file: std::path::PathBuf,
+    },
 }
 
 impl Command {
@@ -259,7 +281,9 @@ impl Command {
             }
             "PASS" => {
                 let password = parse_to_eol(cmd_params)?;
-                Command::Pass { password }
+                Command::Pass {
+                    password: Password::new(password),
+                }
             }
             "ACCT" => {
                 let account = parse_to_eol(cmd_params)?;
@@ -544,6 +568,36 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CDC
+            }
+            "SIZE" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+                let file = String::from_utf8_lossy(&params).to_string().into();
+                Command::SIZE { file }
+            }
+            "REST" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+
+                let offset = String::from_utf8_lossy(&params).to_string();
+                if let Ok(val) = offset.parse::<u64>() {
+                    Command::Rest { offset: val }
+                } else {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+            }
+            "MDTM" => {
+                let params = parse_to_eol(cmd_params)?;
+                if params.is_empty() {
+                    return Err(ParseErrorKind::InvalidCommand.into());
+                }
+
+                let file = String::from_utf8_lossy(&params).to_string().into();
+                Command::MDTM { file }
             }
             _ => {
                 return Err(ParseErrorKind::UnknownCommand {
@@ -1233,5 +1287,57 @@ mod tests {
 
         let input = "AUTH tls\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Auth { protocol: AuthParam::Tls }));
+    }
+
+    #[test]
+    fn parse_rest() {
+        struct Test {
+            input: &'static str,
+            expected: Result<Command>,
+        }
+
+        let tests = [
+            Test {
+                input: "REST\r\n",
+                expected: Err(ParseErrorKind::InvalidCommand.into()),
+            },
+            Test {
+                input: "REST xxx\r\n",
+                expected: Err(ParseErrorKind::InvalidCommand.into()),
+            },
+            Test {
+                input: "REST 1303\r\n",
+                expected: Ok(Command::Rest { offset: 1303 }),
+            },
+            Test {
+                input: "REST 1303 343\r\n",
+                expected: Err(ParseErrorKind::InvalidCommand.into()),
+            },
+        ];
+
+        for test in tests.iter() {
+            assert_eq!(Command::parse(test.input), test.expected);
+        }
+    }
+
+    #[test]
+    fn parse_mdtm() {
+        struct Test {
+            input: &'static str,
+            expected: Result<Command>,
+        }
+        let tests = [
+            Test {
+                input: "MDTM\r\n",
+                expected: Err(ParseErrorKind::InvalidCommand.into()),
+            },
+            Test {
+                input: "MDTM file.txt\r\n",
+                expected: Ok(Command::MDTM { file: "file.txt".into() }),
+            },
+        ];
+        for test in tests.iter() {
+            assert_eq!(Command::parse(test.input), test.expected);
+        }
     }
 }

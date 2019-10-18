@@ -61,6 +61,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
 
+    fn supported_features(&self) -> u32 {
+        crate::storage::FEATURE_RESTART
+    }
+
     fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
@@ -97,16 +101,21 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         Box::new(fut.map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::file::File::open(full_path).map_err(|e| {
-            debug!("{:?}", e);
-            Error::from(ErrorKind::PermanentFileNotAvailable)
-        }))
+        Box::new(
+            tokio::fs::file::File::open(full_path)
+                .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
+                .map(|res| res.0)
+                .map_err(|e| {
+                    debug!("{:?}", e);
+                    Error::from(ErrorKind::PermanentFileNotAvailable)
+                }),
+        )
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
@@ -114,6 +123,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         _user: &Option<U>,
         bytes: R,
         path: P,
+        start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
         // TODO: Add permission checks
         let path = path.as_ref();
@@ -123,7 +133,16 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        let fut = tokio::fs::file::File::create(full_path)
+        use futures::future::IntoFuture;
+
+        let file = std::fs::OpenOptions::new().write(true).create(true).open(full_path);
+
+        let fut = file
+            .into_future()
+            .map(tokio::fs::file::File::from_std)
+            .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
+            .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
+            .map(|f| f.0)
             .and_then(|f| tokio_io::io::copy(bytes, f))
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
@@ -184,6 +203,25 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             });
         Box::new(fut)
     }
+
+    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(err) => return Box::new(future::err(err)),
+        };
+
+        let fut = tokio::fs::symlink_metadata(full_path)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .and_then(move |metadata| {
+                if metadata.is_file() {
+                    future::Either::A(future::ok(metadata.len()))
+                } else {
+                    future::Either::B(future::err(Error::from(ErrorKind::FileNameNotAllowedError)))
+                }
+            });
+
+        Box::new(fut)
+    }
 }
 
 impl Metadata for std::fs::Metadata {
@@ -221,8 +259,9 @@ mod tests {
     use super::*;
     use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
-    use std::fs::File;
+    use std::fs::{self, File};
     use std::io::prelude::*;
+    use std::io::{BufWriter, Write};
 
     #[test]
     fn fs_stat() {
@@ -313,7 +352,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename)).unwrap();
+        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(future::lazy(move || {
             tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
@@ -339,7 +378,7 @@ mod tests {
         // to completion
         let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt"))
+        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
@@ -428,5 +467,26 @@ mod tests {
 
         let old_full_path = root.join(old_filename);
         std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
+    }
+
+    #[test]
+    fn size() {
+        let root = tempfile::TempDir::new().unwrap().into_path();
+        let file = tempfile::NamedTempFile::new_in(&root).unwrap();
+        let filename = file.path().file_name().unwrap().to_str().unwrap();
+
+        // Write something to the file so it has a size
+        let mut w = BufWriter::new(&file);
+        w.write_all(b"Hello unftp").expect("Should be able to write to the temp file.");
+        w.flush().expect("Should be able to flush the temp file.");
+
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
+        // to completion
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+
+        let fs = Filesystem::new(&root);
+        let size = rt.block_on(fs.size(&Some(AnonymousUser {}), &filename)).expect("Failed to rename");
+
+        assert_eq!(size, fs::metadata(&file).unwrap().len(), "Wrong size returned.");
     }
 }
