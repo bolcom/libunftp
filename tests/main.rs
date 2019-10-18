@@ -28,7 +28,8 @@ fn ensure_login_required<T: Debug>(r: Result<T>) {
 
 fn ensure_feat_support(s: &mut FtpStream, c: &str) {
     let mut tcps = s.get_ref();
-    tcps.write_all("FEAT\r\n".as_bytes()).expect(format!("Couldn't issue command {}.", c).as_str());
+    tcps.write_all("FEAT\r\n".as_bytes())
+        .unwrap_or_else(|_| panic!("Couldn't issue command {}.", c));
 
     let mut reader = BufReader::new(tcps);
     let mut r = String::new();
