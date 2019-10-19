@@ -1,74 +1,84 @@
+use chrono::prelude::{DateTime, Utc};
+use failure::{Backtrace, Context, Fail};
+use futures::{Future, Stream};
 use std::path::Path;
 use std::time::SystemTime;
-use std::{fmt, result};
-
-use chrono::prelude::*;
-use futures::{Future, Stream};
+use std::{
+    fmt::{self, Display},
+    result,
+};
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
 pub const FEATURE_RESTART: u32 = 0b0000_0001;
 
-/// `Error` variants that can be produced by the [`StorageBackend`] implementations must implement
-/// this ErrorSemantics trait.
-///
-/// [`StorageBackend`]: ./trait.StorageBackend.html
-pub trait ErrorSemantics {
-    /// If there was an `std::io::Error` this should return its kind otherwise None.
-    fn io_error_kind(&self) -> Option<std::io::ErrorKind>;
+/// The Failure that describes what went wrong in the storage backend
+#[derive(Debug)]
+pub struct Error {
+    inner: Context<ErrorKind>,
 }
 
-#[derive(Debug, PartialEq)]
-/// The `Error` variants that can be produced by the [`StorageBackend`] implementations.
-///
-/// [`StorageBackend`]: ./trait.StorageBackend.html
-pub enum Error {
-    /// An IO Error
-    IOError(std::io::ErrorKind),
-    /// Path error
-    PathError,
-    /// Metadata error
-    MetadataError,
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
 }
 
 impl Error {
-    fn description_str(&self) -> &'static str {
-        ""
+    /// Detailed information about what the FTP server should do with the failure
+    pub fn kind(&self) -> ErrorKind {
+        *self.inner.get_context()
     }
 }
 
-impl ErrorSemantics for Error {
-    fn io_error_kind(&self) -> Option<std::io::ErrorKind> {
-        if let Error::IOError(kind) = self {
-            Some(*kind)
-        } else {
-            None
-        }
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Error {
+        Error { inner: Context::new(kind) }
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&self.description_str())
+impl Fail for Error {
+    fn cause(&self) -> Option<&dyn Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
     }
 }
 
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        self.description_str()
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::IOError(err.kind())
-    }
-}
-
-impl From<path_abs::Error> for Error {
-    fn from(_err: path_abs::Error) -> Error {
-        Error::PathError
-    }
+/// The `ErrorKind` variants that can be produced by the [`StorageBackend`] implementations.
+///
+/// [`StorageBackend`]: ./trait.StorageBackend.html
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ErrorKind {
+    /// 450 Requested file action not taken.
+    ///     File unavailable (e.g., file busy).
+    #[fail(display = "450 Transient file not available")]
+    TransientFileNotAvailable,
+    /// 550 Requested action not taken.
+    ///     File unavailable (e.g., file not found, no access).
+    #[fail(display = "550 Permanent file not available")]
+    PermanentFileNotAvailable,
+    /// 451 Requested action aborted. Local error in processing.
+    #[fail(display = "451 Local error")]
+    LocalError,
+    /// 551 Requested action aborted. Page type unknown.
+    #[fail(display = "551 Page type unknown")]
+    PageTypeUnknown,
+    /// 452 Requested action not taken.
+    ///     Insufficient storage space in system.
+    #[fail(display = "452 Insufficient storage space error")]
+    InsufficientStorageSpaceError,
+    /// 552 Requested file action aborted.
+    ///     Exceeded storage allocation (for current directory or
+    ///     dataset).
+    #[fail(display = "552 Exceeded storage allocation error")]
+    ExceededStorageAllocationError,
+    /// 553 Requested action not taken.
+    ///     File name not allowed.
+    #[fail(display = "553 File name not allowed error")]
+    FileNameNotAllowedError,
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -156,8 +166,6 @@ pub trait StorageBackend<U: Send> {
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata: Metadata;
-    /// The concrete type of the error returned by this StorageBackend.
-    type Error: ErrorSemantics;
 
     /// Tells which optional features are supported by the storage back-end
     /// Return a value with bits set according to the FEATURE_* constants.
@@ -168,14 +176,10 @@ pub trait StorageBackend<U: Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send>;
+    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(
-        &self,
-        user: &Option<U>,
-        path: P,
-    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
@@ -183,10 +187,8 @@ pub trait StorageBackend<U: Send> {
     fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
-        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
-
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
         let fut = stream
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
@@ -201,9 +203,8 @@ pub trait StorageBackend<U: Send> {
     fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
-        <Self as StorageBackend<U>>::Error: Send + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send> = self.list(user, path);
+        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
 
         let fut = stream
             .map(|file| {
@@ -228,7 +229,7 @@ pub trait StorageBackend<U: Send> {
     // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
     // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
     // Trait.
-    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send>;
+    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
 
     /// Write the given bytes to the given file starting at offset
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
@@ -237,24 +238,24 @@ pub trait StorageBackend<U: Send> {
         bytes: R,
         path: P,
         start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
+    ) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send>;
+    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Rename the given file to the given filename.
-    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send>;
+    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
     /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
     /// amount of octets.    
-    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send>;
+    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

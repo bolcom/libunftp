@@ -1,4 +1,5 @@
 //TODO: clean up error handling
+use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -15,7 +16,7 @@ use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
     convert::TryFrom,
-    io::{ErrorKind, Read},
+    io::{self, Read},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{Duration, SystemTime},
@@ -26,8 +27,6 @@ use tokio::{
 };
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
-
-use crate::storage::{Error, Fileinfo, Metadata, StorageBackend};
 
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
@@ -93,13 +92,13 @@ impl CloudStorage {
             client: client.clone(),
             get_token: Box::new(move || match &mut service_account_access.lock() {
                 Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
-                Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(ErrorKind::Other)))),
+                Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(io::ErrorKind::Other)))),
             }),
         }
     }
 
     fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
-        Box::new((self.get_token)().map_err(|_| Error::IOError(ErrorKind::Other)))
+        Box::new((self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 }
 
@@ -109,7 +108,7 @@ fn make_uri(path_and_query: String) -> Result<Uri, Error> {
         .authority("www.googleapis.com")
         .path_and_query(path_and_query.as_str())
         .build()
-        .map_err(|_| Error::PathError)
+        .map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
 }
 
 /// The File type for the CloudStorage
@@ -173,7 +172,7 @@ impl Metadata for ObjectMetadata {
     fn modified(&self) -> Result<SystemTime, Error> {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
-            None => Err(Error::IOError(ErrorKind::Other)),
+            None => Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
         }
     }
 
@@ -193,13 +192,12 @@ impl Metadata for ObjectMetadata {
 impl<U: Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
-    type Error = Error;
 
-    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Self::Error> + Send> {
+    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::PermanentFileNotAvailable))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -216,27 +214,23 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
                     .method(Method::GET)
                     .body(Body::empty())
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
                     .and_then(|body_string| {
                         serde_json::from_slice::<Item>(&body_string)
-                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .map(item_to_metadata)
                     })
             });
         Box::new(result)
     }
 
-    fn list<P: AsRef<Path>>(
-        &self,
-        _user: &Option<U>,
-        path: P,
-    ) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Self::Error> + Send>
+    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
@@ -259,7 +253,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         let uri = match path
             .as_ref()
             .to_str()
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o?delimiter=/&prefix={}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -276,16 +270,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
                     .method(Method::GET)
                     .body(Body::empty())
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(std::io::ErrorKind::Other)).concat2())
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
                     .and_then(|body_string| {
                         serde_json::from_slice::<ResponseBody>(&body_string)
-                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .map(|response_body| {
                                 //TODO: map prefixes
                                 stream::iter_ok(response_body.items.map_or(vec![], |items| items))
@@ -297,12 +291,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Self::Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}?alt=media", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -319,13 +313,13 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
                     .method(Method::GET)
                     .body(Body::empty())
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
                     .and_then(move |body| future::ok(Object::new(body.to_vec())))
             });
         Box::new(result)
@@ -337,12 +331,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         bytes: B,
         path: P,
         _start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+    ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| x.trim_end_matches('/'))
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -360,16 +354,16 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
                     .method(Method::POST)
                     .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
                     .and_then(move |body_string| {
                         serde_json::from_slice::<Item>(&body_string)
-                            .map_err(|_| Error::IOError(ErrorKind::Other))
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .map(item_to_metadata)
                     })
                     .and_then(|meta_data| future::ok(meta_data.len()))
@@ -377,40 +371,39 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = std::io::Error> + Send> {
+    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
         {
             Ok(uri) => uri,
-            Err(_) => return Box::new(future::err(std::io::Error::from(ErrorKind::Other))),
+            Err(err) => return Box::new(future::err(err)),
         };
 
         let client = self.client.clone();
 
         let result = self
             .get_token()
-            .map_err(|_| std::io::Error::from(ErrorKind::Other))
             .and_then(|token| {
                 Request::builder()
                     .uri(uri)
                     .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
                     .method(Method::DELETE)
                     .body(Body::empty())
-                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again."))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again."))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                     .and_then(|response| {
                         let status = response.status();
                         response
                             .into_body()
-                            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again"))
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .concat2()
                             .and_then(move |body| {
                                 match (body.iter().count(), status) {
@@ -419,25 +412,19 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                                         // empty reply means it is successful.
                                         future::ok(())
                                     }
-                                    _ => {
-                                        match serde_json::from_slice::<ResponseBody>(&body) {
-                                            Ok(result) => {
-                                                match result.error {
-                                                    Some(error) => {
-                                                        if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
-                                                            future::err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"))
-                                                        } else {
-                                                            // let's see later how we will reply in different situations...
-                                                            // because we don't want to give a transient error in many cases
-                                                            future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong"))
-                                                        }
-                                                    }
-                                                    _ => future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again")),
+                                    _ => match serde_json::from_slice::<ResponseBody>(&body) {
+                                        Ok(result) => match result.error {
+                                            Some(error) => {
+                                                if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
+                                                    future::err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                                                } else {
+                                                    future::err(Error::from(ErrorKind::TransientFileNotAvailable))
                                                 }
                                             }
-                                            Err(_) => future::err(std::io::Error::new(std::io::ErrorKind::Other, "Something went wrong, try again")),
-                                        }
-                                    }
+                                            _ => future::err(Error::from(ErrorKind::LocalError)),
+                                        },
+                                        Err(_) => future::err(Error::from(ErrorKind::LocalError)),
+                                    },
                                 }
                             })
                     })
@@ -446,12 +433,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
             .map(|x| x.trim_end_matches('/'))
-            .ok_or(Error::PathError)
+            .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
             .and_then(|path| make_uri(format!("/upload/storage/v1/b/{}/o?uploadType=media&name={}/", self.bucket, path)))
         {
             Ok(uri) => uri,
@@ -470,29 +457,29 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .header(header::CONTENT_LENGTH, "0")
                     .method(Method::POST)
                     .body(Body::empty())
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| {
                 client
                     .request(request)
-                    .map_err(|_| Error::IOError(ErrorKind::Other))
-                    .and_then(|response| response.into_body().map_err(|_| Error::IOError(ErrorKind::Other)).concat2())
+                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
                     .map(|_body_string| {}) //TODO: implement error handling
             });
         Box::new(result)
     }
 
-    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, _from: P, _to: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, _from: P, _to: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Self::Error> + Send> {
+    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }
 
-    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = u64, Error = Self::Error> + Send> {
+    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
         //TODO: implement this
         unimplemented!();
     }

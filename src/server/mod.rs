@@ -24,29 +24,28 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use std::io::{ErrorKind, Read};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
+use self::commands::{AuthParam, Command, ProtParam};
+use self::reply::{Reply, ReplyCode};
+use self::stream::{SecuritySwitch, SwitchingTlsStream};
+use crate::auth::{self, AnonymousUser};
+use crate::metrics;
+use crate::storage::{self, filesystem::Filesystem, Error, ErrorKind, Metadata};
 use failure::Fail;
-use futures::prelude::*;
-use futures::sync::mpsc;
 use futures::Sink;
+use futures::{
+    prelude::{Future, Stream},
+    sync::mpsc,
+};
 use log::{error, info, warn};
 use rand::Rng;
+use session::{Session, SessionState};
+use std::io::Read;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_codec::Decoder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use uuid::Uuid;
-
-use self::commands::{AuthParam, Command, ProtParam};
-use self::reply::{Reply, ReplyCode};
-use self::stream::{SecuritySwitch, SwitchingTlsStream};
-use crate::auth;
-use crate::auth::AnonymousUser;
-use crate::metrics;
-use crate::storage::{self, filesystem::Filesystem, Metadata};
-use session::{Session, SessionState};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const CONTROL_CHANNEL_ID: u8 = 0;
@@ -133,7 +132,6 @@ where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio_io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
-    S::Error: Send,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.
@@ -632,20 +630,8 @@ where
                             tokio::spawn(
                                 storage
                                     .del(&session.user, path)
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|e| {
-                                        let msg = match e.kind() {
-                                            ErrorKind::NotFound => InternalMsg::NotFound,
-                                            _ => InternalMsg::DelFail,
-                                        };
-                                        tx_fail
-                                            .send(msg)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to delete file: {}", e);
@@ -663,17 +649,8 @@ where
                             tokio::spawn(
                                 storage
                                     .rmd(&session.user, path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to delete directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::DelSuccess)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelSuccess' to data channel"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::DelFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'DelFail' to data channel"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to delete directory: {}", e);
@@ -696,17 +673,8 @@ where
                             tokio::spawn(
                                 storage
                                     .mkd(&session.user, &path)
-                                    .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to create directory"))
-                                    .and_then(|_| {
-                                        tx_success
-                                            .send(InternalMsg::MkdirSuccess(path))
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirSuccess' message"))
-                                    })
-                                    .or_else(|_| {
-                                        tx_fail
-                                            .send(InternalMsg::MkdirFail)
-                                            .map_err(|_| std::io::Error::new(ErrorKind::Other, "Failed to send 'MkdirFail' message"))
-                                    })
+                                    .and_then(|_| tx_success.send(InternalMsg::MkdirSuccess(path)).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                    .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                                     .map(|_| ())
                                     .map_err(|e| {
                                         warn!("Failed to create directory: {}", e);
@@ -893,6 +861,15 @@ where
                     Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
                 }
                 Event::InternalMsg(AuthFailed) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
+                Event::InternalMsg(StorageError(error_type)) => match error_type.kind() {
+                    ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
+                    ErrorKind::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
+                    ErrorKind::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
+                    ErrorKind::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
+                    ErrorKind::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
+                    ErrorKind::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
+                    ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
+                },
             }
         };
 
@@ -911,7 +888,10 @@ where
                                 metrics::add_event_metric(&event);
                             };
                             // TODO: Make sure data connections are closed
-                            Ok(*event != Event::InternalMsg(InternalMsg::Quit))
+                            match *event {
+                                Event::InternalMsg(InternalMsg::Quit) => Ok(false),
+                                _ => Ok(true),
+                            }
                         })
                         .and_then(respond)
                         .or_else(move |e| {
