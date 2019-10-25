@@ -85,4 +85,4 @@ Want to submit a feature request? Then head over to our [contribution guide (CON
 
 ## License
 
-You're free to use, modify and distribute this software under the terms of the Apache-2.0 license.
+You're free to use, modify and distribute this software under the terms of the [Apache License v2.0](http://www.apache.org/licenses/LICENSE-2.0).
