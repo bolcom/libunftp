@@ -190,7 +190,7 @@ pub trait StorageBackend<U: Send> {
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
     fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        Self::Metadata: Metadata + 'static,
     {
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
         let fut = stream
@@ -206,7 +206,7 @@ pub trait StorageBackend<U: Send> {
     /// immediately be sent to the client.
     fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
     where
-        <Self as StorageBackend<U>>::Metadata: Metadata + 'static,
+        Self::Metadata: Metadata + 'static,
     {
         let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
 

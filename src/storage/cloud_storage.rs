@@ -75,7 +75,7 @@ fn item_to_metadata(item: Item) -> ObjectMetadata {
 
 /// StorageBackend that uses Cloud storage from Google
 pub struct CloudStorage {
-    bucket: &'static str,
+    bucket: String,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
     get_token: Box<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
 }
@@ -84,11 +84,11 @@ impl CloudStorage {
     /// Create a new CloudStorage backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
-    pub fn new(bucket: &'static str, service_account_key: ServiceAccountKey) -> Self {
+    pub fn new<B: Into<String>>(bucket: B, service_account_key: ServiceAccountKey) -> Self {
         let client = Client::builder().build(HttpsConnector::new(4));
         let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
         CloudStorage {
-            bucket,
+            bucket: bucket.into(),
             client: client.clone(),
             get_token: Box::new(move || match &mut service_account_access.lock() {
                 Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
