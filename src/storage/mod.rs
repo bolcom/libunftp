@@ -60,6 +60,10 @@ pub enum ErrorKind {
     ///     File unavailable (e.g., file not found, no access).
     #[fail(display = "550 Permanent file not available")]
     PermanentFileNotAvailable,
+    /// 550 Requested action not taken.
+    ///     File unavailable (e.g., file not found, no access).
+    #[fail(display = "550 Permission denied")]
+    PermissionDenied,
     /// 451 Requested action aborted. Local error in processing.
     #[fail(display = "451 Local error")]
     LocalError,
