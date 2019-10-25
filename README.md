@@ -77,11 +77,11 @@ For more help refer to:
 
 ## Contributing
 
-First of all, thank you for your interest in contributing to libunftp!
-Please feel free to create a github issue if you encounter any problems,
-want to submit a feature request, or just feel like it :)
+Thank you for your interest in contributing to libunftp!
 
-Run `make help` in the root of this repository to see the available *make* commands.
+Please feel free to create a github issue if you encounter any problems.
+
+Want to submit a feature request? Then head over to our [contribution guide (CONTRIBUTING.md)](CONTRIBUTING.md).
 
 ## License
 
