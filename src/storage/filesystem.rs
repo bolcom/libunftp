@@ -110,12 +110,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             tokio::fs::file::File::open(full_path)
                 .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
                 .map(|res| res.0)
-                .map_err(|error| {
-                    match error.kind() {
-                        std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                        std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                        _ => Error::from(ErrorKind::LocalError),
-                    }
+                .map_err(|error| match error.kind() {
+                    std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+                    std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+                    _ => Error::from(ErrorKind::LocalError),
                 }),
         )
     }
@@ -148,12 +146,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             .and_then(|f| tokio_io::io::copy(bytes, f))
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
-            .map_err(|error| {
-                match error.kind() {
-                    std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                    std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                    _ => Error::from(ErrorKind::LocalError),
-                }
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+                _ => Error::from(ErrorKind::LocalError),
             });
         Box::new(fut)
     }
@@ -163,12 +159,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(_) => return Box::new(future::err(Error::from(ErrorKind::PermanentFileNotAvailable))),
         };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|error| {
-            match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            }
+        Box::new(tokio::fs::remove_file(full_path).map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
         }))
     }
 
@@ -177,12 +171,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
-        Box::new(tokio::fs::remove_dir(full_path).map_err(|error| {
-            match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            }
+        Box::new(tokio::fs::remove_dir(full_path).map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
         }))
     }
 
@@ -192,12 +184,10 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             Err(e) => return Box::new(future::err(e)),
         };
 
-        Box::new(tokio::fs::create_dir(full_path).map_err(|error| {
-            match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            }
+        Box::new(tokio::fs::create_dir(full_path).map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
         }))
     }
 
