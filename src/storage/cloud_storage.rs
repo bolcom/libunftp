@@ -319,8 +319,28 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                 client
                     .request(request)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(move |body| future::ok(Object::new(body.to_vec())))
+                    .and_then(|response| {
+                        let status = response.status();
+                        response
+                            .into_body()
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                            .concat2()
+                            .and_then(move |body| {
+                                match status {
+                                    // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
+                                    StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+                                    StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
+                                    StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+                                    _ => {
+                                        if status.is_success() {
+                                            future::ok(Object::new(body.to_vec()))
+                                        } else {
+                                            future::err(Error::from(ErrorKind::LocalError))
+                                        }
+                                    }
+                                }
+                            })
+                    })
             });
         Box::new(result)
     }
