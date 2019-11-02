@@ -1,4 +1,4 @@
-/// Contains the `FTPError` struct that that defines the libunftp custom error type.
+/// )Contains the `FTPError` struct that that defines the libunftp custom error type.
 pub mod error;
 
 pub(crate) mod commands;
@@ -24,7 +24,7 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use self::commands::{AuthParam, Command, ProtParam};
+use self::commands::{AuthParam, Cmd, Command, ProtParam};
 use self::reply::{Reply, ReplyCode};
 use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth::{self, AnonymousUser};
@@ -455,98 +455,32 @@ where
             };
         }
 
+        let args = CommandArgs {
+            session,
+            authenticator,
+            tls_configured,
+            passive_addrs,
+            tx,
+            local_addr,
+            storage_features,
+        };
+
         use session::SessionState::*;
 
         match cmd {
-            Command::User { username } => {
-                let mut session = session.lock()?;
-                match session.state {
-                    SessionState::New | SessionState::WaitPass => {
-                        let user = std::str::from_utf8(&username)?;
-                        session.username = Some(user.to_string());
-                        session.state = SessionState::WaitPass;
-                        Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
-                    }
-                    _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
-                }
-            }
-            Command::Pass { password } => {
-                let session_arc = session.clone();
-                let session = session.lock()?;
-                match session.state {
-                    SessionState::WaitPass => {
-                        let pass = std::str::from_utf8(&password.as_ref())?;
-                        let user = session.username.clone().unwrap();
-                        let tx = tx.clone();
-
-                        tokio::spawn(
-                            authenticator
-                                .authenticate(&user, pass)
-                                .then(move |user| {
-                                    match user {
-                                        Ok(user) => {
-                                            let mut session = session_arc.lock().unwrap();
-                                            session.user = Arc::new(Some(user));
-                                            tx.send(InternalMsg::AuthSuccess)
-                                        }
-                                        _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
-                                    }
-                                })
-                                .map(|_| ())
-                                .map_err(|_| ()),
-                        );
-                        Ok(Reply::none())
-                    }
-                    New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please supply a username first")),
-                    _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate")),
-                }
-            }
+            Command::User { username } => commands::User::new(username).execute(&args),
+            Command::Pass { password } => commands::Pass::new(password).execute(&args),
             // This response is kind of like the User-Agent in http: very much mis-used to gauge
             // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
             // `UNIX Type: L8` for greatest compatibility.
-            Command::Syst => Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8")),
-            Command::Stat { path } => {
-                match path {
-                    None => {
-                        let text = vec!["Status:", "Powered by libunftp"];
-                        // TODO: Add useful information here lik libunftp version, auth type, storage type, IP etc.
-                        Ok(Reply::new_multiline(ReplyCode::SystemStatus, text))
-                    }
-                    Some(path) => {
-                        let path = std::str::from_utf8(&path)?;
-
-                        let session = session.lock()?;
-                        let storage = Arc::clone(&session.storage);
-                        storage.list_fmt(&session.user, path).wait().map(move |mut cursor| {
-                            let mut result = String::new();
-                            cursor.read_to_string(&mut result)?;
-                            Ok(Reply::new(ReplyCode::CommandOkay, &result))
-                        })?
-                    }
-                }
-            }
-            Command::Acct { .. } => Ok(Reply::new(ReplyCode::NotLoggedIn, "Rejected")),
-            Command::Type => Ok(Reply::new(ReplyCode::CommandOkay, "Always in binary mode")),
-            Command::Stru { structure } => match structure {
-                commands::StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
-                _ => Ok(Reply::new(
-                    ReplyCode::CommandNotImplementedForParameter,
-                    "Only File structure mode is supported",
-                )),
-            },
-            Command::Mode { mode } => match mode {
-                commands::ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
-                _ => Ok(Reply::new(
-                    ReplyCode::CommandNotImplementedForParameter,
-                    "Only Stream transfer mode is supported",
-                )),
-            },
-            Command::Help => {
-                let text = vec!["Help:", "Powered by libunftp"];
-                // TODO: Add useful information here like operating server type and app name.
-                Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))
-            }
-            Command::Noop => Ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing")),
+            Command::Syst => commands::Syst.execute(&args),
+            Command::Stat { path } => commands::Stat::new(path).execute(&args),
+            Command::Acct { .. } => commands::Acct.execute(&args),
+            Command::Type => commands::Type.execute(&args),
+            Command::Stru { structure } => commands::Stru::new(structure).execute(&args),
+            Command::Mode { mode } => commands::Mode::new(mode).execute(&args),
+            Command::Help => commands::Help.execute(&args),
+            Command::Noop => commands::Noop.execute(&args),
             Command::Pasv => {
                 // obtain the ip address the client is connected to
                 let conn_addr = match local_addr {
@@ -966,4 +900,19 @@ where
             Size(size) => Ok(Reply::new(ReplyCode::FileStatus, &size.to_string())),
         }
     }
+}
+
+struct CommandArgs<S, U: Send + Sync>
+where
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+{
+    session: Arc<Mutex<Session<S, U>>>,
+    authenticator: Arc<dyn auth::Authenticator<U>>,
+    tls_configured: bool,
+    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    tx: mpsc::Sender<InternalMsg>,
+    local_addr: std::net::SocketAddr,
+    storage_features: u32,
 }

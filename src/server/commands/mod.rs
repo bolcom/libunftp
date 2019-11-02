@@ -1,8 +1,45 @@
+use crate::server::error::FTPError;
 use crate::server::password::Password;
+use crate::server::reply::Reply;
+use crate::server::CommandArgs;
+use crate::storage;
 
 use bytes::Bytes;
 use failure::*;
 use std::{fmt, result, str};
+
+mod acct;
+mod help;
+mod mode;
+mod noop;
+mod pass;
+mod pasv;
+mod stat;
+mod stru;
+mod syst;
+mod type_;
+mod user;
+
+pub use acct::Acct;
+pub use help::Help;
+pub use mode::Mode;
+pub use noop::Noop;
+pub use pass::Pass;
+pub use pasv::Pasv;
+pub use stat::Stat;
+pub use stru::Stru;
+pub use syst::Syst;
+pub use type_::Type;
+pub use user::User;
+
+pub trait Cmd<S, U: Send + Sync>
+where
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+{
+    fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
+}
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
 /// the given structure. This stems from a time where it was common for some operating
