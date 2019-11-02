@@ -4,12 +4,9 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 
-// This response is kind of like the User-Agent in http: very much mis-used to gauge
-// the capabilities of the other peer. D.J. Bernstein recommends to just respond with
-// `UNIX Type: L8` for greatest compatibility.
-pub struct Syst;
+pub struct Pbsz;
 
-impl<S, U> Cmd<S, U> for Syst
+impl<S, U> Cmd<S, U> for Pbsz
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
@@ -17,6 +14,6 @@ where
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8"))
+        Ok(Reply::new(ReplyCode::CommandOkay, "OK"))
     }
 }
