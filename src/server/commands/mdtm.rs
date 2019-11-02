@@ -5,6 +5,7 @@ use crate::server::CommandArgs;
 use crate::storage;
 use crate::storage::Metadata;
 use futures::future::Future;
+use log::error;
 use std::path::PathBuf;
 use std::sync::Arc;
 

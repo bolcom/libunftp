@@ -21,7 +21,7 @@ where
     S::File: tokio_io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.option {
             Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
         }

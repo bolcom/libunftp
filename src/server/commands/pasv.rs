@@ -1,14 +1,13 @@
 use crate::server::commands::{Cmd, Command};
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::session::SessionState;
 use crate::server::CommandArgs;
 use crate::storage;
-use bytes::Bytes;
 use futures::stream::Stream;
 use futures::sync::mpsc;
+use log::{error, warn};
 use rand::Rng;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 
 const BIND_RETRIES: u8 = 10;
 

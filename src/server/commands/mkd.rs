@@ -7,6 +7,7 @@ use crate::storage;
 use crate::storage::{Error, ErrorKind};
 use futures::future::Future;
 use futures::sink::Sink;
+use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
 

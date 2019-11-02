@@ -4,6 +4,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use futures::future::Future;
 use futures::sink::Sink;
 
 pub struct Ccc;

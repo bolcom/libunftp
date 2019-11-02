@@ -4,6 +4,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use futures::future::Future;
 use futures::sink::Sink;
 
 pub struct Auth {
@@ -24,7 +25,7 @@ where
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        match (args.tls_configured, self.protocol) {
+        match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
                 let tx = args.tx.clone();
                 spawn!(tx.send(InternalMsg::SecureControlChannel));
