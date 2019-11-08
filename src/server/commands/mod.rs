@@ -1,8 +1,102 @@
+use crate::server::error::FTPError;
 use crate::server::password::Password;
+use crate::server::reply::Reply;
+use crate::server::CommandArgs;
+use crate::storage;
 
 use bytes::Bytes;
 use failure::*;
 use std::{fmt, result, str};
+
+#[macro_use]
+mod macros;
+
+mod abor;
+mod acct;
+mod allo;
+mod auth;
+mod ccc;
+mod cdc;
+mod cdup;
+mod cwd;
+mod dele;
+mod feat;
+mod help;
+mod list;
+mod mdtm;
+mod mkd;
+mod mode;
+mod nlst;
+mod noop;
+mod opts;
+mod pass;
+mod pasv;
+mod pbsz;
+mod port;
+mod prot;
+mod pwd;
+mod quit;
+mod rest;
+mod retr;
+mod rmd;
+mod rnfr;
+mod rnto;
+mod size;
+mod stat;
+mod stor;
+mod stou;
+mod stru;
+mod syst;
+mod type_;
+mod user;
+
+pub use abor::Abor;
+pub use acct::Acct;
+pub use allo::Allo;
+pub use auth::Auth;
+pub use ccc::Ccc;
+pub use cdc::Cdc;
+pub use cdup::Cdup;
+pub use cwd::Cwd;
+pub use dele::Dele;
+pub use feat::Feat;
+pub use help::Help;
+pub use list::List;
+pub use mdtm::Mdtm;
+pub use mkd::Mkd;
+pub use mode::Mode;
+pub use nlst::Nlst;
+pub use noop::Noop;
+pub use opts::Opts;
+pub use pass::Pass;
+pub use pasv::Pasv;
+pub use pbsz::Pbsz;
+pub use port::Port;
+pub use prot::Prot;
+pub use pwd::Pwd;
+pub use quit::Quit;
+pub use rest::Rest;
+pub use retr::Retr;
+pub use rmd::Rmd;
+pub use rnfr::Rnfr;
+pub use rnto::Rnto;
+pub use size::Size;
+pub use stat::Stat;
+pub use stor::Stor;
+pub use stou::Stou;
+pub use stru::Stru;
+pub use syst::Syst;
+pub use type_::Type;
+pub use user::User;
+
+pub trait Cmd<S, U: Send + Sync>
+where
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: tokio_io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+{
+    fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
+}
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
 /// the given structure. This stems from a time where it was common for some operating
