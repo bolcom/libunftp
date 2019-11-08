@@ -31,7 +31,7 @@ where
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let storage = Arc::clone(&session.storage);
-        match storage.stat(&session.user, &self.path.clone()).wait() {
+        match storage.metadata(&session.user, &self.path.clone()).wait() {
             Ok(meta) => match meta.modified() {
                 Ok(system_time) => {
                     let chrono_time: chrono::DateTime<chrono::offset::Utc> = system_time.into();

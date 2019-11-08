@@ -210,7 +210,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 
-    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
+    fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
         let uri = match path
             .as_ref()
             .to_str()
@@ -498,44 +498,5 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
         //TODO: implement this
         unimplemented!();
-    }
-
-    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
-        let uri = match path
-            .as_ref()
-            .to_str()
-            .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
-            .ok_or_else(|| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
-        {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
-
-        let client = self.client.clone();
-
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::GET)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| {
-                client
-                    .request(request)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(|body_string| {
-                        serde_json::from_slice::<Item>(&body_string)
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(item_to_metadata)
-                            .map(|metadata| metadata.len())
-                    })
-            });
-        Box::new(result)
     }
 }
