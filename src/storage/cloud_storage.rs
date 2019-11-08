@@ -329,7 +329,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .and_then(move |body| {
                                 match status {
                                     // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
-                                    StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+                                    StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermissionDenied)),
                                     StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
                                     StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
                                     _ => {
