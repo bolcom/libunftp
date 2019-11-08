@@ -31,10 +31,11 @@ use crate::auth::{self, AnonymousUser};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, Error, ErrorKind, Metadata};
 use failure::Fail;
-use futures::Sink;
 use futures::{
+    future::ok,
     prelude::{Future, Stream},
     sync::mpsc,
+    Sink,
 };
 use log::{error, info, warn};
 use rand::Rng;
@@ -359,7 +360,7 @@ where
                                 FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
                                 _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
                             };
-                            futures::future::ok(response)
+                            ok(response)
                         })
                         .map(move |reply| {
                             if with_metrics {
@@ -854,12 +855,27 @@ where
             },
             Command::SIZE { file } => {
                 let session = session.lock()?;
+                let start_pos = session.start_pos;
                 let storage = Arc::clone(&session.storage);
+                let path = session.cwd.join(file);
+                let tx_success = tx.clone();
+                let tx_fail = tx.clone();
 
-                match storage.size(&session.user, &file).wait() {
-                    Ok(size) => Ok(Reply::new(ReplyCode::FileStatus, &*(size - session.start_pos).to_string())),
-                    Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get size.")),
-                }
+                tokio::spawn(
+                    storage
+                        .size(&session.user, &path)
+                        .and_then(move |size| {
+                            tx_success
+                                .send(InternalMsg::Size(size - start_pos))
+                                .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                        })
+                        .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
+                        .map(|_| ())
+                        .map_err(|e| {
+                            warn!("Failed to get size: {}", e);
+                        }),
+                );
+                Ok(Reply::none())
             }
             Command::Rest { offset } => {
                 if storage_features & storage::FEATURE_RESTART == 0 {
@@ -947,6 +963,7 @@ where
                 ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
                 ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
             },
+            Size(size) => Ok(Reply::new(ReplyCode::FileStatus, &size.to_string())),
         }
     }
 }

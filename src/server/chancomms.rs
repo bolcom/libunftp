@@ -66,4 +66,6 @@ pub enum InternalMsg {
     PlaintextControlChannel,
     /// Errors comming from the storage
     StorageError(Error),
+    /// The size of a file/directory
+    Size(u64),
 }
