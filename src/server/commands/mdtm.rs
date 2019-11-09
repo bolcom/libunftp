@@ -1,11 +1,14 @@
+use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
-use crate::storage;
-use crate::storage::Metadata;
+use crate::storage::{self, Error, ErrorKind, Metadata};
+use chrono::offset::Utc;
+use chrono::DateTime;
 use futures::future::Future;
-use log::error;
+use futures::sink::Sink;
+use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,19 +34,27 @@ where
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let storage = Arc::clone(&session.storage);
-        match storage.metadata(&session.user, &self.path.clone()).wait() {
-            Ok(meta) => match meta.modified() {
-                Ok(system_time) => {
-                    let chrono_time: chrono::DateTime<chrono::offset::Utc> = system_time.into();
-                    let formatted = chrono_time.format(RFC3659_TIME);
-                    Ok(Reply::new(ReplyCode::FileStatus, formatted.to_string().as_str()))
-                }
-                Err(err) => {
-                    error!("could not get file modification time: {:?}", err);
-                    Ok(Reply::new(ReplyCode::FileError, "Could not get file modification time."))
-                }
-            },
-            Err(_) => Ok(Reply::new(ReplyCode::FileError, "Could not get file metadata.")),
-        }
+        let path = session.cwd.join(self.path.clone());
+        let tx_success = args.tx.clone();
+        let tx_fail = args.tx.clone();
+
+        tokio::spawn(
+            storage
+                .metadata(&session.user, &path)
+                .and_then(move |metadata| {
+                    tx_success
+                        .send(InternalMsg::CommandChannelReply(
+                            ReplyCode::FileStatus,
+                            DateTime::<Utc>::from(metadata.modified().unwrap()).format(RFC3659_TIME).to_string(),
+                        ))
+                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                })
+                .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
+                .map(|_| ())
+                .map_err(|e| {
+                    warn!("Failed to get metadata: {}", e);
+                }),
+        );
+        Ok(Reply::none())
     }
 }
