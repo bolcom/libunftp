@@ -1,3 +1,11 @@
+//! The RFC 959 Passive (`PASSV`) command
+//
+// This command requests the server-DTP to "listen" on a data
+// port (which is not its default data port) and to wait for a
+// connection rather than initiate one upon receipt of a
+// transfer command.  The response to this command includes the
+// host and port address this server is listening on.
+
 use crate::server::commands::{Cmd, Command};
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

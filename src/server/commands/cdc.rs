@@ -1,3 +1,5 @@
+//! The Clear Data Channel (`CDC`) command
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

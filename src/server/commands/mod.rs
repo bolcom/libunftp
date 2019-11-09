@@ -115,50 +115,38 @@ pub enum Command {
         // TODO: Reconsider when NLL have been merged into stable.
         username: Bytes,
     },
-    /// The `PASS` command
     Pass {
         /// The bytes making up the actual password.
         password: Password,
     },
-    /// The `ACCT` command
     Acct {
         /// The bytes making up the account about which information is requested.
         account: Bytes,
     },
-    /// The `SYST` command
     Syst,
-    /// The `STAT` command
     Stat {
         /// The bytes making up the path about which information is requested, if given.
         path: Option<Bytes>,
     },
-    /// The `TYPE` command
     Type,
-    /// The `STRU` command
     Stru {
         /// The structure to which the client would like to switch. Only the `File` structure is
         /// supported by us.
         structure: StruParam,
     },
-    /// The `MODE` command
     Mode {
         /// The transfer mode to which the client would like to switch. Only the `Stream` mode is
         /// supported by us.
         mode: ModeParam,
     },
     Help,
-    /// The `NOOP` command
     Noop,
-    /// The `PASSV` command
     Pasv,
-    /// The `PORT` command
     Port,
-    /// The `RETR` command
     Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
     },
-    /// The `STOR` command
     Stor {
         /// The path to the file the client would like to store.
         path: String,
@@ -173,23 +161,17 @@ pub enum Command {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
     },
-    /// The `FEAT` command
     Feat,
-    /// The `PWD` command
     Pwd,
-    /// The `CWD` command
     Cwd {
         /// The path the client would like to change directory to.
         path: std::path::PathBuf,
     },
-    /// The `CDUP` command
     Cdup,
-    /// The `OPTS` command
     Opts {
         /// The option the client wants to set
         option: Opt,
     },
-    /// The `DELE` command
     Dele {
         /// The (regular) file to delete.
         path: String,
@@ -198,28 +180,21 @@ pub enum Command {
         /// The (regular) directory to delete.
         path: String,
     },
-    /// The `QUIT` command
     Quit,
-    /// The `MKD` command
     Mkd {
         /// The path to the directory the client wants to create.
         path: std::path::PathBuf,
     },
-    /// The `ALLO` command
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
     // as noop, we won't even parse it.
     },
-    /// The `ABOR` command
     Abor,
-    /// The `STOU` command
     Stou,
-    /// The `RNFR` command
     Rnfr {
         /// The file to be renamed
         file: std::path::PathBuf,
     },
-    /// The `RNTO` command
     Rnto {
         /// The filename to rename to
         file: std::path::PathBuf,
@@ -227,12 +202,9 @@ pub enum Command {
     Auth {
         protocol: AuthParam,
     },
-    // The `Clear Command Channel` command
     CCC,
-    // The `Clear Data Channel` command
     CDC,
     PBSZ {},
-    // Data Channel Protection Level
     PROT {
         param: ProtParam,
     },

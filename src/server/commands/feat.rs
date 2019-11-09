@@ -1,3 +1,5 @@
+//! The RFC 2389 Feature (`FEAT`) command
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

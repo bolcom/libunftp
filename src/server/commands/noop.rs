@@ -1,3 +1,9 @@
+//! The RFC 959 No Operation (`NOOP`) command
+//
+// This command does not affect any parameters or previously
+// entered commands. It specifies no action other than that the
+// server send an OK reply.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

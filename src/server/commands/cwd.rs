@@ -1,3 +1,12 @@
+//! The RFC 959 Change Working Directory (`CWD`) command
+//
+// This command allows the user to work with a different
+// directory or dataset for file storage or retrieval without
+// altering his login or accounting information.  Transfer
+// parameters are similarly unchanged.  The argument is a
+// pathname specifying a directory or other system dependent
+// file group designator.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

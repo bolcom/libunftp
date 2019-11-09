@@ -1,3 +1,8 @@
+//! The RFC 959 Print Working Directory (`PWD`) command
+//
+// This command causes the name of the current working
+// directory to be returned in the reply.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

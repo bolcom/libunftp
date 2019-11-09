@@ -1,3 +1,17 @@
+//! The RFC 959 Transfer Mode (`MODE`) command
+//
+// The argument is a single Telnet character code specifying
+// the data transfer modes described in the Section on
+// Transmission Modes.
+//
+// The following codes are assigned for transfer modes:
+//
+// S - Stream
+// B - Block
+// C - Compressed
+//
+// The default transfer mode is Stream.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

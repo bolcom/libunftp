@@ -1,3 +1,17 @@
+//! The RFC 959 File Structure (`STRU`) command
+//
+// The argument is a single Telnet character code specifying
+// file structure described in the Section on Data
+// Representation and Storage.
+//
+// The following codes are assigned for structure:
+//
+// F - File (no record structure)
+// R - Record structure
+// P - Page structure
+//
+// The default structure is File.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

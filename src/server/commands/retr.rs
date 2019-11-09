@@ -1,3 +1,10 @@
+//! The RFC 959 Retrieve (`RETR`) command
+//
+// This command causes the server-DTP to transfer a copy of the
+// file, specified in the pathname, to the server- or user-DTP
+// at the other end of the data connection.  The status and
+// contents of the file at the server site shall be unaffected.
+
 use crate::server::commands::Cmd;
 use crate::server::error::{FTPError, FTPErrorKind};
 use crate::server::reply::Reply;

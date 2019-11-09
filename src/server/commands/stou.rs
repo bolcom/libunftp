@@ -1,3 +1,5 @@
+//! The RFC 959 Store File Uniquely (`STOU`) command
+
 use crate::server::commands::{Cmd, Command};
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

@@ -1,3 +1,5 @@
+//! The RFC 2228 Data Channel Protection Level (`PROT`) command.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

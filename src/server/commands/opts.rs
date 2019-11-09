@@ -1,3 +1,12 @@
+//! The RFC 2389 Options (`OPTS`) command
+//
+// The OPTS (options) command allows a user-PI to specify the desired
+// behavior of a server-FTP process when another FTP command (the target
+// command) is later issued.  The exact behavior, and syntax, will vary
+// with the target command indicated, and will be specified with the
+// definition of that command.  Where no OPTS behavior is defined for a
+// particular command there are no options available for that command.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
