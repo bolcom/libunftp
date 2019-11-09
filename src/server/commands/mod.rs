@@ -95,7 +95,7 @@ pub use syst::Syst;
 pub use type_::Type;
 pub use user::User;
 
-pub trait Cmd<S, U: Send + Sync>
+pub(crate) trait Cmd<S, U: Send + Sync>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio_io::AsyncRead + Send,

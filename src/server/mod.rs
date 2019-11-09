@@ -561,7 +561,7 @@ where
 }
 
 /// Convenience struct to group command args
-pub struct CommandArgs<S, U: Send + Sync>
+pub(crate) struct CommandArgs<S, U: Send + Sync>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio_io::AsyncRead + Send,
