@@ -1,8 +1,21 @@
-use crate::server::commands::{Cmd, ModeParam};
+use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+
+/// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
+/// only support the `Stream` mode. We still have to support the command itself for compatibility
+/// reasons, though.
+#[derive(Debug, PartialEq, Clone)]
+pub enum ModeParam {
+    /// Data is sent in a continuous stream of bytes.
+    Stream,
+    /// Data is sent as a series of blocks preceded by one or more header bytes.
+    Block,
+    /// Some round-about way of sending compressed data.
+    Compressed,
+}
 
 pub struct Mode {
     params: ModeParam,

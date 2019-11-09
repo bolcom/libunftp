@@ -1,8 +1,16 @@
-use crate::server::commands::{Cmd, Opt};
+use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+
+/// The parameter that can be given to the `OPTS` command, specifying the option the client wants
+/// to set.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Opt {
+    /// The client wants us to enable UTF-8 encoding for file paths and such.
+    UTF8,
+}
 
 pub struct Opts {
     option: Opt,

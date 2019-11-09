@@ -53,7 +53,7 @@ mod user;
 pub use abor::Abor;
 pub use acct::Acct;
 pub use allo::Allo;
-pub use auth::Auth;
+pub use auth::{Auth, AuthParam};
 pub use ccc::Ccc;
 pub use cdc::Cdc;
 pub use cdup::Cdup;
@@ -64,15 +64,15 @@ pub use help::Help;
 pub use list::List;
 pub use mdtm::Mdtm;
 pub use mkd::Mkd;
-pub use mode::Mode;
+pub use mode::{Mode, ModeParam};
 pub use nlst::Nlst;
 pub use noop::Noop;
-pub use opts::Opts;
+pub use opts::{Opt, Opts};
 pub use pass::Pass;
 pub use pasv::Pasv;
 pub use pbsz::Pbsz;
 pub use port::Port;
-pub use prot::Prot;
+pub use prot::{Prot, ProtParam};
 pub use pwd::Pwd;
 pub use quit::Quit;
 pub use rest::Rest;
@@ -84,7 +84,7 @@ pub use size::Size;
 pub use stat::Stat;
 pub use stor::Stor;
 pub use stou::Stou;
-pub use stru::Stru;
+pub use stru::{Stru, StruParam};
 pub use syst::Syst;
 pub use type_::Type;
 pub use user::User;
@@ -96,63 +96,6 @@ where
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
-}
-
-/// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
-/// the given structure. This stems from a time where it was common for some operating
-/// systems to address i.e. particular records in files, but isn't used a lot these days. We
-/// support the command itself for legacy reasons, but will only support the `File` structure.
-// Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
-// command parameter enums for the commands that take mutually exclusive parameters.
-#[derive(Debug, PartialEq, Clone)]
-pub enum StruParam {
-    /// "Regular" file structure.
-    File,
-    /// Files are structured in "Records".
-    Record,
-    /// Files are structured in "Pages".
-    Page,
-}
-
-/// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
-/// only support the `Stream` mode. We still have to support the command itself for compatibility
-/// reasons, though.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ModeParam {
-    /// Data is sent in a continuous stream of bytes.
-    Stream,
-    /// Data is sent as a series of blocks preceded by one or more header bytes.
-    Block,
-    /// Some round-about way of sending compressed data.
-    Compressed,
-}
-
-// The parameter that can be given to the `AUTH` command.
-#[derive(Debug, PartialEq, Clone)]
-pub enum AuthParam {
-    Ssl,
-    Tls,
-}
-
-// The parameter that can be given to the `PROT` command.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ProtParam {
-    // 'C' - Clear - neither Integrity nor Privacy
-    Clear,
-    // 'S' - Safe - Integrity without Privacy
-    Safe,
-    // 'E' - Confidential - Privacy without Integrity
-    Confidential,
-    // 'P' - Private - Integrity and Privacy
-    Private,
-}
-
-/// The parameter that can be given to the `OPTS` command, specifying the option the client wants
-/// to set.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Opt {
-    /// The client wants us to enable UTF-8 encoding for file paths and such.
-    UTF8,
 }
 
 #[derive(Debug, PartialEq, Clone)]
