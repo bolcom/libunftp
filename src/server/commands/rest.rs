@@ -1,3 +1,11 @@
+//! Restart of Interrupted Transfer (REST)
+//! To avoid having to resend the entire file if the file is only
+//! partially transferred, both sides need some way to agree on where in
+//! the data stream to restart the data transfer.
+//!
+//! See also: https://cr.yp.to/ftp/retr.html
+//!
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

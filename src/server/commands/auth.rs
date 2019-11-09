@@ -1,3 +1,9 @@
+//! The `AUTH` command used to support TLS
+//!
+//! A client requests TLS with the AUTH command and then decides if it
+//! wishes to secure the data connections by use of the PBSZ and PROT
+//! commands.
+
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;

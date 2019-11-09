@@ -1,3 +1,9 @@
+//! This module contains the implementations for the FTP commands defined in
+//!
+//! - [RFC 959 - FTP](https://tools.ietf.org/html/rfc959)
+//! - [RFC 3659 - Extensions to FTP](https://tools.ietf.org/html/rfc3659)
+//! - [RFC 2228 - FTP Security Extensions](https://tools.ietf.org/html/rfc2228)
+
 use crate::server::error::FTPError;
 use crate::server::password::Password;
 use crate::server::reply::Reply;
@@ -99,12 +105,7 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone)]
-/// This enum represents parsed versions of the FTP commands defined in
-/// - [RFC 959 - FTP](https://tools.ietf.org/html/rfc959)
-/// - [RFC 3659 - Extensions to FTP](https://tools.ietf.org/html/rfc3659)
-/// - [RFC 2228 - FTP Security Extensions](https://tools.ietf.org/html/rfc2228)
 pub enum Command {
-    /// The `USER` command
     User {
         /// The bytes making up the actual username.
         // Ideally I'd like to immediately convert the username to a valid UTF8 `&str`, because
@@ -145,11 +146,6 @@ pub enum Command {
         /// supported by us.
         mode: ModeParam,
     },
-    /// The `HELP` command
-    // A HELP request asks for human-readable information from the server. The server may accept this request with code 211 or 214, or reject it with code 502.
-    //
-    // A HELP request may include a parameter. The meaning of the parameter is defined by the server. Some servers interpret the parameter as an FTP verb,
-    // and respond by briefly explaining the syntax of the verb.
     Help,
     /// The `NOOP` command
     Noop,
@@ -167,38 +163,12 @@ pub enum Command {
         /// The path to the file the client would like to store.
         path: String,
     },
-    /// The `LIST` command
-    // This command causes a list to be sent from the server to the
-    // passive DTP.  If the pathname specifies a directory or other
-    // group of files, the server should transfer a list of files
-    // in the specified directory.  If the pathname specifies a
-    // file then the server should send current information on the
-    // file.  A null argument implies the user's current working or
-    // default directory.  The data transfer is over the data
-    // connection in type ASCII or type EBCDIC.  (The user must
-    // ensure that the TYPE is appropriately ASCII or EBCDIC).
-    // Since the information on a file may vary widely from system
-    // to system, this information may be hard to use automatically
-    // in a program, but may be quite useful to a human user.
     List {
         /// Arguments passed along with the list command.
         options: Option<String>,
         /// The path of the file/directory the clients wants to list
         path: Option<String>,
     },
-    /// The `NAME LIST (NLST)` command
-    // This command causes a directory listing to be sent from
-    // server to user site.  The pathname should specify a
-    // directory or other system-specific file group descriptor; a
-    // null argument implies the current directory.  The server
-    // will return a stream of names of files and no other
-    // information.  The data will be transferred in ASCII or
-    // EBCDIC type over the data connection as valid pathname
-    // strings separated by <CRLF> or <NL>.  (Again the user must
-    // ensure that the TYPE is correct.)  This command is intended
-    // to return information that can be used by a program to
-    // further process the files automatically.  For example, in
-    // the implementation of a "multiple get" function.
     Nlst {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
@@ -254,10 +224,6 @@ pub enum Command {
         /// The filename to rename to
         file: std::path::PathBuf,
     },
-    /// The `AUTH` command used to support TLS
-    /// A client requests TLS with the AUTH command and then decides if it
-    /// wishes to secure the data connections by use of the PBSZ and PROT
-    /// commands.
     Auth {
         protocol: AuthParam,
     },
@@ -265,15 +231,6 @@ pub enum Command {
     CCC,
     // The `Clear Data Channel` command
     CDC,
-    // Protection Buffer Size
-    // To protect the data channel as well, the PBSZ command, followed by the PROT command
-    // sequence, MUST be used. The PBSZ (protection buffer size) command, as detailed
-    // in [RFC-2228], is compulsory prior to any PROT command.
-    //
-    // For FTP-TLS, which appears to the FTP application as a streaming protection mechanism, this
-    // is not required. Thus, the PBSZ command MUST still be issued, but must have a parameter
-    // of '0' to indicate that no buffering is taking place and the data connection should
-    // not be encapsulated.
     PBSZ {},
     // Data Channel Protection Level
     PROT {
@@ -282,13 +239,6 @@ pub enum Command {
     SIZE {
         file: std::path::PathBuf,
     },
-    // Restart of Interrupted Transfer (REST)
-    // To avoid having to resend the entire file if the file is only
-    // partially transferred, both sides need some way to agree on where in
-    // the data stream to restart the data transfer.
-    //
-    // See also: https://cr.yp.to/ftp/retr.html
-    //
     Rest {
         offset: u64,
     },
