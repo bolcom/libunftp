@@ -49,7 +49,7 @@ where
                 .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                 .map(|_| ())
                 .map_err(|e| {
-                    warn!("Failed to get size: {}", e);
+                    warn!("Failed to get metadata: {}", e);
                 }),
         );
         Ok(Reply::none())
