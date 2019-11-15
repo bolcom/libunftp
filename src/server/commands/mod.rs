@@ -377,7 +377,12 @@ impl Command {
                 }
 
                 match &params[..] {
-                    b"UTF8" => Command::Opts { option: Opt::UTF8 },
+                    b"UTF8 ON" => Command::Opts {
+                        option: Opt::UTF8 { on: true },
+                    },
+                    b"UTF8 OFF" => Command::Opts {
+                        option: Opt::UTF8 { on: false },
+                    },
                     _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
@@ -1068,7 +1073,28 @@ mod tests {
         );
 
         let input = "OPTS UTF8\r\n";
-        assert_eq!(Command::parse(input), Ok(Command::Opts { option: Opt::UTF8 }));
+        assert_eq!(
+            Command::parse(input),
+            Err(ParseError {
+                inner: Context::new(ParseErrorKind::InvalidCommand)
+            })
+        );
+
+        let input = "OPTS UTF8 ON\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Opts {
+                option: Opt::UTF8 { on: true }
+            })
+        );
+
+        let input = "OPTS UTF8 OFF\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Opts {
+                option: Opt::UTF8 { on: false }
+            })
+        );
     }
 
     #[test]

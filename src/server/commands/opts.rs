@@ -13,12 +13,12 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 
-/// The parameter that can be given to the `OPTS` command, specifying the option the client wants
+/// The parameters that can be given to the `OPTS` command, specifying the option the client wants
 /// to set.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Opt {
     /// The client wants us to enable UTF-8 encoding for file paths and such.
-    UTF8,
+    UTF8 { on: bool },
 }
 
 pub struct Opts {
@@ -40,7 +40,8 @@ where
 {
     fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.option {
-            Opt::UTF8 => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
+            Opt::UTF8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
+            Opt::UTF8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
         }
     }
 }
