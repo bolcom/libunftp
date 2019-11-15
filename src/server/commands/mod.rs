@@ -22,7 +22,6 @@ mod acct;
 mod allo;
 mod auth;
 mod ccc;
-mod cdc;
 mod cdup;
 mod cwd;
 mod dele;
@@ -61,7 +60,6 @@ pub use acct::Acct;
 pub use allo::Allo;
 pub use auth::{Auth, AuthParam};
 pub use ccc::Ccc;
-pub use cdc::Cdc;
 pub use cdup::Cdup;
 pub use cwd::Cwd;
 pub use dele::Dele;
@@ -203,7 +201,6 @@ pub enum Command {
         protocol: AuthParam,
     },
     CCC,
-    CDC,
     PBSZ {},
     PROT {
         param: ProtParam,
@@ -520,13 +517,6 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CCC
-            }
-            "CDC" => {
-                let params = parse_to_eol(cmd_params)?;
-                if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-                Command::CDC
             }
             "SIZE" => {
                 let params = parse_to_eol(cmd_params)?;
