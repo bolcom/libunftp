@@ -502,7 +502,6 @@ where
             Command::Auth { protocol } => Box::new(commands::Auth::new(protocol)),
             Command::PBSZ {} => Box::new(commands::Pbsz),
             Command::CCC {} => Box::new(commands::Ccc),
-            Command::CDC {} => Box::new(commands::Cdc),
             Command::PROT { param } => Box::new(commands::Prot::new(param)),
             Command::SIZE { file } => Box::new(commands::Size::new(file)),
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
