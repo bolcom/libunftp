@@ -40,6 +40,9 @@ pub enum FTPErrorKind {
     /// an username).
     #[fail(display = "Invalid command (invalid parameter)")]
     InvalidCommand,
+    /// The timer on the Control Channel encountered an error.
+    #[fail(display = "Encountered timer error on the control channel")]
+    ControlChannelTimerError,
 }
 
 impl FTPError {
