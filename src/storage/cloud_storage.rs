@@ -214,6 +214,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         let uri = match path
             .as_ref()
             .to_str()
+            .map(|x| utf8_percent_encode(x, PATH_SEGMENT_ENCODE_SET).collect::<String>())
             .ok_or_else(|| Error::from(ErrorKind::PermanentFileNotAvailable))
             .and_then(|path| make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path)))
         {
