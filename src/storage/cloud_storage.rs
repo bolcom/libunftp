@@ -327,21 +327,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .into_body()
                             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .concat2()
-                            .and_then(move |body| {
-                                match status {
-                                    // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
-                                    StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermissionDenied)),
-                                    StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
-                                    StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
-                                    _ => {
-                                        if status.is_success() {
-                                            future::ok(Object::new(body.to_vec()))
-                                        } else {
-                                            future::err(Error::from(ErrorKind::LocalError))
-                                        }
-                                    }
-                                }
-                            })
+                            .and_then(move |body| map_response(body, status))
                     })
             });
         Box::new(result)
@@ -500,4 +486,21 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         //TODO: implement this
         unimplemented!();
     }
+}
+
+fn map_response(body: hyper::body::Chunk, status: hyper::StatusCode) -> Box<dyn Future<Item = Object, Error = Error> + Send> {
+    let r = match status {
+        // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
+        StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermissionDenied)),
+        StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
+        StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+        _ => {
+            if status.is_success() {
+                future::ok(Object::new(body.to_vec()))
+            } else {
+                future::err(Error::from(ErrorKind::LocalError))
+            }
+        }
+    };
+    Box::new(r)
 }
