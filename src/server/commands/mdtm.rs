@@ -6,7 +6,7 @@ use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind, Metadata};
 use chrono::offset::Utc;
 use chrono::DateTime;
-use futures::future::Future;
+use futures::future::{self, Future};
 use futures::sink::Sink;
 use log::warn;
 use std::path::PathBuf;
@@ -42,12 +42,14 @@ where
             storage
                 .metadata(&session.user, &path)
                 .and_then(move |metadata| {
-                    tx_success
-                        .send(InternalMsg::CommandChannelReply(
-                            ReplyCode::FileStatus,
-                            DateTime::<Utc>::from(metadata.modified().unwrap()).format(RFC3659_TIME).to_string(),
-                        ))
-                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                    future::result(metadata.modified()).and_then(|modified| {
+                        tx_success
+                            .send(InternalMsg::CommandChannelReply(
+                                ReplyCode::FileStatus,
+                                DateTime::<Utc>::from(modified).format(RFC3659_TIME).to_string(),
+                            ))
+                            .map_err(|_| Error::from(ErrorKind::LocalError))
+                    })
                 })
                 .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                 .map(|_| ())

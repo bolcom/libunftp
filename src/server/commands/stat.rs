@@ -5,7 +5,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind};
 use bytes::Bytes;
-use futures::future::Future;
+use futures::future::{self, Future};
 use futures::sink::Sink;
 use log::warn;
 use std::io::Read;
@@ -50,10 +50,13 @@ where
                         .map_err(|_| Error::from(ErrorKind::LocalError))
                         .and_then(move |mut cursor| {
                             let mut result = String::new();
-                            cursor.read_to_string(&mut result).unwrap();
-                            tx_success
-                                .send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result))
+                            future::result(cursor.read_to_string(&mut result))
                                 .map_err(|_| Error::from(ErrorKind::LocalError))
+                                .and_then(|_| {
+                                    tx_success
+                                        .send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result))
+                                        .map_err(|_| Error::from(ErrorKind::LocalError))
+                                })
                         })
                         .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                         .map(|_| ())
