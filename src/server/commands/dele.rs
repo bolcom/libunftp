@@ -1,3 +1,10 @@
+//! The RFC 959 Delete (`DELE`) command
+//
+// This command causes the file specified in the pathname to be
+// deleted at the server site.  If an extra level of protection
+// is desired (such as the query, "Do you really wish to delete?"),
+// it should be provided by the user-FTP process.
+
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;

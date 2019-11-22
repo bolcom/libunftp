@@ -1,3 +1,5 @@
+//! The RFC 2228 Clear Command Channel (`CCC`) command
+
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;

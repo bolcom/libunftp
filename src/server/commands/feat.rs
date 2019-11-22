@@ -1,3 +1,5 @@
+//! The RFC 2389 Feature (`FEAT`) command
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
@@ -14,7 +16,7 @@ where
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let mut feat_text = vec![" SIZE", " MDTM"];
+        let mut feat_text = vec![" SIZE", " MDTM", "UTF8"];
         // Add the features. According to the spec each feature line must be
         // indented by a space.
         if args.tls_configured {

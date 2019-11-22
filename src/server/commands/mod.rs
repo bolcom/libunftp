@@ -1,3 +1,9 @@
+//! This module contains the implementations for the FTP commands defined in
+//!
+//! - [RFC 959 - FTP](https://tools.ietf.org/html/rfc959)
+//! - [RFC 3659 - Extensions to FTP](https://tools.ietf.org/html/rfc3659)
+//! - [RFC 2228 - FTP Security Extensions](https://tools.ietf.org/html/rfc2228)
+
 use crate::server::error::FTPError;
 use crate::server::password::Password;
 use crate::server::reply::Reply;
@@ -16,7 +22,6 @@ mod acct;
 mod allo;
 mod auth;
 mod ccc;
-mod cdc;
 mod cdup;
 mod cwd;
 mod dele;
@@ -53,9 +58,8 @@ mod user;
 pub use abor::Abor;
 pub use acct::Acct;
 pub use allo::Allo;
-pub use auth::Auth;
+pub use auth::{Auth, AuthParam};
 pub use ccc::Ccc;
-pub use cdc::Cdc;
 pub use cdup::Cdup;
 pub use cwd::Cwd;
 pub use dele::Dele;
@@ -64,15 +68,15 @@ pub use help::Help;
 pub use list::List;
 pub use mdtm::Mdtm;
 pub use mkd::Mkd;
-pub use mode::Mode;
+pub use mode::{Mode, ModeParam};
 pub use nlst::Nlst;
 pub use noop::Noop;
-pub use opts::Opts;
+pub use opts::{Opt, Opts};
 pub use pass::Pass;
 pub use pasv::Pasv;
 pub use pbsz::Pbsz;
 pub use port::Port;
-pub use prot::Prot;
+pub use prot::{Prot, ProtParam};
 pub use pwd::Pwd;
 pub use quit::Quit;
 pub use rest::Rest;
@@ -84,12 +88,12 @@ pub use size::Size;
 pub use stat::Stat;
 pub use stor::Stor;
 pub use stou::Stou;
-pub use stru::Stru;
+pub use stru::{Stru, StruParam};
 pub use syst::Syst;
 pub use type_::Type;
 pub use user::User;
 
-pub trait Cmd<S, U: Send + Sync>
+pub(crate) trait Cmd<S, U: Send + Sync>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio_io::AsyncRead + Send,
@@ -98,70 +102,8 @@ where
     fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
 }
 
-/// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
-/// the given structure. This stems from a time where it was common for some operating
-/// systems to address i.e. particular records in files, but isn't used a lot these days. We
-/// support the command itself for legacy reasons, but will only support the `File` structure.
-// Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
-// command parameter enums for the commands that take mutually exclusive parameters.
 #[derive(Debug, PartialEq, Clone)]
-pub enum StruParam {
-    /// "Regular" file structure.
-    File,
-    /// Files are structured in "Records".
-    Record,
-    /// Files are structured in "Pages".
-    Page,
-}
-
-/// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
-/// only support the `Stream` mode. We still have to support the command itself for compatibility
-/// reasons, though.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ModeParam {
-    /// Data is sent in a continuous stream of bytes.
-    Stream,
-    /// Data is sent as a series of blocks preceded by one or more header bytes.
-    Block,
-    /// Some round-about way of sending compressed data.
-    Compressed,
-}
-
-// The parameter that can be given to the `AUTH` command.
-#[derive(Debug, PartialEq, Clone)]
-pub enum AuthParam {
-    Ssl,
-    Tls,
-}
-
-// The parameter that can be given to the `PROT` command.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ProtParam {
-    // 'C' - Clear - neither Integrity nor Privacy
-    Clear,
-    // 'S' - Safe - Integrity without Privacy
-    Safe,
-    // 'E' - Confidential - Privacy without Integrity
-    Confidential,
-    // 'P' - Private - Integrity and Privacy
-    Private,
-}
-
-/// The parameter that can be given to the `OPTS` command, specifying the option the client wants
-/// to set.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Opt {
-    /// The client wants us to enable UTF-8 encoding for file paths and such.
-    UTF8,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-/// This enum represents parsed versions of the FTP commands defined in
-/// - [RFC 959 - FTP](https://tools.ietf.org/html/rfc959)
-/// - [RFC 3659 - Extensions to FTP](https://tools.ietf.org/html/rfc3659)
-/// - [RFC 2228 - FTP Security Extensions](https://tools.ietf.org/html/rfc2228)
 pub enum Command {
-    /// The `USER` command
     User {
         /// The bytes making up the actual username.
         // Ideally I'd like to immediately convert the username to a valid UTF8 `&str`, because
@@ -171,112 +113,63 @@ pub enum Command {
         // TODO: Reconsider when NLL have been merged into stable.
         username: Bytes,
     },
-    /// The `PASS` command
     Pass {
         /// The bytes making up the actual password.
         password: Password,
     },
-    /// The `ACCT` command
     Acct {
         /// The bytes making up the account about which information is requested.
         account: Bytes,
     },
-    /// The `SYST` command
     Syst,
-    /// The `STAT` command
     Stat {
         /// The bytes making up the path about which information is requested, if given.
         path: Option<Bytes>,
     },
-    /// The `TYPE` command
     Type,
-    /// The `STRU` command
     Stru {
         /// The structure to which the client would like to switch. Only the `File` structure is
         /// supported by us.
         structure: StruParam,
     },
-    /// The `MODE` command
     Mode {
         /// The transfer mode to which the client would like to switch. Only the `Stream` mode is
         /// supported by us.
         mode: ModeParam,
     },
-    /// The `HELP` command
-    // A HELP request asks for human-readable information from the server. The server may accept this request with code 211 or 214, or reject it with code 502.
-    //
-    // A HELP request may include a parameter. The meaning of the parameter is defined by the server. Some servers interpret the parameter as an FTP verb,
-    // and respond by briefly explaining the syntax of the verb.
     Help,
-    /// The `NOOP` command
     Noop,
-    /// The `PASSV` command
     Pasv,
-    /// The `PORT` command
     Port,
-    /// The `RETR` command
     Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
     },
-    /// The `STOR` command
     Stor {
         /// The path to the file the client would like to store.
         path: String,
     },
-    /// The `LIST` command
-    // This command causes a list to be sent from the server to the
-    // passive DTP.  If the pathname specifies a directory or other
-    // group of files, the server should transfer a list of files
-    // in the specified directory.  If the pathname specifies a
-    // file then the server should send current information on the
-    // file.  A null argument implies the user's current working or
-    // default directory.  The data transfer is over the data
-    // connection in type ASCII or type EBCDIC.  (The user must
-    // ensure that the TYPE is appropriately ASCII or EBCDIC).
-    // Since the information on a file may vary widely from system
-    // to system, this information may be hard to use automatically
-    // in a program, but may be quite useful to a human user.
     List {
         /// Arguments passed along with the list command.
         options: Option<String>,
         /// The path of the file/directory the clients wants to list
         path: Option<String>,
     },
-    /// The `NAME LIST (NLST)` command
-    // This command causes a directory listing to be sent from
-    // server to user site.  The pathname should specify a
-    // directory or other system-specific file group descriptor; a
-    // null argument implies the current directory.  The server
-    // will return a stream of names of files and no other
-    // information.  The data will be transferred in ASCII or
-    // EBCDIC type over the data connection as valid pathname
-    // strings separated by <CRLF> or <NL>.  (Again the user must
-    // ensure that the TYPE is correct.)  This command is intended
-    // to return information that can be used by a program to
-    // further process the files automatically.  For example, in
-    // the implementation of a "multiple get" function.
     Nlst {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
     },
-    /// The `FEAT` command
     Feat,
-    /// The `PWD` command
     Pwd,
-    /// The `CWD` command
     Cwd {
         /// The path the client would like to change directory to.
         path: std::path::PathBuf,
     },
-    /// The `CDUP` command
     Cdup,
-    /// The `OPTS` command
     Opts {
         /// The option the client wants to set
         option: Opt,
     },
-    /// The `DELE` command
     Dele {
         /// The (regular) file to delete.
         path: String,
@@ -285,67 +178,36 @@ pub enum Command {
         /// The (regular) directory to delete.
         path: String,
     },
-    /// The `QUIT` command
     Quit,
-    /// The `MKD` command
     Mkd {
         /// The path to the directory the client wants to create.
         path: std::path::PathBuf,
     },
-    /// The `ALLO` command
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
     // as noop, we won't even parse it.
     },
-    /// The `ABOR` command
     Abor,
-    /// The `STOU` command
     Stou,
-    /// The `RNFR` command
     Rnfr {
         /// The file to be renamed
         file: std::path::PathBuf,
     },
-    /// The `RNTO` command
     Rnto {
         /// The filename to rename to
         file: std::path::PathBuf,
     },
-    /// The `AUTH` command used to support TLS
-    /// A client requests TLS with the AUTH command and then decides if it
-    /// wishes to secure the data connections by use of the PBSZ and PROT
-    /// commands.
     Auth {
         protocol: AuthParam,
     },
-    // The `Clear Command Channel` command
     CCC,
-    // The `Clear Data Channel` command
-    CDC,
-    // Protection Buffer Size
-    // To protect the data channel as well, the PBSZ command, followed by the PROT command
-    // sequence, MUST be used. The PBSZ (protection buffer size) command, as detailed
-    // in [RFC-2228], is compulsory prior to any PROT command.
-    //
-    // For FTP-TLS, which appears to the FTP application as a streaming protection mechanism, this
-    // is not required. Thus, the PBSZ command MUST still be issued, but must have a parameter
-    // of '0' to indicate that no buffering is taking place and the data connection should
-    // not be encapsulated.
     PBSZ {},
-    // Data Channel Protection Level
     PROT {
         param: ProtParam,
     },
     SIZE {
         file: std::path::PathBuf,
     },
-    // Restart of Interrupted Transfer (REST)
-    // To avoid having to resend the entire file if the file is only
-    // partially transferred, both sides need some way to agree on where in
-    // the data stream to restart the data transfer.
-    //
-    // See also: https://cr.yp.to/ftp/retr.html
-    //
     Rest {
         offset: u64,
     },
@@ -515,7 +377,12 @@ impl Command {
                 }
 
                 match &params[..] {
-                    b"UTF8" => Command::Opts { option: Opt::UTF8 },
+                    b"UTF8 ON" => Command::Opts {
+                        option: Opt::UTF8 { on: true },
+                    },
+                    b"UTF8 OFF" => Command::Opts {
+                        option: Opt::UTF8 { on: false },
+                    },
                     _ => return Err(ParseErrorKind::InvalidCommand.into()),
                 }
             }
@@ -655,13 +522,6 @@ impl Command {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
                 Command::CCC
-            }
-            "CDC" => {
-                let params = parse_to_eol(cmd_params)?;
-                if !params.is_empty() {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-                Command::CDC
             }
             "SIZE" => {
                 let params = parse_to_eol(cmd_params)?;
@@ -1213,7 +1073,28 @@ mod tests {
         );
 
         let input = "OPTS UTF8\r\n";
-        assert_eq!(Command::parse(input), Ok(Command::Opts { option: Opt::UTF8 }));
+        assert_eq!(
+            Command::parse(input),
+            Err(ParseError {
+                inner: Context::new(ParseErrorKind::InvalidCommand)
+            })
+        );
+
+        let input = "OPTS UTF8 ON\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Opts {
+                option: Opt::UTF8 { on: true }
+            })
+        );
+
+        let input = "OPTS UTF8 OFF\r\n";
+        assert_eq!(
+            Command::parse(input),
+            Ok(Command::Opts {
+                option: Opt::UTF8 { on: false }
+            })
+        );
     }
 
     #[test]

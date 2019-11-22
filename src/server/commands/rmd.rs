@@ -1,3 +1,10 @@
+//! The RFC 959 Remove Directory (`RMD`) command
+//
+// This command causes the directory specified in the pathname
+// to be removed as a directory (if the pathname is absolute)
+// or as a subdirectory of the current working directory (if
+// the pathname is relative).
+
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;

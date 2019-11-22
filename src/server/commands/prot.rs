@@ -1,8 +1,23 @@
-use crate::server::commands::{Cmd, ProtParam};
+//! The RFC 2228 Data Channel Protection Level (`PROT`) command.
+
+use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+
+// The parameter that can be given to the `PROT` command.
+#[derive(Debug, PartialEq, Clone)]
+pub enum ProtParam {
+    // 'C' - Clear - neither Integrity nor Privacy
+    Clear,
+    // 'S' - Safe - Integrity without Privacy
+    Safe,
+    // 'E' - Confidential - Privacy without Integrity
+    Confidential,
+    // 'P' - Private - Integrity and Privacy
+    Private,
+}
 
 pub struct Prot {
     param: ProtParam,

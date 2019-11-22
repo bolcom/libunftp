@@ -1,3 +1,18 @@
+//! The `NAME LIST (NLST)` command
+//
+// This command causes a directory listing to be sent from
+// server to user site.  The pathname should specify a
+// directory or other system-specific file group descriptor; a
+// null argument implies the current directory.  The server
+// will return a stream of names of files and no other
+// information.  The data will be transferred in ASCII or
+// EBCDIC type over the data connection as valid pathname
+// strings separated by <CRLF> or <NL>.  (Again the user must
+// ensure that the TYPE is correct.)  This command is intended
+// to return information that can be used by a program to
+// further process the files automatically.  For example, in
+// the implementation of a "multiple get" function.
+
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};

@@ -1,11 +1,24 @@
+//! The `AUTH` command used to support TLS
+//!
+//! A client requests TLS with the AUTH command and then decides if it
+//! wishes to secure the data connections by use of the PBSZ and PROT
+//! commands.
+
 use crate::server::chancomms::InternalMsg;
-use crate::server::commands::{AuthParam, Cmd};
+use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use futures::future::Future;
 use futures::sink::Sink;
+
+// The parameter that can be given to the `AUTH` command.
+#[derive(Debug, PartialEq, Clone)]
+pub enum AuthParam {
+    Ssl,
+    Tls,
+}
 
 pub struct Auth {
     protocol: AuthParam,
