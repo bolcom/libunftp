@@ -180,7 +180,7 @@ pub trait StorageBackend<U: Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn stat<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
+    fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
 
     /// Returns the list of files in the given directory.
     fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
@@ -255,11 +255,6 @@ pub trait StorageBackend<U: Send> {
 
     /// Delete the given directory.
     fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
-
-    /// Returns the size of the specified file in bytes. The FTP spec requires the return type to be octets, but as
-    /// almost all modern architectures use 8-bit bytes we make the assumption that the amount of bytes is also the
-    /// amount of octets.    
-    fn size<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

@@ -1,10 +1,9 @@
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
-use crate::server::reply::Reply;
+use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
-use crate::storage;
-use crate::storage::{Error, ErrorKind};
+use crate::storage::{self, Error, ErrorKind, Metadata};
 use futures::future::Future;
 use futures::sink::Sink;
 use log::warn;
@@ -38,16 +37,19 @@ where
 
         tokio::spawn(
             storage
-                .size(&session.user, &path)
-                .and_then(move |size| {
+                .metadata(&session.user, &path)
+                .and_then(move |metadata| {
                     tx_success
-                        .send(InternalMsg::Size(size - start_pos))
-                        .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                        .send(InternalMsg::CommandChannelReply(
+                            ReplyCode::FileStatus,
+                            (metadata.len() - start_pos).to_string(),
+                        ))
+                        .map_err(|_| Error::from(ErrorKind::LocalError))
                 })
                 .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
                 .map(|_| ())
                 .map_err(|e| {
-                    warn!("Failed to get size: {}", e);
+                    warn!("Failed to get metadata: {}", e);
                 }),
         );
         Ok(Reply::none())

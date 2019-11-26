@@ -64,7 +64,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         crate::storage::FEATURE_RESTART
     }
 
-    fn stat<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
+    fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(err) => return Box::new(future::err(err)),
@@ -213,25 +213,6 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             });
         Box::new(fut)
     }
-
-    fn size<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(err) => return Box::new(future::err(err)),
-        };
-
-        let fut = tokio::fs::symlink_metadata(full_path)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .and_then(move |metadata| {
-                if metadata.is_file() {
-                    future::Either::A(future::ok(metadata.len()))
-                } else {
-                    future::Either::B(future::err(Error::from(ErrorKind::FileNameNotAllowedError)))
-                }
-            });
-
-        Box::new(fut)
-    }
 }
 
 impl Metadata for std::fs::Metadata {
@@ -269,9 +250,9 @@ mod tests {
     use super::*;
     use crate::auth::AnonymousUser;
     use pretty_assertions::assert_eq;
-    use std::fs::{self, File};
+    use std::fs::File;
     use std::io::prelude::*;
-    use std::io::{BufWriter, Write};
+    use std::io::Write;
 
     #[test]
     fn fs_stat() {
@@ -289,7 +270,7 @@ mod tests {
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         let filename = path.file_name().unwrap();
-        let my_meta = rt.block_on(fs.stat(&Some(AnonymousUser {}), filename)).unwrap();
+        let my_meta = rt.block_on(fs.metadata(&Some(AnonymousUser {}), filename)).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
@@ -477,26 +458,5 @@ mod tests {
 
         let old_full_path = root.join(old_filename);
         std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
-    }
-
-    #[test]
-    fn size() {
-        let root = tempfile::TempDir::new().unwrap().into_path();
-        let file = tempfile::NamedTempFile::new_in(&root).unwrap();
-        let filename = file.path().file_name().unwrap().to_str().unwrap();
-
-        // Write something to the file so it has a size
-        let mut w = BufWriter::new(&file);
-        w.write_all(b"Hello unftp").expect("Should be able to write to the temp file.");
-        w.flush().expect("Should be able to flush the temp file.");
-
-        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
-        // to completion
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
-
-        let fs = Filesystem::new(&root);
-        let size = rt.block_on(fs.size(&Some(AnonymousUser {}), &filename)).expect("Failed to rename");
-
-        assert_eq!(size, fs::metadata(&file).unwrap().len(), "Wrong size returned.");
     }
 }

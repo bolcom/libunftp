@@ -1,4 +1,5 @@
 use super::commands::Command;
+use crate::server::reply::ReplyCode;
 use crate::storage::Error;
 use futures::sync::mpsc;
 
@@ -66,6 +67,6 @@ pub enum InternalMsg {
     PlaintextControlChannel,
     /// Errors comming from the storage
     StorageError(Error),
-    /// The size of a file/directory
-    Size(u64),
+    /// Reply on the command channel
+    CommandChannelReply(ReplyCode, String),
 }
