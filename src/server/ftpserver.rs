@@ -107,6 +107,24 @@ where
         }
     }
 
+    /// Construct a new [`Server`] with the given [`StorageBackend`] and [`Authenticator`]. The other parameters will be set to defaults.
+    ///
+    /// [`Server`]: struct.Server.html
+    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    pub fn new_with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+        Server {
+            storage: s,
+            greeting: DEFAULT_GREETING,
+            authenticator,
+            passive_ports: 49152..65535,
+            certs_file: Option::None,
+            certs_password: Option::None,
+            collect_metrics: false,
+            idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
+        }
+    }
+
     /// Set the greeting that will be sent to the client after connecting.
     ///
     /// # Example
