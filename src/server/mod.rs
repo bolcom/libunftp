@@ -567,6 +567,7 @@ where
             DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
             UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
             DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
+            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully cwd")),
             DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "File successfully removed")),
             DelFail => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
             // The InternalMsg::Quit will never be reached, because we catch it in the task before

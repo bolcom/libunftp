@@ -268,6 +268,23 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             }
         }
     }
+
+    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+        let full_path = match self.full_path(path) {
+            Ok(path) => path,
+            Err(e) => return Err(e),
+        };
+
+        if let Err(error) = tokio02::fs::read_dir(full_path).await {
+            return Err(match error.kind() {
+                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+                _ => Error::from(ErrorKind::LocalError),
+            });
+        }
+
+        Ok(())
+    }
 }
 
 impl Metadata for std::fs::Metadata {
