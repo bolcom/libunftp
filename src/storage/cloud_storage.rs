@@ -323,11 +323,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                     .and_then(|response| {
                         let status = response.status();
-                        response
+                        let r = response
                             .into_body()
                             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .concat2()
-                            .and_then(move |body| map_response(body, status))
+                            .and_then(move |body| map_response(body, status));
+                        r
                     })
             });
         Box::new(result)
@@ -414,25 +415,22 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .concat2()
                             .and_then(move |body| {
-                                match (body.iter().count(), status) {
-                                    (0, StatusCode::NO_CONTENT) => {
-                                        // According the Google Storage API for the delete endpoint, an
-                                        // empty reply means it is successful.
-                                        future::ok(())
-                                    }
-                                    _ => match serde_json::from_slice::<ResponseBody>(&body) {
+                                if status.is_success() {
+                                    Ok(())
+                                } else {
+                                    match serde_json::from_slice::<ResponseBody>(&body) {
                                         Ok(result) => match result.error {
                                             Some(error) => {
                                                 if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
-                                                    future::err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                                                    Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                                                 } else {
-                                                    future::err(Error::from(ErrorKind::TransientFileNotAvailable))
+                                                    Err(Error::from(ErrorKind::TransientFileNotAvailable))
                                                 }
                                             }
-                                            _ => future::err(Error::from(ErrorKind::LocalError)),
+                                            _ => Err(Error::from(ErrorKind::LocalError)),
                                         },
-                                        Err(_) => future::err(Error::from(ErrorKind::LocalError)),
-                                    },
+                                        Err(_) => Err(Error::from(ErrorKind::LocalError)),
+                                    }
                                 }
                             })
                     })
@@ -488,19 +486,32 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 }
 
-fn map_response(body: hyper::body::Chunk, status: hyper::StatusCode) -> Box<dyn Future<Item = Object, Error = Error> + Send> {
-    let r = match status {
+fn map_response(body: hyper::body::Chunk, status: hyper::StatusCode) -> Result<Object, Error> {
+    match status {
         // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
-        StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermissionDenied)),
-        StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
-        StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+        StatusCode::UNAUTHORIZED => Err(Error::from(ErrorKind::PermissionDenied)),
+        StatusCode::FORBIDDEN => Err(Error::from(ErrorKind::PermissionDenied)),
+        StatusCode::NOT_FOUND => Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
         _ => {
             if status.is_success() {
-                future::ok(Object::new(body.to_vec()))
+                Ok(Object::new(body.to_vec()))
             } else {
-                future::err(Error::from(ErrorKind::LocalError))
+                Err(Error::from(ErrorKind::LocalError))
             }
         }
-    };
-    Box::new(r)
+    }
+}
+
+fn lift_errors(body: hyper::body::Chunk, status: hyper::StatusCode) -> Result<hyper::body::Chunk, Error> {
+    if status.is_success() {
+        Ok(body)
+    } else {
+        Err(map_errors(body, status))
+    }
+}
+
+fn map_errors(body: hyper::body::Chunk, status: hyper::StatusCode) -> Error {
+    match status {
+        _ => 
+    }
 }
