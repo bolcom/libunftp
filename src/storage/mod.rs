@@ -274,6 +274,9 @@ pub trait StorageBackend<U: Sync + Send> {
 
     /// Delete the given directory.
     async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
+
+    /// Cwd the given directory.
+    async fn cwd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

@@ -7,13 +7,17 @@
 // pathname specifying a directory or other system dependent
 // file group designator.
 
+use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
-use crate::server::reply::{Reply, ReplyCode};
+use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
+use futures03::prelude::*;
+use log::warn;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub struct Cwd {
     path: PathBuf,
@@ -34,11 +38,26 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        // TODO: We current accept all CWD requests. Consider only allowing
-        // this if the directory actually exists and the user has the proper
-        // permission.
         let mut session = args.session.lock().await;
-        session.cwd.push(self.path.clone());
-        Ok(Reply::new(ReplyCode::FileActionOkay, "OK"))
+        let storage: Arc<S> = Arc::clone(&session.storage);
+        let path = session.cwd.join(self.path.clone());
+        let mut tx_success = args.tx.clone();
+        let mut tx_fail = args.tx.clone();
+
+        if let Err(err) = storage.cwd(&session.user, path.clone()).await {
+            warn!("Failed to cwd directory: {}", err);
+            let r = tx_fail.send(InternalMsg::StorageError(err)).await;
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of CWD error: {}", e);
+            }
+        } else {
+            let r = tx_success.send(InternalMsg::CwdSuccess).await;
+            session.cwd.push(path);
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of CWD success: {}", e);
+            }
+        }
+
+        Ok(Reply::none())
     }
 }

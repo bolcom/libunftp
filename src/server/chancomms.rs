@@ -41,6 +41,8 @@ pub enum InternalMsg {
     UnknownRetrieveError,
     /// Listed the directory successfully
     DirectorySuccessfullyListed,
+    /// Successfully cwd
+    CwdSuccess,
     /// File successfully deleted
     DelSuccess,
     /// Failed to delete file
