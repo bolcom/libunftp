@@ -28,6 +28,9 @@ use tokio::{
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
 
+mod http_error;
+use http_error::HttpError;
+
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
     items: Option<Vec<Item>>,
@@ -323,12 +326,20 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                     .and_then(|response| {
                         let status = response.status();
-                        let r = response
+                        response
                             .into_body()
                             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             .concat2()
-                            .and_then(move |body| map_response(body, status));
-                        r
+                            .and_then(move |body| {
+                                lift_errors(body, status)
+                                    .map(|body| Object::new(body.to_vec()))
+                                    .map_err(|err| match err.status {
+                                        StatusCode::UNAUTHORIZED => Error::from(ErrorKind::PermissionDenied),
+                                        StatusCode::FORBIDDEN => Error::from(ErrorKind::PermissionDenied),
+                                        StatusCode::NOT_FOUND => Error::from(ErrorKind::PermanentFileNotAvailable),
+                                        _ => Error::from(ErrorKind::LocalError),
+                                    })
+                            })
                     })
             });
         Box::new(result)
@@ -486,32 +497,10 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     }
 }
 
-fn map_response(body: hyper::body::Chunk, status: hyper::StatusCode) -> Result<Object, Error> {
-    match status {
-        // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
-        StatusCode::UNAUTHORIZED => Err(Error::from(ErrorKind::PermissionDenied)),
-        StatusCode::FORBIDDEN => Err(Error::from(ErrorKind::PermissionDenied)),
-        StatusCode::NOT_FOUND => Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
-        _ => {
-            if status.is_success() {
-                Ok(Object::new(body.to_vec()))
-            } else {
-                Err(Error::from(ErrorKind::LocalError))
-            }
-        }
-    }
-}
-
-fn lift_errors(body: hyper::body::Chunk, status: hyper::StatusCode) -> Result<hyper::body::Chunk, Error> {
+fn lift_errors(body: hyper::body::Chunk, status: hyper::StatusCode) -> Result<hyper::body::Chunk, HttpError> {
     if status.is_success() {
         Ok(body)
     } else {
-        Err(map_errors(body, status))
-    }
-}
-
-fn map_errors(body: hyper::body::Chunk, status: hyper::StatusCode) -> Error {
-    match status {
-        _ => 
+        Err(HttpError::new(status, body))
     }
 }
