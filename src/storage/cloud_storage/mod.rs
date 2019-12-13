@@ -284,7 +284,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                     .map(|response_body| {
                         //TODO: map prefixes
-                        stream::iter_ok(response_body.items.map_or(vec![], |items| items))
+                        stream::iter_ok(response_body.items.unwrap_or(vec![]))
                     })
             })
             .flatten_stream()
