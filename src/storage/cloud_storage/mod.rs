@@ -482,11 +482,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .concat2()
                             .and_then(move |body| {
                                 lift_errors(body, status)
+                                    // fixme: proper error reason logging
+                                    .map_err(|_|{ Error::from(ErrorKind::PermanentFileNotAvailable) })
                                     .map(|_| ())
-                                    .map_err(|err| match err.status {
-                                        // fixme: proper error reason logging
-                                        _ => Error::from(ErrorKind::PermanentFileNotAvailable),
-                                    })
                             })
                     })
             });
