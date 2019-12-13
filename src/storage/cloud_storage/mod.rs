@@ -255,7 +255,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let uri = match path
+        let uri = match (&path)
             .as_ref()
             .to_str()
             .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
@@ -415,34 +415,28 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(|response| {
+                let status = response.status();
+                response
+                    .into_body()
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| {
-                        let status = response.status();
-                        response
-                            .into_body()
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .concat2()
-                            .and_then(move |body| {
-                                if status.is_success() {
-                                    Ok(())
-                                } else {
-                                    match serde_json::from_slice::<ResponseBody>(&body) {
-                                        Ok(result) => match result.error {
-                                            Some(error) => {
-                                                if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
-                                                    Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-                                                } else {
-                                                    Err(Error::from(ErrorKind::TransientFileNotAvailable))
-                                                }
-                                            }
-                                            _ => Err(Error::from(ErrorKind::LocalError)),
-                                        },
-                                        Err(_) => Err(Error::from(ErrorKind::LocalError)),
+                    .concat2()
+                    .and_then(move |body| {
+                        lift_errors(body, status)
+                            .map(|_| ())
+                            .map_err(|err| match serde_json::from_slice::<ResponseBody>(&err.body) {
+                                Ok(result) => match result.error {
+                                    Some(error) => {
+                                        if error.errors[0].reason == "notFound" && err.status == StatusCode::NOT_FOUND {
+                                            Error::from(ErrorKind::PermanentFileNotAvailable)
+                                        } else {
+                                            Error::from(ErrorKind::TransientFileNotAvailable)
+                                        }
                                     }
-                                }
+                                    _ => Error::from(ErrorKind::LocalError),
+                                },
+                                Err(_) => Error::from(ErrorKind::LocalError),
                             })
                     })
             });

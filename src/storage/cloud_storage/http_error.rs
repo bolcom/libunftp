@@ -5,7 +5,7 @@ use hyper::StatusCode;
 
 pub struct HttpError {
     pub status: StatusCode,
-    body: Chunk,
+    pub body: Chunk,
 }
 
 impl HttpError {
