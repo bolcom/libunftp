@@ -1,5 +1,3 @@
-use crate::storage::Error;
-use failure::Context;
 use hyper::body::Chunk;
 use hyper::StatusCode;
 
