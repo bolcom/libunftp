@@ -277,18 +277,14 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
+            .and_then(|body_string| {
+                serde_json::from_slice::<ResponseBody>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(|body_string| {
-                        serde_json::from_slice::<ResponseBody>(&body_string)
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(|response_body| {
-                                //TODO: map prefixes
-                                stream::iter_ok(response_body.items.map_or(vec![], |items| items))
-                            })
+                    .map(|response_body| {
+                        //TODO: map prefixes
+                        stream::iter_ok(response_body.items.map_or(vec![], |items| items))
                     })
             })
             .flatten_stream()
