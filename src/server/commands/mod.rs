@@ -140,7 +140,10 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
-    Port,
+    Port {
+        /// The Address to use to make an active connection to the client
+        addr: String,
+    },
     Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
@@ -301,7 +304,8 @@ impl Command {
                 if params.is_empty() {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
-                Command::Port
+                let addr = String::from_utf8_lossy(&params);
+                Command::Port { addr: addr.to_string() }
             }
             "RETR" => {
                 let path = parse_to_eol(cmd_params)?;

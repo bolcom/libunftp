@@ -16,13 +16,27 @@
 // where h1 is the high order 8 bits of the internet host
 // address.
 
-use crate::server::commands::Cmd;
-use crate::server::error::FTPError;
+use crate::server::commands::{Cmd, Command};
+use crate::server::error::{FTPError, FTPErrorKind};
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use futures::sync::mpsc;
+use futures::Future;
+use log::{error, trace, warn};
+use std::net::{Ipv4Addr, SocketAddrV4};
+use tokio::net::TcpStream;
 
-pub struct Port;
+//pub struct Port;
+pub struct Port {
+    addr: String,
+}
+
+impl Port {
+    pub fn new(addr: String) -> Self {
+        Port { addr }
+    }
+}
 
 impl<S, U> Cmd<S, U> for Port
 where
@@ -31,10 +45,44 @@ where
     S::File: tokio_io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        Ok(Reply::new(
-            ReplyCode::CommandNotImplemented,
-            "ACTIVE mode is not supported - use PASSIVE instead",
-        ))
+    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+        let bytes: Vec<u8> = self.addr.split(',').map(|x| x.parse::<u8>()).filter_map(Result::ok).collect();
+        if bytes.len() != 6 {
+            return Err(FTPErrorKind::ParseError.into());
+        }
+        let port = ((bytes[4] as u16) << 8) | bytes[5] as u16;
+        let addr = SocketAddrV4::new(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]), port);
+
+        let tx = args.tx.clone();
+        let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
+        let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
+        {
+            let mut session = args.session.lock()?;
+            session.data_cmd_tx = Some(cmd_tx);
+            session.data_cmd_rx = Some(cmd_rx);
+            session.data_abort_tx = Some(data_abort_tx);
+            session.data_abort_rx = Some(data_abort_rx);
+        }
+
+        let stream = TcpStream::connect(&addr.into());
+        let session = args.session.clone();
+        let client = stream
+            .map(move |socket| {
+                trace!("Active socket Connected {}", addr.clone());
+                let tx = tx.clone();
+                let session2 = session.clone();
+                let mut session2 = session2.lock().unwrap_or_else(|res| {
+                    // TODO: Send signal to `tx` here, so we can handle the
+                    // error
+                    error!("session lock() result: {}", res);
+                    panic!()
+                });
+                let user = session2.user.clone();
+                session2.process_data(user, socket, session.clone(), tx);
+            })
+            .map_err(|e| warn!("Failed to connect data socket: {:?}", e));
+        tokio::spawn(Box::new(client));
+
+        Ok(Reply::new(ReplyCode::CommandOkay, "Entering Active Mode"))
     }
 }
