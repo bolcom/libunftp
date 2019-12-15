@@ -140,7 +140,10 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
-    Port,
+    Port {
+        /// The Address to use to make an active connection to the client
+        addr: String,
+    },
     Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
@@ -301,7 +304,8 @@ impl Command {
                 if params.is_empty() {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
-                Command::Port
+                let addr = String::from_utf8_lossy(&params);
+                Command::Port { addr: addr.to_string() }
             }
             "RETR" => {
                 let path = parse_to_eol(cmd_params)?;
@@ -946,8 +950,13 @@ mod tests {
             })
         );
 
-        let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
-        assert_eq!(Command::parse(input).unwrap(), Command::Port);
+        let input = "PORT 127,0,0,1,117,48\r\n";
+        assert_eq!(
+            Command::parse(input).unwrap(),
+            Command::Port {
+                addr: "127,0,0,1,117,48".to_string()
+            }
+        );
     }
 
     #[test]
