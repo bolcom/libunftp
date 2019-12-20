@@ -238,7 +238,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .and_then(|body_string| {
                 serde_json::from_slice::<Item>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
@@ -274,7 +274,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .and_then(|body_string| {
                 serde_json::from_slice::<ResponseBody>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
@@ -313,7 +313,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .map(|body| Object::new(body.to_vec()));
         Box::new(result)
     }
@@ -350,7 +350,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .and_then(|body| {
                 serde_json::from_slice::<Item>(&body)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
@@ -385,7 +385,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .map(|_| ());
 
         Box::new(result)
@@ -418,7 +418,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(|response| unpack_response(response))
+            .and_then(unpack_response)
             .map(|_| ());
         Box::new(result)
     }
