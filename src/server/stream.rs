@@ -229,13 +229,15 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        debug!("Flush called <<{}>>", self.channel);
         let state = self.state.lock().unwrap().which_state(self.channel);
         match state {
             SecurityState::On => {
-                self.tls.flush()?;
                 while self.tls.wants_write() {
                     self.tls_io(TlsIoType::Write)?;
                 }
+                self.tls.flush()?;
+                self.tcp.flush()?;
                 Ok(())
             }
             SecurityState::Off => self.tcp.flush(),
@@ -248,7 +250,23 @@ impl<S: SecuritySwitch> AsyncRead for SwitchingTlsStream<S> {}
 impl<S: SecuritySwitch> AsyncWrite for SwitchingTlsStream<S> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         debug!("AsyncWrite shutdown <<{}>>", self.channel);
-        // TODO: Anything to do for the TLS stream??
+
+        let state = self.state.lock().unwrap().which_state(self.channel);
+        if let SecurityState::On = state {
+            if self.tls.is_handshaking() {
+                let r = self.tls.complete_io(&mut self.tcp);
+                debug!("IO Completed: <<{}>>: {:?}", self.channel, r);
+                if let Err(err) = r {
+                    if io::ErrorKind::WouldBlock == err.kind() {
+                        return Ok(Async::NotReady);
+                    }
+                    return Err(err);
+                }
+            }
+            self.tls.send_close_notify();
+        }
+
+        SwitchingTlsStream::flush(self)?;
         AsyncWrite::shutdown(&mut self.tcp)
     }
 }

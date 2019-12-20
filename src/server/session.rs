@@ -6,7 +6,7 @@ use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use futures::Sink;
-use log::warn;
+use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
@@ -172,7 +172,15 @@ where
                         tokio::spawn(
                             storage
                                 .list_fmt(&user, path)
-                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
+                                .and_then(|cursor| {
+                                    debug!("Copying future for List");
+                                    tokio::io::copy(cursor, tcp_tls_stream)
+                                })
+                                .and_then(|reader_writer| {
+                                    debug!("Shutdown future for List");
+                                    let tcp_tls_stream = reader_writer.2;
+                                    tokio::io::shutdown(tcp_tls_stream)
+                                })
                                 .map_err(|_| Error::from(ErrorKind::LocalError))
                                 .and_then(|_| {
                                     tx_ok
