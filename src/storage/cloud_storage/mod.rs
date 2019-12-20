@@ -1,4 +1,3 @@
-//TODO: clean up error handling
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
