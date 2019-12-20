@@ -241,11 +241,18 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                 client
                     .request(request)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(|body_string| {
-                        serde_json::from_slice::<Item>(&body_string)
+                    .and_then(|response| {
+                        let status = response.status();
+                        response
+                            .into_body()
                             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(item_to_metadata)
+                            .concat2()
+                            .and_then(move |body| lift_errors(body, status).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+                            .and_then(|body_string| {
+                                serde_json::from_slice::<Item>(&body_string)
+                                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+                                    .map(item_to_metadata)
+                            })
                     })
             });
         Box::new(result)
