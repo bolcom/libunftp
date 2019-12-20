@@ -28,9 +28,6 @@ use tokio::{
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
 
-mod http_error;
-use http_error::HttpError;
-
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
     items: Option<Vec<Item>>,
