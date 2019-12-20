@@ -94,7 +94,6 @@ fn item_to_file_info(item: Item) -> Fileinfo<PathBuf, ObjectMetadata> {
 }
 /// StorageBackend that uses Cloud storage from Google
 pub struct CloudStorage {
-    bucket: String,
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
     get_token: Box<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
@@ -107,11 +106,9 @@ impl CloudStorage {
     pub fn new<B: Into<String>>(bucket: B, service_account_key: ServiceAccountKey) -> Self {
         let client = Client::builder().build(HttpsConnector::new(4));
         let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
-        let bucket: String = bucket.into();
         CloudStorage {
             client,
-            bucket: bucket.clone(),
-            uris: GcsUri::new(bucket),
+            uris: GcsUri::new(bucket.into()),
             get_token: Box::new(move || match &mut service_account_access.lock() {
                 Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
                 Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(io::ErrorKind::Other)))),
