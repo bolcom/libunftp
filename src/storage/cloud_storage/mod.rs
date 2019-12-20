@@ -343,12 +343,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .and_then(move |body| {
                                 lift_errors(body, status)
                                     .map(|body| Object::new(body.to_vec()))
-                                    .map_err(|err| match err.status {
-                                        StatusCode::UNAUTHORIZED => Error::from(ErrorKind::PermissionDenied),
-                                        StatusCode::FORBIDDEN => Error::from(ErrorKind::PermissionDenied),
-                                        StatusCode::NOT_FOUND => Error::from(ErrorKind::PermanentFileNotAvailable),
-                                        _ => Error::from(ErrorKind::LocalError),
-                                    })
+                                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             })
                     })
             });
@@ -445,19 +440,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .and_then(move |body| {
                         lift_errors(body, status)
                             .map(|_| ())
-                            .map_err(|err| match serde_json::from_slice::<ResponseBody>(&err.body) {
-                                Ok(result) => match result.error {
-                                    Some(error) => {
-                                        if error.errors[0].reason == "notFound" && err.status == StatusCode::NOT_FOUND {
-                                            Error::from(ErrorKind::PermanentFileNotAvailable)
-                                        } else {
-                                            Error::from(ErrorKind::TransientFileNotAvailable)
-                                        }
-                                    }
-                                    _ => Error::from(ErrorKind::LocalError),
-                                },
-                                Err(_) => Error::from(ErrorKind::LocalError),
-                            })
+                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                     })
             });
 
@@ -502,9 +485,8 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                             .concat2()
                             .and_then(move |body| {
                                 lift_errors(body, status)
-                                    // fixme: proper error reason logging
-                                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                                     .map(|_| ())
+                                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
                             })
                     })
             });
