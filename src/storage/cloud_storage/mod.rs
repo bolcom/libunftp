@@ -1,4 +1,3 @@
-//TODO: clean up error handling
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
@@ -9,7 +8,7 @@ use hyper::{
         uri::{Scheme, Uri},
         Method,
     },
-    Body, Client, Request, StatusCode,
+    Body, Chunk, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
@@ -234,16 +233,12 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .and_then(|body_string| {
+                serde_json::from_slice::<Item>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(|body_string| {
-                        serde_json::from_slice::<Item>(&body_string)
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(item_to_metadata)
-                    })
+                    .map(item_to_metadata)
             });
         Box::new(result)
     }
@@ -252,7 +247,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let uri = match path
+        let uri = match (&path)
             .as_ref()
             .to_str()
             .ok_or_else(|| Error::from(ErrorKind::FileNameNotAllowedError))
@@ -274,18 +269,14 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .and_then(|body_string| {
+                serde_json::from_slice::<ResponseBody>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(|body_string| {
-                        serde_json::from_slice::<ResponseBody>(&body_string)
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(|response_body| {
-                                //TODO: map prefixes
-                                stream::iter_ok(response_body.items.map_or(vec![], |items| items))
-                            })
+                    .map(|response_body| {
+                        //TODO: map prefixes
+                        stream::iter_ok(response_body.items.unwrap_or_else(|| vec![]))
                     })
             })
             .flatten_stream()
@@ -317,33 +308,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| {
-                        let status = response.status();
-                        response
-                            .into_body()
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .concat2()
-                            .and_then(move |body| {
-                                match status {
-                                    // These are the GCS error variants as per https://cloud.google.com/storage/docs/json_api/v1/status-codes
-                                    StatusCode::UNAUTHORIZED => future::err(Error::from(ErrorKind::PermissionDenied)),
-                                    StatusCode::FORBIDDEN => future::err(Error::from(ErrorKind::PermissionDenied)),
-                                    StatusCode::NOT_FOUND => future::err(Error::from(ErrorKind::PermanentFileNotAvailable)),
-                                    _ => {
-                                        if status.is_success() {
-                                            future::ok(Object::new(body.to_vec()))
-                                        } else {
-                                            future::err(Error::from(ErrorKind::LocalError))
-                                        }
-                                    }
-                                }
-                            })
-                    })
-            });
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .map(|body| Object::new(body.to_vec()));
         Box::new(result)
     }
 
@@ -378,18 +345,14 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .and_then(|body| {
+                serde_json::from_slice::<Item>(&body)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .and_then(move |body_string| {
-                        serde_json::from_slice::<Item>(&body_string)
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .map(item_to_metadata)
-                    })
-                    .and_then(|meta_data| future::ok(meta_data.len()))
-            });
+                    .map(item_to_metadata)
+            })
+            .and_then(|meta_data| future::ok(meta_data.len()));
         Box::new(result)
     }
 
@@ -417,40 +380,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| {
-                        let status = response.status();
-                        response
-                            .into_body()
-                            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                            .concat2()
-                            .and_then(move |body| {
-                                match (body.iter().count(), status) {
-                                    (0, StatusCode::NO_CONTENT) => {
-                                        // According the Google Storage API for the delete endpoint, an
-                                        // empty reply means it is successful.
-                                        future::ok(())
-                                    }
-                                    _ => match serde_json::from_slice::<ResponseBody>(&body) {
-                                        Ok(result) => match result.error {
-                                            Some(error) => {
-                                                if error.errors[0].reason == "notFound" && status == StatusCode::NOT_FOUND {
-                                                    future::err(Error::from(ErrorKind::PermanentFileNotAvailable))
-                                                } else {
-                                                    future::err(Error::from(ErrorKind::TransientFileNotAvailable))
-                                                }
-                                            }
-                                            _ => future::err(Error::from(ErrorKind::LocalError)),
-                                        },
-                                        Err(_) => future::err(Error::from(ErrorKind::LocalError)),
-                                    },
-                                }
-                            })
-                    })
-            });
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .map(|_| ());
 
         Box::new(result)
     }
@@ -481,13 +413,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     .body(Body::empty())
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             })
-            .and_then(move |request| {
-                client
-                    .request(request)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|response| response.into_body().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).concat2())
-                    .map(|_body_string| {}) //TODO: implement error handling
-            });
+            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(unpack_response)
+            .map(|_| ());
         Box::new(result)
     }
 
@@ -500,4 +428,19 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
         //TODO: implement this
         unimplemented!();
     }
+}
+
+fn unpack_response(response: Response<Body>) -> impl Future<Item = Chunk, Error = Error> {
+    let status = response.status();
+    response
+        .into_body()
+        .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+        .concat2()
+        .and_then(move |body| {
+            if status.is_success() {
+                Ok(body)
+            } else {
+                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+            }
+        })
 }
