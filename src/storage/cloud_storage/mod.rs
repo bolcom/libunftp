@@ -55,38 +55,24 @@ struct ErrorBody {
     message: String,
 }
 
-fn item_to_metadata(item: Item) -> ObjectMetadata {
-    ObjectMetadata {
-        last_updated: match u64::try_from(item.updated.timestamp_millis()) {
-            Ok(timestamp) => SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp)),
-            _ => None,
-        },
+fn item_to_metadata(item: Item) -> Result<ObjectMetadata, Error> {
+    let size = item.size.parse();
+    let size = size.map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
+
+    Ok(ObjectMetadata {
+        size,
+        last_updated: Some(item.updated.into()),
         is_file: true,
-        size: match item.size.parse() {
-            Ok(size) => size,
-            //TODO: return 450
-            _ => 0,
-        },
-    }
+    })
 }
 
-fn item_to_file_info(item: Item) -> Fileinfo<PathBuf, ObjectMetadata> {
-    Fileinfo {
-        path: PathBuf::from(item.name),
-        metadata: ObjectMetadata {
-            last_updated: match u64::try_from(item.updated.timestamp_millis()) {
-                Ok(timestamp) => SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(timestamp)),
-                _ => None,
-            },
-            is_file: true,
-            size: match item.size.parse() {
-                Ok(size) => size,
-                //TODO: return 450
-                _ => 0,
-            },
-        },
-    }
+fn item_to_file_info(item: Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
+    let path = PathBuf::from(item.name.clone());
+    let metadata = item_to_metadata(item)?;
+
+    Ok(Fileinfo { metadata, path })
 }
+
 /// StorageBackend that uses Cloud storage from Google
 pub struct CloudStorage {
     uris: GcsUri,
@@ -221,7 +207,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .and_then(|body_string| {
                 serde_json::from_slice::<Item>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .map(item_to_metadata)
+                    .and_then(item_to_metadata)
             });
         Box::new(result)
     }
@@ -258,7 +244,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
                     })
             })
             .flatten_stream()
-            .map(item_to_file_info);
+            .and_then(item_to_file_info);
         Box::new(result)
     }
 
@@ -316,9 +302,9 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .and_then(|body| {
                 serde_json::from_slice::<Item>(&body)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .map(item_to_metadata)
+                    .and_then(item_to_metadata)
             })
-            .and_then(|meta_data| future::ok(meta_data.len()));
+            .map(|metadata| metadata.len());
         Box::new(result)
     }
 
