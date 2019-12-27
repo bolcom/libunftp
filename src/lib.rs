@@ -11,7 +11,7 @@
 //! # Quick Start
 //!
 //! ```rust
-//! extern crate libunftp;
+//! use libunftp;
 //!
 //! let server = libunftp::Server::with_root(std::env::temp_dir());
 //! # if false { // We don't want to actually start the server in an example.
