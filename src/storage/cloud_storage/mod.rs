@@ -27,7 +27,6 @@ use tokio::{
     codec::{BytesCodec, FramedRead},
     io::AsyncRead,
 };
-use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
 
 #[derive(Deserialize, Debug)]

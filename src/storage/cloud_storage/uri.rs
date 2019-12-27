@@ -1,4 +1,4 @@
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{Error, ErrorKind};
 use hyper::http::uri::Scheme;
 use hyper::Uri;
 use std::path::Path;
