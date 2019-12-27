@@ -338,12 +338,12 @@ where
             session.clone(),
             authenticator.clone(),
             tls_configured,
-            passive_addrs.clone(),
-            tx.clone(),
+            passive_addrs,
+            tx,
             local_addr,
             storage_features,
         );
-        let event_handler_chain = Self::handle_with_auth(session.clone(), event_handler_chain);
+        let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
 
         let codec = controlchan::FTPCodec::new();
