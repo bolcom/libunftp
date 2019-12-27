@@ -13,11 +13,10 @@ use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
-    convert::TryFrom,
     io::{self, Read},
     path::{Path, PathBuf},
     sync::Mutex,
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 use tokio::{
     codec::{BytesCodec, FramedRead},
@@ -395,14 +394,28 @@ mod test {
         let date_time = DateTime::from(sys_time);
 
         let item = Item {
-            name: String::from("some_name"),
+            name: "".into(),
             updated: date_time,
-            size: String::from("50"),
+            size: "50".into(),
         };
 
         let metadata = item_to_metadata(item).unwrap();
         assert_eq!(metadata.size, 50);
         assert_eq!(metadata.modified().unwrap(), sys_time);
         assert_eq!(metadata.is_file, true);
+    }
+
+    #[test]
+    fn item_to_metadata_parse_error() {
+        use chrono::prelude::Utc;
+
+        let item = Item {
+            name: "".into(),
+            updated: Utc::now(),
+            size: "unparseable".into(),
+        };
+
+        let metadata = item_to_metadata(item);
+        assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
     }
 }
