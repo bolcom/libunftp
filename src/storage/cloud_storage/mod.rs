@@ -384,3 +384,25 @@ fn unpack_response(response: Response<Body>) -> impl Future<Item = Chunk, Error 
             }
         })
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn item_to_metadata_converts() {
+        let sys_time = SystemTime::now();
+        let date_time = DateTime::from(sys_time);
+
+        let item = Item {
+            name: String::from("some_name"),
+            updated: date_time,
+            size: String::from("50"),
+        };
+
+        let metadata = item_to_metadata(item).unwrap();
+        assert_eq!(metadata.size, 50);
+        assert_eq!(metadata.modified().unwrap(), sys_time);
+        assert_eq!(metadata.is_file, true);
+    }
+}
