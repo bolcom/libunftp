@@ -6,11 +6,7 @@ use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
     client::connect::HttpConnector,
-    http::{
-        header,
-        uri::{Scheme, Uri},
-        Method,
-    },
+    http::{header, Method},
     Body, Chunk, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
@@ -118,15 +114,6 @@ impl CloudStorage {
     fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
         Box::new((self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
-}
-
-fn make_uri(path_and_query: String) -> Result<Uri, Error> {
-    Uri::builder()
-        .scheme(Scheme::HTTPS)
-        .authority("www.googleapis.com")
-        .path_and_query(path_and_query.as_str())
-        .build()
-        .map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
 }
 
 /// The File type for the CloudStorage
