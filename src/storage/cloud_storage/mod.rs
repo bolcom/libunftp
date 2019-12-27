@@ -105,7 +105,7 @@ impl CloudStorage {
         let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
         CloudStorage {
             bucket: bucket.into(),
-            client: client.clone(),
+            client,
             get_token: Box::new(move || match &mut service_account_access.lock() {
                 Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
                 Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(io::ErrorKind::Other)))),
