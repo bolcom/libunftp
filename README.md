@@ -22,7 +22,7 @@ The API MAY BREAK**
 
 ## Prerequisites
 
-You'll need [Rust](https://rust-lang.org) 1.31 or higher to build libunftp.
+You'll need [Rust](https://rust-lang.org) 1.40 or higher to build libunftp.
 There are no runtime dependencies besides the OS and libc.
 
 ## Getting started
@@ -37,7 +37,7 @@ Then add the libunftp, tokio & futures crates to your project's dependencies in 
 
 ```toml
 [dependencies]
-libunftp = "0.2"
+libunftp = "0.5.1"
 tokio = "0.1"
 futures = "0.1"
 ```
