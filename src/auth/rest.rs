@@ -3,10 +3,16 @@ use crate::auth::*;
 use regex::Regex;
 use std::string::String;
 
-use futures::stream::Stream;
-use futures::Future;
+// use futures::compat::Compat;
+use futures::compat::Compat;
+use futures::future::Future;
+use futures_util::compat::Future01CompatExt;
+use futures_util::future::FutureExt;
+use futures_util::future::TryFutureExt;
 
 use http::uri::InvalidUri;
+
+use hyper::rt::Stream;
 use hyper::{Body, Client, Request};
 
 use serde_json::Value;
@@ -113,7 +119,7 @@ impl RestAuthenticator {
 
 // FIXME: add support for authenticated user
 impl Authenticator<AnonymousUser> for RestAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Output = Result<AnonymousUser, ()>> + Send> {
         let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
@@ -129,41 +135,48 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
 
         debug!("{} {}", url, body);
 
-        Box::new(
-            futures::future::ok(())
-                .and_then(|_| {
-                    Request::builder()
-                        .method(method)
-                        .header("Content-type", "application/json")
-                        .uri(url)
-                        .body(Body::from(body))
-                        .map_err(|e| RestError::HttpError(e.to_string()))
-                })
-                .and_then(|req| Client::new().request(req).map_err(RestError::HyperError))
-                .and_then(|res| res.into_body().map_err(RestError::HyperError).concat2())
-                .and_then(|body| {
-                    //                println!("resp: {:?}", body);
-                    serde_json::from_slice(&body).map_err(RestError::JSONDeserializationError)
-                })
-                .map_err(|err| {
-                    info!("RestError: {:?}", err);
-                })
-                .and_then(move |response: Value| {
-                    let parsed = response
-                        .pointer(&selector)
-                        .map(|x| {
-                            debug!("pointer: {:?}", x);
-                            format!("{:?}", x)
-                        })
-                        .unwrap_or_else(|| "null".to_string());
+        let request = Request::builder()
+            .method(method)
+            .header("Content-type", "application/json")
+            .uri(url)
+            .body(Body::from(body))
+            .map_err(|e| RestError::HttpError(e.to_string()));
 
-                    if regex.is_match(&parsed) {
-                        Ok(AnonymousUser {})
-                    } else {
-                        Err(())
-                    }
-                }),
-        )
+        if let Err(e) = request {
+            info!("RestError: {:?}", e);
+            return Box::new(futures::future::err(()));
+        }
+
+        let request = request.unwrap();
+
+        let auth_future = Client::new()
+            .request(request)
+            .compat()
+            .and_then(|res| res.into_body().concat2().compat())
+            .map(|body| Ok(serde_json::from_slice(&body?)?))
+            .map(move |response: Result<Value, RestError>| {
+                if let Err(e) = response {
+                    info!("RestError: {:?}", e);
+                    return Err(());
+                }
+
+                let response = response.unwrap();
+                let parsed = response
+                    .pointer(&selector)
+                    .map(|x| {
+                        debug!("pointer: {:?}", x);
+                        format!("{:?}", x)
+                    })
+                    .unwrap_or_else(|| "null".to_string());
+
+                if regex.is_match(&parsed) {
+                    Ok(AnonymousUser {})
+                } else {
+                    Err(())
+                }
+            });
+
+        Box::new(auth_future)
     }
 }
 
@@ -200,4 +213,16 @@ pub enum RestError {
     JSONDeserializationError(serde_json::Error),
     ///
     JSONSerializationError(serde_json::Error),
+}
+
+impl From<hyper::error::Error> for RestError {
+    fn from(e: hyper::error::Error) -> Self {
+        Self::HttpError(e.to_string())
+    }
+}
+
+impl From<serde_json::error::Error> for RestError {
+    fn from(e: serde_json::error::Error) -> Self {
+        Self::JSONDeserializationError(e)
+    }
 }

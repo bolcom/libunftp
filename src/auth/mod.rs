@@ -26,7 +26,7 @@ use futures::Future;
 /// Async authenticator interface (error reporting not supported yet)
 pub trait Authenticator<U> {
     /// Authenticate the given user with the given password.
-    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
+    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Output = Result<U, ()>> + Send>;
 }
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
@@ -56,7 +56,7 @@ pub mod rest;
 pub struct AnonymousAuthenticator;
 
 impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
+    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Output = Result<AnonymousUser, ()>> + Send> {
         Box::new(futures::future::ok(AnonymousUser {}))
     }
 }
