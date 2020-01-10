@@ -17,7 +17,7 @@ impl GcsUri {
         make_uri(format!("/storage/v1/b/{}/o/{}", self.bucket, path_str(path)?))
     }
 
-    pub fn list<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
+    pub fn list<P: AsRef<Path>>(&self, path: &P) -> Result<Uri, Error> {
         make_uri(format!("/storage/v1/b/{}/o?delimiter=/&prefix={}", self.bucket, path_str(path)?))
     }
 
