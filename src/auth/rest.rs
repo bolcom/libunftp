@@ -3,16 +3,16 @@ use crate::auth::*;
 use regex::Regex;
 use std::string::String;
 
-// use futures::compat::Compat;
-use futures::compat::Compat;
-use futures::future::Future;
-use futures_util::compat::Future01CompatExt;
+use async_trait::async_trait;
+
 use futures_util::future::FutureExt;
 use futures_util::future::TryFutureExt;
 
 use http::uri::InvalidUri;
 
-use hyper::rt::Stream;
+use bytes::Bytes;
+
+use hyper::body::HttpBody;
 use hyper::{Body, Client, Request};
 
 use serde_json::Value;
@@ -118,65 +118,60 @@ impl RestAuthenticator {
 }
 
 // FIXME: add support for authenticated user
+#[async_trait]
 impl Authenticator<AnonymousUser> for RestAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Output = Result<AnonymousUser, ()>> + Send> {
-        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, ()> {
+        self.authenticate_rest(username, password)
+            .map_err(|err| {
+                info!("RestError: {:?}", err);
+            })
+            .await
+    }
+}
+
+impl RestAuthenticator {
+    async fn authenticate_rest(&self, username: &str, password: &str) -> Result<AnonymousUser, RestError> {
+        let username_url = utf8_percent_encode(username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+        let password_url = utf8_percent_encode(password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
 
-        let username_json = encode_string_json(_username);
-        let password_json = encode_string_json(_password);
+        let username_json = encode_string_json(username);
+        let password_json = encode_string_json(password);
         let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
 
-        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
-        let method = self.method.clone();
+        // FIXME: need to clone too much, just to keep tokio::spawn() happy,
+        // with its 'static requirement. is there a way maybe to work this
+        // around with proper lifetime specifiers? Or is it better to just clone
+        // the whole object?
         let selector = self.selector.clone();
         let regex = self.regex.clone();
 
         debug!("{} {}", url, body);
 
         let request = Request::builder()
-            .method(method)
+            .method(self.method)
             .header("Content-type", "application/json")
             .uri(url)
             .body(Body::from(body))
-            .map_err(|e| RestError::HttpError(e.to_string()));
+            .map_err(|e| RestError::HttpError(e.to_string()))?;
 
-        if let Err(e) = request {
-            info!("RestError: {:?}", e);
-            return Box::new(futures::future::err(()));
+        let res = Client::new().request(request).await?;
+        let bs = hyper::body::to_bytes(res.body_mut()).await?;
+        let response: Value = serde_json::from_slice(&bs)?;
+
+        let parsed = response
+            .pointer(&selector)
+            .map(|x| {
+                debug!("pointer: {:?}", x);
+                format!("{:?}", x)
+            })
+            .unwrap_or_else(|| "null".to_string());
+
+        if regex.is_match(&parsed) {
+            Ok(AnonymousUser {})
+        } else {
+            Err(RestError::HttpError("unauthorized".into()))
         }
-
-        let request = request.unwrap();
-
-        let auth_future = Client::new()
-            .request(request)
-            .compat()
-            .and_then(|res| res.into_body().concat2().compat())
-            .map(|body| Ok(serde_json::from_slice(&body?)?))
-            .map(move |response: Result<Value, RestError>| {
-                if let Err(e) = response {
-                    info!("RestError: {:?}", e);
-                    return Err(());
-                }
-
-                let response = response.unwrap();
-                let parsed = response
-                    .pointer(&selector)
-                    .map(|x| {
-                        debug!("pointer: {:?}", x);
-                        format!("{:?}", x)
-                    })
-                    .unwrap_or_else(|| "null".to_string());
-
-                if regex.is_match(&parsed) {
-                    Ok(AnonymousUser {})
-                } else {
-                    Err(())
-                }
-            });
-
-        Box::new(auth_future)
     }
 }
 

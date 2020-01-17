@@ -1,4 +1,6 @@
 #![deny(missing_docs)]
+use async_trait::async_trait;
+use futures::Future;
 /// Defines the common interface that can be implemented for a multitude of authentication
 /// backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
 ///
@@ -21,12 +23,12 @@
 /// struct RandomUser;
 /// ```
 /// [`Server`]: ../server/struct.Server.html
-use futures::Future;
 
 /// Async authenticator interface (error reporting not supported yet)
+#[async_trait]
 pub trait Authenticator<U> {
     /// Authenticate the given user with the given password.
-    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Output = Result<U, ()>> + Send>;
+    async fn authenticate(&self, username: &str, password: &str) -> Result<U, ()>;
 }
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
@@ -55,9 +57,10 @@ pub mod rest;
 /// ```
 pub struct AnonymousAuthenticator;
 
+#[async_trait]
 impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Output = Result<AnonymousUser, ()>> + Send> {
-        Box::new(futures::future::ok(AnonymousUser {}))
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
+        Ok(AnonymousUser {})
     }
 }
 

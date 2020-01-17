@@ -1,6 +1,5 @@
 use crate::auth::*;
-
-use futures::Future;
+use async_trait::async_trait;
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
@@ -18,22 +17,21 @@ impl PAMAuthenticator {
     }
 }
 
+#[async_trait]
 impl Authenticator<AnonymousUser> for PAMAuthenticator {
-    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Output = Result<AnonymousUser, ()>> + Send> {
+    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, ()> {
         let service = self.service.clone();
         let username = username.to_string();
         let password = password.to_string();
 
         let mut auth = match pam_auth::Authenticator::new(&service) {
             Some(auth) => auth,
-            None => return Box::new(futures::future::err(())),
+            None => return Err(()),
         };
 
         auth.set_credentials(&username, &password);
-        let a = auth.authenticate().map(|_| AnonymousUser {}).map_err(|err| {
+        auth.authenticate().map(|_| AnonymousUser {}).map_err(|err| {
             debug!("RestError: {:?}", err);
-        });
-
-        Box::new(futures::future::ready(a))
+        })
     }
 }
