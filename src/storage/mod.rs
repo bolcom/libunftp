@@ -1,5 +1,7 @@
+use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
+use futures::stream::StreamExt;
 use futures::{Future, Stream};
 use std::path::Path;
 use std::time::SystemTime;
@@ -165,6 +167,7 @@ where
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
+#[async_trait]
 pub trait StorageBackend<U: Send> {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
@@ -180,19 +183,21 @@ pub trait StorageBackend<U: Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
+    async fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
+    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Result<Fileinfo<std::path::PathBuf, Self::Metadata>>> + Send + Unpin>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
-    fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    async fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
         Self::Metadata: Metadata + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
+        let stream = self.list(user, path);
+
+        let item = stream.next().await;
         let fut = stream
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
