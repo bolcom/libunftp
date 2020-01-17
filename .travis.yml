@@ -8,6 +8,7 @@ rust:
 os:
   - linux
   - osx
+  - windows
 
 before_script:
   - rustup component add rustfmt clippy
@@ -23,6 +24,7 @@ cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
+    - os: windows
 
 branches:
   only:
