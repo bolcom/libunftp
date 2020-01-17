@@ -60,13 +60,13 @@ pub fn dec_session() {
 /// Add a metric for an FTP server error.
 pub fn add_error_metric(error: &FTPErrorKind) {
     let error_str = error.to_string();
-    let label = error_str.split_whitespace().nth(0).unwrap_or("unknown").to_lowercase();
+    let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
     FTP_ERROR_TOTAL.with_label_values(&[&label]).inc();
 }
 
 fn add_command_metric(cmd: &Command) {
     let cmd_str = cmd.to_string();
-    let label = cmd_str.split_whitespace().nth(0).unwrap_or("unknown").to_lowercase();
+    let label = cmd_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
     FTP_COMMAND_TOTAL.with_label_values(&[&label]).inc();
 }
 
