@@ -2,7 +2,7 @@
 
 [![Crate Version](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
 [![Crate License](https://img.shields.io/crates/v/libunftp.svg)](https://crates.io/crates/libunftp)
-[![Linux Build Status](https://github.com/bolcom/libunftp/workflows/CI/badge.svg)](https://github.com/bolcom/libunftp/actions)
+[![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
 
 When you need to FTP, but don't want to.
