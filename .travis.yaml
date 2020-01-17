@@ -13,10 +13,10 @@ before_script:
   - rustup component add rustfmt clippy
 
 script:
-  - cargo clippy -- -D warnings
   - cargo fmt --all -- --check
-  - cargo build --verbose --all --all-features
+  - cargo clippy --all-features -- -D warnings
   - cargo test --verbose --all --all-features
+  - cargo build --verbose --all --all-features
 
 cache: cargo
 
