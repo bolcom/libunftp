@@ -27,12 +27,12 @@ impl Authenticator<AnonymousUser> for PAMAuthenticator {
         Box::new(
             futures::future::ok(())
                 .and_then(move |_| {
-                    let mut auth = match pam_auth::Authenticator::new(&service) {
-                        Some(auth) => auth,
-                        None => return Err(()),
+                    let mut auth = match pam::Authenticator::with_password(&service) {
+                        Ok(auth) => auth,
+                        Err(_) => return Err(()),
                     };
 
-                    auth.set_credentials(&username, &password);
+                    auth.get_handler().set_credentials(&username, &password);
                     match auth.authenticate() {
                         Ok(()) => Ok(AnonymousUser {}),
                         Err(_) => Err(()),

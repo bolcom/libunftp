@@ -33,8 +33,8 @@ pub trait Authenticator<U> {
 ///
 /// [`Authenticator`]: trait.Authenticator.html
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
-#[cfg(feature = "pam")]
-pub mod pam;
+#[cfg(feature = "pam_auth")]
+pub mod pam_auth;
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
