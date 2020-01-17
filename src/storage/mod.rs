@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
 use futures::stream::StreamExt;
-use futures::{Future, Stream};
+use itertools::Itertools;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{
@@ -168,7 +168,7 @@ where
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
 #[async_trait]
-pub trait StorageBackend<U: Send> {
+pub trait StorageBackend<U: Sync + Send> {
     /// The concrete type of the Files returned by this StorageBackend.
     type File;
     /// The concrete type of the `Metadata` used by this StorageBackend.
@@ -186,80 +186,62 @@ pub trait StorageBackend<U: Send> {
     async fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Result<Fileinfo<std::path::PathBuf, Self::Metadata>>> + Send + Unpin>
+    async fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
-    async fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
+    async fn list_fmt<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
+        P: AsRef<Path> + Send,
         Self::Metadata: Metadata + 'static,
     {
-        let stream = self.list(user, path);
+        let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
 
-        let item = stream.next().await;
-        let fut = stream
-            .map(|file| format!("{}\r\n", file).into_bytes())
-            .concat2()
-            .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
+        let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi).into_bytes()).concat();
 
-        Box::new(fut)
+        Ok(std::io::Cursor::new(file_infos))
     }
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be sent to the client.
-    fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    async fn nlst<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
+        P: AsRef<Path> + Send,
         Self::Metadata: Metadata + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
+        let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
 
-        let fut = stream
+        let bytes = list
+            .iter()
             .map(|file| {
-                format!(
-                    "{}\r\n",
-                    file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("")
-                )
-                .into_bytes()
+                let info = file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("");
+                format!("{}\r\n", info).into_bytes()
             })
-            .concat2()
-            .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
-
-        Box::new(fut)
+            .concat();
+        Ok(std::io::Cursor::new(bytes))
     }
 
     /// Returns the content of the given file from offset start_pos.
     /// The starting position can only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    ///
-    // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
-    // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
-    // Trait.
-    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
+    async fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
 
     /// Write the given bytes to the given file starting at offset
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
-        &self,
-        user: &Option<U>,
-        bytes: R,
-        path: P,
-        start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
+    async fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, user: &Option<U>, bytes: R, path: P, start_pos: u64) -> Result<u64>;
 
     /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Rename the given file to the given filename.
-    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
