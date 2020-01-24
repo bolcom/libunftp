@@ -1,5 +1,7 @@
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use async_trait::async_trait;
 use futures::{future, Future, Stream};
+use futures_util::future::FutureExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -56,7 +58,8 @@ impl Filesystem {
     }
 }
 
-impl<U: Send> StorageBackend<U> for Filesystem {
+#[async_trait]
+impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
 
@@ -64,16 +67,18 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         crate::storage::FEATURE_RESTART
     }
 
-    fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn metadata<P>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata>
+    where
+        P: AsRef<Path> + Send,
+    {
+        let full_path = self.full_path(path)?;
         // TODO: Some more useful error reporting
-        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+        tokio::fs::symlink_metadata(full_path)
+            .await
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 
-    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
+    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Result<Fileinfo<std::path::PathBuf, Self::Metadata>>> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
@@ -85,16 +90,20 @@ impl<U: Send> StorageBackend<U> for Filesystem {
 
         let prefix = self.root.clone();
 
-        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(move |dir_entry| {
-            let prefix = prefix.clone();
-            let path = dir_entry.path();
-            let relpath = path.strip_prefix(prefix).unwrap();
-            let relpath = std::path::PathBuf::from(relpath);
-            match std::fs::symlink_metadata(dir_entry.path()) {
-                Ok(stat) => Some(Fileinfo { path: relpath, metadata: stat }),
-                Err(_) => None,
+        let asdf = async {
+            let rd = tokio::fs::read_dir(full_path).await.unwrap();
+            while let Ok(Some(dir_entry)) = rd.next_entry().await {
+                let prefix = prefix.clone();
+                let path = dir_entry.path();
+                let relpath = path.strip_prefix(prefix).unwrap();
+                let relpath = std::path::PathBuf::from(relpath);
+                let meta = std::fs::symlink_metadata(dir_entry.path()).unwrap();
+                match meta {
+                    Ok(stat) => Some(Fileinfo { path: relpath, metadata: stat }),
+                    Err(_) => None,
+                }
             }
-        });
+        };
 
         // TODO: Some more useful error reporting
         Box::new(fut.map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))

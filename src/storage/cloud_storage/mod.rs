@@ -2,6 +2,7 @@ mod uri;
 use uri::GcsUri;
 
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -76,7 +77,7 @@ fn item_to_file_info(item: Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Er
 pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    get_token: Box<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
+    get_token: Box<dyn Fn() -> Box<dyn Future< = Token, Error = RequestError> + Send> + Send + Sync>,
 }
 
 impl CloudStorage {
@@ -96,8 +97,8 @@ impl CloudStorage {
         }
     }
 
-    fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
-        Box::new((self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+    async fn get_token(&self) -> Result<Token, Error> {
+        (self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 }
 
@@ -179,15 +180,13 @@ impl Metadata for ObjectMetadata {
     }
 }
 
-impl<U: Send> StorageBackend<U> for CloudStorage {
+#[async_trait]
+impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 
-    fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
-        let uri = match self.uris.metadata(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
+        let uri = self.uris.metadata(path)?;
 
         let client = self.client.clone();
 
