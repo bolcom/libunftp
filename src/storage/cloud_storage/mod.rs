@@ -14,6 +14,7 @@ use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
     io::{self, Read},
+    iter::Extend,
     path::{Path, PathBuf},
     sync::Mutex,
     time::SystemTime,
@@ -28,48 +29,57 @@ use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey
 struct ResponseBody {
     items: Option<Vec<Item>>,
     prefixes: Option<Vec<String>>,
-    error: Option<ErrorBody>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct Item {
     name: String,
     updated: DateTime<Utc>,
     size: String,
 }
 
-// JSON error response format:
-// https://cloud.google.com/storage/docs/json_api/v1/status-codes
-#[derive(Deserialize, Debug)]
-struct ErrorDetails {
-    domain: String,
-    reason: String,
-    message: String,
+impl ResponseBody {
+    fn list(self) -> Result<Vec<Fileinfo<PathBuf, ObjectMetadata>>, Error> {
+        let files: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self
+            .items
+            .map_or(Ok(vec![]), move |items| items.iter().map(move |item| item_to_file_info(item)).collect())?;
+        let dirs: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self
+            .prefixes
+            .map_or(Ok(vec![]), |prefixes| prefixes.iter().map(|prefix| prefix_to_file_info(prefix)).collect())?;
+        let result: &mut Vec<Fileinfo<PathBuf, ObjectMetadata>> = &mut vec![];
+        result.extend(dirs);
+        result.extend(files);
+        Ok(result.to_vec())
+    }
 }
 
-#[derive(Deserialize, Debug)]
-struct ErrorBody {
-    errors: Vec<ErrorDetails>,
-    code: u32,
-    message: String,
-}
-
-fn item_to_metadata(item: Item) -> Result<ObjectMetadata, Error> {
+fn item_to_metadata(item: &Item) -> Result<ObjectMetadata, Error> {
     let size = item.size.parse();
     let size = size.map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
 
     Ok(ObjectMetadata {
         size,
         last_updated: Some(item.updated.into()),
-        is_file: true,
+        is_file: !item.name.ends_with('/'),
     })
 }
 
-fn item_to_file_info(item: Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
+fn item_to_file_info(item: &Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
     let path = PathBuf::from(item.name.clone());
     let metadata = item_to_metadata(item)?;
 
     Ok(Fileinfo { metadata, path })
+}
+
+fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
+    Ok(Fileinfo {
+        path: prefix.into(),
+        metadata: ObjectMetadata {
+            last_updated: None,
+            is_file: false,
+            size: 0,
+        },
+    })
 }
 
 /// StorageBackend that uses Cloud storage from Google
@@ -131,6 +141,7 @@ impl Read for Object {
 impl AsyncRead for Object {}
 
 /// This is a hack for now
+#[derive(Clone)]
 pub struct ObjectMetadata {
     last_updated: Option<SystemTime>,
     is_file: bool,
@@ -206,7 +217,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .and_then(|body_string| {
                 serde_json::from_slice::<Item>(&body_string)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(item_to_metadata)
+                    .and_then(|item| item_to_metadata(&item))
             });
         Box::new(result)
     }
@@ -215,7 +226,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let uri = match self.uris.list(path) {
+        let uri = match self.uris.list(&path) {
             Ok(uri) => uri,
             Err(err) => return Box::new(stream::once(Err(err))),
         };
@@ -234,16 +245,10 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             })
             .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
             .and_then(unpack_response)
-            .and_then(|body_string| {
-                serde_json::from_slice::<ResponseBody>(&body_string)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .map(|response_body| {
-                        //TODO: map prefixes
-                        stream::iter_ok(response_body.items.unwrap_or_else(|| vec![]))
-                    })
-            })
-            .flatten_stream()
-            .and_then(item_to_file_info);
+            .and_then(|body_string| serde_json::from_slice::<ResponseBody>(&body_string).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+            .and_then(move |response_body| response_body.list())
+            .map(stream::iter_ok)
+            .flatten_stream();
         Box::new(result)
     }
 
@@ -301,7 +306,7 @@ impl<U: Send> StorageBackend<U> for CloudStorage {
             .and_then(|body| {
                 serde_json::from_slice::<Item>(&body)
                     .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(item_to_metadata)
+                    .and_then(|item| item_to_metadata(&item))
             })
             .map(|metadata| metadata.len());
         Box::new(result)
@@ -399,7 +404,7 @@ mod test {
             size: "50".into(),
         };
 
-        let metadata = item_to_metadata(item).unwrap();
+        let metadata = item_to_metadata(&item).unwrap();
         assert_eq!(metadata.size, 50);
         assert_eq!(metadata.modified().unwrap(), sys_time);
         assert_eq!(metadata.is_file, true);
@@ -415,7 +420,7 @@ mod test {
             size: "unparseable".into(),
         };
 
-        let metadata = item_to_metadata(item);
+        let metadata = item_to_metadata(&item);
         assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
     }
 }
