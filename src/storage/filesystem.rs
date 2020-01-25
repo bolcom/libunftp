@@ -78,62 +78,49 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 
-    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Result<Fileinfo<std::path::PathBuf, Self::Metadata>>> + Send>
+    async fn list<P>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
+        P: AsRef<Path> + Send,
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
         // TODO: Use `?` operator here when we can use `impl Future`
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e).into_stream()),
-        };
+        let full_path = self.full_path(path)?;
 
         let prefix = self.root.clone();
 
-        let asdf = async {
-            let rd = tokio::fs::read_dir(full_path).await.unwrap();
-            while let Ok(Some(dir_entry)) = rd.next_entry().await {
-                let prefix = prefix.clone();
-                let path = dir_entry.path();
-                let relpath = path.strip_prefix(prefix).unwrap();
-                let relpath = std::path::PathBuf::from(relpath);
-                let meta = std::fs::symlink_metadata(dir_entry.path()).unwrap();
-                match meta {
-                    Ok(stat) => Some(Fileinfo { path: relpath, metadata: stat }),
-                    Err(_) => None,
-                }
-            }
-        };
+        let rd = tokio::fs::read_dir(full_path).await.unwrap();
 
-        // TODO: Some more useful error reporting
-        Box::new(fut.map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+        let mut fis = vec![];
+        while let Ok(Some(dir_entry)) = rd.next_entry().await {
+            let prefix = prefix.clone();
+            let path = dir_entry.path();
+            let relpath = path.strip_prefix(prefix).unwrap();
+            let relpath = std::path::PathBuf::from(relpath);
+            let meta = tokio::fs::symlink_metadata(dir_entry.path()).await?;
+            fis.push(Fileinfo { path: relpath, metadata: meta })
+        }
+
+        Ok(fis)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
+    async fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<tokio::fs::File>
+    where
+        P: AsRef<Path> + Send,
+    {
+        let full_path = self.full_path(path)?;
+
         // TODO: Some more useful error reporting
-        Box::new(
-            tokio::fs::file::File::open(full_path)
-                .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
-                .map(|res| res.0)
-                .map_err(|error| match error.kind() {
-                    std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                    std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                    _ => Error::from(ErrorKind::LocalError),
-                }),
-        )
+        let file = tokio::fs::File::open(full_path).await?;
+        file.seek(std::io::SeekFrom::Start(start_pos)).await?;
+
+        Ok(file)
     }
 
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
-        &self,
-        _user: &Option<U>,
-        bytes: R,
-        path: P,
-        start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
+    async fn put<P, R>(&self, _user: &Option<U>, bytes: R, path: P, start_pos: u64) -> Result<u64>
+    where
+        P: AsRef<Path> + Send,
+        R: tokio::io::AsyncRead + Send + Unpin + 'static,
+    {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -142,85 +129,55 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        use futures::future::IntoFuture;
+        let mut file = tokio::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
+        file.set_len(start_pos).await?;
+        file.seek(std::io::SeekFrom::Start(start_pos)).await?;
+        let n_bytes = tokio::io::copy(&mut bytes, &mut file).await?;
 
-        let file = std::fs::OpenOptions::new().write(true).create(true).open(full_path);
-
-        let fut = file
-            .into_future()
-            .map(tokio::fs::file::File::from_std)
-            .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
-            .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
-            .map(|f| f.0)
-            .and_then(|f| tokio_io::io::copy(bytes, f))
-            .map(|(n, _, _)| n)
-            // TODO: Some more useful error reporting
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            });
-        Box::new(fut)
+        Ok(n_bytes)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(_) => return Box::new(future::err(Error::from(ErrorKind::PermanentFileNotAvailable))),
-        };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        }))
+    async fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Result<()>
+    where
+        P: AsRef<Path> + Send,
+    {
+        tokio::fs::remove_file(self.full_path(path)?).await?;
+
+        Ok(())
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
-        Box::new(tokio::fs::remove_dir(full_path).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        }))
+    async fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Result<()>
+    where
+        P: AsRef<Path> + Send,
+    {
+        tokio::fs::remove_dir(self.full_path(path)?).await?;
+
+        Ok(())
     }
 
-    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
+    async fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Result<()>
+    where
+        P: AsRef<Path> + Send,
+    {
+        tokio::fs::create_dir(self.full_path(path)?).await?;
 
-        Box::new(tokio::fs::create_dir(full_path).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        }))
+        Ok(())
     }
 
-    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let from = match self.full_path(from) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
-        let to = match self.full_path(to) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
+    async fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, from: P, to: P) -> Result<()>
+    where
+        P: AsRef<Path> + Send,
+    {
+        let from = self.full_path(from)?;
+        let to = self.full_path(to)?;
 
-        let from_rename = from.clone(); // Alright, borrow checker, have it your way.
-        let fut = tokio::fs::symlink_metadata(from)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .and_then(move |metadata| {
-                if metadata.is_file() {
-                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-                } else {
-                    future::Either::B(future::err(Error::from(ErrorKind::PermanentFileNotAvailable)))
-                }
-            });
-        Box::new(fut)
+        let meta = tokio::fs::symlink_metadata(&from).await?;
+        if meta.is_file() {
+            tokio::fs::rename(from, to).await?;
+            Ok(())
+        } else {
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+        }
     }
 }
 
@@ -262,9 +219,10 @@ mod tests {
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::Write;
+    use tokio::test;
 
     #[test]
-    fn fs_stat() {
+    async fn fs_stat() {
         let root = std::env::temp_dir();
 
         // Create a temp file and get it's metadata
@@ -277,9 +235,8 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
         let filename = path.file_name().unwrap();
-        let my_meta = rt.block_on(fs.metadata(&Some(AnonymousUser {}), filename)).unwrap();
+        let my_meta = fs.metadata(&Some(AnonymousUser {}), filename).await;
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
@@ -289,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_list() {
+    async fn fs_list() {
         // Create a temp directory and create some files in it
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
@@ -317,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_list_fmt() {
+    async fn fs_list_fmt() {
         // Create a temp directory and create some files in it
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
@@ -337,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_get() {
+    async fn fs_get() {
         let root = std::env::temp_dir();
 
         let mut file = tempfile::NamedTempFile::new_in(&root).unwrap();
@@ -369,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_put() {
+    async fn fs_put() {
         let root = std::env::temp_dir();
         let orig_content = b"hallo";
         let fs = Filesystem::new(&root);
@@ -389,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn fileinfo_fmt() {
+    async fn fileinfo_fmt() {
         struct MockMetadata {};
         impl Metadata for MockMetadata {
             fn len(&self) -> u64 {
@@ -431,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_mkd() {
+    async fn fs_mkd() {
         let root = tempfile::TempDir::new().unwrap().into_path();
         let fs = Filesystem::new(&root);
         let new_dir_name = "bla";
@@ -448,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_rename() {
+    async fn fs_rename() {
         let root = tempfile::TempDir::new().unwrap().into_path();
         let file = tempfile::NamedTempFile::new_in(&root).unwrap();
         let old_filename = file.path().file_name().unwrap().to_str().unwrap();
@@ -467,5 +424,15 @@ mod tests {
 
         let old_full_path = root.join(old_filename);
         std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        match err.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
+        }
     }
 }

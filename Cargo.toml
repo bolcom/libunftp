@@ -41,7 +41,7 @@ regex = "1"
 rustls = "0.15.2"
 serde = { version = "1.0.98", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.40", optional = true }
-tokio = {version = "0.2.9", features = ["fs"]}
+tokio = {version = "0.2.9", features = ["fs", "io-util", "macros"]}
 tokio-codec = "0.1"
 tokio-io = "0.1"
 url = { version = "1.7.2", optional = true }
