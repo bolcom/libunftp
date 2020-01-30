@@ -8,7 +8,7 @@ use futures::{future, stream, Future, Stream};
 use hyper::{
     client::connect::HttpConnector,
     http::{header, Method},
-    Body, Chunk, Client, Request, Response,
+    Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
@@ -23,7 +23,7 @@ use tokio::{
     codec::{BytesCodec, FramedRead},
     io::AsyncRead,
 };
-use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
+use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
 
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
@@ -77,7 +77,7 @@ fn item_to_file_info(item: Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Er
 pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    get_token: Box<dyn Fn() -> Box<dyn Future< = Token, Error = RequestError> + Send> + Send + Sync>,
+    service_account_key: ServiceAccountKey,
 }
 
 impl CloudStorage {
@@ -85,20 +85,22 @@ impl CloudStorage {
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new<B: Into<String>>(bucket: B, service_account_key: ServiceAccountKey) -> Self {
-        let client = Client::builder().build(HttpsConnector::new(4));
-        let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
+        let client = Client::builder().build(HttpsConnector::new());
+        let auth = async {};
         CloudStorage {
             client,
+            service_account_key,
             uris: GcsUri::new(bucket.into()),
-            get_token: Box::new(move || match &mut service_account_access.lock() {
-                Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
-                Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(io::ErrorKind::Other)))),
-            }),
         }
     }
 
-    async fn get_token(&self) -> Result<Token, Error> {
-        (self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+    async fn get_token(&self) -> Result<AccessToken, Error> {
+        let auth = ServiceAccountAuthenticator::builder(self.service_account_key)
+            .hyper_client(self.client.clone())
+            .build()
+            .await?;
+
+        auth.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]).await
     }
 }
 
