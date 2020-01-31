@@ -183,10 +183,10 @@ pub trait StorageBackend<U: Sync + Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    async fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
+    async fn metadata<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
-    async fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
+    async fn list<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
@@ -226,22 +226,28 @@ pub trait StorageBackend<U: Sync + Send> {
     /// The starting position can only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    async fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
+    async fn get<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
 
     /// Write the given bytes to the given file starting at offset
-    async fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(&self, user: &Option<U>, bytes: R, path: P, start_pos: u64) -> Result<u64>;
+    async fn put<P: AsRef<Path> + Send, R: tokio::prelude::AsyncRead + Send + 'static>(
+        &self,
+        user: &Option<U>,
+        bytes: R,
+        path: P,
+        start_pos: u64,
+    ) -> Result<u64>;
 
     /// Delete the given file.
-    async fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn del<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Create the given directory.
-    async fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn mkd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Rename the given file to the given filename.
-    async fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
+    async fn rename<P: AsRef<Path> + Send>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
 
     /// Delete the given directory.
-    async fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

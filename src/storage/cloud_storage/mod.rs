@@ -1,11 +1,17 @@
 mod uri;
 use uri::GcsUri;
 
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{self, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use async_trait::async_trait;
+use bytes::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
+use futures_util::{
+    future::TryFutureExt,
+    stream::{StreamExt, TryStreamExt},
+};
 use hyper::{
+    body::aggregate,
     client::connect::HttpConnector,
     http::{header, Method},
     Body, Client, Request, Response,
@@ -100,7 +106,9 @@ impl CloudStorage {
             .build()
             .await?;
 
-        auth.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]).await
+        auth.token(&vec!["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .await
     }
 }
 
@@ -187,29 +195,27 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 
-    async fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
+    async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
         let uri = self.uris.metadata(path)?;
 
         let client = self.client.clone();
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::GET)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .and_then(|body_string| {
-                serde_json::from_slice::<Item>(&body_string)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(item_to_metadata)
-            });
-        Box::new(result)
+        let token = self.get_token().await?;
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str())) //TODO check that this works
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        let response = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+
+        let body = unpack_response(response).await?;
+
+        let response = serde_json::from_reader(body.reader()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        item_to_metadata(response)
     }
 
     fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
@@ -359,30 +365,25 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, _from: P, _to: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _from: P, _to: P) -> storage::Result<()> {
         //TODO: implement this
         unimplemented!();
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> storage::Result<()> {
         //TODO: implement this
         unimplemented!();
     }
 }
 
-fn unpack_response(response: Response<Body>) -> impl Future<Item = Chunk, Error = Error> {
+async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     let status = response.status();
-    response
-        .into_body()
-        .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-        .concat2()
-        .and_then(move |body| {
-            if status.is_success() {
-                Ok(body)
-            } else {
-                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-            }
-        })
+    let body = aggregate(response).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+    if status.is_success() {
+        Ok(body)
+    } else {
+        Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+    }
 }
 
 #[cfg(test)]
