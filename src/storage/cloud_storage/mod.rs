@@ -254,28 +254,20 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
-        let uri = match self.uris.get(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
-
+    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Result<Self::File, Error> {
+        let uri = self.uris.get(path)?;
         let client = self.client.clone();
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::GET)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .map(|body| Object::new(body.to_vec()));
-        Box::new(result)
+        let token = self.get_token().await?;
+        let request = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        let response = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        let body = unpack_response(response).await?;
+        Ok(Object::new(body.bytes().into()))
     }
 
     fn put<P: AsRef<Path>, B: tokio::prelude::AsyncRead + Send + 'static>(
