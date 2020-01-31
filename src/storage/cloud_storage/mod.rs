@@ -270,40 +270,30 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(Object::new(body.bytes().into()))
     }
 
-    fn put<P: AsRef<Path>, B: tokio::prelude::AsyncRead + Send + 'static>(
+    async fn put<P: AsRef<Path> + Send, B: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         _user: &Option<U>,
         bytes: B,
         path: P,
         _start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
-        let uri = match self.uris.put(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    ) -> Result<u64, Error> {
+        let uri = self.uris.put(path)?;
 
         let client = self.client.clone();
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-                    .method(Method::POST)
-                    .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .and_then(|body| {
-                serde_json::from_slice::<Item>(&body)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(item_to_metadata)
-            })
-            .map(|metadata| metadata.len());
-        Box::new(result)
+        let token = self.get_token().await?;
+        let request = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+            .method(Method::POST)
+            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        let response = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        let body = unpack_response(response).await?;
+        let response = serde_json::from_reader(body.reader()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        item_to_metadata(response).map(|metadata| metadata.len())
     }
 
     fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
