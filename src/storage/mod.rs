@@ -121,6 +121,7 @@ pub trait Metadata {
 /// Fileinfo contains the path and `Metadata` of a file.
 ///
 /// [`Metadata`]: ./trait.Metadata.html
+#[derive(Clone)]
 pub struct Fileinfo<P, M>
 where
     P: AsRef<Path>,
@@ -138,11 +139,15 @@ where
     M: Metadata,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let modified: DateTime<Utc> = DateTime::from(self.metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH));
+        let modified: String = self
+            .metadata
+            .modified()
+            .map(|x| DateTime::<Utc>::from(x).format("%b %d %H:%M").to_string())
+            .unwrap_or_else(|_| "-".to_string());
         #[allow(clippy::write_literal)]
         write!(
             f,
-            "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified} {path}",
+            "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",
             filetype = if self.metadata.is_dir() {
                 "d"
             } else if self.metadata.is_symlink() {
@@ -156,7 +161,7 @@ where
             owner = self.metadata.uid(),
             group = self.metadata.gid(),
             size = self.metadata.len(),
-            modified = modified.format("%b %d %H:%M"),
+            modified = modified,
             path = self.path.as_ref().components().last().unwrap().as_os_str().to_string_lossy(),
         )
     }

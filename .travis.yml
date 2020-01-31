@@ -23,3 +23,7 @@ cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
+
+branches:
+  only:
+  - master

@@ -71,7 +71,7 @@ impl Encoder for FTPCodec {
                 let last_line = lines.pop().unwrap();
                 // Lines starting with a digit should be indented
                 for it in lines.iter_mut() {
-                    if it.chars().nth(0).unwrap().is_digit(10) {
+                    if it.chars().next().unwrap().is_digit(10) {
                         it.insert(0, ' ');
                     }
                 }
