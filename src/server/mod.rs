@@ -31,10 +31,7 @@ use crate::auth::{self, AnonymousUser};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use failure::Fail;
-use futures::{
-    prelude::{Future, Stream},
-    Sink,
-};
+use futures::prelude::Stream;
 use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
@@ -96,7 +93,7 @@ pub struct Server<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
 {
-    storage: Box<dyn (Fn() -> S) + Send>,
+    storage: Box<dyn (Fn() -> S) + Sync + Send>,
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
@@ -137,7 +134,7 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self
+    pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
         auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
@@ -272,7 +269,7 @@ where
         self
     }
 
-    /// Returns a tokio future that is the main ftp process. Should be started in a async runtime context.
+    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
     ///
     /// # Example
     ///
@@ -298,12 +295,12 @@ where
 
         use futures03::StreamExt;
         while let Some(socket) = connections.next().await {
-            self.process(socket.unwrap());
+            self.process(socket.unwrap()).await;
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    fn process(&self, tcp_stream: TcpStream) {
+    async fn process(&self, tcp_stream: TcpStream) {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
             true
@@ -344,46 +341,40 @@ where
         let codec = controlchan::FTPCodec::new();
         let (sink, stream) = codec.framed(tcp_tls_stream).split();
         let idle_session_timeout = self.idle_session_timeout;
-        let task = sink
-            .send(Reply::new(ReplyCode::ServiceReady, self.greeting))
-            .and_then(|sink| sink.flush())
-            .and_then(move |sink| {
-                sink.send_all(
-                    stream
-                        .map(Event::Command)
-                        .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
-                        // Read events until we get an InternalMsg::Quit or the session times out
-                        .take_while(move |event| {
-                            if with_metrics {
-                                metrics::add_event_metric(&event);
-                            };
-                            match *event {
-                                Event::InternalMsg(InternalMsg::Quit) => Ok(false),
-                                _ => Ok(true),
-                            }
-                        })
-                        .and_then(event_handler_chain)
-                        .timeout(idle_session_timeout)
-                        .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
-                        .map(move |reply| {
-                            if with_metrics {
-                                metrics::add_reply_metric(&reply);
-                            }
-                            reply
-                        })
-                        // Needed for type annotation, we can possible remove this once the compiler is
-                        // smarter about inference :)
-                        .map_err(|e: FTPError| e),
-                )
-            })
-            .then(|res| {
-                if let Err(e) = res {
-                    warn!("Failed to process connection: {}", e);
-                }
+        use futures03::compat::Sink01CompatExt;
+        use futures03::SinkExt;
 
-                Ok(())
-            });
-        tokio::spawn(task);
+        let mut sink = sink.sink_compat();
+        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await.unwrap();
+        sink.flush().await.unwrap();
+
+        let strm = stream
+            .map(Event::Command)
+            .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
+            // Read events until we get an InternalMsg::Quit or the session times out
+            .take_while(move |event| {
+                if with_metrics {
+                    metrics::add_event_metric(&event);
+                };
+                match *event {
+                    Event::InternalMsg(InternalMsg::Quit) => Ok(false),
+                    _ => Ok(true),
+                }
+            })
+            .and_then(event_handler_chain)
+            .timeout(idle_session_timeout)
+            .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
+            .map(move |reply| {
+                if with_metrics {
+                    metrics::add_reply_metric(&reply);
+                }
+                reply
+            })
+            // Needed for type annotation, we can possible remove this once the compiler is
+            // smarter about inference :)
+            .map_err(|e: FTPError| e);
+
+        sink.send_all(&mut strm.compat()).await.unwrap();
     }
 
     fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {

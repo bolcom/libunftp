@@ -61,7 +61,7 @@ impl Filesystem {
     }
 }
 
-impl<U: Send> StorageBackend<U> for Filesystem {
+impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
 

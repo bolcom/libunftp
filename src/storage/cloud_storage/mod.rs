@@ -190,7 +190,7 @@ impl Metadata for ObjectMetadata {
     }
 }
 
-impl<U: Send> StorageBackend<U> for CloudStorage {
+impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 
