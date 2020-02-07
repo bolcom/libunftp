@@ -35,6 +35,7 @@ use futures::{
     prelude::{Future, Stream},
     Sink,
 };
+use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
 use std::path::PathBuf;
@@ -271,7 +272,7 @@ where
         self
     }
 
-    /// Returns a tokio future that is the main ftp process. Should be started in a tokio context.
+    /// Returns a tokio future that is the main ftp process. Should be started in a async runtime context.
     ///
     /// # Example
     ///
@@ -290,20 +291,15 @@ where
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listener<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
+    pub async fn listener<'a>(self, addr: &str) {
         let addr = addr.parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
+        let mut connections = listener.incoming().compat();
 
-        Box::new(
-            listener
-                .incoming()
-                .map_err(|e| warn!("Failed to accept socket: {}", e))
-                .map_err(drop)
-                .for_each(move |socket| {
-                    self.process(socket);
-                    Ok(())
-                }),
-        )
+        use futures03::StreamExt;
+        while let Some(socket) = connections.next().await {
+            self.process(socket.unwrap());
+        }
     }
 
     /// Does TCP processing when a FTP client connects
