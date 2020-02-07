@@ -18,6 +18,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::session::SessionState;
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 use futures::future::Future;
 use futures::sink::Sink;
@@ -33,14 +34,15 @@ impl Pass {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Pass
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session_arc = args.session.clone();
         let session = args.session.lock()?;
         match &session.state {

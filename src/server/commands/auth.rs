@@ -10,8 +10,8 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
-use futures::future::Future;
-use futures::sink::Sink;
+use async_trait::async_trait;
+use futures::{sink::Sink, Future};
 
 // The parameter that can be given to the `AUTH` command.
 #[derive(Debug, PartialEq, Clone)]
@@ -30,18 +30,18 @@ impl Auth {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Auth
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
-                let tx = args.tx.clone();
-                spawn!(tx.send(InternalMsg::SecureControlChannel));
+                spawn!(args.tx.send(InternalMsg::SecureControlChannel));
                 Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
             }
             (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),

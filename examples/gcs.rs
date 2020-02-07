@@ -7,11 +7,12 @@ pub fn main() {
 
     let server = libunftp::Server::new(Box::new(move || {
         libunftp::storage::cloud_storage::CloudStorage::new(
-            "bolcom-dev-unftp-dev-738-unftp-dev",
-            yup_oauth2::service_account_key_from_file(&"/Users/dkosztka/Downloads/bolcom-dev-unftp-dev-738-1379d4070948.json".to_string()).expect("borked"),
+            "your_bucket_name",
+            yup_oauth2::service_account_key_from_file(&"/path/to/key-json/key.json".to_string()).expect("borked"),
         )
     }));
 
     info!("Starting ftp server on {}", addr);
-    tokio::run(server.listener(addr));
+    let mut runtime = tokio02::runtime::Builder::new().build().unwrap();
+    runtime.block_on(server.listener(addr));
 }

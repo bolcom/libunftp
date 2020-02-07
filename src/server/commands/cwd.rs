@@ -12,6 +12,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use std::path::PathBuf;
 
 pub struct Cwd {
@@ -24,14 +25,15 @@ impl Cwd {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Cwd
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         // TODO: We current accept all CWD requests. Consider only allowing
         // this if the directory actually exists and the user has the proper
         // permission.

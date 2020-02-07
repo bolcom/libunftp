@@ -18,21 +18,21 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
-use futures::future::Future;
+use async_trait::async_trait;
 use futures::sink::Sink;
-use tokio;
+use log::warn;
 
 pub struct List;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for List
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        // TODO: Map this error so we can give more meaningful error messages.
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,
@@ -40,7 +40,14 @@ where
                 return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
             }
         };
-        spawn!(tx.send(args.cmd.clone()));
+        let cmd = args.cmd.clone();
+        tokio02::spawn(async move {
+            use futures03::compat::Future01CompatExt;
+            let send_result = tx.send(cmd).compat().await;
+            if send_result.is_err() {
+                warn!("could not notify data channel to respond with LIST");
+            }
+        });
         Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
     }
 }

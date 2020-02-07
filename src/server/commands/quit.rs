@@ -18,21 +18,27 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
-use futures::future::Future;
+use async_trait::async_trait;
 use futures::sink::Sink;
+use futures03::compat::Future01CompatExt;
+use log::warn;
 
 pub struct Quit;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Quit
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let tx = args.tx.clone();
-        spawn!(tx.send(InternalMsg::Quit));
+        let send_res = tx.send(InternalMsg::Quit).compat().await;
+        if send_res.is_err() {
+            warn!("could not send internal message: QUIT");
+        }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
     }
 }

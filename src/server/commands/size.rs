@@ -4,6 +4,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind, Metadata};
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use log::warn;
@@ -20,14 +21,15 @@ impl Size {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Size
 where
     U: Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let start_pos = session.start_pos;
         let storage = Arc::clone(&session.storage);

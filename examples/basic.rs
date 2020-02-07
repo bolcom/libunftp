@@ -7,5 +7,6 @@ pub fn main() {
     let server = libunftp::Server::with_root(std::env::temp_dir());
 
     info!("Starting ftp server on {}", addr);
-    tokio::run(server.listener(addr));
+    let mut runtime = tokio02::runtime::Builder::new().build().unwrap();
+    runtime.block_on(server.listener(addr));
 }

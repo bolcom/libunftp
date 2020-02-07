@@ -31,17 +31,19 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 pub struct Type;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Type
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         Ok(Reply::new(ReplyCode::CommandOkay, "Always in binary mode"))
     }
 }

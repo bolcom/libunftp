@@ -8,8 +8,8 @@ use futures::{Async, Poll};
 use log::debug;
 use rustls;
 use rustls::{NoClientAuth, Session};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio_io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Clone)]
 pub enum SecurityState {

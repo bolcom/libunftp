@@ -1,7 +1,7 @@
 mod uri;
 use uri::GcsUri;
 
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -123,6 +123,16 @@ impl Object {
     }
 }
 
+impl AsAsyncReads for Object {
+    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
+        Box::new(self)
+    }
+
+    fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
+        unimplemented!()
+    }
+}
+
 impl Read for Object {
     fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
         for (i, item) in buffer.iter_mut().enumerate() {
@@ -190,7 +200,7 @@ impl Metadata for ObjectMetadata {
     }
 }
 
-impl<U: Send> StorageBackend<U> for CloudStorage {
+impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 

@@ -1,3 +1,4 @@
+use failure::_core::time::Duration;
 use ftp::types::Result;
 use ftp::FtpStream;
 use pretty_assertions::assert_eq;
@@ -7,16 +8,14 @@ use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::str;
-use tokio::runtime::Runtime;
+use tokio_compat::runtime::Runtime as CompatRuntime;
 
-fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
-    let mut rt = Runtime::new().unwrap();
+fn test_with(addr: &'static str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
+    let rt = CompatRuntime::new().unwrap();
     let server = libunftp::Server::with_root(path.into());
-    let _thread = rt.spawn(server.listener(addr));
-
+    let _thread = rt.spawn_std(server.listener(addr));
+    std::thread::sleep(Duration::new(1, 0));
     test();
-
-    rt.shutdown_now();
 }
 
 fn ensure_login_required<T: Debug>(r: Result<T>) {

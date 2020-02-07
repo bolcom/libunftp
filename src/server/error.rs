@@ -46,6 +46,11 @@ pub enum FTPErrorKind {
 }
 
 impl FTPError {
+    /// Creates a new FTP Error with the specific kind
+    pub fn new(kind: FTPErrorKind) -> Self {
+        FTPError { inner: Context::new(kind) }
+    }
+
     /// Return the inner error kind of this error.
     #[allow(unused)]
     pub fn kind(&self) -> &FTPErrorKind {

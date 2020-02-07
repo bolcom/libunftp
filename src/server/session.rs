@@ -1,15 +1,15 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
+use super::storage::AsAsyncReads;
 use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::sync::mpsc;
-use futures::Sink;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -24,7 +24,7 @@ pub enum SessionState {
 pub struct Session<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
@@ -52,7 +52,7 @@ where
 impl<S, U: Send + Sync + 'static> Session<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
@@ -95,7 +95,13 @@ where
     /// socket: the data socket we'll be working with
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: mpsc::Sender<InternalMsg>) {
+    pub(super) fn process_data(
+        &mut self,
+        user: Arc<Option<U>>,
+        socket: TcpStream,
+        sec_switch: Arc<Mutex<Session<S, U>>>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
+    ) {
         let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
@@ -129,8 +135,10 @@ where
                                 .and_then(|f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                        .map_err(|_e| Error::from(ErrorKind::LocalError))
+                                        .and_then(|_| {
+                                            tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError))
+                                        })
                                         .and_then(|(bytes, _, _)| {
                                             tx.send(InternalMsg::SendData { bytes: bytes as i64 })
                                                 .map_err(|_| Error::from(ErrorKind::LocalError))
@@ -235,7 +243,7 @@ where
 impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
@@ -260,7 +268,7 @@ where
 impl<S, U: Send + Sync> Drop for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     fn drop(&mut self) {

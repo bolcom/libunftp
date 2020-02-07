@@ -165,16 +165,25 @@ where
     }
 }
 
+/// Provides the capability to convert StorageBackend::File instances to AsyncRead instances
+pub trait AsAsyncReads {
+    /// Converts self to a tokio 0.1 AsyncRead instance
+    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync>;
+
+    /// Converts self to a tokio 0.2 AsyncRead instance
+    fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin>;
+}
+
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
 /// [`Server`], e.g. for a [`Filesystem`] or GCP buckets.
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
-pub trait StorageBackend<U: Send> {
+pub trait StorageBackend<U: Sync + Send>: Send + Sync {
     /// The concrete type of the Files returned by this StorageBackend.
-    type File;
+    type File: AsAsyncReads + Sync + Send;
     /// The concrete type of the `Metadata` used by this StorageBackend.
-    type Metadata: Metadata;
+    type Metadata: Metadata + Sync + Send;
 
     /// Tells which optional features are supported by the storage back-end
     /// Return a value with bits set according to the FEATURE_* constants.
@@ -202,7 +211,7 @@ pub trait StorageBackend<U: Send> {
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
             .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
+            .map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other));
 
         Box::new(fut)
     }

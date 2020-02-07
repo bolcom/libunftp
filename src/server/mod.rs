@@ -31,20 +31,17 @@ use crate::auth::{self, AnonymousUser};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use failure::Fail;
-use futures::{
-    prelude::{Future, Stream},
-    sync::mpsc,
-    Sink,
-};
+use futures::prelude::Stream;
+use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::codec::Decoder;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio_codec::Decoder;
-use tokio_io::{AsyncRead, AsyncWrite};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -81,7 +78,7 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// ```rust
 /// use libunftp::Server;
-/// use tokio::runtime::Runtime;
+/// use tokio02::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
 /// let server = Server::with_root("/srv/ftp");
@@ -92,11 +89,11 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-pub struct Server<S, U: Send + Sync>
+pub struct Server<S: Send + Sync, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
 {
-    storage: Box<dyn (Fn() -> S) + Send>,
+    storage: Box<dyn (Fn() -> S) + Sync + Send>,
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
@@ -129,7 +126,7 @@ impl Server<Filesystem, AnonymousUser> {
 impl<S, U: Send + Sync + 'static> Server<S, U>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
@@ -137,7 +134,7 @@ where
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn (Fn() -> S) + Send>) -> Self
+    pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
         auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
@@ -272,13 +269,13 @@ where
         self
     }
 
-    /// Returns a tokio future that is the main ftp process. Should be started in a tokio context.
+    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// use tokio::runtime::Runtime;
+    /// use tokio02::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
     /// let server = Server::with_root("/srv/ftp");
@@ -291,32 +288,33 @@ where
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub fn listener<'a>(self, addr: &str) -> Box<dyn Future<Item = (), Error = ()> + Send + 'a> {
-        let addr = addr.parse().unwrap();
+    pub async fn listener<T: Into<String>>(self, bind_address: T) {
+        let addr = bind_address.into().parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
+        let mut connections = listener.incoming().compat();
 
-        Box::new(
-            listener
-                .incoming()
-                .map_err(|e| warn!("Failed to accept socket: {}", e))
-                .map_err(drop)
-                .for_each(move |socket| {
-                    self.process(socket);
-                    Ok(())
-                }),
-        )
+        use futures03::StreamExt;
+        while let Some(stream) = connections.next().await {
+            match stream {
+                Ok(stream) => {
+                    let result = self.process(stream).await;
+                    if result.is_err() {
+                        warn!("Could not process connection: {:?}", result.err().unwrap())
+                    }
+                }
+                Err(err) => warn!("Could not get next connection stream: {:?}", err),
+            }
+        }
     }
 
     /// Does TCP processing when a FTP client connects
-    fn process(&self, tcp_stream: TcpStream) {
+    async fn process(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
             true
         } else {
             false
         };
-        // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
-        // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
@@ -327,7 +325,7 @@ where
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
-        let local_addr = tcp_stream.local_addr().unwrap();
+        let local_addr = tcp_stream.local_addr()?;
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
@@ -349,46 +347,41 @@ where
         let codec = controlchan::FTPCodec::new();
         let (sink, stream) = codec.framed(tcp_tls_stream).split();
         let idle_session_timeout = self.idle_session_timeout;
-        let task = sink
-            .send(Reply::new(ReplyCode::ServiceReady, self.greeting))
-            .and_then(|sink| sink.flush())
-            .and_then(move |sink| {
-                sink.send_all(
-                    stream
-                        .map(Event::Command)
-                        .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
-                        // Read events until we get an InternalMsg::Quit or the session times out
-                        .take_while(move |event| {
-                            if with_metrics {
-                                metrics::add_event_metric(&event);
-                            };
-                            match *event {
-                                Event::InternalMsg(InternalMsg::Quit) => Ok(false),
-                                _ => Ok(true),
-                            }
-                        })
-                        .and_then(event_handler_chain)
-                        .timeout(idle_session_timeout)
-                        .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
-                        .map(move |reply| {
-                            if with_metrics {
-                                metrics::add_reply_metric(&reply);
-                            }
-                            reply
-                        })
-                        // Needed for type annotation, we can possible remove this once the compiler is
-                        // smarter about inference :)
-                        .map_err(|e: FTPError| e),
-                )
-            })
-            .then(|res| {
-                if let Err(e) = res {
-                    warn!("Failed to process connection: {}", e);
-                }
+        use futures03::compat::Sink01CompatExt;
+        use futures03::SinkExt;
 
-                Ok(())
-            });
-        tokio::spawn(task);
+        let mut sink = sink.sink_compat();
+        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
+        sink.flush().await?;
+
+        let strm = stream
+            .map(Event::Command)
+            .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
+            // Read events until we get an InternalMsg::Quit or the session times out
+            .take_while(move |event| {
+                if with_metrics {
+                    metrics::add_event_metric(&event);
+                };
+                match *event {
+                    Event::InternalMsg(InternalMsg::Quit) => Ok(false),
+                    _ => Ok(true),
+                }
+            })
+            .and_then(event_handler_chain)
+            .timeout(idle_session_timeout)
+            .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
+            .map(move |reply| {
+                if with_metrics {
+                    metrics::add_reply_metric(&reply);
+                }
+                reply
+            })
+            // Needed for type annotation, we can possible remove this once the compiler is
+            // smarter about inference :)
+            .map_err(|e: FTPError| e);
+
+        sink.send_all(&mut strm.compat()).await?;
+        Ok(())
     }
 
     fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
@@ -425,7 +418,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: mpsc::Sender<InternalMsg>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
@@ -453,7 +446,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: mpsc::Sender<InternalMsg>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> Result<Reply, FTPError> {
@@ -508,7 +501,7 @@ where
             Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
-        command.execute(&args)
+        futures03::executor::block_on(async move { command.execute(args).await })
     }
 
     fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
@@ -637,18 +630,18 @@ where
 }
 
 /// Convenience struct to group command args
-pub(crate) struct CommandArgs<S, U: Send + Sync>
+pub(crate) struct CommandArgs<S: Send + Sync, U: Send + Sync + 'static>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::File: crate::storage::AsAsyncReads + Send + Sync,
+    S::Metadata: storage::Metadata + Sync,
 {
     cmd: Command,
     session: Arc<Mutex<Session<S, U>>>,
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-    tx: mpsc::Sender<InternalMsg>,
+    tx: futures::sync::mpsc::Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,
 }

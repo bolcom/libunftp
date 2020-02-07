@@ -4,6 +4,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind, Metadata};
+use async_trait::async_trait;
 use chrono::offset::Utc;
 use chrono::DateTime;
 use futures::future::{self, Future};
@@ -24,14 +25,15 @@ impl Mdtm {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Mdtm
 where
     U: Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send + Sync,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
@@ -57,6 +59,7 @@ where
                     warn!("Failed to get metadata: {}", e);
                 }),
         );
+
         Ok(Reply::none())
     }
 }
