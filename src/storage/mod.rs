@@ -202,7 +202,7 @@ pub trait StorageBackend<U: Send> {
             .map(|file| format!("{}\r\n", file).into_bytes())
             .concat2()
             .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
+            .map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other));
 
         Box::new(fut)
     }

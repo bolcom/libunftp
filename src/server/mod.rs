@@ -33,7 +33,6 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use failure::Fail;
 use futures::{
     prelude::{Future, Stream},
-    sync::mpsc,
     Sink,
 };
 use log::{debug, info, warn};
@@ -41,10 +40,10 @@ use session::{Session, SessionState};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::codec::Decoder;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio_codec::Decoder;
-use tokio_io::{AsyncRead, AsyncWrite};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -129,7 +128,7 @@ impl Server<Filesystem, AnonymousUser> {
 impl<S, U: Send + Sync + 'static> Server<S, U>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
@@ -425,7 +424,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: mpsc::Sender<InternalMsg>,
+        tx: tokio::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
@@ -453,7 +452,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: mpsc::Sender<InternalMsg>,
+        tx: tokio::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> Result<Reply, FTPError> {
@@ -640,7 +639,7 @@ where
 pub(crate) struct CommandArgs<S, U: Send + Sync>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     cmd: Command,
@@ -648,7 +647,7 @@ where
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-    tx: mpsc::Sender<InternalMsg>,
+    tx: tokio::sync::mpsc::Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,
 }

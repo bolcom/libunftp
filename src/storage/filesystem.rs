@@ -1,8 +1,13 @@
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
-use futures::{future, Future, Stream};
+use futures::{future, Future};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+
+use futures03::{
+    future::TryFutureExt,
+    stream::{StreamExt, TryStreamExt},
+};
 
 /// Filesystem contains the PathBuf.
 ///
@@ -73,31 +78,36 @@ impl<U: Send> StorageBackend<U> for Filesystem {
         Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
     }
 
-    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
+    fn list<P: AsRef<Path>>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+    ) -> Box<dyn futures::Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        // TODO: Use `?` operator here when we can use `impl Future`
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e).into_stream()),
         };
 
-        let prefix = self.root.clone();
+        let fut = tokio02::fs::read_dir(full_path)
+            .try_flatten_stream()
+            .try_filter_map(|dir_entry| async move {
+                let meta = dir_entry.metadata().await;
+                let x = match meta {
+                    Ok(stat) => Some(Fileinfo {
+                        path: std::path::PathBuf::from(dir_entry.file_name()),
+                        metadata: stat,
+                    }),
+                    Err(_e) => None,
+                };
+                Ok(x)
+            })
+            .map_err(|_e| Error::from(ErrorKind::PermanentFileNotAvailable));
 
-        let fut = tokio::fs::read_dir(full_path).flatten_stream().filter_map(move |dir_entry| {
-            let prefix = prefix.clone();
-            let path = dir_entry.path();
-            let relpath = path.strip_prefix(prefix).unwrap();
-            let relpath = std::path::PathBuf::from(relpath);
-            match std::fs::symlink_metadata(dir_entry.path()) {
-                Ok(stat) => Some(Fileinfo { path: relpath, metadata: stat }),
-                Err(_) => None,
-            }
-        });
-
-        // TODO: Some more useful error reporting
-        Box::new(fut.map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+        let fut01 = fut.boxed().compat();
+        Box::new(fut01)
     }
 
     fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
@@ -143,7 +153,7 @@ impl<U: Send> StorageBackend<U> for Filesystem {
             .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
             .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
             .map(|f| f.0)
-            .and_then(|f| tokio_io::io::copy(bytes, f))
+            .and_then(|f| tokio::io::copy(bytes, f))
             .map(|(n, _, _)| n)
             // TODO: Some more useful error reporting
             .map_err(|error| match error.kind() {

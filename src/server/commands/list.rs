@@ -28,7 +28,7 @@ impl<S, U> Cmd<S, U> for List
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
@@ -40,7 +40,7 @@ where
                 return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
             }
         };
-        spawn!(tx.send(args.cmd.clone()));
+        tokio::spawn(tx.send(args.cmd.clone()).map(|_| ()).map_err(|_| ()));
         Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
     }
 }

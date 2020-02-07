@@ -12,7 +12,7 @@ impl<S, U> Cmd<S, U> for Feat
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {

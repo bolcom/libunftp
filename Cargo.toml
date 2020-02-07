@@ -24,8 +24,8 @@ edition = "2018"
 regex = "1"
 futures = "0.1"
 tokio = "0.1"
-tokio-codec = "0.1"
-tokio-io = "0.1"
+futures03 = {package = "futures", version = "0.3", features = ["compat", "io-compat"]}
+tokio02 = { package="tokio", version = "0.2", features = ["fs", "io-util", "macros", "stream"]}
 rustls = "0.15.2"
 bytes = "0.4"
 lazy_static = "1.3.0"

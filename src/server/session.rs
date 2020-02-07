@@ -4,12 +4,12 @@ use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::sync::mpsc;
 use futures::Sink;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -24,7 +24,7 @@ pub enum SessionState {
 pub struct Session<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
@@ -52,7 +52,7 @@ where
 impl<S, U: Send + Sync + 'static> Session<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
@@ -123,14 +123,14 @@ where
                         let path = cwd.join(path);
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
-                        tokio::spawn(
+                        tokio::spawn(futures::future::lazy(move || {
                             storage
                                 .get(&user, path, start_pos)
                                 .and_then(|f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                        .and_then(|_| tokio_io::io::copy(f, tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                        .map_err(|_e| Error::from(ErrorKind::LocalError))
+                                        .and_then(|_| tokio::io::copy(f, tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError)))
                                         .and_then(|(bytes, _, _)| {
                                             tx.send(InternalMsg::SendData { bytes: bytes as i64 })
                                                 .map_err(|_| Error::from(ErrorKind::LocalError))
@@ -140,8 +140,8 @@ where
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
-                                }),
-                        );
+                                })
+                        }));
                     }
                     Some(ExternalCommand(Command::Stor { path })) => {
                         let path = cwd.join(path);
@@ -235,7 +235,7 @@ where
 impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
@@ -260,7 +260,7 @@ where
 impl<S, U: Send + Sync> Drop for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn drop(&mut self) {

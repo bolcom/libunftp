@@ -1,7 +1,7 @@
 use super::commands::Command;
 use crate::server::reply::ReplyCode;
 use crate::storage::Error;
-use futures::sync::mpsc;
+use tokio::sync::mpsc;
 
 // Commands that can be send to the data channel.
 #[derive(PartialEq)]

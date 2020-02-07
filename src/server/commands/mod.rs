@@ -96,7 +96,7 @@ pub use user::User;
 pub(crate) trait Cmd<S, U: Send + Sync>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;

@@ -12,10 +12,10 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use futures::stream::Stream;
-use futures::sync::mpsc;
 use log::{error, warn};
 use rand::Rng;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 
 const BIND_RETRIES: u8 = 10;
 
@@ -25,7 +25,7 @@ impl<S, U> Cmd<S, U> for Pasv
 where
     U: 'static + Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio_io::AsyncRead + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
