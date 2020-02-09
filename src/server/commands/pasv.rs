@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use log::{error, warn};
 use rand::Rng;
-use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 const BIND_RETRIES: u8 = 10;
@@ -79,25 +78,27 @@ where
         }
 
         let session = args.session.clone();
-        tokio::spawn(Box::new(
-            listener
-                .incoming()
-                .take(1)
-                .map_err(|e| warn!("Failed to accept data socket: {:?}", e))
-                .for_each(move |socket| {
-                    let tx = tx.clone();
-                    let session2 = session.clone();
-                    let mut session2 = session2.lock().unwrap_or_else(|res| {
-                        // TODO: Send signal to `tx` here, so we can handle the
-                        // error
-                        error!("session lock() result: {}", res);
-                        panic!()
-                    });
-                    let user = session2.user.clone();
-                    session2.process_data(user, socket, session.clone(), tx);
-                    Ok(())
-                }),
-        ));
+
+        use futures03::compat::Stream01CompatExt;
+        use futures03::StreamExt;
+        use tokio::net::TcpListener;
+
+        tokio02::spawn(async move {
+            let mut strm = listener.incoming().take(1).compat();
+
+            if let Some(socket) = strm.next().await {
+                let tx = tx.clone();
+                let session2 = session.clone();
+                let mut session2 = session2.lock().unwrap_or_else(|res| {
+                    // TODO: Send signal to `tx` here, so we can handle the
+                    // error
+                    error!("session lock() result: {}", res);
+                    panic!()
+                });
+                let user = session2.user.clone();
+                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
+            }
+        });
 
         Ok(Reply::new_with_string(
             ReplyCode::EnteringPassiveMode,

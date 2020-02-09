@@ -19,20 +19,18 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
 use futures::sink::Sink;
 use tokio;
-use futures03::compat::Future01CompatExt;
 
 pub struct List;
 
 #[async_trait]
 impl<S, U> Cmd<S, U> for List
-    where
-        U: Send + Sync + 'static,
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
-        S::File: tokio::io::AsyncRead + Send,
-        S::Metadata: storage::Metadata,
+where
+    U: Send + Sync + 'static,
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: tokio::io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
