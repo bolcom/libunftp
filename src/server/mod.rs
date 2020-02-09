@@ -494,7 +494,7 @@ where
             Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
-        command.execute(&args)
+        command.execute(args)
     }
 
     fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {

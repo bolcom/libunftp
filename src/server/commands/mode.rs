@@ -48,7 +48,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.params {
             ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
             _ => Ok(Reply::new(

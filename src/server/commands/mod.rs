@@ -99,7 +99,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
+    fn execute(&self, args: CommandArgs<S, U>) -> result::Result<Reply, FTPError>;
 }
 
 #[derive(Debug, PartialEq, Clone)]

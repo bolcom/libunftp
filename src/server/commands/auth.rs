@@ -37,7 +37,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
                 let tx = args.tx.clone();

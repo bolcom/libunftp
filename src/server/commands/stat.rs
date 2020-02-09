@@ -47,7 +47,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.path {
             None => {
                 let text = vec!["Status:", "Powered by libunftp"];

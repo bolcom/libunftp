@@ -18,7 +18,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let tx = args.tx.clone();
         let session = args.session.lock()?;
         if session.cmd_tls {

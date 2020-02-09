@@ -27,7 +27,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let start_pos = session.start_pos;
         let storage = Arc::clone(&session.storage);

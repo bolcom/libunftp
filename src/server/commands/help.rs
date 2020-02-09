@@ -20,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let text = vec!["Help:", "Powered by libunftp"];
         // TODO: Add useful information here like operating server type and app name.
         Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))

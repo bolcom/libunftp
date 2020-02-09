@@ -33,7 +33,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         // ALLO is obsolete and we'll just ignore it.
         Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
     }

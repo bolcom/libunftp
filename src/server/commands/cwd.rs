@@ -31,7 +31,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         // TODO: We current accept all CWD requests. Consider only allowing
         // this if the directory actually exists and the user has the proper
         // permission.

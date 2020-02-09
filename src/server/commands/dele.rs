@@ -36,7 +36,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());

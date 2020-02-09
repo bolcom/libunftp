@@ -15,7 +15,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut feat_text = vec![" SIZE", " MDTM", "UTF8"];
         // Add the features. According to the spec each feature line must be
         // indented by a space.

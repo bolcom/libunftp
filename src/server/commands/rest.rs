@@ -29,7 +29,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         if args.storage_features & storage::FEATURE_RESTART == 0 {
             return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
         }

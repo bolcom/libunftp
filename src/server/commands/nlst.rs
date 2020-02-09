@@ -31,7 +31,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,

@@ -31,7 +31,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: &CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         Ok(Reply::new(
             ReplyCode::CommandNotImplemented,
             "ACTIVE mode is not supported - use PASSIVE instead",
