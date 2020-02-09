@@ -5,6 +5,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 // The parameter that can be given to the `PROT` command.
 #[derive(Debug, PartialEq, Clone)]
@@ -29,6 +30,7 @@ impl Prot {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Prot
 where
     U: Send + Sync,
@@ -36,7 +38,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match (args.tls_configured, self.param.clone()) {
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock()?;

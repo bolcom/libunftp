@@ -17,6 +17,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 /// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
 /// only support the `Stream` mode. We still have to support the command itself for compatibility
@@ -41,6 +42,7 @@ impl Mode {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Mode
 where
     U: Send + Sync + 'static,
@@ -48,7 +50,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.params {
             ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
             _ => Ok(Reply::new(

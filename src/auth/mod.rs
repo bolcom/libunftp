@@ -24,7 +24,7 @@
 use futures::Future;
 
 /// Async authenticator interface (error reporting not supported yet)
-pub trait Authenticator<U> {
+pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.
     fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
 }

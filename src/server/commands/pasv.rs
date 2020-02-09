@@ -11,6 +11,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::stream::Stream;
 use log::{error, warn};
 use rand::Rng;
@@ -21,6 +22,7 @@ const BIND_RETRIES: u8 = 10;
 
 pub struct Pasv;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Pasv
 where
     U: 'static + Send + Sync,
@@ -28,7 +30,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,

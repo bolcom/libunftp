@@ -4,6 +4,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::session::SessionState;
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use bytes::Bytes;
 
 pub struct User {
@@ -16,6 +17,7 @@ impl User {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for User
 where
     U: Send + Sync,
@@ -23,7 +25,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         match session.state {
             SessionState::New | SessionState::WaitPass => {

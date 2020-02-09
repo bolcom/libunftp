@@ -11,6 +11,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 pub struct Rest {
     offset: u64,
@@ -22,6 +23,7 @@ impl Rest {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Rest
 where
     U: Send + Sync,
@@ -29,7 +31,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         if args.storage_features & storage::FEATURE_RESTART == 0 {
             return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
         }

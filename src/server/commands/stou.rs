@@ -5,6 +5,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use uuid::Uuid;
@@ -12,6 +13,7 @@ use uuid::Uuid;
 // TODO: Write functional test for STOU command.
 pub struct Stou;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Stou
 where
     U: Send + Sync + 'static,
@@ -19,7 +21,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,

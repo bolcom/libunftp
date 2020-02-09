@@ -10,12 +10,14 @@ use crate::server::error::{FTPError, FTPErrorKind};
 use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use tokio;
 
 pub struct Retr;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Retr
 where
     U: Send + Sync + 'static,
@@ -23,7 +25,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,

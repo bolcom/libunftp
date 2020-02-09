@@ -17,6 +17,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 /// The parameter the can be given to the `STRU` command. It is used to set the file `STRU`cture to
 /// the given structure. This stems from a time where it was common for some operating
@@ -44,6 +45,7 @@ impl Stru {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Stru
 where
     U: Send + Sync + 'static,
@@ -51,7 +53,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.params {
             StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
             _ => Ok(Reply::new(

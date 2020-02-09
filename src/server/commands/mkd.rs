@@ -12,6 +12,7 @@ use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use crate::storage::{Error, ErrorKind};
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use log::warn;
@@ -28,6 +29,7 @@ impl Mkd {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Mkd
 where
     U: Send + Sync + 'static,
@@ -35,7 +37,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());

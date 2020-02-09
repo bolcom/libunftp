@@ -6,11 +6,13 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 
 pub struct Ccc;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Ccc
 where
     U: Send + Sync + 'static,
@@ -18,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let tx = args.tx.clone();
         let session = args.session.lock()?;
         if session.cmd_tls {

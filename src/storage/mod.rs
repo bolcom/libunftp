@@ -170,11 +170,11 @@ where
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
-pub trait StorageBackend<U: Sync + Send> {
+pub trait StorageBackend<U: Sync + Send>: Send + Sync {
     /// The concrete type of the Files returned by this StorageBackend.
-    type File;
+    type File: Sync + Send;
     /// The concrete type of the `Metadata` used by this StorageBackend.
-    type Metadata: Metadata;
+    type Metadata: Metadata + Sync + Send;
 
     /// Tells which optional features are supported by the storage back-end
     /// Return a value with bits set according to the FEATURE_* constants.

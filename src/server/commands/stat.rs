@@ -23,6 +23,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind};
+use async_trait::async_trait;
 use bytes::Bytes;
 use futures::future::{self, Future};
 use futures::sink::Sink;
@@ -40,6 +41,7 @@ impl Stat {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Stat
 where
     U: Send + Sync,
@@ -47,7 +49,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.path {
             None => {
                 let text = vec!["Status:", "Powered by libunftp"];

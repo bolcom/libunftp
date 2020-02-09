@@ -12,6 +12,7 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 /// The parameters that can be given to the `OPTS` command, specifying the option the client wants
 /// to set.
@@ -31,6 +32,7 @@ impl Opts {
     }
 }
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Opts
 where
     U: Send + Sync + 'static,
@@ -38,7 +40,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         match &self.option {
             Opt::UTF8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
             Opt::UTF8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),

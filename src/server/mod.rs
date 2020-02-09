@@ -89,7 +89,7 @@ impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 ///
 /// [`Authenticator`]: ../auth/trait.Authenticator.html
 /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-pub struct Server<S, U: Send + Sync>
+pub struct Server<S: Send + Sync, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
 {
@@ -401,7 +401,7 @@ where
 
     fn handle_with_logging(next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| {
-            info!("Processing event {:?}", event);
+            println!("Processing event {:?}", event);
             next(event)
         }
     }
@@ -454,6 +454,8 @@ where
             storage_features,
         };
 
+        println!("EXECUTING CMD!!!!!!!!!!!!!!!!!!!!: {:?}", cmd.clone());
+
         let command: Box<dyn Cmd<S, U>> = match cmd {
             Command::User { username } => Box::new(commands::User::new(username)),
             Command::Pass { password } => Box::new(commands::Pass::new(password)),
@@ -494,7 +496,9 @@ where
             Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
-        command.execute(args)
+        let reply = futures03::executor::block_on(async move { command.execute(args).await });
+        println!("GOT A REPLY!!!!!!!!!!!!!!!!!!!!: {:?}", reply);
+        reply
     }
 
     fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
@@ -526,7 +530,9 @@ where
             // this closure is called (because we have to close the connection).
             Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
             SecureControlChannel => {
+                println!("GOING TO LOCK!!!!!");
                 let mut session = session.lock()?;
+                println!("LOCKED, SETTING TLS TRUE");
                 session.cmd_tls = true;
                 Ok(Reply::none())
             }
@@ -623,11 +629,11 @@ where
 }
 
 /// Convenience struct to group command args
-pub(crate) struct CommandArgs<S, U: Send + Sync>
+pub(crate) struct CommandArgs<S: Send + Sync, U: Send + Sync + 'static>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::File: tokio::io::AsyncRead + Send + Sync,
+    S::Metadata: storage::Metadata + Sync,
 {
     cmd: Command,
     session: Arc<Mutex<Session<S, U>>>,

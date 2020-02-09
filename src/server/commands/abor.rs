@@ -14,11 +14,13 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 
 pub struct Abor;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Abor
 where
     U: Send + Sync + 'static,
@@ -26,7 +28,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         match session.data_abort_tx.take() {
             Some(tx) => {

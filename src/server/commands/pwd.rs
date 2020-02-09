@@ -8,9 +8,11 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 
 pub struct Pwd;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for Pwd
 where
     U: Send + Sync + 'static,
@@ -18,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock()?;
         // TODO: properly escape double quotes in `cwd`
         Ok(Reply::new_with_string(

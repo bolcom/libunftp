@@ -18,12 +18,15 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use tokio;
+use futures03::compat::Future01CompatExt;
 
 pub struct List;
 
+#[async_trait]
 impl<S, U> Cmd<S, U> for List
 where
     U: Send + Sync + 'static,
@@ -31,8 +34,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        // TODO: Map this error so we can give more meaningful error messages.
+    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,

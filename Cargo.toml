@@ -21,6 +21,7 @@ categories = ["network-programming"]
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.22"
 regex = "1"
 futures = "0.1"
 tokio = "0.1"
