@@ -43,7 +43,10 @@ where
         let cmd = args.cmd.clone();
         tokio02::spawn(async move {
             use futures03::compat::Future01CompatExt;
-            tx.send(cmd).compat().await;
+            let send_result = tx.send(cmd).compat().await;
+            if send_result.is_err() {
+                warn!("could not notify data channel to respond with LIST");
+            }
         });
         Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
     }

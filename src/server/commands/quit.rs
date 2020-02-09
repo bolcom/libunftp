@@ -19,8 +19,9 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
 use futures::sink::Sink;
+use futures03::compat::Future01CompatExt;
+use log::warn;
 
 pub struct Quit;
 
@@ -34,7 +35,10 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let tx = args.tx.clone();
-        spawn!(tx.send(InternalMsg::Quit));
+        let send_res = tx.send(InternalMsg::Quit).compat().await;
+        if send_res.is_err() {
+            warn!("could not send internal message: QUIT");
+        }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
     }
 }
