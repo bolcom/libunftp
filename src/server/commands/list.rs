@@ -28,11 +28,11 @@ pub struct List;
 
 #[async_trait]
 impl<S, U> Cmd<S, U> for List
-where
-    U: Send + Sync + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    where
+        U: Send + Sync + 'static,
+        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        S::File: tokio::io::AsyncRead + Send,
+        S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock()?;
@@ -42,7 +42,11 @@ where
                 return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
             }
         };
-        tokio::spawn(tx.send(args.cmd.clone()).map(|_| ()).map_err(|_| ()));
+        let cmd = args.cmd.clone();
+        tokio02::spawn(async move {
+            use futures03::compat::Future01CompatExt;
+            tx.send(cmd).compat().await;
+        });
         Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
     }
 }
