@@ -13,7 +13,7 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::stream::Stream;
-use log::{error, warn};
+use log::error;
 use rand::Rng;
 use tokio::sync::mpsc;
 

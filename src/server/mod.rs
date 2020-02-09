@@ -33,7 +33,7 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use failure::Fail;
 use futures::prelude::Stream;
 use futures03::compat::Stream01CompatExt;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use session::{Session, SessionState};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

@@ -74,8 +74,14 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(err) => return Box::new(future::err(err)),
         };
-        // TODO: Some more useful error reporting
-        Box::new(tokio::fs::symlink_metadata(full_path).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+
+        use futures03::FutureExt;
+        let fut01 = tokio02::fs::symlink_metadata(full_path)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .boxed()
+            .compat();
+
+        Box::new(fut01)
     }
 
     fn list<P: AsRef<Path>>(

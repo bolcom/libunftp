@@ -39,6 +39,7 @@ where
         let path = session.cwd.join(self.path.clone());
         let tx_success = args.tx.clone();
         let tx_fail = args.tx.clone();
+        let user = session.user.clone();
 
         tokio::spawn(
             storage
@@ -59,6 +60,7 @@ where
                     warn!("Failed to get metadata: {}", e);
                 }),
         );
+
         Ok(Reply::none())
     }
 }
