@@ -33,8 +33,16 @@ where
         let storage = Arc::clone(&session.storage);
         match session.rename_from.take() {
             Some(from) => {
-                spawn!(storage.rename(&session.user, from, session.cwd.join(self.path.clone())));
-                Ok(Reply::new(ReplyCode::FileActionOkay, "sure, it shall be known"))
+                tokio::spawn(
+                    storage
+                        .rename(&session.user, from, session.cwd.join(self.path.clone()))
+                        .map(|_| ())
+                        .map_err(|e| {
+                            println!("Error: {:?}", e);
+                            ()
+                        }),
+                );
+                Ok(Reply::new(ReplyCode::FileActionOkay, "Renamed"))
             }
             None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
         }

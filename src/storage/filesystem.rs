@@ -230,17 +230,35 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Err(e) => return Box::new(future::err(e)),
         };
 
-        let from_rename = from.clone(); // Alright, borrow checker, have it your way.
-        let fut = tokio::fs::symlink_metadata(from)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .and_then(move |metadata| {
-                if metadata.is_file() {
-                    future::Either::A(tokio::fs::rename(from_rename, to).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-                } else {
-                    future::Either::B(future::err(Error::from(ErrorKind::PermanentFileNotAvailable)))
+        let from_rename = from.clone();
+
+        let fut01 = async move {
+            let r = tokio02::fs::symlink_metadata(from).await;
+            match r {
+                Ok(metadata) => {
+                    if metadata.is_file() {
+                        let r = tokio02::fs::rename(from_rename, to).await;
+                        match r {
+                            Ok(_) => Ok(()),
+                            Err(e) => {
+                                warn!("could not rename file: {:?}", e);
+                                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                            }
+                        }
+                    } else {
+                        Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                    }
                 }
-            });
-        Box::new(fut)
+                Err(e) => {
+                    warn!("could not get file metadata: {:?}", e);
+                    Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                }
+            }
+        }
+        .boxed()
+        .compat();
+
+        Box::new(fut01)
     }
 }
 
