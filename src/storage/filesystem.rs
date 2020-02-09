@@ -190,11 +190,16 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
-        Box::new(tokio::fs::remove_dir(full_path).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        }))
+        let fut01 = tokio02::fs::remove_dir(full_path)
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+                _ => Error::from(ErrorKind::LocalError),
+            })
+            .boxed()
+            .compat();
+
+        Box::new(fut01)
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
