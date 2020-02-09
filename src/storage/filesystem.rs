@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use futures03::{
-    future::TryFutureExt,
+    future::{FutureExt, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
 
@@ -75,7 +75,6 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Err(err) => return Box::new(future::err(err)),
         };
 
-        use futures03::FutureExt;
         let fut01 = tokio02::fs::symlink_metadata(full_path)
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             .boxed()
@@ -175,11 +174,15 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(_) => return Box::new(future::err(Error::from(ErrorKind::PermanentFileNotAvailable))),
         };
-        Box::new(tokio::fs::remove_file(full_path).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        }))
+        let fut01 = tokio02::fs::remove_file(full_path)
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+                _ => Error::from(ErrorKind::LocalError),
+            })
+            .boxed()
+            .compat();
+        Box::new(fut01)
     }
 
     fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
