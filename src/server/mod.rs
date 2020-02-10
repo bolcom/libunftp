@@ -411,7 +411,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: tokio::sync::mpsc::Sender<InternalMsg>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
@@ -439,7 +439,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: tokio::sync::mpsc::Sender<InternalMsg>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> Result<Reply, FTPError> {
@@ -640,7 +640,7 @@ where
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-    tx: tokio::sync::mpsc::Sender<InternalMsg>,
+    tx: futures::sync::mpsc::Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,
 }

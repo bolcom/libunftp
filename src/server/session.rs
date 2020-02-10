@@ -4,7 +4,6 @@ use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::Sink;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -95,7 +94,13 @@ where
     /// socket: the data socket we'll be working with
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: mpsc::Sender<InternalMsg>) {
+    pub(super) fn process_data(
+        &mut self,
+        user: Arc<Option<U>>,
+        socket: TcpStream,
+        sec_switch: Arc<Mutex<Session<S, U>>>,
+        tx: futures::sync::mpsc::Sender<InternalMsg>,
+    ) {
         let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
@@ -123,7 +128,7 @@ where
                         let path = cwd.join(path);
                         let tx_sending = tx.clone();
                         let tx_error = tx.clone();
-                        tokio::spawn(futures::future::lazy(move || {
+                        tokio::spawn(
                             storage
                                 .get(&user, path, start_pos)
                                 .and_then(|f| {
@@ -140,8 +145,8 @@ where
                                 .map(|_| ())
                                 .map_err(|e| {
                                     warn!("Failed to send file: {:?}", e);
-                                })
-                        }));
+                                }),
+                        );
                     }
                     Some(ExternalCommand(Command::Stor { path })) => {
                         let path = cwd.join(path);

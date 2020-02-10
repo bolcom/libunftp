@@ -148,25 +148,27 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        use futures::future::IntoFuture;
+        use futures03::compat::AsyncRead01CompatExt;
+        use tokio02::fs::OpenOptions;
+        use tokio02util::compat::FuturesAsyncReadCompatExt;
 
-        let file = std::fs::OpenOptions::new().write(true).create(true).open(full_path);
+        let fut01 = async move {
+            let mut file: tokio02::fs::File = OpenOptions::new().write(true).create(true).open(full_path).await?;
+            file.set_len(start_pos).await?;
+            file.seek(std::io::SeekFrom::Start(start_pos)).await?;
+            let mut b = FuturesAsyncReadCompatExt::compat(bytes.compat());
+            let bytes_copied = tokio02::io::copy(&mut b, &mut file).await?;
+            Ok(bytes_copied)
+        }
+        .map_err(|error: std::io::Error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
+        })
+        .boxed()
+        .compat();
 
-        let fut = file
-            .into_future()
-            .map(tokio::fs::file::File::from_std)
-            .and_then(move |mut file| file.poll_set_len(start_pos).map(|_| file))
-            .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
-            .map(|f| f.0)
-            .and_then(|f| tokio::io::copy(bytes, f))
-            .map(|(n, _, _)| n)
-            // TODO: Some more useful error reporting
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            });
-        Box::new(fut)
+        Box::new(fut01)
     }
 
     fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
