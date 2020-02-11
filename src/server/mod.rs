@@ -307,8 +307,6 @@ where
         } else {
             false
         };
-        // FIXME: instead of manually cloning fields here, we could .clone() the whole server structure itself for each new connection
-        // TODO: I think we can do with least one `Arc` less...
         let storage = Arc::new((self.storage)());
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();

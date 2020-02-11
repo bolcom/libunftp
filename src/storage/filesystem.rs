@@ -62,7 +62,7 @@ impl Filesystem {
 }
 
 impl<U: Send + Sync> StorageBackend<U> for Filesystem {
-    type File = tokio::fs::File;
+    type File = tokio02::fs::File;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -115,22 +115,28 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio::fs::File, Error = Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio02::fs::File, Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
-        // TODO: Some more useful error reporting
-        Box::new(
-            tokio::fs::file::File::open(full_path)
-                .and_then(move |file| file.seek(std::io::SeekFrom::Start(start_pos)))
-                .map(|res| res.0)
-                .map_err(|error| match error.kind() {
-                    std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                    std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                    _ => Error::from(ErrorKind::LocalError),
-                }),
-        )
+
+        let fut01 = async {
+            let file = tokio02::fs::File::open(full_path).await?;
+            if start_pos > 0 {
+                file.seek(std::io::SeekFrom::Start(start_pos)).await?;
+            }
+            Ok(file)
+        }
+        .map_err(|error: std::io::Error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::from(ErrorKind::LocalError),
+        })
+        .boxed()
+        .compat();
+
+        Box::new(fut01)
     }
 
     fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
