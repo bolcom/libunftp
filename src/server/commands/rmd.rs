@@ -34,7 +34,7 @@ impl<S, U> Cmd<S, U> for Rmd
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {

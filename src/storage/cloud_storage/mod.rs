@@ -1,7 +1,7 @@
 mod uri;
 use uri::GcsUri;
 
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -120,6 +120,12 @@ pub struct Object {
 impl Object {
     fn new(data: Vec<u8>) -> Object {
         Object { data, index: 0 }
+    }
+}
+
+impl AsAsyncReads for Object {
+    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
+        Box::new(self)
     }
 }
 

@@ -1,5 +1,6 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
+use super::storage::AsAsyncReads;
 use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
@@ -23,7 +24,7 @@ pub enum SessionState {
 pub struct Session<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
@@ -51,7 +52,7 @@ where
 impl<S, U: Send + Sync + 'static> Session<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     pub(super) fn with_storage(storage: Arc<S>) -> Self {
@@ -135,7 +136,9 @@ where
                                     tx_sending
                                         .send(InternalMsg::SendingData)
                                         .map_err(|_e| Error::from(ErrorKind::LocalError))
-                                        .and_then(|_| tokio::io::copy(f, tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError)))
+                                        .and_then(|_| {
+                                            tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError))
+                                        })
                                         .and_then(|(bytes, _, _)| {
                                             tx.send(InternalMsg::SendData { bytes: bytes as i64 })
                                                 .map_err(|_| Error::from(ErrorKind::LocalError))
@@ -240,7 +243,7 @@ where
 impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     fn which_state(&self, channel: u8) -> SecurityState {
@@ -265,7 +268,7 @@ where
 impl<S, U: Send + Sync> Drop for Session<S, U>
 where
     S: storage::StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     fn drop(&mut self) {

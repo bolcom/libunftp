@@ -1,4 +1,4 @@
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use futures::{future, Future};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -8,6 +8,27 @@ use futures03::{
     future::{FutureExt, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
+
+/// Object returned by the get method of the storage implementation
+pub struct Object {
+    inner: tokio02::fs::File,
+}
+
+impl Object {
+    /// dfdfd
+    pub fn new(inner: tokio02::fs::File) -> Object {
+        Object { inner }
+    }
+}
+
+impl AsAsyncReads for Object {
+    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
+        use futures03::AsyncReadExt;
+        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+        let futures03AsyncRead = self.inner.compat();
+        Box::new(futures03AsyncRead.compat())
+    }
+}
 
 /// Filesystem contains the PathBuf.
 ///
@@ -62,7 +83,7 @@ impl Filesystem {
 }
 
 impl<U: Send + Sync> StorageBackend<U> for Filesystem {
-    type File = tokio02::fs::File;
+    type File = Object;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -115,18 +136,18 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = tokio02::fs::File, Error = Error> + Send> {
+    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Box::new(future::err(e)),
         };
 
-        let fut01 = async {
-            let file = tokio02::fs::File::open(full_path).await?;
+        let fut01 = async move {
+            let mut file = tokio02::fs::File::open(full_path).await?;
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(file)
+            Ok(Object::new(file))
         }
         .map_err(|error: std::io::Error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),

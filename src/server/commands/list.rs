@@ -20,7 +20,6 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::sink::Sink;
-use tokio;
 
 pub struct List;
 
@@ -29,7 +28,7 @@ impl<S, U> Cmd<S, U> for List
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {

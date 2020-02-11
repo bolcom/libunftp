@@ -165,6 +165,12 @@ where
     }
 }
 
+/// Provides the capability to convert StorageBackend::File instances to AsyncRead instances
+pub trait AsAsyncReads {
+    /// Converts self to a tokio 0.1 AsyncRead instance
+    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync>;
+}
+
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
 /// [`Server`], e.g. for a [`Filesystem`] or GCP buckets.
 ///
@@ -172,7 +178,7 @@ where
 /// [`filesystem`]: ./struct.Filesystem.html
 pub trait StorageBackend<U: Sync + Send>: Send + Sync {
     /// The concrete type of the Files returned by this StorageBackend.
-    type File: Sync + Send;
+    type File: AsAsyncReads + Sync + Send;
     /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata: Metadata + Sync + Send;
 
