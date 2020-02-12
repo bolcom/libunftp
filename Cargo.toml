@@ -25,7 +25,6 @@ async-trait = "0.1.22"
 regex = "1"
 futures = "0.1"
 tokio = "0.1"
-mio = "0.6"
 futures03 = {package = "futures", version = "0.3", features = ["compat", "io-compat"]}
 tokio02 = { package="tokio", version = "0.2", features = ["fs", "io-util", "macros", "stream"]}
 tokio02util = { package="tokio-util", path="./vendor/tokio-util", features=["compat"] }
