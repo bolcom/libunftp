@@ -294,13 +294,21 @@ where
         let mut connections = listener.incoming().compat();
 
         use futures03::StreamExt;
-        while let Some(socket) = connections.next().await {
-            self.process(socket.unwrap()).await;
+        while let Some(stream) = connections.next().await {
+            match stream {
+                Ok(stream) => {
+                    let result = self.process(stream).await;
+                    if result.is_err() {
+                        warn!("Could not process connection: {:?}", result.err().unwrap())
+                    }
+                }
+                Err(err) => warn!("Could not get next connection stream: {:?}", err),
+            }
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn process(&self, tcp_stream: TcpStream) {
+    async fn process(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
             true
@@ -317,7 +325,7 @@ where
         let (tx, rx) = chancomms::create_internal_msg_channel();
         let passive_addrs = self.passive_addrs.clone();
 
-        let local_addr = tcp_stream.local_addr().unwrap();
+        let local_addr = tcp_stream.local_addr()?;
 
         let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
@@ -343,8 +351,8 @@ where
         use futures03::SinkExt;
 
         let mut sink = sink.sink_compat();
-        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await.unwrap();
-        sink.flush().await.unwrap();
+        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
+        sink.flush().await?;
 
         let strm = stream
             .map(Event::Command)
@@ -372,7 +380,8 @@ where
             // smarter about inference :)
             .map_err(|e: FTPError| e);
 
-        sink.send_all(&mut strm.compat()).await.unwrap();
+        sink.send_all(&mut strm.compat()).await?;
+        Ok(())
     }
 
     fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
