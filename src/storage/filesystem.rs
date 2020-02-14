@@ -120,16 +120,18 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
 
         let fut = tokio02::fs::read_dir(full_path)
             .try_flatten_stream()
-            .try_filter_map(|dir_entry| async move {
-                let meta = dir_entry.metadata().await;
-                let x = match meta {
-                    Ok(stat) => Some(Fileinfo {
-                        path: std::path::PathBuf::from(dir_entry.file_name()),
-                        metadata: stat,
-                    }),
-                    Err(_e) => None,
-                };
-                Ok(x)
+            .try_filter_map(|dir_entry| {
+                async move {
+                    let meta = dir_entry.metadata().await;
+                    let x = match meta {
+                        Ok(stat) => Some(Fileinfo {
+                            path: std::path::PathBuf::from(dir_entry.file_name()),
+                            metadata: stat,
+                        }),
+                        Err(_e) => None,
+                    };
+                    Ok(x)
+                }
             })
             .map_err(|_e| Error::from(ErrorKind::PermanentFileNotAvailable));
 
@@ -358,6 +360,8 @@ mod tests {
 
     #[test]
     fn fs_list() {
+        use futures::stream::Stream;
+
         // Create a temp directory and create some files in it
         let root = tempfile::tempdir().unwrap();
         let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
@@ -395,7 +399,6 @@ mod tests {
         // Create a filesystem StorageBackend with our root dir
         let fs = Filesystem::new(&root.path());
 
-        // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
         let my_list = rt.block_on(fs.list_fmt(&Some(AnonymousUser {}), "/")).unwrap();
 
@@ -420,10 +423,10 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio::runtime::Runtime::new().unwrap();
-        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
+        let my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(future::lazy(move || {
-            tokio::prelude::AsyncRead::read_to_end(&mut my_file, &mut my_content).unwrap();
+            tokio::prelude::AsyncRead::read_to_end(&mut my_file.as_tokio01_async_read(), &mut my_content).unwrap();
             assert_eq!(data.as_ref(), &*my_content);
             // We need a `Err` branch because otherwise the compiler can't infer the `E` type,
             // and I'm not sure where/how to annotate it.
