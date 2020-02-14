@@ -20,6 +20,7 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::sink::Sink;
+use log::warn;
 
 pub struct List;
 

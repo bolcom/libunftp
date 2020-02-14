@@ -1,5 +1,6 @@
 use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use futures::{future, Future};
+use log::warn;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
