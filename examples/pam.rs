@@ -11,9 +11,9 @@ pub fn main() {
     info!("Starting ftp server on {}", addr);
     let authenticator = pam::PAMAuthenticator::new("hello");
 
-    tokio::run(
-        libunftp::Server::with_root(std::env::temp_dir())
-            .authenticator(Arc::new(authenticator))
-            .listener(addr),
-    );
+    let server = libunftp::Server::with_root(std::env::temp_dir())
+            .authenticator(Arc::new(authenticator));
+
+    let mut runtime = tokio02::runtime::Builder::new().build().unwrap();
+    runtime.block_on(server.listener(addr));
 }
