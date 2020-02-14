@@ -408,7 +408,7 @@ where
 
     fn handle_with_logging(next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| {
-            println!("Processing event {:?}", event);
+            info!("Processing event {:?}", event);
             next(event)
         }
     }
@@ -461,8 +461,6 @@ where
             storage_features,
         };
 
-        println!("EXECUTING CMD!!!!!!!!!!!!!!!!!!!!: {:?}", cmd.clone());
-
         let command: Box<dyn Cmd<S, U>> = match cmd {
             Command::User { username } => Box::new(commands::User::new(username)),
             Command::Pass { password } => Box::new(commands::Pass::new(password)),
@@ -504,7 +502,6 @@ where
         };
 
         let reply = futures03::executor::block_on(async move { command.execute(args).await });
-        println!("GOT A REPLY!!!!!!!!!!!!!!!!!!!!: {:?}", reply);
         reply
     }
 
@@ -537,9 +534,7 @@ where
             // this closure is called (because we have to close the connection).
             Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
             SecureControlChannel => {
-                println!("GOING TO LOCK!!!!!");
                 let mut session = session.lock()?;
-                println!("LOCKED, SETTING TLS TRUE");
                 session.cmd_tls = true;
                 Ok(Reply::none())
             }
