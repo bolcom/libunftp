@@ -7,16 +7,13 @@ use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::str;
-use tokio::runtime::Runtime;
 
-fn test_with(addr: &str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
-    let mut rt = Runtime::new().unwrap();
+fn test_with(addr: &'static str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
+    let rt = tokio02::runtime::Builder::new().build().unwrap();
     let server = libunftp::Server::with_root(path.into());
     let _thread = rt.spawn(server.listener(addr));
 
     test();
-
-    rt.shutdown_now();
 }
 
 fn ensure_login_required<T: Debug>(r: Result<T>) {
