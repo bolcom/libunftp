@@ -1,23 +1,12 @@
-/// Contains the `FTPError` struct that that defines the libunftp custom error type.
-pub mod error;
+//! Contains the `Server` struct that is used to configure and control a FTP server instance.
 
-pub(crate) mod commands;
-
-pub(crate) mod reply;
-
-pub(crate) mod password;
-
-// Contains code pertaining to the FTP *control* channel
-mod controlchan;
-
-// Contains code pertaining to the communication between the data and control channels.
 mod chancomms;
-
-// The session module implements per-connection session handling and currently also
-// implements the control loop for the *data* channel.
+pub(crate) mod commands;
+mod controlchan;
+pub mod error;
+pub(crate) mod password;
+pub(crate) mod reply;
 mod session;
-
-// Implements a stream that can change between TCP and TLS on the fly.
 mod stream;
 
 pub(crate) use chancomms::InternalMsg;
@@ -30,14 +19,16 @@ use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth::{self, AnonymousUser};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use failure::Fail;
 use futures::prelude::Stream;
 use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::codec::Decoder;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};

@@ -129,15 +129,7 @@ fn read_err() {
     };
     let mut framed = FramedRead::new(mock, U32Decoder);
 
-    task.enter(|cx, _| {
-        assert_eq!(
-            io::ErrorKind::Other,
-            assert_ready!(pin!(framed).poll_next(cx))
-                .unwrap()
-                .unwrap_err()
-                .kind()
-        )
-    });
+    task.enter(|cx, _| assert_eq!(io::ErrorKind::Other, assert_ready!(pin!(framed).poll_next(cx)).unwrap().unwrap_err().kind()));
 }
 
 #[test]
@@ -149,15 +141,7 @@ fn read_partial_then_err() {
     };
     let mut framed = FramedRead::new(mock, U32Decoder);
 
-    task.enter(|cx, _| {
-        assert_eq!(
-            io::ErrorKind::Other,
-            assert_ready!(pin!(framed).poll_next(cx))
-                .unwrap()
-                .unwrap_err()
-                .kind()
-        )
-    });
+    task.enter(|cx, _| assert_eq!(io::ErrorKind::Other, assert_ready!(pin!(framed).poll_next(cx)).unwrap().unwrap_err().kind()));
 }
 
 #[test]
@@ -172,13 +156,7 @@ fn read_partial_would_block_then_err() {
 
     task.enter(|cx, _| {
         assert!(pin!(framed).poll_next(cx).is_pending());
-        assert_eq!(
-            io::ErrorKind::Other,
-            assert_ready!(pin!(framed).poll_next(cx))
-                .unwrap()
-                .unwrap_err()
-                .kind()
-        )
+        assert_eq!(io::ErrorKind::Other, assert_ready!(pin!(framed).poll_next(cx)).unwrap().unwrap_err().kind())
     });
 }
 
@@ -261,11 +239,7 @@ struct Mock {
 }
 
 impl AsyncRead for Mock {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         use io::ErrorKind::WouldBlock;
 
         match self.calls.pop_front() {
@@ -285,11 +259,7 @@ impl AsyncRead for Mock {
 struct Slice<'a>(&'a [u8]);
 
 impl AsyncRead for Slice<'_> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.0).poll_read(cx, buf)
     }
 }

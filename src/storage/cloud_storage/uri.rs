@@ -1,7 +1,9 @@
 use crate::storage::{Error, ErrorKind};
+
+use std::path::Path;
+
 use hyper::http::uri::Scheme;
 use hyper::Uri;
-use std::path::Path;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 pub struct GcsUri {

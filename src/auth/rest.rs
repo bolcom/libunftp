@@ -1,3 +1,7 @@
+//! [`Authenticator`] implementation that authenticates against a JSON REST API.
+//!
+//! [`Authenticator`]: trait.Authenticator.html
+
 use crate::auth::*;
 
 use regex::Regex;

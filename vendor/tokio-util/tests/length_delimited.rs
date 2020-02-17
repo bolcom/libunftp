@@ -2,9 +2,7 @@
 
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_test::task;
-use tokio_test::{
-    assert_err, assert_ok, assert_pending, assert_ready, assert_ready_err, assert_ready_ok,
-};
+use tokio_test::{assert_err, assert_ok, assert_pending, assert_ready, assert_ready_err, assert_ready_ok};
 use tokio_util::codec::*;
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -95,11 +93,9 @@ fn read_single_frame_one_packet() {
 
 #[test]
 fn read_single_frame_one_packet_little_endian() {
-    let io = length_delimited::Builder::new()
-        .little_endian()
-        .new_read(mock! {
-            data(b"\x09\x00\x00\x00abcdefghi"),
-        });
+    let io = length_delimited::Builder::new().little_endian().new_read(mock! {
+        data(b"\x09\x00\x00\x00abcdefghi"),
+    });
     pin_mut!(io);
 
     assert_next_eq!(io, b"abcdefghi");
@@ -113,11 +109,9 @@ fn read_single_frame_one_packet_native_endian() {
     } else {
         b"\x09\x00\x00\x00abcdefghi"
     };
-    let io = length_delimited::Builder::new()
-        .native_endian()
-        .new_read(mock! {
-            data(d),
-        });
+    let io = length_delimited::Builder::new().native_endian().new_read(mock! {
+        data(d),
+    });
     pin_mut!(io);
 
     assert_next_eq!(io, b"abcdefghi");
@@ -283,11 +277,9 @@ fn read_incomplete_payload() {
 
 #[test]
 fn read_max_frame_len() {
-    let io = length_delimited::Builder::new()
-        .max_frame_length(5)
-        .new_read(mock! {
-            data(b"\x00\x00\x00\x09abcdefghi"),
-        });
+    let io = length_delimited::Builder::new().max_frame_length(5).new_read(mock! {
+        data(b"\x00\x00\x00\x09abcdefghi"),
+    });
     pin_mut!(io);
 
     assert_next_err!(io);
@@ -324,11 +316,9 @@ fn read_update_max_frame_len_in_flight() {
 
 #[test]
 fn read_one_byte_length_field() {
-    let io = length_delimited::Builder::new()
-        .length_field_length(1)
-        .new_read(mock! {
-            data(b"\x09abcdefghi"),
-        });
+    let io = length_delimited::Builder::new().length_field_length(1).new_read(mock! {
+        data(b"\x09abcdefghi"),
+    });
     pin_mut!(io);
 
     assert_next_eq!(io, b"abcdefghi");
@@ -337,12 +327,9 @@ fn read_one_byte_length_field() {
 
 #[test]
 fn read_header_offset() {
-    let io = length_delimited::Builder::new()
-        .length_field_length(2)
-        .length_field_offset(4)
-        .new_read(mock! {
-            data(b"zzzz\x00\x09abcdefghi"),
-        });
+    let io = length_delimited::Builder::new().length_field_length(2).length_field_offset(4).new_read(mock! {
+        data(b"zzzz\x00\x09abcdefghi"),
+    });
     pin_mut!(io);
 
     assert_next_eq!(io, b"abcdefghi");
@@ -379,12 +366,9 @@ fn read_single_multi_frame_one_packet_length_includes_head() {
     d.extend_from_slice(b"\x00\x05123");
     d.extend_from_slice(b"\x00\x0dhello world");
 
-    let io = length_delimited::Builder::new()
-        .length_field_length(2)
-        .length_adjustment(-2)
-        .new_read(mock! {
-            data(&d),
-        });
+    let io = length_delimited::Builder::new().length_field_length(2).length_adjustment(-2).new_read(mock! {
+        data(&d),
+    });
     pin_mut!(io);
 
     assert_next_eq!(io, b"abcdefghi");
@@ -395,13 +379,11 @@ fn read_single_multi_frame_one_packet_length_includes_head() {
 
 #[test]
 fn write_single_frame_length_adjusted() {
-    let io = length_delimited::Builder::new()
-        .length_adjustment(-2)
-        .new_write(mock! {
-            data(b"\x00\x00\x00\x0b"),
-            data(b"abcdefghi"),
-            flush(),
-        });
+    let io = length_delimited::Builder::new().length_adjustment(-2).new_write(mock! {
+        data(b"\x00\x00\x00\x0b"),
+        data(b"abcdefghi"),
+        flush(),
+    });
     pin_mut!(io);
 
     task::spawn(()).enter(|cx, _| {
@@ -539,13 +521,11 @@ fn write_single_frame_would_block() {
 
 #[test]
 fn write_single_frame_little_endian() {
-    let io = length_delimited::Builder::new()
-        .little_endian()
-        .new_write(mock! {
-            data(b"\x09\x00\x00\x00"),
-            data(b"abcdefghi"),
-            flush(),
-        });
+    let io = length_delimited::Builder::new().little_endian().new_write(mock! {
+        data(b"\x09\x00\x00\x00"),
+        data(b"abcdefghi"),
+        flush(),
+    });
     pin_mut!(io);
 
     task::spawn(()).enter(|cx, _| {
@@ -559,13 +539,11 @@ fn write_single_frame_little_endian() {
 
 #[test]
 fn write_single_frame_with_short_length_field() {
-    let io = length_delimited::Builder::new()
-        .length_field_length(1)
-        .new_write(mock! {
-            data(b"\x09"),
-            data(b"abcdefghi"),
-            flush(),
-        });
+    let io = length_delimited::Builder::new().length_field_length(1).new_write(mock! {
+        data(b"\x09"),
+        data(b"abcdefghi"),
+        flush(),
+    });
     pin_mut!(io);
 
     task::spawn(()).enter(|cx, _| {
@@ -580,9 +558,7 @@ fn write_single_frame_with_short_length_field() {
 
 #[test]
 fn write_max_frame_len() {
-    let io = length_delimited::Builder::new()
-        .max_frame_length(5)
-        .new_write(mock! {});
+    let io = length_delimited::Builder::new().max_frame_length(5).new_write(mock! {});
     pin_mut!(io);
 
     task::spawn(()).enter(|cx, _| {
@@ -685,11 +661,7 @@ enum Op {
 use self::Op::*;
 
 impl AsyncRead for Mock {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        dst: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, dst: &mut [u8]) -> Poll<io::Result<usize>> {
         match self.calls.pop_front() {
             Some(Ready(Ok(Op::Data(data)))) => {
                 debug_assert!(dst.len() >= data.len());
@@ -705,11 +677,7 @@ impl AsyncRead for Mock {
 }
 
 impl AsyncWrite for Mock {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        src: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, src: &[u8]) -> Poll<Result<usize, io::Error>> {
         match self.calls.pop_front() {
             Some(Ready(Ok(Op::Data(data)))) => {
                 let len = data.len();

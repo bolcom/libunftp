@@ -1,3 +1,6 @@
+//! The session module implements per-connection session handling and currently also
+//! implements the control loop for the *data* channel.
+
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;

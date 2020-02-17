@@ -1,22 +1,23 @@
 use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
-use futures::{future, Future};
-use log::warn;
+
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use futures::{future, Future};
 use futures03::{
     future::{FutureExt, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
+use log::warn;
 
-/// Object returned by the get method of the storage implementation
+/// Type returned by the get method of the storage implementation
 pub struct Object {
     inner: tokio02::fs::File,
 }
 
 impl Object {
-    /// dfdfd
+    /// Creates a new `Object`
     pub fn new(inner: tokio02::fs::File) -> Object {
         Object { inner }
     }
@@ -35,7 +36,8 @@ impl AsAsyncReads for Object {
     }
 }
 
-/// Filesystem contains the PathBuf.
+/// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
+/// inside a specific root directory on local disk.
 ///
 /// [`Filesystem`]: ./trait.Filesystem.html
 pub struct Filesystem {

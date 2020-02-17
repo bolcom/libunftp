@@ -1,3 +1,5 @@
+//! Contains the `add...metric` functions that are used for gathering metrics.
+
 use crate::server::{
     commands::Command,
     reply::{Reply, ReplyCode},

@@ -1,3 +1,5 @@
+//! Contains code pertaining to the FTP *control* channel
+
 use crate::server::{Command, FTPError, InternalMsg, Reply};
 use bytes::BytesMut;
 use std::io::Write;

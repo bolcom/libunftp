@@ -1,7 +1,7 @@
 mod uri;
-use uri::GcsUri;
 
 use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -23,6 +23,7 @@ use tokio::{
     codec::{BytesCodec, FramedRead},
     io::AsyncRead,
 };
+use uri::GcsUri;
 use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
 
 #[derive(Deserialize, Debug)]

@@ -1,3 +1,5 @@
+//! Implements a stream that can change between TCP and TLS on the fly.
+
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;

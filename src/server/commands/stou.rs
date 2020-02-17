@@ -33,7 +33,7 @@ where
         let uuid = Uuid::new_v4().to_string();
         let filename = std::path::Path::new(&uuid);
         let path = session.cwd.join(&filename).to_string_lossy().to_string();
-        spawn!(tx.send(Command::Stor { path: path }));
+        spawn!(tx.send(Command::Stor { path }));
         Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
     }
 }

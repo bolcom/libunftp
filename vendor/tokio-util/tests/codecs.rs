@@ -27,17 +27,13 @@ fn bytes_encoder() {
     const INLINE_CAP: usize = 4 * 4 - 1;
 
     let mut buf = BytesMut::new();
-    codec
-        .encode(Bytes::from_static(&[0; INLINE_CAP + 1]), &mut buf)
-        .unwrap();
+    codec.encode(Bytes::from_static(&[0; INLINE_CAP + 1]), &mut buf).unwrap();
 
     // Default capacity of Framed Read
     const INITIAL_CAPACITY: usize = 8 * 1024;
 
     let mut buf = BytesMut::with_capacity(INITIAL_CAPACITY);
-    codec
-        .encode(Bytes::from_static(&[0; INITIAL_CAPACITY + 1]), &mut buf)
-        .unwrap();
+    codec.encode(Bytes::from_static(&[0; INITIAL_CAPACITY + 1]), &mut buf).unwrap();
 }
 
 #[test]
@@ -72,32 +68,17 @@ fn lines_decoder_max_length() {
     assert!(codec.decode(buf).is_err());
 
     let line = codec.decode(buf).unwrap().unwrap();
-    assert!(
-        line.len() <= MAX_LENGTH,
-        "{:?}.len() <= {:?}",
-        line,
-        MAX_LENGTH
-    );
+    assert!(line.len() <= MAX_LENGTH, "{:?}.len() <= {:?}", line, MAX_LENGTH);
     assert_eq!("line 2", line);
 
     assert!(codec.decode(buf).is_err());
 
     let line = codec.decode(buf).unwrap().unwrap();
-    assert!(
-        line.len() <= MAX_LENGTH,
-        "{:?}.len() <= {:?}",
-        line,
-        MAX_LENGTH
-    );
+    assert!(line.len() <= MAX_LENGTH, "{:?}.len() <= {:?}", line, MAX_LENGTH);
     assert_eq!("line 4", line);
 
     let line = codec.decode(buf).unwrap().unwrap();
-    assert!(
-        line.len() <= MAX_LENGTH,
-        "{:?}.len() <= {:?}",
-        line,
-        MAX_LENGTH
-    );
+    assert!(line.len() <= MAX_LENGTH, "{:?}.len() <= {:?}", line, MAX_LENGTH);
     assert_eq!("", line);
 
     assert_eq!(None, codec.decode(buf).unwrap());
@@ -106,12 +87,7 @@ fn lines_decoder_max_length() {
     assert_eq!(None, codec.decode(buf).unwrap());
 
     let line = codec.decode_eof(buf).unwrap().unwrap();
-    assert!(
-        line.len() <= MAX_LENGTH,
-        "{:?}.len() <= {:?}",
-        line,
-        MAX_LENGTH
-    );
+    assert!(line.len() <= MAX_LENGTH, "{:?}.len() <= {:?}", line, MAX_LENGTH);
     assert_eq!("\rk", line);
 
     assert_eq!(None, codec.decode(buf).unwrap());

@@ -1,3 +1,8 @@
+//! [`Authenticator`] implementation that authenticates against [`PAM`].
+//!
+//! [`Authenticator`]: trait.Authenticator.html
+//! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
+
 use crate::auth::*;
 
 use futures::Future;

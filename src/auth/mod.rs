@@ -1,26 +1,36 @@
 #![deny(missing_docs)]
-/// Defines the common interface that can be implemented for a multitude of authentication
-/// backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
-///
-/// You can define your own implementation to integrate the FTP server with whatever authentication
-/// mechanism you need. For example, to define an `Authenticator` that will randomly decide:
-///
-/// ```rust
-/// use rand::prelude::*;
-/// use libunftp::auth::Authenticator;
-/// use futures::Future;
-///
-/// struct RandomAuthenticator;
-///
-/// impl Authenticator<RandomUser> for RandomAuthenticator {
-///     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=RandomUser, Error=()> + Send> {
-///         Box::new(futures::future::ok(RandomUser{}))
-///     }
-/// }
-///
-/// struct RandomUser;
-/// ```
-/// [`Server`]: ../server/struct.Server.html
+//! Contains the `Authenticator` trait that is used by the `Server` and its various implementations
+//! to authenticate users.
+//!
+//! Defines the common interface that can be implemented for a multitude of authentication
+//! backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
+//!
+//! You can define your own implementation to integrate the FTP server with whatever authentication
+//! mechanism you need. For example, to define an `Authenticator` that will randomly decide:
+//!
+//! ```rust
+//! use rand::prelude::*;
+//! use libunftp::auth::Authenticator;
+//! use futures::Future;
+//!
+//! struct RandomAuthenticator;
+//!
+//! impl Authenticator<RandomUser> for RandomAuthenticator {
+//!     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=RandomUser, Error=()> + Send> {
+//!         Box::new(futures::future::ok(RandomUser{}))
+//!     }
+//! }
+//!
+//! struct RandomUser;
+//! ```
+//! [`Server`]: ../server/struct.Server.html
+
+#[cfg(feature = "pam")]
+pub mod pam;
+
+#[cfg(feature = "rest")]
+pub mod rest;
+
 use futures::Future;
 
 /// Async authenticator interface (error reporting not supported yet)
@@ -28,19 +38,6 @@ pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.
     fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
 }
-
-/// [`Authenticator`] implementation that authenticates against [`PAM`].
-///
-/// [`Authenticator`]: trait.Authenticator.html
-/// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
-#[cfg(feature = "pam")]
-pub mod pam;
-
-/// [`Authenticator`] implementation that authenticates against a JSON REST API.
-///
-/// [`Authenticator`]: trait.Authenticator.html
-#[cfg(feature = "rest")]
-pub mod rest;
 
 /// Authenticator implementation that simply allows everyone.
 ///

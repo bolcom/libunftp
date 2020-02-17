@@ -151,11 +151,7 @@ impl Write for Mock {
 }
 
 impl AsyncWrite for Mock {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         match Pin::get_mut(self).write(buf) {
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Pending,
             other => Ready(other),

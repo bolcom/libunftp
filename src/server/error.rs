@@ -1,3 +1,5 @@
+//! Contains the `FTPError` struct that that defines the libunftp custom error type.
+
 use failure::{Backtrace, Context, Fail};
 use std::fmt;
 

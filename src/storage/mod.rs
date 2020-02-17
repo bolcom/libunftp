@@ -1,12 +1,15 @@
-use chrono::prelude::{DateTime, Utc};
-use failure::{Backtrace, Context, Fail};
-use futures::{Future, Stream};
+//! Contains the `StorageBackend` trait that is by the `Server` and its various implementations.
+
 use std::path::Path;
 use std::time::SystemTime;
 use std::{
     fmt::{self, Display},
     result,
 };
+
+use chrono::prelude::{DateTime, Utc};
+use failure::{Backtrace, Context, Fail};
+use futures::{Future, Stream};
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.

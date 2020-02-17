@@ -45,19 +45,12 @@ struct DontReadIntoThis;
 
 impl Read for DontReadIntoThis {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Read into something you weren't supposed to.",
-        ))
+        Err(io::Error::new(io::ErrorKind::Other, "Read into something you weren't supposed to."))
     }
 }
 
 impl AsyncRead for DontReadIntoThis {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        _buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &mut [u8]) -> Poll<io::Result<usize>> {
         unreachable!()
     }
 }
