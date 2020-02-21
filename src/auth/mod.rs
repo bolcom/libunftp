@@ -28,15 +28,16 @@
 #[cfg(feature = "pam")]
 pub mod pam;
 
-#[cfg(feature = "rest")]
-pub mod rest;
+//#[cfg(feature = "rest")]
+//pub mod rest;
 
-use futures::Future;
+use async_trait::async_trait;
 
 /// Async authenticator interface (error reporting not supported yet)
+#[async_trait]
 pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.
-    fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
+    async fn authenticate(&self, username: &str, password: &str) -> Result<U, ()>;
 }
 /// [`Authenticator`] implementation that authenticates against a JSON file.
 ///
@@ -57,9 +58,10 @@ pub mod jsonfile_auth;
 /// ```
 pub struct AnonymousAuthenticator;
 
+#[async_trait]
 impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
-        Box::new(futures::future::ok(AnonymousUser {}))
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
+        Ok(AnonymousUser {})
     }
 }
 
