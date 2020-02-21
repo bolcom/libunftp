@@ -23,6 +23,8 @@ use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use std::sync::Arc;
+use futures03::compat::Future01CompatExt;
+use futures03::{FutureExt, TryFutureExt};
 
 pub struct Pass {
     password: password::Password,
@@ -36,11 +38,11 @@ impl Pass {
 
 #[async_trait]
 impl<S, U> Cmd<S, U> for Pass
-where
-    U: Send + Sync + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
+    where
+        U: Send + Sync + 'static,
+        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        S::File: crate::storage::AsAsyncReads + Send,
+        S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session_arc = args.session.clone();
@@ -48,25 +50,21 @@ where
         match &session.state {
             SessionState::WaitPass => {
                 let pass = std::str::from_utf8(&self.password.as_ref())?;
+                let pass = pass.to_string();
                 let user = session.username.clone().unwrap();
                 let tx = args.tx.clone();
 
-                tokio::spawn(
-                    args.authenticator
-                        .authenticate(&user, pass)
-                        .then(move |user| {
-                            match user {
-                                Ok(user) => {
-                                    let mut session = session_arc.lock().unwrap();
-                                    session.user = Arc::new(Some(user));
-                                    tx.send(InternalMsg::AuthSuccess)
-                                }
-                                _ => tx.send(InternalMsg::AuthFailed), // FIXME: log
-                            }
-                        })
-                        .map(|_| ())
-                        .map_err(|_| ()),
-                );
+                let auther = args.authenticator.clone();
+                match auther.authenticate(&user, &pass).await {
+                    Ok(user) => {
+                        let mut session = session_arc.lock()?;
+                        session.user = Arc::new(Some(user));
+                        tokio::spawn(tx.send(InternalMsg::AuthSuccess).map(|_| ()).map_err(|_| ()));
+                    },
+                    Err(_) => {
+                        tokio::spawn(tx.send(InternalMsg::AuthFailed).map(|_| ()).map_err(|_| ()));
+                    },
+                };
                 Ok(Reply::none())
             }
             SessionState::New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please supply a username first")),
