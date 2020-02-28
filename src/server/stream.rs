@@ -13,7 +13,6 @@ use rustls;
 use rustls::{NoClientAuth, Session};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use crate::server::chancomms::InternalMsg::SecureControlChannel;
 
 #[derive(Debug, Clone)]
 pub enum SecurityState {
