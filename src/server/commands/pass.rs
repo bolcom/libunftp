@@ -44,7 +44,7 @@ impl<S, U> Cmd<S, U> for Pass
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session_arc = args.session.clone();
-        let session = args.session.lock().await;
+        let mut session = args.session.lock().await;
         match &session.state {
             SessionState::WaitPass => {
                 let pass = std::str::from_utf8(&self.password.as_ref())?;
@@ -55,7 +55,6 @@ impl<S, U> Cmd<S, U> for Pass
                 let auther = args.authenticator.clone();
                 match auther.authenticate(&user, &pass).await {
                     Ok(user) => {
-                        let mut session = session_arc.lock().await;
                         session.user = Arc::new(Some(user));
                         tokio::spawn(tx.send(InternalMsg::AuthSuccess).map(|_| ()).map_err(|_| ()));
                     },
