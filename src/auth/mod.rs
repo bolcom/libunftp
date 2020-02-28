@@ -38,6 +38,11 @@ pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.
     fn authenticate(&self, username: &str, password: &str) -> Box<dyn Future<Item = U, Error = ()> + Send>;
 }
+/// [`Authenticator`] implementation that authenticates against a JSON file.
+///
+/// [`Authenticator`]: trait.Authenticator.html
+#[cfg(feature = "jsonfile_auth")]
+pub mod jsonfile_auth;
 
 /// Authenticator implementation that simply allows everyone.
 ///
