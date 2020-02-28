@@ -26,7 +26,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         match session.state {
             SessionState::New | SessionState::WaitPass => {
                 let user = std::str::from_utf8(&self.username)?;

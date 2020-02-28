@@ -22,7 +22,7 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let tx = args.tx.clone();
-        let session = args.session.lock()?;
+        let session = args.session.lock().await;
         if session.cmd_tls {
             spawn!(tx.send(InternalMsg::PlaintextControlChannel));
             Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))

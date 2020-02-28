@@ -3,7 +3,8 @@
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio02::sync::Mutex;
 
 use futures::Future;
 use futures::{Async, Poll};

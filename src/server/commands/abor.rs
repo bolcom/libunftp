@@ -29,7 +29,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         match session.data_abort_tx.take() {
             Some(tx) => {
                 spawn!(tx.send(()));

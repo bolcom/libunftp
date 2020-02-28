@@ -59,7 +59,7 @@ where
             Some(path) => {
                 let path = std::str::from_utf8(&path)?;
 
-                let session = args.session.lock()?;
+                let session = args.session.lock().await;
                 let storage = Arc::clone(&session.storage);
 
                 let tx_success = args.tx.clone();

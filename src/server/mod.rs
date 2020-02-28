@@ -21,7 +21,8 @@ use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio02::sync::Mutex;
 use std::time::Duration;
 
 use failure::Fail;
@@ -387,7 +388,7 @@ where
             | Event::Command(Command::Quit) => next(event),
             _ => {
                 {
-                    let session = session.lock()?;
+                    let session = session.lock();
                     if session.state != SessionState::WaitCmd {
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"));
                     }

@@ -13,7 +13,6 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::stream::Stream;
-use log::error;
 use rand::Rng;
 use tokio::sync::mpsc;
 
@@ -70,7 +69,7 @@ where
         let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
         let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
         {
-            let mut session = args.session.lock()?;
+            let mut session = args.session.lock().await;
             session.data_cmd_tx = Some(cmd_tx);
             session.data_cmd_rx = Some(cmd_rx);
             session.data_abort_tx = Some(data_abort_tx);
@@ -89,12 +88,7 @@ where
             if let Some(socket) = strm.next().await {
                 let tx = tx.clone();
                 let session2 = session.clone();
-                let mut session2 = session2.lock().unwrap_or_else(|res| {
-                    // TODO: Send signal to `tx` here, so we can handle the
-                    // error
-                    error!("session lock() result: {}", res);
-                    panic!()
-                });
+                let mut session2 = session2.lock().await;
                 let user = session2.user.clone();
                 session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
             }

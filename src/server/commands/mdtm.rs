@@ -34,7 +34,7 @@ where
     S::Metadata: 'static + storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let session = args.session.lock()?;
+        let session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
         let tx_success = args.tx.clone();
