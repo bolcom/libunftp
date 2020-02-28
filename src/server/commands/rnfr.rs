@@ -27,7 +27,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         session.rename_from = Some(session.cwd.join(self.path.clone()));
         Ok(Reply::new(ReplyCode::FileActionPending, "Tell me, what would you like the new name to be?"))
     }

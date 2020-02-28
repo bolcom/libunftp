@@ -21,7 +21,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let session = args.session.lock()?;
+        let session = args.session.lock().await;
         // TODO: properly escape double quotes in `cwd`
         Ok(Reply::new_with_string(
             ReplyCode::DirCreated,

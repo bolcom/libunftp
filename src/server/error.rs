@@ -99,11 +99,3 @@ impl From<std::str::Utf8Error> for FTPError {
         err.context(FTPErrorKind::UTF8Error).into()
     }
 }
-
-impl<'a, T> From<std::sync::PoisonError<std::sync::MutexGuard<'a, T>>> for FTPError {
-    fn from(_err: std::sync::PoisonError<std::sync::MutexGuard<'a, T>>) -> FTPError {
-        FTPError {
-            inner: Context::new(FTPErrorKind::InternalServerError),
-        }
-    }
-}

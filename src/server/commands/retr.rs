@@ -26,7 +26,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         let tx = match session.data_cmd_tx.take() {
             Some(tx) => tx,
             None => return Err(FTPErrorKind::InternalServerError.into()),

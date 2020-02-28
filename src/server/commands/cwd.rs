@@ -37,7 +37,7 @@ where
         // TODO: We current accept all CWD requests. Consider only allowing
         // this if the directory actually exists and the user has the proper
         // permission.
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         session.cwd.push(self.path.clone());
         Ok(Reply::new(ReplyCode::FileActionOkay, "OK"))
     }

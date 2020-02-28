@@ -10,7 +10,8 @@ use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
 use log::{debug, warn};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio02::sync::Mutex;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 

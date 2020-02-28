@@ -35,7 +35,7 @@ where
         if args.storage_features & storage::FEATURE_RESTART == 0 {
             return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
         }
-        let mut session = args.session.lock()?;
+        let mut session = args.session.lock().await;
         session.start_pos = self.offset;
         let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", self.offset);
         Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
