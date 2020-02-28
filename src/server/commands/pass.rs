@@ -23,7 +23,6 @@ use async_trait::async_trait;
 use futures::future::Future;
 use futures::sink::Sink;
 use std::sync::Arc;
-use futures03::{FutureExt, TryFutureExt};
 
 pub struct Pass {
     password: password::Password,
