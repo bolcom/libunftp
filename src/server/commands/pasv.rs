@@ -61,43 +61,42 @@ where
         };
         let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
-//        let octets = conn_addr.ip().octets();
-//        let port = addr.port();
-//        let p1 = port >> 8;
-//        let p2 = port - (p1 * 256);
-//        let tx = args.tx.clone();
-//
-//        let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
-//        let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
-//        {
-//            let mut session = args.session.lock().await;
-//            session.data_cmd_tx = Some(cmd_tx);
-//            session.data_cmd_rx = Some(cmd_rx);
-//            session.data_abort_tx = Some(data_abort_tx);
-//            session.data_abort_rx = Some(data_abort_rx);
-//        }
-//
-//        let session = args.session.clone();
-//
-//        use futures03::compat::Stream01CompatExt;
-//        use futures03::StreamExt;
-//        use tokio::net::TcpListener;
-//
-//        tokio02::spawn(async move {
-//            let mut strm = listener.incoming().take(1).compat();
-//
-//            if let Some(socket) = strm.next().await {
-//                let tx = tx.clone();
-//                let session2 = session.clone();
-//                let mut session2 = session2.lock().await;
-//                let user = session2.user.clone();
-//                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
-//            }
-//        });
+        let octets = conn_addr.ip().octets();
+        let port = addr.port();
+        let p1 = port >> 8;
+        let p2 = port - (p1 * 256);
+        let tx = args.tx.clone();
 
-        let octets = [1, 2, 3, 4];
-        let p1 = "p1";
-        let p2 = "p2";
+        let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
+        let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
+
+        futures03::executor::block_on(async {
+            let mut session = args.session.lock().await;
+            session.data_cmd_tx = Some(cmd_tx);
+            session.data_cmd_rx = Some(cmd_rx);
+            session.data_abort_tx = Some(data_abort_tx);
+            session.data_abort_rx = Some(data_abort_rx);
+
+            let session = args.session.clone();
+
+            use futures03::compat::Stream01CompatExt;
+            use futures03::StreamExt;
+            use tokio::net::TcpListener;
+
+            tokio02::spawn(async move {
+                let mut strm = listener.incoming().take(1).compat();
+
+                if let Some(socket) = strm.next().await {
+                    let tx = tx.clone();
+                    let session2 = session.clone();
+                    let mut session2 = session2.lock().await;
+                    let user = session2.user.clone();
+                    session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
+                }
+            });
+
+        });
+
         Ok(Reply::new_with_string(
             ReplyCode::EnteringPassiveMode,
             format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
