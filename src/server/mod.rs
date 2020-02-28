@@ -387,7 +387,7 @@ where
             | Event::Command(Command::Feat)
             | Event::Command(Command::Quit) => next(event),
             _ => {
-                futures03::executor::block_on(async move {
+                futures03::executor::block_on(async {
                     let session = session.lock().await;
                     if session.state != SessionState::WaitCmd {
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"));

@@ -116,59 +116,63 @@ impl RestAuthenticator {
 }
 
 // FIXME: add support for authenticated user
+#[async_trait]
 impl Authenticator<AnonymousUser> for RestAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
-        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
+    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, ()> {
+//        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+//        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+//        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
+//
+//        let username_json = encode_string_json(_username);
+//        let password_json = encode_string_json(_password);
+//        let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
+//
+//        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
+//        let method = self.method.clone();
+//        let selector = self.selector.clone();
+//        let regex = self.regex.clone();
+//
+//        debug!("{} {}", url, body);
 
-        let username_json = encode_string_json(_username);
-        let password_json = encode_string_json(_password);
-        let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
+//        Box::new(
+//            futures::future::ok(())
+//                .and_then(|_| {
+//                    Request::builder()
+//                        .method(method)
+//                        .header("Content-type", "application/json")
+//                        .uri(url)
+//                        .body(Body::from(body))
+//                        .map_err(|e| RestError::HttpError(e.to_string()))
+//                })
+//                .and_then(|req| Client::new().request(req).map_err(RestError::HyperError))
+//                .and_then(|res| res.into_body().map_err(RestError::HyperError).concat2())
+//                .and_then(|body| {
+//                    //                println!("resp: {:?}", body);
+//                    serde_json::from_slice(&body).map_err(RestError::JSONDeserializationError)
+//                })
+//                .map_err(|err| {
+//                    info!("RestError: {:?}", err);
+//                })
+//                .and_then(move |response: Value| {
+//                    let parsed = response
+//                        .pointer(&selector)
+//                        .map(|x| {
+//                            debug!("pointer: {:?}", x);
+//                            format!("{:?}", x)
+//                        })
+//                        .unwrap_or_else(|| "null".to_string());
+//
+//                    if regex.is_match(&parsed) {
+//                        Ok(AnonymousUser {})
+//                    } else {
+//                        Err(())
+//                    }
+//                }),
+//        )
 
-        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
-        let method = self.method.clone();
-        let selector = self.selector.clone();
-        let regex = self.regex.clone();
-
-        debug!("{} {}", url, body);
-
-        Box::new(
-            futures::future::ok(())
-                .and_then(|_| {
-                    Request::builder()
-                        .method(method)
-                        .header("Content-type", "application/json")
-                        .uri(url)
-                        .body(Body::from(body))
-                        .map_err(|e| RestError::HttpError(e.to_string()))
-                })
-                .and_then(|req| Client::new().request(req).map_err(RestError::HyperError))
-                .and_then(|res| res.into_body().map_err(RestError::HyperError).concat2())
-                .and_then(|body| {
-                    //                println!("resp: {:?}", body);
-                    serde_json::from_slice(&body).map_err(RestError::JSONDeserializationError)
-                })
-                .map_err(|err| {
-                    info!("RestError: {:?}", err);
-                })
-                .and_then(move |response: Value| {
-                    let parsed = response
-                        .pointer(&selector)
-                        .map(|x| {
-                            debug!("pointer: {:?}", x);
-                            format!("{:?}", x)
-                        })
-                        .unwrap_or_else(|| "null".to_string());
-
-                    if regex.is_match(&parsed) {
-                        Ok(AnonymousUser {})
-                    } else {
-                        Err(())
-                    }
-                }),
-        )
+        Ok(AnonymousUser{})
     }
+
 }
 
 /// limited capabilities, meant for us-ascii username and password only, really
@@ -204,4 +208,16 @@ pub enum RestError {
     JSONDeserializationError(serde_json::Error),
     ///
     JSONSerializationError(serde_json::Error),
+}
+
+impl From<hyper::error::Error> for RestError {
+    fn from(e: hyper::error::Error) -> Self {
+        Self::HttpError(e.to_string())
+    }
+}
+
+impl From<serde_json::error::Error> for RestError {
+    fn from(e: serde_json::error::Error) -> Self {
+        Self::JSONDeserializationError(e)
+    }
 }

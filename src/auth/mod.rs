@@ -28,8 +28,8 @@
 #[cfg(feature = "pam")]
 pub mod pam;
 
-//#[cfg(feature = "rest")]
-//pub mod rest;
+#[cfg(feature = "rest")]
+pub mod rest;
 
 use async_trait::async_trait;
 
@@ -39,6 +39,7 @@ pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.
     async fn authenticate(&self, username: &str, password: &str) -> Result<U, ()>;
 }
+
 /// [`Authenticator`] implementation that authenticates against a JSON file.
 ///
 /// [`Authenticator`]: trait.Authenticator.html
