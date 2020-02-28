@@ -13,6 +13,7 @@ use rustls;
 use rustls::{NoClientAuth, Session};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
+use crate::server::chancomms::InternalMsg::SecureControlChannel;
 
 #[derive(Debug, Clone)]
 pub enum SecurityState {
@@ -156,7 +157,8 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
 
 impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let state = self.state.lock().unwrap().which_state(self.channel);
+//        let state = self.state.lock().unwrap().which_state(self.channel);
+        let state = SecurityState::Off;
         match state {
             SecurityState::Off => self.tcp.read(buf),
             SecurityState::On => {
@@ -190,7 +192,8 @@ impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
 
 impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let state = self.state.lock().unwrap().which_state(self.channel);
+        //let state = self.state.lock().unwrap().which_state(self.channel);
+        let state = SecurityState::Off;
         match state {
             SecurityState::On => {
                 if self.tls.is_handshaking() {
@@ -233,7 +236,8 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
 
     fn flush(&mut self) -> io::Result<()> {
         debug!("Flush called <<{}>>", self.channel);
-        let state = self.state.lock().unwrap().which_state(self.channel);
+        //let state = self.state.lock().unwrap().which_state(self.channel);
+        let state = SecurityState::Off;
         match state {
             SecurityState::On => {
                 while self.tls.wants_write() {
@@ -254,7 +258,8 @@ impl<S: SecuritySwitch> AsyncWrite for SwitchingTlsStream<S> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         debug!("AsyncWrite shutdown <<{}>>", self.channel);
 
-        let state = self.state.lock().unwrap().which_state(self.channel);
+        //let state = self.state.lock().unwrap().which_state(self.channel);
+        let state = SecurityState::Off;
         if let SecurityState::On = state {
             if self.tls.is_handshaking() {
                 let r = self.tls.complete_io(&mut self.tcp);
