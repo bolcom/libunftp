@@ -387,13 +387,13 @@ where
             | Event::Command(Command::Feat)
             | Event::Command(Command::Quit) => next(event),
             _ => {
-                {
-                    let session = session.lock();
+                futures03::executor::block_on(async move {
+                    let session = session.lock().await;
                     if session.state != SessionState::WaitCmd {
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"));
                     }
-                }
-                next(event)
+                    next(event)
+                })
             }
         }
     }
@@ -426,7 +426,9 @@ where
                     local_addr,
                     storage_features,
                 ),
-                Event::InternalMsg(msg) => Self::handle_internal_msg(msg, session.clone()),
+                Event::InternalMsg(msg) => {
+                    futures03::executor::block_on(Self::handle_internal_msg(msg, session.clone()))
+                },
             }
         }
     }
@@ -496,7 +498,7 @@ where
         futures03::executor::block_on(async move { command.execute(args).await })
     }
 
-    fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
+    async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
         use self::InternalMsg::*;
         use session::SessionState::*;
 
@@ -505,14 +507,14 @@ where
             PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
             SendingData => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
             SendData { .. } => {
-                let mut session = session.lock()?;
+                let mut session = session.lock().await;
                 session.start_pos = 0;
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
             }
             WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
             ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
             WrittenData { .. } => {
-                let mut session = session.lock()?;
+                let mut session = session.lock().await;
                 session.start_pos = 0;
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
             }
@@ -525,19 +527,19 @@ where
             // this closure is called (because we have to close the connection).
             Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
             SecureControlChannel => {
-                let mut session = session.lock()?;
+                let mut session = session.lock().await;
                 session.cmd_tls = true;
                 Ok(Reply::none())
             }
             PlaintextControlChannel => {
-                let mut session = session.lock()?;
+                let mut session = session.lock().await;
                 session.cmd_tls = false;
                 Ok(Reply::none())
             }
             MkdirSuccess(path) => Ok(Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string())),
             MkdirFail => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
             AuthSuccess => {
-                let mut session = session.lock()?;
+                let mut session = session.lock().await;
                 session.state = WaitCmd;
                 Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
             }
