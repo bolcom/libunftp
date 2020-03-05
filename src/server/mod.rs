@@ -22,8 +22,8 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio02::sync::Mutex;
 use std::time::Duration;
+use tokio02::sync::Mutex;
 
 use failure::Fail;
 use futures::prelude::Stream;
@@ -424,7 +424,7 @@ where
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| -> Result<Reply, FTPError> {
             match event {
-                Event::Command(cmd) => Self::handle_command(
+                Event::Command(cmd) => futures03::executor::block_on(Self::handle_command(
                     cmd,
                     session.clone(),
                     authenticator.clone(),
@@ -433,16 +433,14 @@ where
                     tx.clone(),
                     local_addr,
                     storage_features,
-                ),
-                Event::InternalMsg(msg) => {
-                    futures03::executor::block_on(Self::handle_internal_msg(msg, session.clone()))
-                },
+                )),
+                Event::InternalMsg(msg) => futures03::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn handle_command(
+    async fn handle_command(
         cmd: Command,
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn auth::Authenticator<U>>,
@@ -503,7 +501,7 @@ where
             Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
-        futures03::executor::block_on(async move { command.execute(args).await })
+        command.execute(args).await
     }
 
     async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {

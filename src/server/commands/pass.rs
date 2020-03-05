@@ -36,11 +36,11 @@ impl Pass {
 
 #[async_trait]
 impl<S, U> Cmd<S, U> for Pass
-    where
-        U: Send + Sync + 'static,
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
-        S::File: crate::storage::AsAsyncReads + Send,
-        S::Metadata: storage::Metadata,
+where
+    U: Send + Sync + 'static,
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: crate::storage::AsAsyncReads + Send,
+    S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session_arc = args.session.clone();
@@ -57,10 +57,10 @@ impl<S, U> Cmd<S, U> for Pass
                     Ok(user) => {
                         session.user = Arc::new(Some(user));
                         tokio::spawn(tx.send(InternalMsg::AuthSuccess).map(|_| ()).map_err(|_| ()));
-                    },
+                    }
                     Err(_) => {
                         tokio::spawn(tx.send(InternalMsg::AuthFailed).map(|_| ()).map_err(|_| ()));
-                    },
+                    }
                 };
                 Ok(Reply::none())
             }

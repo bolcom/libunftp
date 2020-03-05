@@ -14,8 +14,8 @@ use crate::storage;
 use async_trait::async_trait;
 use futures::stream::Stream;
 use rand::Rng;
-use tokio::sync::mpsc;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 
 const BIND_RETRIES: u8 = 10;
 
@@ -94,7 +94,6 @@ where
                     session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
                 }
             });
-
         });
 
         Ok(Reply::new_with_string(

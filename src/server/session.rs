@@ -11,9 +11,9 @@ use futures::prelude::*;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio02::sync::Mutex;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio02::sync::Mutex;
 
 const DATA_CHANNEL_ID: u8 = 1;
 

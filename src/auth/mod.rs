@@ -15,9 +15,10 @@
 //!
 //! struct RandomAuthenticator;
 //!
+//! #[async_trait]
 //! impl Authenticator<RandomUser> for RandomAuthenticator {
-//!     fn authenticate(&self, username: &str, password: &str) -> Box<Future<Item=RandomUser, Error=()> + Send> {
-//!         Box::new(futures::future::ok(RandomUser{}))
+//!     async fn authenticate(&self, username: &str, password: &str) -> Result<RandomUser, ()> {
+//!         Ok(RandomUser{})
 //!     }
 //! }
 //!
@@ -69,5 +70,3 @@ impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
 /// AnonymousUser
 #[derive(Debug, PartialEq)]
 pub struct AnonymousUser;
-
-// FIXME: add support for authenticated user
