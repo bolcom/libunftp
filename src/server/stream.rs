@@ -156,7 +156,7 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
 
 impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-//        let state = self.state.lock().unwrap().which_state(self.channel);
+        //        let state = self.state.lock().unwrap().which_state(self.channel);
         let state = SecurityState::Off;
         match state {
             SecurityState::Off => self.tcp.read(buf),
