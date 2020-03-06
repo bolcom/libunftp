@@ -7,14 +7,14 @@ use crate::auth::*;
 use regex::Regex;
 use std::string::String;
 
-use futures::stream::Stream;
-use futures::Future;
+// use futures::stream::Stream;
+// use futures::Future;
 
 use http::uri::InvalidUri;
-use hyper::{Body, Client, Request};
+// use hyper::{Body, Client, Request};
 
-use serde_json::Value;
-use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+// use serde_json::Value;
+// use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -108,17 +108,17 @@ impl Builder {
 }
 
 impl RestAuthenticator {
-    fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str) -> String {
-        string
-            .replace(&self.username_placeholder, username)
-            .replace(&self.password_placeholder, password)
-    }
+    // fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str) -> String {
+    //     string
+    //         .replace(&self.username_placeholder, username)
+    //         .replace(&self.password_placeholder, password)
+    // }
 }
 
 // FIXME: add support for authenticated user
 #[async_trait]
 impl Authenticator<AnonymousUser> for RestAuthenticator {
-    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, ()> {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
         //        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         //        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
         //        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
@@ -175,22 +175,22 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
 }
 
 /// limited capabilities, meant for us-ascii username and password only, really
-fn encode_string_json(string: &str) -> String {
-    let mut res = String::with_capacity(string.len() * 2);
+// fn encode_string_json(string: &str) -> String {
+//     let mut res = String::with_capacity(string.len() * 2);
 
-    for i in string.chars() {
-        match i {
-            '\\' => res.push_str("\\\\"),
-            '"' => res.push_str("\\\""),
-            ' '..='~' => res.push(i),
-            _ => {
-                error!("special character {} is not supported", i);
-            }
-        }
-    }
+//     for i in string.chars() {
+//         match i {
+//             '\\' => res.push_str("\\\\"),
+//             '"' => res.push_str("\\\""),
+//             ' '..='~' => res.push(i),
+//             _ => {
+//                 error!("special character {} is not supported", i);
+//             }
+//         }
+//     }
 
-    res
-}
+//     res
+// }
 
 /// Possible errors while doing REST lookup
 #[derive(Debug)]

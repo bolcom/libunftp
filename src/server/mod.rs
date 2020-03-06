@@ -27,6 +27,7 @@ use tokio02::sync::Mutex;
 
 use failure::Fail;
 use futures::prelude::Stream;
+use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
@@ -314,7 +315,7 @@ where
             .certs(self.certs_file.clone(), self.key_file.clone())
             .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
-        let (tx, rx) = chancomms::create_internal_msg_channel();
+        let (tx, rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_addrs = self.passive_addrs.clone();
 
         let local_addr = tcp_stream.local_addr()?;
@@ -373,7 +374,9 @@ where
             .map_err(|e: FTPError| e);
 
         tokio02::spawn(async move {
-            sink.send_all(&mut strm.compat()).await;
+            if let Err(e) = sink.send_all(&mut strm.compat()).await {
+                warn!("Could not send stream. {}", e);
+            }
         });
         Ok(())
     }
@@ -397,8 +400,8 @@ where
                         Err(())
                     }
                 });
-                if r.is_ok() {
-                    return Ok(r.unwrap());
+                if let Ok(r) = r {
+                    return Ok(r);
                 }
                 next(event)
             }
@@ -417,7 +420,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: futures::sync::mpsc::Sender<InternalMsg>,
+        tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
@@ -445,7 +448,7 @@ where
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
         passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-        tx: futures::sync::mpsc::Sender<InternalMsg>,
+        tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> Result<Reply, FTPError> {
@@ -640,7 +643,7 @@ where
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
     passive_addrs: Arc<Vec<std::net::SocketAddr>>,
-    tx: futures::sync::mpsc::Sender<InternalMsg>,
+    tx: Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,
 }
