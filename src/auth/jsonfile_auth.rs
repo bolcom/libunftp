@@ -62,6 +62,8 @@ impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
                     return Ok(AnonymousUser {});
                 } else {
                     warn!("Failed login for user {}: bad password", username);
+                    // punish the failed login with a 1500ms delay before returning the error
+                    delay_for(Duration::from_millis(1500)).await;
                     return Err(());
                 }
             }
