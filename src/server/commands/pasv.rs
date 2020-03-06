@@ -36,12 +36,13 @@ where
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
 
-        let mut rng = rand::thread_rng();
+        //let mut rng = rand::thread_rng();
+        // TODO: Re-enable this functionality somehow
 
         let mut listener: Option<std::net::TcpListener> = None;
         for _ in 1..BIND_RETRIES {
-            let i = rng.gen_range(0, args.passive_addrs.len() - 1);
-            match std::net::TcpListener::bind(args.passive_addrs[i]) {
+            //let i = rng.gen_range(0, args.passive_addrs.len() - 1);
+            match std::net::TcpListener::bind(args.passive_addrs[0]) {
                 Ok(x) => {
                     listener = Some(x);
                     break;
@@ -70,30 +71,28 @@ where
         let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
         let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
 
-        futures03::executor::block_on(async {
-            let mut session = args.session.lock().await;
-            session.data_cmd_tx = Some(cmd_tx);
-            session.data_cmd_rx = Some(cmd_rx);
-            session.data_abort_tx = Some(data_abort_tx);
-            session.data_abort_rx = Some(data_abort_rx);
+        let mut session = args.session.lock().await;
+        session.data_cmd_tx = Some(cmd_tx);
+        session.data_cmd_rx = Some(cmd_rx);
+        session.data_abort_tx = Some(data_abort_tx);
+        session.data_abort_rx = Some(data_abort_rx);
 
-            let session = args.session.clone();
+        let session = args.session.clone();
 
-            use futures03::compat::Stream01CompatExt;
-            use futures03::StreamExt;
-            use tokio::net::TcpListener;
+        use futures03::compat::Stream01CompatExt;
+        use futures03::StreamExt;
+        use tokio::net::TcpListener;
 
-            tokio02::spawn(async move {
-                let mut strm = listener.incoming().take(1).compat();
+        tokio02::spawn(async move {
+            let mut strm = listener.incoming().take(1).compat();
 
-                if let Some(socket) = strm.next().await {
-                    let tx = tx.clone();
-                    let session2 = session.clone();
-                    let mut session2 = session2.lock().await;
-                    let user = session2.user.clone();
-                    session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
-                }
-            });
+            if let Some(socket) = strm.next().await {
+                let tx = tx.clone();
+                let session2 = session.clone();
+                let mut session2 = session2.lock().await;
+                let user = session2.user.clone();
+                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
+            }
         });
 
         Ok(Reply::new_with_string(
