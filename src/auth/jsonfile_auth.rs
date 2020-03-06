@@ -1,5 +1,7 @@
 use crate::auth::*;
 
+use log::{info, warn};
+
 use futures::Future;
 
 use std::io::Error;
@@ -8,8 +10,8 @@ use serde::Deserialize;
 use serde_json;
 use std::fs;
 
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
+use std::time::Duration;
+use tokio02::time::delay_for;
 
 #[derive(Deserialize, Clone, Debug)]
 struct Credentials {
@@ -46,34 +48,28 @@ impl JsonFileAuthenticator {
     }
 }
 
+#[async_trait]
 impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
-    fn authenticate(&self, _username: &str, _password: &str) -> Box<dyn Future<Item = AnonymousUser, Error = ()> + Send> {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
         let username = _username.to_string();
         let password = _password.to_string();
         let credentials_list = self.credentials_list.clone();
 
-        Box::new(
-            futures::future::ok(())
-                .and_then(move |_| {
-                    for c in credentials_list.iter() {
-                        if username == c.username {
-                            if password == c.password {
-                                info!("Successful login by user {}", username);
-                                return Ok(AnonymousUser {});
-                            } else {
-                                warn!("Failed login for user {}: bad password", username);
-                                return Err(());
-                            }
-                        }
-                    }
-                    warn!("Failed login for user \"{}\": unknown user", username);
-                    Err(())
-                })
-                .or_else(|_| {
-                    // punish the failed login with a 1500ms delay before returning the error
-                    let when = Instant::now() + Duration::from_millis(1500);
-                    Delay::new(when).map_err(|e| panic!("timer failed; err={:?}", e)).and_then(|_| Err(()))
-                }),
-        )
+        for c in credentials_list.iter() {
+            if username == c.username {
+                if password == c.password {
+                    info!("Successful login by user {}", username);
+                    return Ok(AnonymousUser {});
+                } else {
+                    warn!("Failed login for user {}: bad password", username);
+                    return Err(());
+                }
+            }
+        }
+        warn!("Failed login for user \"{}\": unknown user", username);
+
+        // punish the failed login with a 1500ms delay before returning the error
+        delay_for(Duration::from_millis(1500)).await;
+        Err(())
     }
 }
