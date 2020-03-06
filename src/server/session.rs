@@ -8,7 +8,7 @@ use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::sync::mpsc::{Sender, Receiver};
+use futures::sync::mpsc::{Receiver, Sender};
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,8 +36,8 @@ where
     pub storage: Arc<S>,
     pub data_cmd_tx: Option<Sender<Command>>,
     pub data_cmd_rx: Option<Receiver<Command>>,
-    pub data_abort_tx: Option<Sender<()>>,
-    pub data_abort_rx: Option<Receiver<()>>,
+    pub data_abort_tx: Option<futures03::channel::mpsc::Sender<()>>,
+    pub data_abort_rx: Option<futures03::channel::mpsc::Receiver<()>>,
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
@@ -99,13 +99,7 @@ where
     /// socket: the data socket we'll be working with
     /// sec_switch: communicates the security setting for the data channel.
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(
-        &mut self,
-        user: Arc<Option<U>>,
-        socket: TcpStream,
-        sec_switch: Arc<Mutex<Session<S, U>>>,
-        tx: Sender<InternalMsg>,
-    ) {
+    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: Sender<InternalMsg>) {
         let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
             (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
@@ -123,7 +117,11 @@ where
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
-            .select(abort_rx.map(|_| DataCommand::Abort))
+            .select({
+                use futures03::stream::StreamExt;
+                use futures03::stream::TryStreamExt;
+                abort_rx.map(|_| Ok(DataCommand::Abort)).compat()
+            })
             .take_while(|data_cmd| Ok(*data_cmd != DataCommand::Abort))
             .into_future()
             .map(move |(cmd, _)| {

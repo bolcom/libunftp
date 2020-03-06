@@ -15,9 +15,8 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
 
+use log::warn;
 pub struct Abor;
 
 #[async_trait]
@@ -31,8 +30,13 @@ where
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
         match session.data_abort_tx.take() {
-            Some(tx) => {
-                spawn!(tx.send(()));
+            Some(mut tx) => {
+                tokio02::spawn(async move {
+                    use futures03::sink::SinkExt;
+                    if let Err(err) = tx.send(()).await {
+                        warn!("abort failed: {}", err);
+                    }
+                });
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel"))
             }
             None => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Data channel already closed")),
