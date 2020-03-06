@@ -371,7 +371,10 @@ where
             // smarter about inference :)
             .map_err(|e: FTPError| e);
 
-        sink.send_all(&mut strm.compat()).await?;
+        tokio02::spawn(async move {
+            sink.send_all(&mut strm.compat()).await;
+        });
+
         Ok(())
     }
 
