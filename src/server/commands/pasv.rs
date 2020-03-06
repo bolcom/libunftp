@@ -71,11 +71,13 @@ where
         let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
         let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
 
-        let mut session = args.session.lock().await;
-        session.data_cmd_tx = Some(cmd_tx);
-        session.data_cmd_rx = Some(cmd_rx);
-        session.data_abort_tx = Some(data_abort_tx);
-        session.data_abort_rx = Some(data_abort_rx);
+        {
+            let mut session = args.session.lock().await;
+            session.data_cmd_tx = Some(cmd_tx);
+            session.data_cmd_rx = Some(cmd_rx);
+            session.data_abort_tx = Some(data_abort_tx);
+            session.data_abort_rx = Some(data_abort_rx);
+        }
 
         let session = args.session.clone();
 

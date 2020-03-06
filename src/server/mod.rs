@@ -375,7 +375,6 @@ where
         tokio02::spawn(async move {
             sink.send_all(&mut strm.compat()).await;
         });
-        //sink.send_all(&mut strm.compat()).await?;
         Ok(())
     }
 
