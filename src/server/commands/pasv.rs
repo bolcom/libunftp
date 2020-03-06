@@ -13,9 +13,9 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::stream::Stream;
-use rand::Rng;
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+// use rand::Rng;
+// use tokio::net::TcpListener;
+use futures::sync::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -68,8 +68,8 @@ where
         let p2 = port - (p1 * 256);
         let tx = args.tx.clone();
 
-        let (cmd_tx, cmd_rx): (mpsc::Sender<Command>, mpsc::Receiver<Command>) = mpsc::channel(1);
-        let (data_abort_tx, data_abort_rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
+        let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
+        let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
 
         {
             let mut session = args.session.lock().await;

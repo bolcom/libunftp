@@ -43,7 +43,7 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let session_arc = args.session.clone();
+        // let session_arc = args.session.clone();
         let mut session = args.session.lock().await;
         match &session.state {
             SessionState::WaitPass => {

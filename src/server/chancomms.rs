@@ -3,20 +3,12 @@
 use super::commands::Command;
 use crate::server::reply::ReplyCode;
 use crate::storage::Error;
-use futures::sync::mpsc;
 
 // Commands that can be send to the data channel.
 #[derive(PartialEq)]
 pub enum DataCommand {
     ExternalCommand(Command),
     Abort,
-}
-
-type InternalMsgChannel = (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>);
-
-pub fn create_internal_msg_channel() -> InternalMsgChannel {
-    let (tx, rx): (mpsc::Sender<InternalMsg>, mpsc::Receiver<InternalMsg>) = mpsc::channel(1);
-    (tx, rx)
 }
 
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)

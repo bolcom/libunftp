@@ -2,8 +2,6 @@ use crate::auth::*;
 
 use log::{info, warn};
 
-use futures::Future;
-
 use std::io::Error;
 
 use serde::Deserialize;
