@@ -1,6 +1,6 @@
 use libunftp::auth::jsonfile_auth;
-use log::*;
 
+use log::info;
 use std::io::Error;
 
 use std::sync::Arc;
