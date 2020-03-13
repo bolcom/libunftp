@@ -6,8 +6,8 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
+use log::warn;
+use std::path::Path;
 use uuid::Uuid;
 
 // TODO: Write functional test for STOU command.
@@ -23,17 +23,20 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
-        let tx = match session.data_cmd_tx.take() {
-            Some(tx) => tx,
-            None => {
-                return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
+        let uuid: String = Uuid::new_v4().to_string();
+        let filename: &Path = std::path::Path::new(&uuid);
+        let path: String = session.cwd.join(&filename).to_string_lossy().to_string();
+        match session.data_cmd_tx.take() {
+            Some(mut tx) => {
+                tokio02::spawn(async move {
+                    use futures03::sink::SinkExt;
+                    if let Err(err) = tx.send(Command::Stor { path }).await {
+                        warn!("sending command failed. {}", err);
+                    }
+                });
+                Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
             }
-        };
-
-        let uuid = Uuid::new_v4().to_string();
-        let filename = std::path::Path::new(&uuid);
-        let path = session.cwd.join(&filename).to_string_lossy().to_string();
-        spawn!(tx.send(Command::Stor { path }));
-        Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
+            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+        }
     }
 }

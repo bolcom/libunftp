@@ -9,14 +9,13 @@
 // pathname does not already exist.
 
 use crate::server::commands::Cmd;
+use crate::server::commands::Command;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
-use tokio;
+use log::warn;
 
 pub struct Stor;
 
@@ -30,13 +29,18 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
-        let tx = match session.data_cmd_tx.take() {
-            Some(tx) => tx,
-            None => {
-                return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
+        let cmd: Command = args.cmd.clone();
+        match session.data_cmd_tx.take() {
+            Some(mut tx) => {
+                tokio02::spawn(async move {
+                    use futures03::sink::SinkExt;
+                    if let Err(err) = tx.send(cmd).await {
+                        warn!("{}", err);
+                    }
+                });
+                Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
             }
-        };
-        spawn!(tx.send(args.cmd.clone()));
-        Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
+            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+        }
     }
 }
