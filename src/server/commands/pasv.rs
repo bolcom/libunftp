@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 // use rand::Rng;
 // use tokio::net::TcpListener;
-use futures::sync::mpsc::{channel, Receiver, Sender};
+use futures03::channel::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -69,8 +69,7 @@ where
         let tx = args.tx.clone();
 
         let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
-        let (data_abort_tx, data_abort_rx): (futures03::channel::mpsc::Sender<()>, futures03::channel::mpsc::Receiver<()>) =
-            futures03::channel::mpsc::channel(1);
+        let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
 
         {
             let mut session = args.session.lock().await;

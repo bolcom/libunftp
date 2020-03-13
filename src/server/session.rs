@@ -8,7 +8,8 @@ use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::sync::mpsc::{Receiver, Sender};
+use futures::sync::mpsc::Sender;
+use futures03::channel::mpsc::Receiver;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,10 +35,10 @@ where
     pub user: Arc<Option<U>>,
     pub username: Option<String>,
     pub storage: Arc<S>,
-    pub data_cmd_tx: Option<Sender<Command>>,
+    pub data_cmd_tx: Option<futures03::channel::mpsc::Sender<Command>>,
     pub data_cmd_rx: Option<Receiver<Command>>,
     pub data_abort_tx: Option<futures03::channel::mpsc::Sender<()>>,
-    pub data_abort_rx: Option<futures03::channel::mpsc::Receiver<()>>,
+    pub data_abort_rx: Option<Receiver<()>>,
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
@@ -107,13 +108,17 @@ where
 
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
-        let rx = self.data_cmd_rx.take().unwrap();
+        let rx = {
+            use futures03::stream::StreamExt;
+            use futures03::stream::TryStreamExt;
+            self.data_cmd_rx.take().unwrap().map(Ok::<Command, ()>).compat()
+        };
         // TODO: Same as above, don't `unwrap()` here. Ideally we solve this by refactoring to a
         // proper state machine.
-        let abort_rx = self.data_abort_rx.take().unwrap();
-        let storage = Arc::clone(&self.storage);
+        let abort_rx: Receiver<()> = self.data_abort_rx.take().unwrap();
+        let storage: Arc<S> = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
-        let start_pos = self.start_pos;
+        let start_pos: u64 = self.start_pos;
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
@@ -129,8 +134,8 @@ where
                 match cmd {
                     Some(ExternalCommand(Command::Retr { path })) => {
                         let path = cwd.join(path);
-                        let tx_sending = tx.clone();
-                        let tx_error = tx.clone();
+                        let tx_sending: Sender<InternalMsg> = tx.clone();
+                        let tx_error: Sender<InternalMsg> = tx.clone();
                         tokio::spawn(
                             storage
                                 .get(&user, path, start_pos)
