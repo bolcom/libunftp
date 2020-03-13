@@ -23,19 +23,20 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio02::sync::Mutex;
 
+use tokio02::sync::Mutex;
 use failure::Fail;
 use futures::prelude::Stream;
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
-use tokio::codec::Decoder;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpStream};
+use tokio02util::codec::*;
+use futures03::{SinkExt, StreamExt, TryStreamExt};
 use tokio::prelude::*;
 use std::ops::Range;
+use futures03::compat::Future01CompatExt;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -59,7 +60,7 @@ impl From<commands::ParseError> for FTPError {
 // Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
 trait AsyncStream: AsyncRead + AsyncWrite + Send {}
 
-impl AsyncStream for TcpStream {}
+impl AsyncStream for tokio::net::TcpStream {}
 
 impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 
@@ -276,26 +277,20 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub async fn listener<T: Into<String>>(self, bind_address: T) {
-        let addr = bind_address.into().parse().unwrap();
-        let listener = TcpListener::bind(&addr).unwrap();
-        let mut connections = listener.incoming().compat();
-
-        use futures03::StreamExt;
-        while let Some(stream) = connections.next().await {
-            match stream {
-                Ok(stream) => {
-                    let result = self.process_control_connection(stream).await;
-                    if result.is_err() {
-                        warn!("Could not process connection: {:?}", result.err().unwrap())
-                    }
-                }
-                Err(err) => warn!("Could not get next connection stream: {:?}", err),
+        // TODO: Propogate errors to caller instead of doing unwraps.
+        let addr :std::net::SocketAddr = bind_address.into().parse().unwrap();
+        let mut listener = tokio02::net::TcpListener::bind(addr).await.unwrap();
+        loop {
+            let (tcp_stream, _socket_addr) = listener.accept().await.unwrap();
+            let result = self.process_control_connection(tcp_stream).await;
+            if result.is_err() {
+                warn!("Could not process connection: {:?}", result.err().unwrap())
             }
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn process_control_connection(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
+    async fn process_control_connection(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
             true
@@ -309,22 +304,22 @@ where
             .certs(self.certs_file.clone(), self.key_file.clone())
             .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
-        let (tx, rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+        let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_ports = self.passive_ports.clone();
 
         let local_addr = tcp_stream.local_addr()?;
 
-        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
-            _ => Box::new(tcp_stream),
-        };
+//        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
+//            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
+//            _ => Box::new(tcp_stream),
+//        };
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
             authenticator,
             tls_configured,
             passive_ports,
-            tx,
+            internal_msg_tx,
             local_addr,
             storage_features,
         );
@@ -332,46 +327,54 @@ where
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
 
         let codec = controlchan::FTPCodec::new();
-        let (sink, stream) = codec.framed(tcp_tls_stream).split();
+        let cmd_and_reply_stream = codec.framed(tcp_stream);
+        let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
         let idle_session_timeout = self.idle_session_timeout;
-        use futures03::compat::Sink01CompatExt;
-        use futures03::SinkExt;
 
-        let mut sink = sink.sink_compat();
-        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
-        sink.flush().await?;
+        reply_sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
+        reply_sink.flush().await?;
 
-        let strm = stream
-            .map(Event::Command)
-            .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
-            // Read events until we get an InternalMsg::Quit or the session times out
-            .take_while(move |event| {
+        use futures03::*;
+
+        // combine the command stream with the internal message stream
+        let mut event_stream = command_source.map_ok(|command| Event::Command(command)).map_err(|e: FTPError| e);
+        use futures03::compat::Stream01CompatExt;
+        let mut select_stream = futures03::stream::select(
+            event_stream,
+            internal_msg_rx.map(Event::InternalMsg).map_err(|_|FTPErrorKind::InternalMsgError.into()).compat()
+        );
+
+        tokio02::spawn(async move {
+            //use tokio02::stream::StreamExt;
+            //let mut command_stream_with_timeout = command_stream.timeout(idle_session_timeout);
+            while let Some(Ok(event)) = select_stream.next().await {
                 if with_metrics {
                     metrics::add_event_metric(&event);
                 };
-                match *event {
-                    Event::InternalMsg(InternalMsg::Quit) => Ok(false),
-                    _ => Ok(true),
-                }
-            })
-            .and_then(event_handler_chain)
-            .timeout(idle_session_timeout)
-            .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
-            .map(move |reply| {
-                if with_metrics {
-                    metrics::add_reply_metric(&reply);
-                }
-                reply
-            })
-            // Needed for type annotation, we can possible remove this once the compiler is
-            // smarter about inference :)
-            .map_err(|e: FTPError| e);
 
-        tokio02::spawn(async move {
-            if let Err(e) = sink.send_all(&mut strm.compat()).await {
-                warn!("Could not send stream. {}", e);
+                if let Event::InternalMsg(InternalMsg::Quit) = event {
+                    println!("Quit received");
+                    return
+                }
+
+                // TODO: Handle timeout and call Self::handle_control_channel_error(e, with_metrics))
+
+                match event_handler_chain(event) {
+                    Err(e) => {
+                        println!("Event handler chain error: {:?}", e);
+                        return;
+                    },
+                    Ok(reply) => {
+                        if with_metrics {
+                            metrics::add_reply_metric(&reply);
+                        }
+                        println!("Got reply: {:?}", reply);
+                        reply_sink.send(reply).await;
+                    }
+                }
             }
         });
+
         Ok(())
     }
 
