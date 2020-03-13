@@ -6,14 +6,13 @@
 // contents of the file at the server site shall be unaffected.
 
 use crate::server::commands::Cmd;
+use crate::server::commands::Command;
 use crate::server::error::{FTPError, FTPErrorKind};
 use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
-use tokio;
+use log::warn;
 
 pub struct Retr;
 
@@ -27,11 +26,18 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
-        let tx = match session.data_cmd_tx.take() {
-            Some(tx) => tx,
-            None => return Err(FTPErrorKind::InternalServerError.into()),
-        };
-        spawn!(tx.send(args.cmd.clone()));
-        Ok(Reply::none())
+        let cmd: Command = args.cmd.clone();
+        match session.data_cmd_tx.take() {
+            Some(mut tx) => {
+                tokio02::spawn(async move {
+                    use futures03::sink::SinkExt;
+                    if let Err(err) = tx.send(cmd).await {
+                        warn!("{}", err);
+                    }
+                });
+                Ok(Reply::none())
+            }
+            None => Err(FTPErrorKind::InternalServerError.into()),
+        }
     }
 }
