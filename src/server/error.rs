@@ -42,9 +42,9 @@ pub enum FTPErrorKind {
     /// an username).
     #[fail(display = "Invalid command (invalid parameter)")]
     InvalidCommand,
-    /// The timer on the Control Channel encountered an error.
-    #[fail(display = "Encountered timer error on the control channel")]
-    ControlChannelTimerError,
+    /// The timer on the Control Channel elapsed.
+    #[fail(display = "Encountered read timeout on the control channel")]
+    ControlChannelTimeout,
 }
 
 impl FTPError {
@@ -97,5 +97,20 @@ impl From<std::io::Error> for FTPError {
 impl From<std::str::Utf8Error> for FTPError {
     fn from(err: std::str::Utf8Error) -> FTPError {
         err.context(FTPErrorKind::UTF8Error).into()
+    }
+}
+
+impl From<super::commands::ParseError> for FTPError {
+    fn from(err: super::commands::ParseError) -> FTPError {
+        match err.kind().clone() {
+            super::commands::ParseErrorKind::UnknownCommand { command } => {
+                // TODO: Do something smart with CoW to prevent copying the command around.
+                err.context(FTPErrorKind::UnknownCommand { command }).into()
+            }
+            super::commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
+            super::commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
+            super::commands::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
+            _ => err.context(FTPErrorKind::InvalidCommand).into(),
+        }
     }
 }

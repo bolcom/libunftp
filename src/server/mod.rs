@@ -24,12 +24,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio02::sync::Mutex;
-use failure::Fail;
-use futures::prelude::Stream;
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
-use log::{debug, info, warn};
+use futures03::*;
+use log::{info, warn};
 use session::{Session, SessionState};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio02util::codec::*;
@@ -37,25 +35,11 @@ use futures03::{SinkExt, StreamExt, TryStreamExt};
 use tokio::prelude::*;
 use std::ops::Range;
 use futures03::compat::Future01CompatExt;
+use tokio02::sync::Mutex;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 const CONTROL_CHANNEL_ID: u8 = 0;
-
-impl From<commands::ParseError> for FTPError {
-    fn from(err: commands::ParseError) -> FTPError {
-        match err.kind().clone() {
-            commands::ParseErrorKind::UnknownCommand { command } => {
-                // TODO: Do something smart with CoW to prevent copying the command around.
-                err.context(FTPErrorKind::UnknownCommand { command }).into()
-            }
-            commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
-            commands::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
-            _ => err.context(FTPErrorKind::InvalidCommand).into(),
-        }
-    }
-}
 
 // Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
 trait AsyncStream: AsyncRead + AsyncWrite + Send {}
@@ -281,7 +265,8 @@ where
         let addr :std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio02::net::TcpListener::bind(addr).await.unwrap();
         loop {
-            let (tcp_stream, _socket_addr) = listener.accept().await.unwrap();
+            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
+            info!("Incoming control channel connection from {:?}", socket_addr);
             let result = self.process_control_connection(tcp_stream).await;
             if result.is_err() {
                 warn!("Could not process connection: {:?}", result.err().unwrap())
@@ -328,50 +313,84 @@ where
 
         let codec = controlchan::FTPCodec::new();
         let cmd_and_reply_stream = codec.framed(tcp_stream);
-        let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
+        let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
         let idle_session_timeout = self.idle_session_timeout;
 
         reply_sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
         reply_sink.flush().await?;
 
-        use futures03::*;
-
-        // combine the command stream with the internal message stream
-        let mut event_stream = command_source.map_ok(|command| Event::Command(command)).map_err(|e: FTPError| e);
-        use futures03::compat::Stream01CompatExt;
-        let mut select_stream = futures03::stream::select(
-            event_stream,
-            internal_msg_rx.map(Event::InternalMsg).map_err(|_|FTPErrorKind::InternalMsgError.into()).compat()
-        );
+        let mut command_source = command_source.fuse();
+        let mut internal_msg_rx = internal_msg_rx.compat().fuse();
 
         tokio02::spawn(async move {
-            //use tokio02::stream::StreamExt;
-            //let mut command_stream_with_timeout = command_stream.timeout(idle_session_timeout);
-            while let Some(Ok(event)) = select_stream.next().await {
-                if with_metrics {
-                    metrics::add_event_metric(&event);
+            // The control channel event loop
+            loop {
+                #[allow(unused_assignments)]
+                let mut incoming = None;
+                let mut timeout_delay = tokio02::time::delay_for(idle_session_timeout);
+                tokio02::select! {
+                    Some(cmd_result) = command_source.next() => {
+                        incoming = Some(cmd_result.map(Event::Command));
+                    },
+                    Some(Ok(msg)) = internal_msg_rx.next() => {
+                        incoming = Some(Ok(Event::InternalMsg(msg)));
+                    },
+                    _ = &mut timeout_delay => {
+                        info!("Connection timed out");
+                        incoming = Some(Err(FTPError::new(FTPErrorKind::ControlChannelTimeout)));
+                    }
                 };
 
-                if let Event::InternalMsg(InternalMsg::Quit) = event {
-                    println!("Quit received");
-                    return
-                }
-
-                // TODO: Handle timeout and call Self::handle_control_channel_error(e, with_metrics))
-
-                match event_handler_chain(event) {
-                    Err(e) => {
-                        println!("Event handler chain error: {:?}", e);
+                match incoming {
+                    None => {
+                        // Should not happen.
+                        warn!("No event polled...");
                         return;
                     },
-                    Ok(reply) => {
+                    Some(Ok(event)) => {
                         if with_metrics {
-                            metrics::add_reply_metric(&reply);
+                            metrics::add_event_metric(&event);
+                        };
+
+                        if let Event::InternalMsg(InternalMsg::Quit) = event {
+                            info!("Quit received");
+                            return;
                         }
-                        println!("Got reply: {:?}", reply);
-                        reply_sink.send(reply).await;
+
+                        match event_handler_chain(event) {
+                            Err(e) => {
+                                warn!("Event handler chain error: {:?}", e);
+                                return;
+                            },
+                            Ok(reply) => {
+                                if with_metrics {
+                                    metrics::add_reply_metric(&reply);
+                                }
+                                let result = reply_sink.send(reply).await;
+                                if result.is_err() {
+                                    warn!("could not send reply");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        let reply = Self::handle_control_channel_error(e, with_metrics);
+                        let mut close_connection = false;
+                        if let Reply::CodeAndMsg{ code: ReplyCode::ClosingControlConnection, msg: _ } = reply {
+                            close_connection = true;
+                        }
+                        let result = reply_sink.send(reply).await;
+                        if result.is_err() {
+                            warn!("could not send error reply");
+                            return;
+                        }
+                        if close_connection {
+                            return;
+                        }
                     }
                 }
+
             }
         });
 
@@ -380,7 +399,7 @@ where
 
     fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| match event {
-            // internal messages and the below commands are except from auth checks.
+            // internal messages and the below commands are exempt from auth checks.
             Event::InternalMsg(_)
             | Event::Command(Command::Help)
             | Event::Command(Command::User { .. })
@@ -563,69 +582,20 @@ where
         }
     }
 
-    fn handle_control_channel_error(error: tokio::timer::timeout::Error<FTPError>, with_metrics: bool) -> Reply {
-        if error.is_timer() {
-            if with_metrics {
-                metrics::add_error_metric(&FTPErrorKind::ControlChannelTimerError);
-            };
-            match error.into_timer() {
-                Some(timeout_error) => {
-                    if timeout_error.is_shutdown() {
-                        warn!("Control channel timer has been shutdown")
-                    } else if timeout_error.is_at_capacity() {
-                        warn!("Control channel timer has reached maximum capacity. There are too many idle connections")
-                    };
-                    // Timer errors can either be due to the timer being shutdown or being at_capacity.
-                    // In both cases we can simply tell the client that the service is unavailable.
-                    Reply::new(ReplyCode::ServiceNotAvailable, "Service not available, please try again later")
-                }
-                None => {
-                    // If error.is_timer() is true then we expect there to be Some error. If this branch fires then
-                    // it is likely from a bug in tokio::timer::timeout
-                    if with_metrics {
-                        metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-                    };
-                    debug!("tokio::timer::timeout thinks it got an error on the control channel but there is no error there");
-                    Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
-                }
-            }
-        } else if error.is_inner() {
-            match error.into_inner() {
-                Some(ftp_error) => {
-                    if with_metrics {
-                        metrics::add_error_metric(&ftp_error.kind());
-                    };
-                    warn!("Failed to process command: {}", ftp_error);
-                    match ftp_error.kind() {
-                        FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
-                        FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
-                        FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
-                        _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
-                    }
-                }
-                None => {
-                    // If error.is_inner() is true then we expect there to be Some error. If this branch fires then
-                    // it is likely from a bug in tokio::timer::timeout
-                    if with_metrics {
-                        metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-                    };
-                    debug!("tokio::timer::timeout thinks it got an error on the control channel but there is no error there");
-                    Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
-                }
-            }
-        } else if error.is_elapsed() {
-            Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection")
-        } else {
-            if with_metrics {
-                metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-            };
-            // The error enum tokio::timer::timeout::Kind is private so we can't pattern match to ensure we get all the different kinds.
-            // Presently, only the above three are available but we'll add this so that the FTP server doesn't break unexpectedly
-            // if that ever changes.
-            warn!("Unexpected tokio::timer::timeout::Error Kind received: {}", error);
-            Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
+    fn handle_control_channel_error(error: FTPError, with_metrics: bool) -> Reply {
+        if with_metrics {
+            metrics::add_error_metric(&error.kind());
+        };
+        warn!("Control channel error: {}", error);
+        match error.kind() {
+            FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
+            FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
+            FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
+            FTPErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+            _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
         }
     }
+
 }
 
 /// Convenience struct to group command args
