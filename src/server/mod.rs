@@ -8,6 +8,7 @@ pub(crate) mod password;
 pub(crate) mod reply;
 mod session;
 mod stream;
+mod tls;
 
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
@@ -295,6 +296,8 @@ where
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
         let local_addr = tcp_stream.local_addr()?;
+        let certs = self.certs_file.clone().unwrap();
+        let keys = self.key_file.clone().unwrap();
 
         //        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
         //            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
@@ -361,16 +364,18 @@ where
                         if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
                             info!("Stepping up to TLS");
 
-                            use futures03::stream::SplitStream;
+                            //use futures03::stream::SplitStream;
                             let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
                             let io = codec_io.into_inner();
 
                             // TODO: Do TLS handshake and wrap io in a TLS stream.
 
+                            let config = tls::new_config(&certs, &keys);
+
                             let codec = controlchan::FTPCodec::new();
                             let cmd_and_reply_stream = codec.framed(io);
-                            let (mut sink, src) = cmd_and_reply_stream.split();
-                            let mut src = src.fuse();
+                            let (sink, src) = cmd_and_reply_stream.split();
+                            let src = src.fuse();
                             reply_sink = sink;
                             command_source = src;
                         }
