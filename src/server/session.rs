@@ -4,7 +4,7 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;
-use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
+use super::stream::{SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
@@ -14,7 +14,6 @@ use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio02::sync::Mutex;
 
 const DATA_CHANNEL_ID: u8 = 1;
 
@@ -98,11 +97,11 @@ where
     /// Processing for the data connection.
     ///
     /// socket: the data socket we'll be working with
-    /// sec_switch: communicates the security setting for the data channel.
+    /// tls: tells if this should be a TLS connection
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: Sender<InternalMsg>) {
-        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
+    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, tls: bool, tx: Sender<InternalMsg>) {
+        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (tls, &self.certs_file, &self.key_file) {
+            (true, Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
         };
 
@@ -244,31 +243,6 @@ where
             .map(|_| ());
 
         tokio::spawn(task);
-    }
-}
-
-impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
-where
-    S: storage::StorageBackend<U>,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
-{
-    fn which_state(&self, channel: u8) -> SecurityState {
-        match channel {
-            crate::server::CONTROL_CHANNEL_ID => {
-                if self.cmd_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            DATA_CHANNEL_ID => {
-                if self.data_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            _ => SecurityState::Off,
-        }
     }
 }
 

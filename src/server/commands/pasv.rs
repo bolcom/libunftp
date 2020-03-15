@@ -110,7 +110,8 @@ where
                 let session2 = session.clone();
                 let mut session2 = session2.lock().await;
                 let user = session2.user.clone();
-                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
+                let tls = session2.data_tls;
+                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, tls, tx);
             }
         });
 
