@@ -1,7 +1,6 @@
 //! Implements a stream that can change between TCP and TLS on the fly.
 
-use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 use tokio02::sync::Mutex;
@@ -10,7 +9,7 @@ use futures::Future;
 use futures::{Async, Poll};
 use log::debug;
 use rustls;
-use rustls::{NoClientAuth, Session};
+use rustls::Session;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 
@@ -46,48 +45,13 @@ enum TlsIoType {
 
 impl<S: SecuritySwitch> SwitchingTlsStream<S> {
     pub fn new<P: AsRef<Path>>(delegate: TcpStream, switch: Arc<Mutex<S>>, channel: u8, certs_file: P, key_file: P) -> SwitchingTlsStream<S> {
-        let certs = <SwitchingTlsStream<S>>::load_certs(certs_file);
-        let privkey = <SwitchingTlsStream<S>>::load_private_key(key_file);
-
-        let mut config = rustls::ServerConfig::new(NoClientAuth::new());
-        config.key_log = Arc::new(rustls::KeyLogFile::new());
-        config.set_single_cert(certs, privkey).expect("Failed to setup TLS certificate chain and key");
-        let config = Arc::new(config);
-
+        let config = super::tls::new_config(certs_file, key_file);
         SwitchingTlsStream {
             tcp: delegate,
             state: switch,
             tls: rustls::ServerSession::new(&config),
             channel,
             eof: false,
-        }
-    }
-
-    fn load_certs<P: AsRef<Path>>(filename: P) -> Vec<rustls::Certificate> {
-        let certfile = File::open(filename).expect("cannot open certificate file");
-        let mut reader = BufReader::new(certfile);
-        rustls::internal::pemfile::certs(&mut reader).unwrap()
-    }
-
-    fn load_private_key<P: AsRef<Path>>(filename: P) -> rustls::PrivateKey {
-        let rsa_keys = {
-            let keyfile = File::open(&filename).expect("cannot open private key file");
-            let mut reader = BufReader::new(keyfile);
-            rustls::internal::pemfile::rsa_private_keys(&mut reader).expect("file contains invalid rsa private key")
-        };
-
-        let pkcs8_keys = {
-            let keyfile = File::open(&filename).expect("cannot open private key file");
-            let mut reader = BufReader::new(keyfile);
-            rustls::internal::pemfile::pkcs8_private_keys(&mut reader).expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
-        };
-
-        // prefer to load pkcs8 keys
-        if !pkcs8_keys.is_empty() {
-            pkcs8_keys[0].clone()
-        } else {
-            assert!(!rsa_keys.is_empty());
-            rsa_keys[0].clone()
         }
     }
 
@@ -157,7 +121,7 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
 impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         //        let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::Off;
+        let state = SecurityState::On;
         match state {
             SecurityState::Off => self.tcp.read(buf),
             SecurityState::On => {
@@ -192,7 +156,7 @@ impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
 impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::Off;
+        let state = SecurityState::On;
         match state {
             SecurityState::On => {
                 if self.tls.is_handshaking() {
@@ -236,7 +200,7 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
     fn flush(&mut self) -> io::Result<()> {
         debug!("Flush called <<{}>>", self.channel);
         //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::Off;
+        let state = SecurityState::On;
         match state {
             SecurityState::On => {
                 while self.tls.wants_write() {
@@ -258,7 +222,7 @@ impl<S: SecuritySwitch> AsyncWrite for SwitchingTlsStream<S> {
         debug!("AsyncWrite shutdown <<{}>>", self.channel);
 
         //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::Off;
+        let state = SecurityState::On;
         if let SecurityState::On = state {
             if self.tls.is_handshaking() {
                 let r = self.tls.complete_io(&mut self.tcp);

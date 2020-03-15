@@ -27,8 +27,12 @@ tokio = "0.1"
 futures03 = {package = "futures", version = "0.3", features = ["compat", "io-compat", "std"]}
 tokio02 = { package="tokio", version = "0.2.13", features = ["full"]}
 tokio02util = { package="tokio-util", version = "0.3.0", features=["compat", "codec"] }
+tokio02tls = { package="tokio-tls", version = "0.3.0" }
 tokio-compat = { version = "0.1", features = ["rt-full"] }
+
+native-tls = "0.2.4"
 rustls = "0.15.2"
+
 bytes = "0.4"
 bytes05 = { package="bytes", version = "0.5" }
 lazy_static = "1.3.0"

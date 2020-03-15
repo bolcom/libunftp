@@ -50,6 +50,28 @@ impl AsyncStream for tokio::net::TcpStream {}
 
 impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 
+trait Async2Stream: tokio02::io::AsyncRead + tokio02::io::AsyncWrite + Send + Unpin {}
+
+impl Async2Stream for tokio02::net::TcpStream {}
+impl Async2Stream for tokio02tls::TlsStream<tokio02::net::TcpStream> {}
+impl Async2Stream for tokio02tls::TlsStream<Box<dyn Async2Stream>> {}
+
+trait AsAsyncIo {
+    fn as_async_io(self) -> Box<dyn Async2Stream>;
+}
+
+impl AsAsyncIo for tokio02::net::TcpStream {
+    fn as_async_io(self) -> Box<dyn Async2Stream> {
+        Box::new(self)
+    }
+}
+
+impl AsAsyncIo for tokio02tls::TlsStream<Box<dyn Async2Stream>> {
+    fn as_async_io(self) -> Box<dyn Async2Stream> {
+        Box::new(self)
+    }
+}
+
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
 ///
@@ -295,14 +317,7 @@ where
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
-        let local_addr = tcp_stream.local_addr()?;
-        let certs = self.certs_file.clone().unwrap();
-        let keys = self.key_file.clone().unwrap();
-
-        //        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
-        //            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
-        //            _ => Box::new(tcp_stream),
-        //        };
+        let local_addr = tcp_stream.local_addr().unwrap();
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
@@ -317,7 +332,7 @@ where
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
 
         let codec = controlchan::FTPCodec::new();
-        let cmd_and_reply_stream = codec.framed(tcp_stream);
+        let cmd_and_reply_stream = codec.framed(tcp_stream.as_async_io());
         let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
         reply_sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
@@ -362,16 +377,19 @@ where
                         }
 
                         if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
-                            info!("Stepping up to TLS");
+                            info!("Upgrading to TLS");
 
-                            //use futures03::stream::SplitStream;
+                            // Get back the original TCP Stream
                             let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
                             let io = codec_io.into_inner();
 
-                            // TODO: Do TLS handshake and wrap io in a TLS stream.
+                            // Wrap in TLS Stream
+                            //let config = tls::new_config(&certs, &keys);
+                            let identity = tls::identity();
+                            let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                            let io = acceptor.accept(io).await.unwrap().as_async_io();
 
-                            let config = tls::new_config(&certs, &keys);
-
+                            // Wrap in codec again and get sink + source
                             let codec = controlchan::FTPCodec::new();
                             let cmd_and_reply_stream = codec.framed(io);
                             let (sink, src) = cmd_and_reply_stream.split();
