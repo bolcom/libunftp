@@ -16,7 +16,7 @@ pub(crate) use error::{FTPError, FTPErrorKind};
 
 use self::commands::{Cmd, Command};
 use self::reply::{Reply, ReplyCode};
-use self::stream::{SecuritySwitch, SwitchingTlsStream};
+use self::stream::SwitchingTlsStream;
 use crate::auth::{self, AnonymousUser};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
@@ -27,31 +27,23 @@ use std::time::Duration;
 
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
-use futures03::*;
 use log::{info, warn};
 use session::{Session, SessionState};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio02util::codec::*;
-use futures03::{SinkExt, StreamExt, TryStreamExt};
-use tokio::prelude::*;
+use futures03::{SinkExt, StreamExt};
 use std::ops::Range;
-use futures03::compat::Future01CompatExt;
 use tokio02::sync::Mutex;
-use tokio02util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
-const CONTROL_CHANNEL_ID: u8 = 0;
 
 // Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
 trait AsyncStream: AsyncRead + AsyncWrite + Send {}
-
 impl AsyncStream for tokio::net::TcpStream {}
-
-impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
+impl AsyncStream for SwitchingTlsStream {}
 
 trait Async2Stream: tokio02::io::AsyncRead + tokio02::io::AsyncWrite + Send + Unpin {}
-
 impl Async2Stream for tokio02::net::TcpStream {}
 impl Async2Stream for tokio02tls::TlsStream<tokio02::net::TcpStream> {}
 impl Async2Stream for tokio02tls::TlsStream<Box<dyn Async2Stream>> {}
@@ -397,6 +389,8 @@ where
                             reply_sink = sink;
                             command_source = src;
                         }
+
+                        // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
 
                         match event_handler_chain(event) {
                             Err(e) => {

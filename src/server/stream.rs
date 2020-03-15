@@ -2,8 +2,6 @@
 
 use std::io::{self, Read, Write};
 use std::path::Path;
-use std::sync::Arc;
-use tokio02::sync::Mutex;
 
 use futures::Future;
 use futures::{Async, Poll};
@@ -21,18 +19,12 @@ pub enum SecurityState {
     Off,
 }
 
-pub trait SecuritySwitch {
-    /// Tells if the specified channel is in secure mode or not.
-    fn which_state(&self, channel: u8) -> SecurityState;
-}
-
 // A stream that can switch between TLS and plaintext mode depending on the state of provided
 // SecuritySwitch.
 #[derive(Debug)]
-pub struct SwitchingTlsStream<S: SecuritySwitch> {
+pub struct SwitchingTlsStream {
     tcp: TcpStream,
     tls: rustls::ServerSession,
-    state: Arc<Mutex<S>>,
     channel: u8,
     eof: bool,
 }
@@ -43,12 +35,11 @@ enum TlsIoType {
     Write,
 }
 
-impl<S: SecuritySwitch> SwitchingTlsStream<S> {
-    pub fn new<P: AsRef<Path>>(delegate: TcpStream, switch: Arc<Mutex<S>>, channel: u8, certs_file: P, key_file: P) -> SwitchingTlsStream<S> {
+impl SwitchingTlsStream {
+    pub fn new<P: AsRef<Path>>(delegate: TcpStream, channel: u8, certs_file: P, key_file: P) -> SwitchingTlsStream {
         let config = super::tls::new_config(certs_file, key_file);
         SwitchingTlsStream {
             tcp: delegate,
-            state: switch,
             tls: rustls::ServerSession::new(&config),
             channel,
             eof: false,
@@ -118,7 +109,7 @@ impl<S: SecuritySwitch> SwitchingTlsStream<S> {
     }
 }
 
-impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
+impl Read for SwitchingTlsStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         //        let state = self.state.lock().unwrap().which_state(self.channel);
         let state = SecurityState::On;
@@ -153,7 +144,7 @@ impl<S: SecuritySwitch> Read for SwitchingTlsStream<S> {
     }
 }
 
-impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
+impl Write for SwitchingTlsStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         //let state = self.state.lock().unwrap().which_state(self.channel);
         let state = SecurityState::On;
@@ -215,9 +206,9 @@ impl<S: SecuritySwitch> Write for SwitchingTlsStream<S> {
     }
 }
 
-impl<S: SecuritySwitch> AsyncRead for SwitchingTlsStream<S> {}
+impl AsyncRead for SwitchingTlsStream {}
 
-impl<S: SecuritySwitch> AsyncWrite for SwitchingTlsStream<S> {
+impl AsyncWrite for SwitchingTlsStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         debug!("AsyncWrite shutdown <<{}>>", self.channel);
 
