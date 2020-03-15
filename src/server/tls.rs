@@ -1,10 +1,22 @@
-use std::io::BufReader;
 use std::fs::File;
+use std::io::BufReader;
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 
 use rustls;
 use rustls::NoClientAuth;
+
+use native_tls;
+use native_tls::Identity;
+
+pub fn identity() -> Identity {
+    let mut file = File::open("/Users/hdejager/Desktop/unftp/unftp.pfx").unwrap();
+    let mut identity = vec![];
+    file.read_to_end(&mut identity).unwrap();
+    let identity = Identity::from_pkcs12(&identity, "123").unwrap();
+    identity
+}
 
 pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::ServerConfig> {
     let certs = load_certs(certs_file);
