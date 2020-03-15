@@ -36,6 +36,7 @@ use tokio::prelude::*;
 use std::ops::Range;
 use futures03::compat::Future01CompatExt;
 use tokio02::sync::Mutex;
+use tokio02util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -262,7 +263,7 @@ where
     /// `bind()` to the address.
     pub async fn listener<T: Into<String>>(self, bind_address: T) {
         // TODO: Propogate errors to caller instead of doing unwraps.
-        let addr :std::net::SocketAddr = bind_address.into().parse().unwrap();
+        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio02::net::TcpListener::bind(addr).await.unwrap();
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
@@ -294,10 +295,10 @@ where
 
         let local_addr = tcp_stream.local_addr()?;
 
-//        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
-//            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
-//            _ => Box::new(tcp_stream),
-//        };
+        //        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
+        //            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
+        //            _ => Box::new(tcp_stream),
+        //        };
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
@@ -346,7 +347,7 @@ where
                         // Should not happen.
                         warn!("No event polled...");
                         return;
-                    },
+                    }
                     Some(Ok(event)) => {
                         if with_metrics {
                             metrics::add_event_metric(&event);
@@ -361,7 +362,7 @@ where
                             Err(e) => {
                                 warn!("Event handler chain error: {:?}", e);
                                 return;
-                            },
+                            }
                             Ok(reply) => {
                                 if with_metrics {
                                     metrics::add_reply_metric(&reply);
@@ -377,7 +378,11 @@ where
                     Some(Err(e)) => {
                         let reply = Self::handle_control_channel_error(e, with_metrics);
                         let mut close_connection = false;
-                        if let Reply::CodeAndMsg{ code: ReplyCode::ClosingControlConnection, msg: _ } = reply {
+                        if let Reply::CodeAndMsg {
+                            code: ReplyCode::ClosingControlConnection,
+                            ..
+                        } = reply
+                        {
                             close_connection = true;
                         }
                         let result = reply_sink.send(reply).await;
@@ -390,7 +395,6 @@ where
                         }
                     }
                 }
-
             }
         });
 
@@ -595,7 +599,6 @@ where
             _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
         }
     }
-
 }
 
 /// Convenience struct to group command args
