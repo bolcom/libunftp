@@ -1,6 +1,6 @@
 //! Contains code pertaining to the FTP *control* channel
 
-use crate::server::{commands::Command, FTPError, InternalMsg, reply::Reply};
+use crate::server::{commands::Command, reply::Reply, FTPError, InternalMsg};
 use bytes05::BytesMut;
 use std::io::Write;
 use tokio02util::codec::{Decoder, Encoder};
