@@ -190,6 +190,7 @@ where
 
     /// Configures the path to the certificates file (PEM format) and the associated private key file
     /// in order to configure FTPS.
+    /// in order to configure FTPS.
     ///
     /// # Example
     ///
@@ -292,7 +293,7 @@ where
         let session = Arc::new(Mutex::new(session));
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_ports = self.passive_ports.clone();
-
+        let idle_session_timeout = self.idle_session_timeout;
         let local_addr = tcp_stream.local_addr()?;
 
         //        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
@@ -315,7 +316,6 @@ where
         let codec = controlchan::FTPCodec::new();
         let cmd_and_reply_stream = codec.framed(tcp_stream);
         let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
-        let idle_session_timeout = self.idle_session_timeout;
 
         reply_sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
         reply_sink.flush().await?;
@@ -356,6 +356,23 @@ where
                         if let Event::InternalMsg(InternalMsg::Quit) = event {
                             info!("Quit received");
                             return;
+                        }
+
+                        if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
+                            info!("Stepping up to TLS");
+
+                            use futures03::stream::SplitStream;
+                            let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
+                            let io = codec_io.into_inner();
+
+                            // TODO: Do TLS handshake and wrap io in a TLS stream.
+
+                            let codec = controlchan::FTPCodec::new();
+                            let cmd_and_reply_stream = codec.framed(io);
+                            let (mut sink, src) = cmd_and_reply_stream.split();
+                            let mut src = src.fuse();
+                            reply_sink = sink;
+                            command_source = src;
                         }
 
                         match event_handler_chain(event) {
