@@ -35,6 +35,7 @@ use tokio::codec::Decoder;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use std::ops::Range;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -90,7 +91,7 @@ where
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
-    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
     key_file: Option<PathBuf>,
     with_metrics: bool,
@@ -131,17 +132,16 @@ where
     where
         auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
-        let server = Server {
+        Server {
             storage: s,
             greeting: DEFAULT_GREETING,
             authenticator: Arc::new(auth::AnonymousAuthenticator {}),
-            passive_addrs: Arc::new(vec![]),
+            passive_ports: 49152..65535,
             certs_file: Option::None,
             key_file: Option::None,
             with_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-        };
-        server.passive_ports(49152..65535)
+        }
     }
 
     /// Set the greeting that will be sent to the client after connecting.
@@ -197,14 +197,8 @@ where
     /// let mut server = Server::with_root("/tmp");
     /// server.passive_ports(49152..65535);
     /// ```
-    pub fn passive_ports(mut self, range: std::ops::Range<u16>) -> Self {
-        let mut addrs = vec![];
-        for port in range {
-            let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
-            let addr = std::net::SocketAddr::new(ip, port);
-            addrs.push(addr);
-        }
-        self.passive_addrs = Arc::new(addrs);
+    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
+        self.passive_ports = range;
         self
     }
 
@@ -290,7 +284,7 @@ where
         while let Some(stream) = connections.next().await {
             match stream {
                 Ok(stream) => {
-                    let result = self.process(stream).await;
+                    let result = self.process_control_connection(stream).await;
                     if result.is_err() {
                         warn!("Could not process connection: {:?}", result.err().unwrap())
                     }
@@ -301,7 +295,7 @@ where
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn process(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
+    async fn process_control_connection(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
             true
@@ -316,7 +310,7 @@ where
             .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
         let (tx, rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-        let passive_addrs = self.passive_addrs.clone();
+        let passive_ports = self.passive_ports.clone();
 
         let local_addr = tcp_stream.local_addr()?;
 
@@ -327,9 +321,9 @@ where
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
-            authenticator.clone(),
+            authenticator,
             tls_configured,
-            passive_addrs,
+            passive_ports,
             tx,
             local_addr,
             storage_features,
@@ -419,7 +413,7 @@ where
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
-        passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+        passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
@@ -431,7 +425,7 @@ where
                     session.clone(),
                     authenticator.clone(),
                     tls_configured,
-                    passive_addrs.clone(),
+                    passive_ports.clone(),
                     tx.clone(),
                     local_addr,
                     storage_features,
@@ -447,7 +441,7 @@ where
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
-        passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+        passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
@@ -457,7 +451,7 @@ where
             session,
             authenticator,
             tls_configured,
-            passive_addrs,
+            passive_ports,
             tx,
             local_addr,
             storage_features,
@@ -474,7 +468,7 @@ where
             Command::Mode { mode } => Box::new(commands::Mode::new(mode)),
             Command::Help => Box::new(commands::Help),
             Command::Noop => Box::new(commands::Noop),
-            Command::Pasv => Box::new(commands::Pasv),
+            Command::Pasv => Box::new(commands::Pasv::new()),
             Command::Port => Box::new(commands::Port),
             Command::Retr { .. } => Box::new(commands::Retr),
             Command::Stor { .. } => Box::new(commands::Stor),
@@ -642,7 +636,7 @@ where
     session: Arc<Mutex<Session<S, U>>>,
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
-    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,
