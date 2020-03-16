@@ -10,8 +10,8 @@ use rustls::NoClientAuth;
 use native_tls;
 use native_tls::Identity;
 
-pub fn identity() -> Identity {
-    let mut file = File::open("/Users/hdejager/Desktop/unftp/unftp.pfx").unwrap();
+pub fn identity<P: AsRef<Path>>(identity_file: P) -> Identity {
+    let mut file = File::open(identity_file).unwrap();
     let mut identity = vec![];
     file.read_to_end(&mut identity).unwrap();
     let identity = Identity::from_pkcs12(&identity, "123").unwrap();
