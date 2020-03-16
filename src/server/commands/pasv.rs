@@ -12,14 +12,13 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::stream::Stream;
 use futures03::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Range;
 use tokio::io;
-use tokio::net::TcpListener;
+use tokio02::net::TcpListener;
 use tokio02::sync::Mutex;
 
 use lazy_static::*;
@@ -44,7 +43,7 @@ impl Pasv {
         let mut rng = OS_RNG.lock().await;
         for _ in 1..BIND_RETRIES {
             let port = rng.next_u32() % rng_length as u32 + passive_addrs.start as u32;
-            listener = TcpListener::bind(&std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16));
+            listener = TcpListener::bind(std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16)).await;
             if listener.is_ok() {
                 break;
             }
@@ -71,7 +70,7 @@ where
 
         let listener = Pasv::try_port_range(args.passive_ports).await;
 
-        let listener = match listener {
+        let mut listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
             Ok(l) => l,
         };
@@ -100,19 +99,14 @@ where
 
         let session = args.session.clone();
 
-        use futures03::compat::Stream01CompatExt;
-        use futures03::StreamExt;
-
         tokio02::spawn(async move {
-            let mut strm = listener.incoming().take(1).compat();
-
-            if let Some(socket) = strm.next().await {
+            if let Ok((socket, _socket_addr)) = listener.accept().await {
                 let tx = tx.clone();
-                let session2 = session.clone();
-                let mut session2 = session2.lock().await;
-                let user = session2.user.clone();
-                let tls = session2.data_tls;
-                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, tls, tx);
+                let session_arc = session.clone();
+                let mut session = session_arc.lock().await;
+                let user = session.user.clone();
+                let tls = session.data_tls;
+                session.process_data(user, socket, tls, tx);
             }
         });
 
