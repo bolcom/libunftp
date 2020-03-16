@@ -4,7 +4,6 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;
-use super::stream::TlsStream;
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
@@ -13,9 +12,6 @@ use futures03::channel::mpsc::Receiver;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::net::TcpStream;
-
-const DATA_CHANNEL_ID: u8 = 1;
 
 #[derive(PartialEq)]
 pub enum SessionState {
@@ -94,17 +90,51 @@ where
         self
     }
 
+    fn writer(socket: tokio02::net::TcpStream, tls: bool) -> Box<dyn tokio::io::AsyncWrite + Send> {
+        info!("TLS: {:?}", tls);
+        use futures03::AsyncReadExt;
+        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+        if tls {
+            let io = futures03::executor::block_on(async move {
+                let identity = crate::server::tls::identity();
+                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let io = acceptor.accept(socket).await.unwrap();
+                io
+            });
+            let futures03_async_read = io.compat();
+            Box::new(futures03_async_read.compat())
+        } else {
+            let futures03_async_read = socket.compat();
+            Box::new(futures03_async_read.compat())
+        }
+    }
+
+    fn reader(socket: tokio02::net::TcpStream, tls: bool) -> Box<dyn tokio::io::AsyncRead + Send> {
+        info!("TLS: {:?}", tls);
+        use futures03::AsyncReadExt;
+        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+        if tls {
+            let io = futures03::executor::block_on(async move {
+                let identity = crate::server::tls::identity();
+                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let io = acceptor.accept(socket).await.unwrap();
+                io
+            });
+            let futures03_async_read = io.compat();
+            Box::new(futures03_async_read.compat())
+        } else {
+            let futures03_async_read = socket.compat();
+            Box::new(futures03_async_read.compat())
+        }
+    }
+
+
     /// Processing for the data connection.
     ///
     /// socket: the data socket we'll be working with
     /// tls: tells if this should be a TLS connection
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, tls: bool, tx: Sender<InternalMsg>) {
-        let tcp_tls_stream: Box<dyn crate::server::io::AsyncStream> = match (tls, &self.certs_file, &self.key_file) {
-            (true, Some(certs), Some(keys)) => Box::new(TlsStream::new(socket, DATA_CHANNEL_ID, certs, keys)),
-            _ => Box::new(socket),
-        };
-
+    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: tokio02::net::TcpStream, tls: bool, tx: Sender<InternalMsg>) {
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = {
@@ -138,12 +168,12 @@ where
                         tokio::spawn(
                             storage
                                 .get(&user, path, start_pos)
-                                .and_then(|f| {
+                                .and_then(move |f| {
                                     tx_sending
                                         .send(InternalMsg::SendingData)
                                         .map_err(|_e| Error::from(ErrorKind::LocalError))
-                                        .and_then(|_| {
-                                            tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError))
+                                        .and_then(move |_| {
+                                            tokio::io::copy(f.as_tokio01_async_read(), Self::writer(socket, tls)).map_err(|_| Error::from(ErrorKind::LocalError))
                                         })
                                         .and_then(|(bytes, _, _)| {
                                             tx.send(InternalMsg::SendData { bytes: bytes as i64 })
@@ -161,9 +191,10 @@ where
                         let path = cwd.join(path);
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
+
                         tokio::spawn(
                             storage
-                                .put(&user, tcp_tls_stream, path, start_pos)
+                                .put(&user, Self::reader(socket, tls), path, start_pos)
                                 .and_then(|bytes| {
                                     tx_ok
                                         .send(InternalMsg::WrittenData { bytes: bytes as i64 })
@@ -186,14 +217,13 @@ where
                         tokio::spawn(
                             storage
                                 .list_fmt(&user, path)
-                                .and_then(|cursor| {
-                                    debug!("Copying future for List");
-                                    tokio::io::copy(cursor, tcp_tls_stream)
+                                .and_then(move |cursor| {
+                                    tokio::io::copy(cursor, Self::writer(socket, tls))
                                 })
                                 .and_then(|reader_writer| {
                                     debug!("Shutdown future for List");
-                                    let tcp_tls_stream = reader_writer.2;
-                                    tokio::io::shutdown(tcp_tls_stream)
+                                    let writer = reader_writer.2;
+                                    tokio::io::shutdown(writer)
                                 })
                                 .map_err(|_| Error::from(ErrorKind::LocalError))
                                 .and_then(|_| {
@@ -218,7 +248,9 @@ where
                         tokio::spawn(
                             storage
                                 .nlst(&user, path)
-                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
+                                .and_then(move |res| {
+                                    tokio::io::copy(res, Self::writer(socket, tls))
+                                })
                                 .map_err(|_| Error::from(ErrorKind::LocalError))
                                 .and_then(|_| {
                                     tx_ok
