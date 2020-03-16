@@ -14,12 +14,12 @@ use crate::storage;
 use async_trait::async_trait;
 use futures::stream::Stream;
 use futures03::channel::mpsc::{channel, Receiver, Sender};
-use tokio::net::TcpListener;
-use rand::RngCore;
 use rand::rngs::OsRng;
-use tokio::io;
-use std::net::{Ipv4Addr, IpAddr};
+use rand::RngCore;
+use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Range;
+use tokio::io;
+use tokio::net::TcpListener;
 use tokio02::sync::Mutex;
 
 use lazy_static::*;
@@ -29,12 +29,11 @@ lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng::new().unwrap());
 }
 
-pub struct Pasv {
-}
+pub struct Pasv {}
 
 impl Pasv {
     pub fn new() -> Self {
-        Pasv { }
+        Pasv {}
     }
 
     async fn try_port_range(passive_addrs: Range<u16>) -> io::Result<TcpListener> {
@@ -45,8 +44,10 @@ impl Pasv {
         let mut rng = OS_RNG.lock().await;
         for _ in 1..BIND_RETRIES {
             let port = rng.next_u32() % rng_length as u32 + passive_addrs.start as u32;
-            listener = TcpListener::bind(&std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16 ));
-            if listener.is_ok() { break }
+            listener = TcpListener::bind(&std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16));
+            if listener.is_ok() {
+                break;
+            }
         }
 
         listener
