@@ -283,6 +283,12 @@ where
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
         let local_addr = tcp_stream.local_addr().unwrap();
+        let identity_file: Option<PathBuf> = if tls_configured {
+            let p: PathBuf = self.certs_file.clone().unwrap();
+            Some(p)
+        } else {
+            None
+        };
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
@@ -350,7 +356,7 @@ where
 
                             // Wrap in TLS Stream
                             //let config = tls::new_config(&certs, &keys);
-                            let identity = tls::identity();
+                            let identity = tls::identity(identity_file.clone().unwrap());
                             let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                             let io = acceptor.accept(io).await.unwrap().as_async_io();
 
