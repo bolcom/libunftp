@@ -18,6 +18,7 @@ pub fn identity() -> Identity {
     identity
 }
 
+#[allow(unused)]
 pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::ServerConfig> {
     let certs = load_certs(certs_file);
     let privkey = load_private_key(key_file);
@@ -28,12 +29,14 @@ pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::Ser
     Arc::new(config)
 }
 
+#[allow(unused)]
 fn load_certs<P: AsRef<Path>>(filename: P) -> Vec<rustls::Certificate> {
     let certfile = File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls::internal::pemfile::certs(&mut reader).unwrap()
 }
 
+#[allow(unused)]
 fn load_private_key<P: AsRef<Path>>(filename: P) -> rustls::PrivateKey {
     let rsa_keys = {
         let keyfile = File::open(&filename).expect("cannot open private key file");

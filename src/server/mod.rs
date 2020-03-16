@@ -8,7 +8,6 @@ pub(crate) mod io;
 pub(crate) mod password;
 pub(crate) mod reply;
 mod session;
-mod stream;
 mod tls;
 
 pub(crate) use chancomms::InternalMsg;
