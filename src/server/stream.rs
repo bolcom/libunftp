@@ -11,18 +11,10 @@ use rustls::Session;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 
-#[derive(Debug, Clone)]
-pub enum SecurityState {
-    /// We're in TLS mode
-    On,
-    /// We're in plaintext mode
-    Off,
-}
-
 // A stream that can switch between TLS and plaintext mode depending on the state of provided
 // SecuritySwitch.
 #[derive(Debug)]
-pub struct SwitchingTlsStream {
+pub struct TlsStream {
     tcp: TcpStream,
     tls: rustls::ServerSession,
     channel: u8,
@@ -35,10 +27,10 @@ enum TlsIoType {
     Write,
 }
 
-impl SwitchingTlsStream {
-    pub fn new<P: AsRef<Path>>(delegate: TcpStream, channel: u8, certs_file: P, key_file: P) -> SwitchingTlsStream {
+impl TlsStream {
+    pub fn new<P: AsRef<Path>>(delegate: TcpStream, channel: u8, certs_file: P, key_file: P) -> TlsStream {
         let config = super::tls::new_config(certs_file, key_file);
-        SwitchingTlsStream {
+        TlsStream {
             tcp: delegate,
             tls: rustls::ServerSession::new(&config),
             channel,
@@ -109,126 +101,101 @@ impl SwitchingTlsStream {
     }
 }
 
-impl Read for SwitchingTlsStream {
+impl Read for TlsStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        //        let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::On;
-        match state {
-            SecurityState::Off => self.tcp.read(buf),
-            SecurityState::On => {
-                if self.tls.is_handshaking() {
-                    let mut handshake = Handshake {
-                        tcp: &mut self.tcp,
-                        tls: &mut self.tls,
-                        channel: self.channel,
-                    };
+        if self.tls.is_handshaking() {
+            let mut handshake = Handshake {
+                tcp: &mut self.tcp,
+                tls: &mut self.tls,
+                channel: self.channel,
+            };
 
-                    match handshake.poll() {
-                        Result::Ok(Async::NotReady) => {
-                            return Err(io::ErrorKind::WouldBlock.into());
-                        }
-                        Result::Err(e) => return Err(e),
-                        Result::Ok(Async::Ready(_)) => {}
-                    }
+            match handshake.poll() {
+                Result::Ok(Async::NotReady) => {
+                    return Err(io::ErrorKind::WouldBlock.into());
                 }
-
-                while self.tls.wants_read() {
-                    if let (0, _) = self.tls_io(TlsIoType::Read)? {
-                        break;
-                    }
-                }
-
-                self.tls.read(buf)
+                Result::Err(e) => return Err(e),
+                Result::Ok(Async::Ready(_)) => {}
             }
         }
+
+        while self.tls.wants_read() {
+            if let (0, _) = self.tls_io(TlsIoType::Read)? {
+                break;
+            }
+        }
+
+        self.tls.read(buf)
     }
 }
 
-impl Write for SwitchingTlsStream {
+impl Write for TlsStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::On;
-        match state {
-            SecurityState::On => {
-                if self.tls.is_handshaking() {
-                    let mut handshake = Handshake {
-                        tcp: &mut self.tcp,
-                        tls: &mut self.tls,
-                        channel: self.channel,
-                    };
+        if self.tls.is_handshaking() {
+            let mut handshake = Handshake {
+                tcp: &mut self.tcp,
+                tls: &mut self.tls,
+                channel: self.channel,
+            };
 
-                    match handshake.poll() {
-                        Result::Ok(Async::NotReady) => {
-                            return Err(io::ErrorKind::WouldBlock.into());
-                        }
-                        Result::Err(e) => return Err(e),
-                        Result::Ok(Async::Ready(_)) => {}
-                    }
+            match handshake.poll() {
+                Result::Ok(Async::NotReady) => {
+                    return Err(io::ErrorKind::WouldBlock.into());
                 }
-
-                let len = self.tls.write(buf)?;
-
-                while self.tls.wants_write() {
-                    match self.tls_io(TlsIoType::Write) {
-                        Ok(_) => (),
-                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock && len != 0 => break,
-                        Err(err) => return Err(err),
-                    }
-                }
-
-                if len != 0 || buf.is_empty() {
-                    Ok(len)
-                } else {
-                    self.tls
-                        .write(buf)
-                        .and_then(|len| if len != 0 { Ok(len) } else { Err(io::ErrorKind::WouldBlock.into()) })
-                }
+                Result::Err(e) => return Err(e),
+                Result::Ok(Async::Ready(_)) => {}
             }
-            SecurityState::Off => self.tcp.write(buf),
+        }
+
+        let len = self.tls.write(buf)?;
+
+        while self.tls.wants_write() {
+            match self.tls_io(TlsIoType::Write) {
+                Ok(_) => (),
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock && len != 0 => break,
+                Err(err) => return Err(err),
+            }
+        }
+
+        if len != 0 || buf.is_empty() {
+            Ok(len)
+        } else {
+            self.tls
+                .write(buf)
+                .and_then(|len| if len != 0 { Ok(len) } else { Err(io::ErrorKind::WouldBlock.into()) })
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
         debug!("Flush called <<{}>>", self.channel);
-        //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::On;
-        match state {
-            SecurityState::On => {
-                while self.tls.wants_write() {
-                    self.tls_io(TlsIoType::Write)?;
-                }
-                self.tls.flush()?;
-                self.tcp.flush()?;
-                Ok(())
-            }
-            SecurityState::Off => self.tcp.flush(),
+        while self.tls.wants_write() {
+            self.tls_io(TlsIoType::Write)?;
         }
+        self.tls.flush()?;
+        self.tcp.flush()?;
+        Ok(())
     }
 }
 
-impl AsyncRead for SwitchingTlsStream {}
+impl AsyncRead for TlsStream {}
 
-impl AsyncWrite for SwitchingTlsStream {
+impl AsyncWrite for TlsStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         debug!("AsyncWrite shutdown <<{}>>", self.channel);
 
-        //let state = self.state.lock().unwrap().which_state(self.channel);
-        let state = SecurityState::On;
-        if let SecurityState::On = state {
-            if self.tls.is_handshaking() {
-                let r = self.tls.complete_io(&mut self.tcp);
-                debug!("IO Completed: <<{}>>: {:?}", self.channel, r);
-                if let Err(err) = r {
-                    if io::ErrorKind::WouldBlock == err.kind() {
-                        return Ok(Async::NotReady);
-                    }
-                    return Err(err);
+        if self.tls.is_handshaking() {
+            let r = self.tls.complete_io(&mut self.tcp);
+            debug!("IO Completed: <<{}>>: {:?}", self.channel, r);
+            if let Err(err) = r {
+                if io::ErrorKind::WouldBlock == err.kind() {
+                    return Ok(Async::NotReady);
                 }
+                return Err(err);
             }
-            self.tls.send_close_notify();
         }
+        self.tls.send_close_notify();
 
-        SwitchingTlsStream::flush(self)?;
+        TlsStream::flush(self)?;
         AsyncWrite::shutdown(&mut self.tcp)
     }
 }
