@@ -4,7 +4,7 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;
-use super::stream::{SwitchingTlsStream};
+use super::stream::SwitchingTlsStream;
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
@@ -100,7 +100,7 @@ where
     /// tls: tells if this should be a TLS connection
     /// tx: channel to send the result of our operation to the control process
     pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, tls: bool, tx: Sender<InternalMsg>) {
-        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (tls, &self.certs_file, &self.key_file) {
+        let tcp_tls_stream: Box<dyn crate::server::io::AsyncStream> = match (tls, &self.certs_file, &self.key_file) {
             (true, Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, DATA_CHANNEL_ID, certs, keys)),
             _ => Box::new(socket),
         };

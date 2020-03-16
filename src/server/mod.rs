@@ -4,6 +4,7 @@ mod chancomms;
 pub(crate) mod commands;
 mod controlchan;
 pub mod error;
+pub(crate) mod io;
 pub(crate) mod password;
 pub(crate) mod reply;
 mod session;
@@ -16,9 +17,9 @@ pub(crate) use error::{FTPError, FTPErrorKind};
 
 use self::commands::{Cmd, Command};
 use self::reply::{Reply, ReplyCode};
-use self::stream::SwitchingTlsStream;
 use crate::auth::{self, AnonymousUser};
 use crate::metrics;
+use crate::server::io::*;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 
 use std::path::PathBuf;
@@ -27,42 +28,15 @@ use std::time::Duration;
 
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
+use futures03::{SinkExt, StreamExt};
 use log::{info, warn};
 use session::{Session, SessionState};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio02util::codec::*;
-use futures03::{SinkExt, StreamExt};
 use std::ops::Range;
 use tokio02::sync::Mutex;
+use tokio02util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
-
-// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
-trait AsyncStream: AsyncRead + AsyncWrite + Send {}
-impl AsyncStream for tokio::net::TcpStream {}
-impl AsyncStream for SwitchingTlsStream {}
-
-trait Async2Stream: tokio02::io::AsyncRead + tokio02::io::AsyncWrite + Send + Unpin {}
-impl Async2Stream for tokio02::net::TcpStream {}
-impl Async2Stream for tokio02tls::TlsStream<tokio02::net::TcpStream> {}
-impl Async2Stream for tokio02tls::TlsStream<Box<dyn Async2Stream>> {}
-
-trait AsAsyncIo {
-    fn as_async_io(self) -> Box<dyn Async2Stream>;
-}
-
-impl AsAsyncIo for tokio02::net::TcpStream {
-    fn as_async_io(self) -> Box<dyn Async2Stream> {
-        Box::new(self)
-    }
-}
-
-impl AsAsyncIo for tokio02tls::TlsStream<Box<dyn Async2Stream>> {
-    fn as_async_io(self) -> Box<dyn Async2Stream> {
-        Box::new(self)
-    }
-}
 
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
