@@ -62,10 +62,10 @@ rand = "0.6"
 
 [features]
 pam = ["pam-auth"]
-oauth2 = ["yup-oauth2", "hyper-rustls"]
-cloud_storage = ["oauth2", "mime", "url", "hyper", "serde", "serde_json"]
 rest = ["hyper", "url", "http", "serde", "serde_json"]
 jsonfile_auth = ["serde", "serde_json"]
+cloud_storage = ["oauth2", "mime", "url", "hyper", "serde", "serde_json"]
+oauth2 = ["yup-oauth2", "hyper-rustls"]
 
 [[example]]
 name = "pam"
@@ -82,4 +82,3 @@ required-features = ["rest"]
 [[example]]
 name = "jsonfile_auth"
 required-features = ["jsonfile_auth"]
-
