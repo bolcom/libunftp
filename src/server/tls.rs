@@ -10,14 +10,18 @@ use rustls::NoClientAuth;
 use native_tls;
 use native_tls::Identity;
 
-pub fn identity<P: AsRef<Path>>(identity_file: P) -> Identity {
+/// Creates a native-tls Identity from the specified DER-formatted PKCS #12 archive.
+pub fn identity<P: AsRef<Path>, T: Into<String>>(identity_file: P, password: T) -> Identity {
     let mut file = File::open(identity_file).unwrap();
     let mut identity = vec![];
     file.read_to_end(&mut identity).unwrap();
-    let identity = Identity::from_pkcs12(&identity, "123").unwrap();
+    let pw: String = password.into();
+    let identity = Identity::from_pkcs12(&identity, &pw).unwrap();
     identity
 }
 
+// I had to switch to native TLS because of conflicts when trying to use rustls and specifically
+// tokio-rustls. Keeping this here for now in case we're switching back
 #[allow(unused)]
 pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::ServerConfig> {
     let certs = load_certs(certs_file);
@@ -29,6 +33,8 @@ pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::Ser
     Arc::new(config)
 }
 
+// I had to switch to native TLS because of conflicts when trying to use rustls and specifically
+// tokio-rustls. Keeping this here for now in case we're switching back
 #[allow(unused)]
 fn load_certs<P: AsRef<Path>>(filename: P) -> Vec<rustls::Certificate> {
     let certfile = File::open(filename).expect("cannot open certificate file");
@@ -36,6 +42,8 @@ fn load_certs<P: AsRef<Path>>(filename: P) -> Vec<rustls::Certificate> {
     rustls::internal::pemfile::certs(&mut reader).unwrap()
 }
 
+// I had to switch to native TLS because of conflicts when trying to use rustls and specifically
+// tokio-rustls. Keeping this here for now in case we're switching back
 #[allow(unused)]
 fn load_private_key<P: AsRef<Path>>(filename: P) -> rustls::PrivateKey {
     let rsa_keys = {

@@ -38,7 +38,7 @@ where
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
     pub certs_file: Option<PathBuf>,
-    pub key_file: Option<PathBuf>,
+    pub certs_password: Option<String>,
     // True if the command channel is in secure mode
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
@@ -68,7 +68,7 @@ where
             rename_from: None,
             state: SessionState::New,
             certs_file: Option::None,
-            key_file: Option::None,
+            certs_password: Option::None,
             cmd_tls: false,
             data_tls: false,
             with_metrics: false,
@@ -76,9 +76,9 @@ where
         }
     }
 
-    pub(super) fn certs(mut self, certs_file: Option<PathBuf>, key_file: Option<PathBuf>) -> Self {
+    pub(super) fn with_ftps(mut self, certs_file: Option<PathBuf>, password: Option<String>) -> Self {
         self.certs_file = certs_file;
-        self.key_file = key_file;
+        self.certs_password = password;
         self
     }
 
@@ -90,13 +90,19 @@ where
         self
     }
 
-    fn writer(socket: tokio02::net::TcpStream, tls: bool, identity_file: Option<PathBuf>) -> Box<dyn tokio::io::AsyncWrite + Send> {
+    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    fn writer(
+        socket: tokio02::net::TcpStream,
+        tls: bool,
+        identity_file: Option<PathBuf>,
+        indentity_password: Option<String>,
+    ) -> Box<dyn tokio::io::AsyncWrite + Send> {
         info!("TLS: {:?}", tls);
         use futures03::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
         if tls {
             let io = futures03::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap());
+                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 let io = acceptor.accept(socket).await.unwrap();
                 io
@@ -109,13 +115,19 @@ where
         }
     }
 
-    fn reader(socket: tokio02::net::TcpStream, tls: bool, identity_file: Option<PathBuf>) -> Box<dyn tokio::io::AsyncRead + Send> {
+    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    fn reader(
+        socket: tokio02::net::TcpStream,
+        tls: bool,
+        identity_file: Option<PathBuf>,
+        indentity_password: Option<String>,
+    ) -> Box<dyn tokio::io::AsyncRead + Send> {
         info!("TLS: {:?}", tls);
         use futures03::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
         if tls {
             let io = futures03::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap());
+                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 let io = acceptor.accept(socket).await.unwrap();
                 io
@@ -127,7 +139,6 @@ where
             Box::new(futures03_async_read.compat())
         }
     }
-
 
     /// Processing for the data connection.
     ///
@@ -149,6 +160,7 @@ where
         let cwd = self.cwd.clone();
         let start_pos: u64 = self.start_pos;
         let identity_file = if tls { Some(self.certs_file.clone().unwrap().into()) } else { None };
+        let identity_password = if tls { Some(self.certs_password.clone().unwrap().into()) } else { None };
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
@@ -174,7 +186,8 @@ where
                                         .send(InternalMsg::SendingData)
                                         .map_err(|_e| Error::from(ErrorKind::LocalError))
                                         .and_then(move |_| {
-                                            tokio::io::copy(f.as_tokio01_async_read(), Self::writer(socket, tls, identity_file)).map_err(|_| Error::from(ErrorKind::LocalError))
+                                            tokio::io::copy(f.as_tokio01_async_read(), Self::writer(socket, tls, identity_file, identity_password))
+                                                .map_err(|_| Error::from(ErrorKind::LocalError))
                                         })
                                         .and_then(|(bytes, _, _)| {
                                             tx.send(InternalMsg::SendData { bytes: bytes as i64 })
@@ -192,10 +205,9 @@ where
                         let path = cwd.join(path);
                         let tx_ok = tx.clone();
                         let tx_error = tx.clone();
-
                         tokio::spawn(
                             storage
-                                .put(&user, Self::reader(socket, tls, identity_file), path, start_pos)
+                                .put(&user, Self::reader(socket, tls, identity_file, identity_password), path, start_pos)
                                 .and_then(|bytes| {
                                     tx_ok
                                         .send(InternalMsg::WrittenData { bytes: bytes as i64 })
@@ -218,9 +230,7 @@ where
                         tokio::spawn(
                             storage
                                 .list_fmt(&user, path)
-                                .and_then(move |cursor| {
-                                    tokio::io::copy(cursor, Self::writer(socket, tls, identity_file))
-                                })
+                                .and_then(move |cursor| tokio::io::copy(cursor, Self::writer(socket, tls, identity_file, identity_password)))
                                 .and_then(|reader_writer| {
                                     debug!("Shutdown future for List");
                                     let writer = reader_writer.2;
@@ -249,9 +259,7 @@ where
                         tokio::spawn(
                             storage
                                 .nlst(&user, path)
-                                .and_then(move |res| {
-                                    tokio::io::copy(res, Self::writer(socket, tls, identity_file))
-                                })
+                                .and_then(move |res| tokio::io::copy(res, Self::writer(socket, tls, identity_file, identity_password)))
                                 .map_err(|_| Error::from(ErrorKind::LocalError))
                                 .and_then(|_| {
                                     tx_ok
