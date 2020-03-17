@@ -67,7 +67,7 @@ where
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
     passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
-    key_file: Option<PathBuf>,
+    certs_password: Option<String>,
     with_metrics: bool,
     idle_session_timeout: std::time::Duration,
 }
@@ -112,7 +112,7 @@ where
             authenticator: Arc::new(auth::AnonymousAuthenticator {}),
             passive_ports: 49152..65535,
             certs_file: Option::None,
-            key_file: Option::None,
+            certs_password: Option::None,
             with_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
         }
@@ -176,20 +176,19 @@ where
         self
     }
 
-    /// Configures the path to the certificates file (PEM format) and the associated private key file
-    /// in order to configure FTPS.
-    /// in order to configure FTPS.
+    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
+    /// associated password for the archive in order to configure FTPS.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
+    /// let mut server = Server::with_root("/tmp").with_ftps("/srv/unftp/server-certs.pfx", "thepassword");
     /// ```
-    pub fn certs<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
+    pub fn with_ftps<P: Into<PathBuf>, T: Into<String>>(mut self, certs_file: P, password: T) -> Self {
         self.certs_file = Option::Some(certs_file.into());
-        self.key_file = Option::Some(key_file.into());
+        self.certs_password = Option::Some(password.into());
         self
     }
 
@@ -267,7 +266,7 @@ where
     /// Does TCP processing when a FTP client connects
     async fn process_control_connection(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
-        let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
+        let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
         } else {
             false
@@ -276,7 +275,7 @@ where
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage)
-            .certs(self.certs_file.clone(), self.key_file.clone())
+            .with_ftps(self.certs_file.clone(), self.certs_password.clone())
             .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
@@ -285,6 +284,12 @@ where
         let local_addr = tcp_stream.local_addr().unwrap();
         let identity_file: Option<PathBuf> = if tls_configured {
             let p: PathBuf = self.certs_file.clone().unwrap();
+            Some(p)
+        } else {
+            None
+        };
+        let identity_password: Option<String> = if tls_configured {
+            let p: String = self.certs_password.clone().unwrap();
             Some(p)
         } else {
             None
@@ -356,7 +361,7 @@ where
 
                             // Wrap in TLS Stream
                             //let config = tls::new_config(&certs, &keys);
-                            let identity = tls::identity(identity_file.clone().unwrap());
+                            let identity = tls::identity(identity_file.clone().unwrap(), identity_password.clone().unwrap());
                             let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                             let io = acceptor.accept(io).await.unwrap().as_async_io();
 
