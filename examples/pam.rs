@@ -6,7 +6,7 @@ use log::*;
 pub fn main() {
     pretty_env_logger::init();
 
-    let addr = "127.0.0.1:8181";
+    let addr = "127.0.0.1:2121";
 
     info!("Starting ftp server on {}", addr);
     let authenticator = pam::PAMAuthenticator::new("hello");

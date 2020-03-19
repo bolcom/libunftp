@@ -49,7 +49,7 @@ Add the following to `src/main.rs`:
 
 ```rust
 use futures::future::Future;
-use tokio::runtime::Runtime;
+use tokio_compat::runtime::Runtime;
 
 fn main() {
     let ftp_home = std::env::temp_dir();
@@ -58,8 +58,7 @@ fn main() {
         .passive_ports(50000..65535);
 
     let mut runtime = Runtime::new().unwrap();
-    runtime.spawn(server.listener("127.0.0.1:2121"));
-    runtime.shutdown_on_idle().wait().unwrap();
+    runtime.block_on_std(server.listener("127.0.0.1:2121"));
 }
 ```
 
