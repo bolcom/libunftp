@@ -97,7 +97,6 @@ where
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
     ) -> Box<dyn tokio::io::AsyncWrite + Send> {
-        info!("TLS: {:?}", tls);
         use futures03::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
         if tls {
@@ -122,7 +121,6 @@ where
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
     ) -> Box<dyn tokio::io::AsyncRead + Send> {
-        info!("TLS: {:?}", tls);
         use futures03::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
         if tls {
