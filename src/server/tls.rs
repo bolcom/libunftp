@@ -1,14 +1,10 @@
+use native_tls::Identity;
+use rustls::NoClientAuth;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-
-use rustls;
-use rustls::NoClientAuth;
-
-use native_tls;
-use native_tls::Identity;
 
 /// Creates a native-tls Identity from the specified DER-formatted PKCS #12 archive.
 pub fn identity<P: AsRef<Path>, T: Into<String>>(identity_file: P, password: T) -> Identity {

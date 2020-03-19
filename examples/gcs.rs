@@ -13,6 +13,6 @@ pub fn main() {
     }));
 
     info!("Starting ftp server on {}", addr);
-    let mut runtime = tokio02::runtime::Builder::new().build().unwrap();
-    runtime.block_on(server.listener(addr));
+    let mut runtime = tokio_compat::runtime::Builder::new().build().unwrap();
+    runtime.block_on_std(server.listener(addr));
 }
