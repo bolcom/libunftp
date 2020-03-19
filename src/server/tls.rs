@@ -16,8 +16,7 @@ pub fn identity<P: AsRef<Path>, T: Into<String>>(identity_file: P, password: T) 
     let mut identity = vec![];
     file.read_to_end(&mut identity).unwrap();
     let pw: String = password.into();
-    let identity = Identity::from_pkcs12(&identity, &pw).unwrap();
-    identity
+    Identity::from_pkcs12(&identity, &pw).unwrap()
 }
 
 // I had to switch to native TLS because of conflicts when trying to use rustls and specifically

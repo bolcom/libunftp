@@ -103,8 +103,7 @@ where
             let io = futures03::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
-                let io = acceptor.accept(socket).await.unwrap();
-                io
+                acceptor.accept(socket).await.unwrap()
             });
             let futures03_async_read = io.compat();
             Box::new(futures03_async_read.compat())
@@ -127,8 +126,7 @@ where
             let io = futures03::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
-                let io = acceptor.accept(socket).await.unwrap();
-                io
+                acceptor.accept(socket).await.unwrap()
             });
             let futures03_async_read = io.compat();
             Box::new(futures03_async_read.compat())
@@ -157,8 +155,8 @@ where
         let storage: Arc<S> = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
         let start_pos: u64 = self.start_pos;
-        let identity_file = if tls { Some(self.certs_file.clone().unwrap().into()) } else { None };
-        let identity_password = if tls { Some(self.certs_password.clone().unwrap().into()) } else { None };
+        let identity_file = if tls { Some(self.certs_file.clone().unwrap()) } else { None };
+        let identity_password = if tls { Some(self.certs_password.clone().unwrap()) } else { None };
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
