@@ -18,7 +18,6 @@ use futures::sink::Sink;
 use log::warn;
 use std::string::String;
 use std::sync::Arc;
-use tokio;
 
 pub struct Dele {
     path: String,
