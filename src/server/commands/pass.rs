@@ -52,25 +52,32 @@ where
                 let mut tx: Sender<InternalMsg> = args.tx.clone();
 
                 let auther = args.authenticator.clone();
-                match auther.authenticate(&user, &pass).await {
-                    Ok(user) => {
-                        session.user = Arc::new(Some(user));
-                        tokio02::spawn(async move {
-                            use futures03::prelude::*;
-                            if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
-                                warn!("{}", err);
-                            }
-                        });
-                    }
-                    Err(_) => {
-                        tokio02::spawn(async move {
-                            use futures03::prelude::*;
-                            if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
-                                warn!("{}", err);
-                            }
-                        });
-                    }
-                };
+
+                // without this, the REST authenticator hangs when
+                // performing a http call through Hyper
+                let session2clone = args.session.clone();
+                tokio02::spawn(async move {
+                    match auther.authenticate(&user, &pass).await {
+                        Ok(user) => {
+                            let mut session = session2clone.lock().await;
+                            session.user = Arc::new(Some(user));
+                            tokio02::spawn(async move {
+                                use futures03::prelude::*;
+                                if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
+                                    warn!("{}", err);
+                                }
+                            });
+                        }
+                        Err(_) => {
+                            tokio02::spawn(async move {
+                                use futures03::prelude::*;
+                                if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
+                                    warn!("{}", err);
+                                }
+                            });
+                        }
+                    };
+                });
                 Ok(Reply::none())
             }
             SessionState::New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please supply a username first")),

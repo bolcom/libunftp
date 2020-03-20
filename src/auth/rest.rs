@@ -7,14 +7,11 @@ use crate::auth::*;
 use regex::Regex;
 use std::string::String;
 
-// use futures::stream::Stream;
-// use futures::Future;
-
 use http::uri::InvalidUri;
-// use hyper::{Body, Client, Request};
+use hyper13::{Body, Client, Request, Method};
 
-// use serde_json::Value;
-// use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+use serde_json::Value;
+use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -24,7 +21,7 @@ pub struct RestAuthenticator {
     username_placeholder: String,
     password_placeholder: String,
 
-    method: http::Method,
+    method: Method,
     url: String,
     body: String,
     selector: String,
@@ -37,7 +34,7 @@ pub struct Builder {
     username_placeholder: String,
     password_placeholder: String,
 
-    method: http::Method,
+    method: Method,
     url: String,
     body: String,
     selector: String,
@@ -63,7 +60,7 @@ impl Builder {
     }
 
     /// specify HTTP method
-    pub fn with_method(mut self, s: http::Method) -> Self {
+    pub fn with_method(mut self, s: Method) -> Self {
         self.method = s;
         self
     }
@@ -108,89 +105,77 @@ impl Builder {
 }
 
 impl RestAuthenticator {
-    // fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str) -> String {
-    //     string
-    //         .replace(&self.username_placeholder, username)
-    //         .replace(&self.password_placeholder, password)
-    // }
+    fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str) -> String {
+        string
+            .replace(&self.username_placeholder, username)
+            .replace(&self.password_placeholder, password)
+    }
 }
 
 // FIXME: add support for authenticated user
 #[async_trait]
 impl Authenticator<AnonymousUser> for RestAuthenticator {
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
-        //        let username_url = utf8_percent_encode(_username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        //        let password_url = utf8_percent_encode(_password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        //        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
-        //
-        //        let username_json = encode_string_json(_username);
-        //        let password_json = encode_string_json(_password);
-        //        let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
-        //
-        //        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
-        //        let method = self.method.clone();
-        //        let selector = self.selector.clone();
-        //        let regex = self.regex.clone();
-        //
-        //        debug!("{} {}", url, body);
+    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
+        let username_url = utf8_percent_encode(username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+        let password_url = utf8_percent_encode(password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
 
-        //        Box::new(
-        //            futures::future::ok(())
-        //                .and_then(|_| {
-        //                    Request::builder()
-        //                        .method(method)
-        //                        .header("Content-type", "application/json")
-        //                        .uri(url)
-        //                        .body(Body::from(body))
-        //                        .map_err(|e| RestError::HttpError(e.to_string()))
-        //                })
-        //                .and_then(|req| Client::new().request(req).map_err(RestError::HyperError))
-        //                .and_then(|res| res.into_body().map_err(RestError::HyperError).concat2())
-        //                .and_then(|body| {
-        //                    //                println!("resp: {:?}", body);
-        //                    serde_json::from_slice(&body).map_err(RestError::JSONDeserializationError)
-        //                })
-        //                .map_err(|err| {
-        //                    info!("RestError: {:?}", err);
-        //                })
-        //                .and_then(move |response: Value| {
-        //                    let parsed = response
-        //                        .pointer(&selector)
-        //                        .map(|x| {
-        //                            debug!("pointer: {:?}", x);
-        //                            format!("{:?}", x)
-        //                        })
-        //                        .unwrap_or_else(|| "null".to_string());
-        //
-        //                    if regex.is_match(&parsed) {
-        //                        Ok(AnonymousUser {})
-        //                    } else {
-        //                        Err(())
-        //                    }
-        //                }),
-        //        )
+        let username_json = encode_string_json(username);
+        let password_json = encode_string_json(password);
+        let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
 
-        Ok(AnonymousUser {})
+        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
+        let method = self.method.clone();
+        let selector = self.selector.clone();
+        let regex = self.regex.clone();
+
+        debug!("{} {}", url, body);
+
+        let req = Request::builder()
+            .method(method)
+            .header("Content-type", "application/json")
+            .uri(url)
+            .body(Body::from(body))?;
+
+        let client = Client::new();
+
+        let resp = client.request(req).await?;
+        let body_bytes = hyper13::body::to_bytes(resp.into_body()).await?;
+
+        let body: Value = serde_json::from_slice(&body_bytes)?;
+        let parsed = body
+            .pointer(&selector)
+            .map(|x| {
+                debug!("pointer: {:?}", x);
+                format!("{:?}", x)
+            })
+            .unwrap_or_else(|| "null".to_string());
+
+        if regex.is_match(&parsed) {
+            Ok(AnonymousUser {})
+        } else {
+            Err(Box::new(BadPasswordError))
+        }
     }
 }
 
 /// limited capabilities, meant for us-ascii username and password only, really
-// fn encode_string_json(string: &str) -> String {
-//     let mut res = String::with_capacity(string.len() * 2);
+fn encode_string_json(string: &str) -> String {
+    let mut res = String::with_capacity(string.len() * 2);
 
-//     for i in string.chars() {
-//         match i {
-//             '\\' => res.push_str("\\\\"),
-//             '"' => res.push_str("\\\""),
-//             ' '..='~' => res.push(i),
-//             _ => {
-//                 error!("special character {} is not supported", i);
-//             }
-//         }
-//     }
+    for i in string.chars() {
+        match i {
+            '\\' => res.push_str("\\\\"),
+            '"' => res.push_str("\\\""),
+            ' '..='~' => res.push(i),
+            _ => {
+                error!("special character {} is not supported", i);
+            }
+        }
+    }
 
-//     res
-// }
+    res
+}
 
 /// Possible errors while doing REST lookup
 #[derive(Debug)]
