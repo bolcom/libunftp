@@ -6,7 +6,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
+use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,19 +31,19 @@ where
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
-        match session.rename_from.take() {
+        let reply = match session.rename_from.take() {
             Some(from) => {
-                tokio::spawn(
-                    storage
-                        .rename(&session.user, from, session.cwd.join(self.path.clone()))
-                        .map(|_| ())
-                        .map_err(|e| {
-                            println!("Error: {:?}", e);
-                        }),
-                );
-                Ok(Reply::new(ReplyCode::FileActionOkay, "Renamed"))
+                let to = session.cwd.join(self.path.clone());
+                match storage.rename(&session.user, from, to).await {
+                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, "Renamed"),
+                    Err(err) => {
+                        warn!("Error renaming: {:?}", err);
+                        Reply::new(ReplyCode::FileError, "Storage error while renaming")
+                    }
+                }
             }
-            None => Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
-        }
+            None => Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first"),
+        };
+        Ok(reply)
     }
 }

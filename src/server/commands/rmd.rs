@@ -41,18 +41,16 @@ where
         let path = session.cwd.join(self.path.clone());
         let mut tx_success = args.tx.clone();
         let mut tx_fail = args.tx.clone();
-        if let Some(err) = storage.rmd(&session.user, path).await {
+        if let Err(err) = storage.rmd(&session.user, path).await {
             warn!("Failed to delete directory: {}", err);
             let r = tx_fail.send(InternalMsg::StorageError(err)).await;
-            if r.is_err() {
-                warn!("Could not send internal message to notify of RMD error: {}", r.unwrap_err());
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of RMD error: {}", e);
             }
         } else {
-            let r = tx_success
-                .send(InternalMsg::DelSuccess)
-                .await;
-            if r.is_err() {
-                warn!("Could not send internal message to notify of RMD success: {}", r.unwrap_err());
+            let r = tx_success.send(InternalMsg::DelSuccess).await;
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of RMD success: {}", e);
             }
         }
         Ok(Reply::none())

@@ -270,10 +270,10 @@ pub trait StorageBackend<U: Sync + Send> {
     fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Rename the given file to the given filename.
-    fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn rename<P: AsRef<Path> + Send>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
 
     /// Delete the given directory.
-    async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Option<Error>;
+    async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.
