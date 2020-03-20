@@ -2,7 +2,7 @@ use libunftp::auth::rest;
 use log::info;
 use std::env;
 use std::sync::Arc;
-use tokio02::runtime::Builder;
+use tokio_compat::runtime::Builder;
 
 pub fn main() {
     pretty_env_logger::init();
@@ -19,10 +19,10 @@ pub fn main() {
         .with_regex("pass".to_string())
         .build();
 
-    let addr = "127.0.0.1:8080";
+    let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
     let mut runtime = Builder::new().build().unwrap();
-    runtime.block_on(server.listener(addr));
+    runtime.block_on_std(server.listener(addr));
 }

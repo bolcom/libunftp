@@ -4,21 +4,21 @@ mod chancomms;
 pub(crate) mod commands;
 mod controlchan;
 pub mod error;
+pub(crate) mod io;
 pub(crate) mod password;
 pub(crate) mod reply;
 mod session;
-mod stream;
+mod tls;
 
-use crate::server::controlchan::FTPCodec;
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
 use self::commands::{Cmd, Command};
 use self::reply::{Reply, ReplyCode};
-use self::stream::{SecuritySwitch, SwitchingTlsStream};
 use crate::auth::{self, AnonymousUser};
 use crate::metrics;
+use crate::server::io::*;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 
 use std::path::PathBuf;
@@ -26,42 +26,15 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio02::sync::Mutex;
 
-use failure::Fail;
-use futures::prelude::Stream;
 use futures03::channel::mpsc::{channel, Receiver, Sender};
-use futures03::compat::Stream01CompatExt;
-use log::{debug, info, warn};
+use futures03::{SinkExt, StreamExt};
+use log::{info, warn};
 use session::{Session, SessionState};
-use tokio::codec::Decoder;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::prelude::*;
+use std::ops::Range;
+use tokio02util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
-const CONTROL_CHANNEL_ID: u8 = 0;
-
-impl From<commands::ParseError> for FTPError {
-    fn from(err: commands::ParseError) -> FTPError {
-        match err.kind().clone() {
-            commands::ParseErrorKind::UnknownCommand { command } => {
-                // TODO: Do something smart with CoW to prevent copying the command around.
-                err.context(FTPErrorKind::UnknownCommand { command }).into()
-            }
-            commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
-            commands::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
-            _ => err.context(FTPErrorKind::InvalidCommand).into(),
-        }
-    }
-}
-
-// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
-trait AsyncStream: AsyncRead + AsyncWrite + Send {}
-
-impl AsyncStream for TcpStream {}
-
-impl<S: SecuritySwitch + Send> AsyncStream for SwitchingTlsStream<S> {}
 
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
@@ -91,9 +64,9 @@ where
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
-    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
-    key_file: Option<PathBuf>,
+    certs_password: Option<String>,
     with_metrics: bool,
     idle_session_timeout: std::time::Duration,
 }
@@ -132,17 +105,16 @@ where
     where
         auth::AnonymousAuthenticator: auth::Authenticator<U>,
     {
-        let server = Server {
+        Server {
             storage: s,
             greeting: DEFAULT_GREETING,
             authenticator: Arc::new(auth::AnonymousAuthenticator {}),
-            passive_addrs: Arc::new(vec![]),
+            passive_ports: 49152..65535,
             certs_file: Option::None,
-            key_file: Option::None,
+            certs_password: Option::None,
             with_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-        };
-        server.passive_ports(49152..65535)
+        }
     }
 
     /// Set the greeting that will be sent to the client after connecting.
@@ -198,30 +170,24 @@ where
     /// let mut server = Server::with_root("/tmp");
     /// server.passive_ports(49152..65535);
     /// ```
-    pub fn passive_ports(mut self, range: std::ops::Range<u16>) -> Self {
-        let mut addrs = vec![];
-        for port in range {
-            let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
-            let addr = std::net::SocketAddr::new(ip, port);
-            addrs.push(addr);
-        }
-        self.passive_addrs = Arc::new(addrs);
+    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
+        self.passive_ports = range;
         self
     }
 
-    /// Configures the path to the certificates file (PEM format) and the associated private key file
-    /// in order to configure FTPS.
+    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
+    /// associated password for the archive in order to configure FTPS.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::with_root("/tmp").certs("/srv/unftp/server-certs.pem", "/srv/unftp/server-key.pem");
+    /// let mut server = Server::with_root("/tmp").with_ftps("/srv/unftp/server-certs.pfx", "thepassword");
     /// ```
-    pub fn certs<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
+    pub fn with_ftps<P: Into<PathBuf>, T: Into<String>>(mut self, certs_file: P, password: T) -> Self {
         self.certs_file = Option::Some(certs_file.into());
-        self.key_file = Option::Some(key_file.into());
+        self.certs_password = Option::Some(password.into());
         self
     }
 
@@ -283,28 +249,23 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub async fn listener<T: Into<String>>(self, bind_address: T) {
-        let addr = bind_address.into().parse().unwrap();
-        let listener = TcpListener::bind(&addr).unwrap();
-        let mut connections = listener.incoming().compat();
-
-        use futures03::StreamExt;
-        while let Some(stream) = connections.next().await {
-            match stream {
-                Ok(stream) => {
-                    let result = self.process(stream).await;
-                    if result.is_err() {
-                        warn!("Could not process connection: {:?}", result.err().unwrap())
-                    }
-                }
-                Err(err) => warn!("Could not get next connection stream: {:?}", err),
+        // TODO: Propogate errors to caller instead of doing unwraps.
+        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
+        let mut listener = tokio02::net::TcpListener::bind(addr).await.unwrap();
+        loop {
+            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
+            info!("Incoming control channel connection from {:?}", socket_addr);
+            let result = self.process_control_connection(tcp_stream).await;
+            if result.is_err() {
+                warn!("Could not process connection: {:?}", result.err().unwrap())
             }
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn process(&self, tcp_stream: TcpStream) -> Result<(), FTPError> {
+    async fn process_control_connection(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
-        let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.key_file) {
+        let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
         } else {
             false
@@ -313,78 +274,153 @@ where
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
         let session = Session::with_storage(storage)
-            .certs(self.certs_file.clone(), self.key_file.clone())
+            .with_ftps(self.certs_file.clone(), self.certs_password.clone())
             .with_metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
-        let (tx, rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-        let passive_addrs = self.passive_addrs.clone();
-
-        let local_addr = tcp_stream.local_addr()?;
-
-        let tcp_tls_stream: Box<dyn AsyncStream> = match (&self.certs_file, &self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(tcp_stream, session.clone(), CONTROL_CHANNEL_ID, certs, keys)),
-            _ => Box::new(tcp_stream),
+        let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+        let passive_ports = self.passive_ports.clone();
+        let idle_session_timeout = self.idle_session_timeout;
+        let local_addr = tcp_stream.local_addr().unwrap();
+        let identity_file: Option<PathBuf> = if tls_configured {
+            let p: PathBuf = self.certs_file.clone().unwrap();
+            Some(p)
+        } else {
+            None
+        };
+        let identity_password: Option<String> = if tls_configured {
+            let p: String = self.certs_password.clone().unwrap();
+            Some(p)
+        } else {
+            None
         };
 
         let event_handler_chain = Self::handle_event(
             session.clone(),
-            authenticator.clone(),
+            authenticator,
             tls_configured,
-            passive_addrs,
-            tx,
+            passive_ports,
+            internal_msg_tx,
             local_addr,
             storage_features,
         );
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
 
-        let codec: FTPCodec = controlchan::FTPCodec::new();
-        let (sink, stream) = codec.framed(tcp_tls_stream).split();
-        let idle_session_timeout = self.idle_session_timeout;
-        use futures03::compat::Sink01CompatExt;
-        use futures03::SinkExt;
+        let codec = controlchan::FTPCodec::new();
+        let cmd_and_reply_stream = codec.framed(tcp_stream.as_async_io());
+        let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
-        let mut sink = sink.sink_compat();
-        sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
-        sink.flush().await?;
+        reply_sink.send(Reply::new(ReplyCode::ServiceReady, self.greeting)).await?;
+        reply_sink.flush().await?;
 
-        let strm = stream
-            .map(Event::Command)
-            .select({use futures03::prelude::*; rx.map(|msg| Ok(Event::InternalMsg(msg))).compat()})
-            // Read events until we get an InternalMsg::Quit or the session times out
-            .take_while(move |event| {
-                if with_metrics {
-                    metrics::add_event_metric(&event);
-                };
-                match *event {
-                    Event::InternalMsg(InternalMsg::Quit) => Ok(false),
-                    _ => Ok(true),
-                }
-            })
-            .and_then(event_handler_chain)
-            .timeout(idle_session_timeout)
-            .or_else(move |e| futures::future::ok(Self::handle_control_channel_error(e, with_metrics)))
-            .map(move |reply| {
-                if with_metrics {
-                    metrics::add_reply_metric(&reply);
-                }
-                reply
-            })
-            // Needed for type annotation, we can possible remove this once the compiler is
-            // smarter about inference :)
-            .map_err(|e: FTPError| e);
+        let mut command_source = command_source.fuse();
+        let mut internal_msg_rx = internal_msg_rx.fuse();
 
         tokio02::spawn(async move {
-            if let Err(e) = sink.send_all(&mut strm.compat()).await {
-                warn!("Could not send stream. {}", e);
+            // The control channel event loop
+            loop {
+                #[allow(unused_assignments)]
+                let mut incoming = None;
+                let mut timeout_delay = tokio02::time::delay_for(idle_session_timeout);
+                tokio02::select! {
+                    Some(cmd_result) = command_source.next() => {
+                        incoming = Some(cmd_result.map(Event::Command));
+                    },
+                    Some(msg) = internal_msg_rx.next() => {
+                        incoming = Some(Ok(Event::InternalMsg(msg)));
+                    },
+                    _ = &mut timeout_delay => {
+                        info!("Connection timed out");
+                        incoming = Some(Err(FTPError::new(FTPErrorKind::ControlChannelTimeout)));
+                    }
+                };
+
+                match incoming {
+                    None => {
+                        // Should not happen.
+                        warn!("No event polled...");
+                        return;
+                    }
+                    Some(Ok(event)) => {
+                        if with_metrics {
+                            metrics::add_event_metric(&event);
+                        };
+
+                        if let Event::InternalMsg(InternalMsg::Quit) = event {
+                            info!("Quit received");
+                            return;
+                        }
+
+                        if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
+                            info!("Upgrading to TLS");
+
+                            // Get back the original TCP Stream
+                            let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
+                            let io = codec_io.into_inner();
+
+                            // Wrap in TLS Stream
+                            //let config = tls::new_config(&certs, &keys);
+                            let identity = tls::identity(identity_file.clone().unwrap(), identity_password.clone().unwrap());
+                            let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                            let io = acceptor.accept(io).await.unwrap().as_async_io();
+
+                            // Wrap in codec again and get sink + source
+                            let codec = controlchan::FTPCodec::new();
+                            let cmd_and_reply_stream = codec.framed(io);
+                            let (sink, src) = cmd_and_reply_stream.split();
+                            let src = src.fuse();
+                            reply_sink = sink;
+                            command_source = src;
+                        }
+
+                        // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
+
+                        match event_handler_chain(event) {
+                            Err(e) => {
+                                warn!("Event handler chain error: {:?}", e);
+                                return;
+                            }
+                            Ok(reply) => {
+                                if with_metrics {
+                                    metrics::add_reply_metric(&reply);
+                                }
+                                let result = reply_sink.send(reply).await;
+                                if result.is_err() {
+                                    warn!("could not send reply");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        let reply = Self::handle_control_channel_error(e, with_metrics);
+                        let mut close_connection = false;
+                        if let Reply::CodeAndMsg {
+                            code: ReplyCode::ClosingControlConnection,
+                            ..
+                        } = reply
+                        {
+                            close_connection = true;
+                        }
+                        let result = reply_sink.send(reply).await;
+                        if result.is_err() {
+                            warn!("could not send error reply");
+                            return;
+                        }
+                        if close_connection {
+                            return;
+                        }
+                    }
+                }
             }
         });
+
         Ok(())
     }
 
     fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| match event {
-            // internal messages and the below commands are except from auth checks.
+            // internal messages and the below commands are exempt from auth checks.
             Event::InternalMsg(_)
             | Event::Command(Command::Help)
             | Event::Command(Command::User { .. })
@@ -420,7 +456,7 @@ where
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
         tls_configured: bool,
-        passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+        passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
@@ -432,7 +468,7 @@ where
                     session.clone(),
                     authenticator.clone(),
                     tls_configured,
-                    passive_addrs.clone(),
+                    passive_ports.clone(),
                     tx.clone(),
                     local_addr,
                     storage_features,
@@ -448,7 +484,7 @@ where
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn auth::Authenticator<U>>,
         tls_configured: bool,
-        passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+        passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
@@ -458,7 +494,7 @@ where
             session,
             authenticator,
             tls_configured,
-            passive_addrs,
+            passive_ports,
             tx,
             local_addr,
             storage_features,
@@ -475,7 +511,7 @@ where
             Command::Mode { mode } => Box::new(commands::Mode::new(mode)),
             Command::Help => Box::new(commands::Help),
             Command::Noop => Box::new(commands::Noop),
-            Command::Pasv => Box::new(commands::Pasv),
+            Command::Pasv => Box::new(commands::Pasv::new()),
             Command::Port => Box::new(commands::Port),
             Command::Retr { .. } => Box::new(commands::Retr),
             Command::Stor { .. } => Box::new(commands::Stor),
@@ -567,67 +603,17 @@ where
         }
     }
 
-    fn handle_control_channel_error(error: tokio::timer::timeout::Error<FTPError>, with_metrics: bool) -> Reply {
-        if error.is_timer() {
-            if with_metrics {
-                metrics::add_error_metric(&FTPErrorKind::ControlChannelTimerError);
-            };
-            match error.into_timer() {
-                Some(timeout_error) => {
-                    if timeout_error.is_shutdown() {
-                        warn!("Control channel timer has been shutdown")
-                    } else if timeout_error.is_at_capacity() {
-                        warn!("Control channel timer has reached maximum capacity. There are too many idle connections")
-                    };
-                    // Timer errors can either be due to the timer being shutdown or being at_capacity.
-                    // In both cases we can simply tell the client that the service is unavailable.
-                    Reply::new(ReplyCode::ServiceNotAvailable, "Service not available, please try again later")
-                }
-                None => {
-                    // If error.is_timer() is true then we expect there to be Some error. If this branch fires then
-                    // it is likely from a bug in tokio::timer::timeout
-                    if with_metrics {
-                        metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-                    };
-                    debug!("tokio::timer::timeout thinks it got an error on the control channel but there is no error there");
-                    Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
-                }
-            }
-        } else if error.is_inner() {
-            match error.into_inner() {
-                Some(ftp_error) => {
-                    if with_metrics {
-                        metrics::add_error_metric(&ftp_error.kind());
-                    };
-                    warn!("Failed to process command: {}", ftp_error);
-                    match ftp_error.kind() {
-                        FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
-                        FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
-                        FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
-                        _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
-                    }
-                }
-                None => {
-                    // If error.is_inner() is true then we expect there to be Some error. If this branch fires then
-                    // it is likely from a bug in tokio::timer::timeout
-                    if with_metrics {
-                        metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-                    };
-                    debug!("tokio::timer::timeout thinks it got an error on the control channel but there is no error there");
-                    Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
-                }
-            }
-        } else if error.is_elapsed() {
-            Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection")
-        } else {
-            if with_metrics {
-                metrics::add_error_metric(&FTPErrorKind::InternalServerError);
-            };
-            // The error enum tokio::timer::timeout::Kind is private so we can't pattern match to ensure we get all the different kinds.
-            // Presently, only the above three are available but we'll add this so that the FTP server doesn't break unexpectedly
-            // if that ever changes.
-            warn!("Unexpected tokio::timer::timeout::Error Kind received: {}", error);
-            Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later")
+    fn handle_control_channel_error(error: FTPError, with_metrics: bool) -> Reply {
+        if with_metrics {
+            metrics::add_error_metric(&error.kind());
+        };
+        warn!("Control channel error: {}", error);
+        match error.kind() {
+            FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
+            FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
+            FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
+            FTPErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+            _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
         }
     }
 }
@@ -643,7 +629,7 @@ where
     session: Arc<Mutex<Session<S, U>>>,
     authenticator: Arc<dyn auth::Authenticator<U>>,
     tls_configured: bool,
-    passive_addrs: Arc<Vec<std::net::SocketAddr>>,
+    passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
     local_addr: std::net::SocketAddr,
     storage_features: u32,

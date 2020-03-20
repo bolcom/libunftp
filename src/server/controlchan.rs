@@ -1,9 +1,9 @@
 //! Contains code pertaining to the FTP *control* channel
 
-use crate::server::{Command, FTPError, InternalMsg, Reply};
-use bytes::BytesMut;
+use crate::server::{commands::Command, reply::Reply, FTPError, InternalMsg};
+use bytes05::BytesMut;
 use std::io::Write;
-use tokio::codec::{Decoder, Encoder};
+use tokio02util::codec::{Decoder, Encoder};
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.
@@ -42,7 +42,7 @@ impl Decoder for FTPCodec {
             let newline_index = newline_offset + self.next_index;
             let line = buf.split_to(newline_index + 1);
             self.next_index = 0;
-            Ok(Some(Command::parse(line)?))
+            Ok(Some(Command::parse(&*line)?))
         } else {
             self.next_index = buf.len();
             Ok(None)
@@ -50,8 +50,7 @@ impl Decoder for FTPCodec {
     }
 }
 
-impl Encoder for FTPCodec {
-    type Item = Reply;
+impl Encoder<Reply> for FTPCodec {
     type Error = FTPError;
 
     // Here we encode the outgoing response

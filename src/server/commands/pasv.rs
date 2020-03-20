@@ -12,14 +12,46 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::stream::Stream;
-// use rand::Rng;
-// use tokio::net::TcpListener;
 use futures03::channel::mpsc::{channel, Receiver, Sender};
+use rand::rngs::OsRng;
+use rand::RngCore;
+use std::net::{IpAddr, Ipv4Addr};
+use std::ops::Range;
+use tokio::io;
+use tokio02::net::TcpListener;
+use tokio02::sync::Mutex;
+
+use lazy_static::*;
 
 const BIND_RETRIES: u8 = 10;
+lazy_static! {
+    static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng::new().unwrap());
+}
 
-pub struct Pasv;
+pub struct Pasv {}
+
+impl Pasv {
+    pub fn new() -> Self {
+        Pasv {}
+    }
+
+    async fn try_port_range(passive_addrs: Range<u16>) -> io::Result<TcpListener> {
+        let rng_length = passive_addrs.end - passive_addrs.start;
+
+        let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
+
+        let mut rng = OS_RNG.lock().await;
+        for _ in 1..BIND_RETRIES {
+            let port = rng.next_u32() % rng_length as u32 + passive_addrs.start as u32;
+            listener = TcpListener::bind(std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16)).await;
+            if listener.is_ok() {
+                break;
+            }
+        }
+
+        listener
+    }
+}
 
 #[async_trait]
 impl<S, U> Cmd<S, U> for Pasv
@@ -36,31 +68,17 @@ where
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
 
-        //let mut rng = rand::thread_rng();
-        // TODO: Re-enable this functionality somehow
+        let listener = Pasv::try_port_range(args.passive_ports).await;
 
-        let mut listener: Option<std::net::TcpListener> = None;
-        for _ in 1..BIND_RETRIES {
-            //let i = rng.gen_range(0, args.passive_addrs.len() - 1);
-            match std::net::TcpListener::bind(args.passive_addrs[0]) {
-                Ok(x) => {
-                    listener = Some(x);
-                    break;
-                }
-                Err(_) => continue,
-            };
-        }
-
-        let listener = match listener {
-            None => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
-            Some(l) => l,
+        let mut listener = match listener {
+            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            Ok(l) => l,
         };
 
         let addr = match listener.local_addr()? {
             std::net::SocketAddr::V4(addr) => addr,
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
-        let listener = TcpListener::from_std(listener, &tokio::reactor::Handle::default())?;
 
         let octets = conn_addr.ip().octets();
         let port = addr.port();
@@ -81,19 +99,14 @@ where
 
         let session = args.session.clone();
 
-        use futures03::compat::Stream01CompatExt;
-        use futures03::StreamExt;
-        use tokio::net::TcpListener;
-
         tokio02::spawn(async move {
-            let mut strm = listener.incoming().take(1).compat();
-
-            if let Some(socket) = strm.next().await {
+            if let Ok((socket, _socket_addr)) = listener.accept().await {
                 let tx = tx.clone();
-                let session2 = session.clone();
-                let mut session2 = session2.lock().await;
-                let user = session2.user.clone();
-                session2.process_data(user, socket.unwrap() /* TODO: Don't unwrap */, session.clone(), tx);
+                let session_arc = session.clone();
+                let mut session = session_arc.lock().await;
+                let user = session.user.clone();
+                let tls = session.data_tls;
+                session.process_data(user, socket, tls, tx);
             }
         });
 

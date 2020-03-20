@@ -4,20 +4,16 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;
-use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
+
 use futures03::channel::mpsc::Receiver;
 use futures03::channel::mpsc::Sender;
 use futures03::compat::*;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio02::sync::Mutex;
-
-const DATA_CHANNEL_ID: u8 = 1;
 
 #[derive(PartialEq)]
 pub enum SessionState {
@@ -44,7 +40,7 @@ where
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
     pub certs_file: Option<PathBuf>,
-    pub key_file: Option<PathBuf>,
+    pub certs_password: Option<String>,
     // True if the command channel is in secure mode
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
@@ -74,7 +70,7 @@ where
             rename_from: None,
             state: SessionState::New,
             certs_file: Option::None,
-            key_file: Option::None,
+            certs_password: Option::None,
             cmd_tls: false,
             data_tls: false,
             with_metrics: false,
@@ -82,9 +78,9 @@ where
         }
     }
 
-    pub(super) fn certs(mut self, certs_file: Option<PathBuf>, key_file: Option<PathBuf>) -> Self {
+    pub(super) fn with_ftps(mut self, certs_file: Option<PathBuf>, password: Option<String>) -> Self {
         self.certs_file = certs_file;
-        self.key_file = key_file;
+        self.certs_password = password;
         self
     }
 
@@ -96,17 +92,58 @@ where
         self
     }
 
+    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    fn writer(
+        socket: tokio02::net::TcpStream,
+        tls: bool,
+        identity_file: Option<PathBuf>,
+        indentity_password: Option<String>,
+    ) -> Box<dyn tokio::io::AsyncWrite + Send> {
+        use futures03::AsyncReadExt;
+        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+        if tls {
+            let io = futures03::executor::block_on(async move {
+                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
+                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                acceptor.accept(socket).await.unwrap()
+            });
+            let futures03_async_read = io.compat();
+            Box::new(futures03_async_read.compat())
+        } else {
+            let futures03_async_read = socket.compat();
+            Box::new(futures03_async_read.compat())
+        }
+    }
+
+    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    fn reader(
+        socket: tokio02::net::TcpStream,
+        tls: bool,
+        identity_file: Option<PathBuf>,
+        indentity_password: Option<String>,
+    ) -> Box<dyn tokio::io::AsyncRead + Send> {
+        use futures03::AsyncReadExt;
+        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+        if tls {
+            let io = futures03::executor::block_on(async move {
+                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
+                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                acceptor.accept(socket).await.unwrap()
+            });
+            let futures03_async_read = io.compat();
+            Box::new(futures03_async_read.compat())
+        } else {
+            let futures03_async_read = socket.compat();
+            Box::new(futures03_async_read.compat())
+        }
+    }
+
     /// Processing for the data connection.
     ///
     /// socket: the data socket we'll be working with
-    /// sec_switch: communicates the security setting for the data channel.
+    /// tls: tells if this should be a TLS connection
     /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: TcpStream, sec_switch: Arc<Mutex<Session<S, U>>>, tx: Sender<InternalMsg>) {
-        let tcp_tls_stream: Box<dyn crate::server::AsyncStream> = match (&self.certs_file, &self.key_file) {
-            (Some(certs), Some(keys)) => Box::new(SwitchingTlsStream::new(socket, sec_switch, DATA_CHANNEL_ID, certs, keys)),
-            _ => Box::new(socket),
-        };
-
+    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: tokio02::net::TcpStream, tls: bool, tx: Sender<InternalMsg>) {
         // TODO: Either take the rx as argument, or properly check the result instead of
         // `unwrap()`.
         let rx = {
@@ -120,6 +157,8 @@ where
         let storage: Arc<S> = Arc::clone(&self.storage);
         let cwd = self.cwd.clone();
         let start_pos: u64 = self.start_pos;
+        let identity_file = if tls { Some(self.certs_file.clone().unwrap()) } else { None };
+        let identity_password = if tls { Some(self.certs_password.clone().unwrap()) } else { None };
         let task = rx
             .take(1)
             .map(DataCommand::ExternalCommand)
@@ -141,7 +180,10 @@ where
                         tokio02::spawn(async move {
                             match storage.get(&user, path, start_pos).compat().await {
                                 Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
-                                    Ok(_) => match tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).compat().await {
+                                    Ok(_) => match tokio::io::copy(f.as_tokio01_async_read(), Self::writer(socket, tls, identity_file, identity_password))
+                                        .compat()
+                                        .await
+                                    {
                                         Ok((bytes, _, _)) => {
                                             if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes as i64 }).await {
                                                 warn!("{}", err);
@@ -164,7 +206,11 @@ where
                         let mut tx_ok = tx.clone();
                         let mut tx_error = tx.clone();
                         tokio02::spawn(async move {
-                            match storage.put(&user, tcp_tls_stream, path, start_pos).compat().await {
+                            match storage
+                                .put(&user, Self::reader(socket, tls, identity_file, identity_password), path, start_pos)
+                                .compat()
+                                .await
+                            {
                                 Ok(bytes) => {
                                     if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
                                         warn!("{}", err);
@@ -188,7 +234,10 @@ where
                             match storage.list_fmt(&user, path).compat().await {
                                 Ok(cursor) => {
                                     debug!("Copying future for List");
-                                    match tokio::io::copy(cursor, tcp_tls_stream).compat().await {
+                                    match tokio::io::copy(cursor, Self::writer(socket, tls, identity_file, identity_password))
+                                        .compat()
+                                        .await
+                                    {
                                         Ok(reader_writer) => {
                                             debug!("Shutdown future for List");
                                             let tcp_tls_stream = reader_writer.2;
@@ -217,7 +266,7 @@ where
                         let mut tx_error = tx.clone();
                         tokio02::spawn(async move {
                             match storage.nlst(&user, path).compat().await {
-                                Ok(res) => match tokio::io::copy(res, tcp_tls_stream).compat().await {
+                                Ok(res) => match tokio::io::copy(res, Self::writer(socket, tls, identity_file, identity_password)).compat().await {
                                     Ok(_) => {
                                         if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
                                             warn!("{}", err);
@@ -244,31 +293,6 @@ where
             .map(|_| ());
 
         tokio::spawn(task);
-    }
-}
-
-impl<S, U: Send + Sync + 'static> SecuritySwitch for Session<S, U>
-where
-    S: storage::StorageBackend<U>,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
-{
-    fn which_state(&self, channel: u8) -> SecurityState {
-        match channel {
-            crate::server::CONTROL_CHANNEL_ID => {
-                if self.cmd_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            DATA_CHANNEL_ID => {
-                if self.data_tls {
-                    return SecurityState::On;
-                }
-                SecurityState::Off
-            }
-            _ => SecurityState::Off,
-        }
     }
 }
 

@@ -9,11 +9,15 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-The libunftp library is a safe, fast and extensible FTP server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
+The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). Its a safe, fast and extensible FTP(S) server 
+implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
-Because of its plugable authentication and storage backends (e.g. local filesystem, [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a perfect match for the cloud.
+Because of its plug-able authentication and storage backends (e.g. local filesystem, 
+[Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a 
+perfect match for the cloud.
 
-It runs on top of the [Tokio](https://tokio.rs) asynchronous run-time and so tries to make use of Async IO as much as possible.
+It runs on top of the [Tokio](https://tokio.rs) asynchronous run-time and tries to make use of Async IO as much as 
+possible.
 
 **libunftp is currently under heavy development and not yet recommended for production use.
 The API MAY BREAK**
@@ -22,24 +26,22 @@ The API MAY BREAK**
 
 ## Prerequisites
 
-You'll need [Rust](https://rust-lang.org) 1.40 or higher to build libunftp.
-There are no runtime dependencies besides the OS and libc.
+You'll need [Rust](https://rust-lang.org) 1.41 or higher to build libunftp.
 
 ## Getting started
 
 If you've got Rust and cargo installed, create your project with
 
 ```sh
-cargo new my_project
+cargo new myftp
 ```
 
 Then add the libunftp, tokio & futures crates to your project's dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
-libunftp = "0.5.1"
-tokio = "0.1"
-futures = "0.1"
+libunftp = "0.6.0"
+tokio-compat = { version = "0.1", features = ["rt-full"] }
 ```
 
 Now you're ready to develop your server!
@@ -47,7 +49,7 @@ Add the following to `src/main.rs`:
 
 ```rust
 use futures::future::Future;
-use tokio::runtime::Runtime;
+use tokio_compat::runtime::Runtime;
 
 fn main() {
     let ftp_home = std::env::temp_dir();
@@ -55,10 +57,8 @@ fn main() {
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..65535);
 
-    let bind_addr = "127.0.0.1:2121";
     let mut runtime = Runtime::new().unwrap();
-    runtime.spawn(server.listener(&bind_addr));
-    runtime.shutdown_on_idle().wait().unwrap();
+    runtime.block_on_std(server.listener("127.0.0.1:2121"));
 }
 ```
 

@@ -5,7 +5,6 @@ use log::{info, warn};
 use std::io::Error;
 
 use serde::Deserialize;
-use serde_json;
 use std::fs;
 
 use std::time::Duration;
