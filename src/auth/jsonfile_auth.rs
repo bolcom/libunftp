@@ -2,8 +2,6 @@ use crate::auth::*;
 
 use log::{info, warn};
 
-use std::io::Error;
-
 use serde::Deserialize;
 use std::fs;
 
@@ -38,7 +36,7 @@ pub struct JsonFileAuthenticator {
 
 impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from file.
-    pub fn new<T: Into<String>>(filename: T) -> Result<Self, Error> {
+    pub fn new<T: Into<String>>(filename: T) -> Result<Self, Box<dyn std::error::Error>> {
         let s = fs::read_to_string(filename.into())?;
         let credentials_list: Vec<Credentials> = serde_json::from_str(&s)?;
         Ok(JsonFileAuthenticator { credentials_list })
@@ -47,7 +45,7 @@ impl JsonFileAuthenticator {
 
 #[async_trait]
 impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, ()> {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
         let username = _username.to_string();
         let password = _password.to_string();
         let credentials_list = self.credentials_list.clone();
@@ -61,7 +59,7 @@ impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
                     warn!("Failed login for user {}: bad password", username);
                     // punish the failed login with a 1500ms delay before returning the error
                     delay_for(Duration::from_millis(1500)).await;
-                    return Err(());
+                    return Err(Box::new(BadPasswordError));
                 }
             }
         }
@@ -69,6 +67,6 @@ impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
 
         // punish the failed login with a 1500ms delay before returning the error
         delay_for(Duration::from_millis(1500)).await;
-        Err(())
+        Err(Box::new(UnknownUsernameError))
     }
 }

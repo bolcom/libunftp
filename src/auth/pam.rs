@@ -25,19 +25,15 @@ impl PAMAuthenticator {
 
 #[async_trait]
 impl Authenticator<AnonymousUser> for PAMAuthenticator {
-    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, ()> {
+    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
         let service = self.service.clone();
         let username = username.to_string();
         let password = password.to_string();
 
-        let mut auth = match pam_auth::Authenticator::new(&service) {
-            Some(auth) => auth,
-            None => return Err(()),
-        };
+        let mut auth = pam_auth::Authenticator::with_password(&service)?;
 
-        auth.set_credentials(&username, &password);
-        auth.authenticate().map(|_| AnonymousUser {}).map_err(|err| {
-            debug!("RestError: {:?}", err);
-        })
+        auth.get_handler().set_credentials(&username, &password);
+        auth.authenticate()?;
+        Ok(AnonymousUser {})
     }
 }
