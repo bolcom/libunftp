@@ -2,6 +2,7 @@ mod uri;
 
 use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::{future, stream, Future, Stream};
 use hyper::{
@@ -201,6 +202,7 @@ impl Metadata for ObjectMetadata {
     }
 }
 
+#[async_trait]
 impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
@@ -379,7 +381,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         unimplemented!();
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, _path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> Option<Error> {
         //TODO: implement this
         unimplemented!();
     }

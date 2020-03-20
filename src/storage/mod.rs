@@ -7,6 +7,7 @@ use std::{
     result,
 };
 
+use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
 use futures::{Future, Stream};
@@ -182,7 +183,8 @@ pub trait AsAsyncReads {
 ///
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
-pub trait StorageBackend<U: Sync + Send>: Send + Sync {
+#[async_trait]
+pub trait StorageBackend<U: Sync + Send> {
     /// The concrete type of the Files returned by this StorageBackend.
     type File: AsAsyncReads + Sync + Send;
     /// The concrete type of the `Metadata` used by this StorageBackend.
@@ -271,7 +273,7 @@ pub trait StorageBackend<U: Sync + Send>: Send + Sync {
     fn rename<P: AsRef<Path>>(&self, user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
 
     /// Delete the given directory.
-    fn rmd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Option<Error>;
 }
 
 /// StorageBackend that uses a local filesystem, like a traditional FTP server.

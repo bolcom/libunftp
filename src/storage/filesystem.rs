@@ -4,6 +4,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use async_trait::async_trait;
 use futures::{future, Future};
 use futures03::{
     future::{FutureExt, TryFutureExt},
@@ -89,6 +90,7 @@ impl Filesystem {
     }
 }
 
+#[async_trait]
 impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     type File = Object;
     type Metadata = std::fs::Metadata;
@@ -221,21 +223,21 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Option<Error> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
+            Err(e) => return Some(e),
         };
-        let fut01 = tokio02::fs::remove_dir(full_path)
-            .map_err(|error| match error.kind() {
+
+        if let Err(error) = tokio02::fs::remove_dir(full_path).await {
+            return Some(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
                 _ => Error::from(ErrorKind::LocalError),
-            })
-            .boxed()
-            .compat();
+            });
+        }
 
-        Box::new(fut01)
+        return None;
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
