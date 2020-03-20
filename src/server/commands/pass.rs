@@ -19,9 +19,8 @@ use crate::server::session::SessionState;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
+use futures03::channel::mpsc::Sender;
 
-use futures::future::Future;
-use futures::sink::Sink;
 use std::sync::Arc;
 
 pub struct Pass {
@@ -47,19 +46,29 @@ where
         let mut session = args.session.lock().await;
         match &session.state {
             SessionState::WaitPass => {
-                let pass = std::str::from_utf8(&self.password.as_ref())?;
-                let pass = pass.to_string();
-                let user = session.username.clone().unwrap();
-                let tx = args.tx.clone();
+                let pass: &str = std::str::from_utf8(&self.password.as_ref())?;
+                let pass: String = pass.to_string();
+                let user: String = session.username.clone().unwrap();
+                let mut tx: Sender<InternalMsg> = args.tx.clone();
 
                 let auther = args.authenticator.clone();
                 match auther.authenticate(&user, &pass).await {
                     Ok(user) => {
                         session.user = Arc::new(Some(user));
-                        tokio::spawn(tx.send(InternalMsg::AuthSuccess).map(|_| ()).map_err(|_| ()));
+                        tokio02::spawn(async move {
+                            use futures03::prelude::*;
+                            if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
+                                warn!("{}", err);
+                            }
+                        });
                     }
                     Err(_) => {
-                        tokio::spawn(tx.send(InternalMsg::AuthFailed).map(|_| ()).map_err(|_| ()));
+                        tokio02::spawn(async move {
+                            use futures03::prelude::*;
+                            if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
+                                warn!("{}", err);
+                            }
+                        });
                     }
                 };
                 Ok(Reply::none())

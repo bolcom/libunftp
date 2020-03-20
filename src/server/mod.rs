@@ -9,6 +9,7 @@ pub(crate) mod reply;
 mod session;
 mod stream;
 
+use crate::server::controlchan::FTPCodec;
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
@@ -27,7 +28,7 @@ use tokio02::sync::Mutex;
 
 use failure::Fail;
 use futures::prelude::Stream;
-use futures::sync::mpsc::{channel, Receiver, Sender};
+use futures03::channel::mpsc::{channel, Receiver, Sender};
 use futures03::compat::Stream01CompatExt;
 use log::{debug, info, warn};
 use session::{Session, SessionState};
@@ -337,7 +338,7 @@ where
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
 
-        let codec = controlchan::FTPCodec::new();
+        let codec: FTPCodec = controlchan::FTPCodec::new();
         let (sink, stream) = codec.framed(tcp_tls_stream).split();
         let idle_session_timeout = self.idle_session_timeout;
         use futures03::compat::Sink01CompatExt;
@@ -349,7 +350,7 @@ where
 
         let strm = stream
             .map(Event::Command)
-            .select(rx.map(Event::InternalMsg).map_err(|_| FTPErrorKind::InternalMsgError.into()))
+            .select({use futures03::prelude::*; rx.map(|msg| Ok(Event::InternalMsg(msg))).compat()})
             // Read events until we get an InternalMsg::Quit or the session times out
             .take_while(move |event| {
                 if with_metrics {

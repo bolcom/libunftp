@@ -8,8 +8,9 @@ use super::stream::{SecurityState, SecuritySwitch, SwitchingTlsStream};
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
 use futures::prelude::*;
-use futures::sync::mpsc::Sender;
 use futures03::channel::mpsc::Receiver;
+use futures03::channel::mpsc::Sender;
+use futures03::compat::*;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -131,107 +132,106 @@ where
             .into_future()
             .map(move |(cmd, _)| {
                 use self::DataCommand::ExternalCommand;
+                use futures03::prelude::*;
                 match cmd {
                     Some(ExternalCommand(Command::Retr { path })) => {
                         let path = cwd.join(path);
-                        let tx_sending: Sender<InternalMsg> = tx.clone();
-                        let tx_error: Sender<InternalMsg> = tx.clone();
-                        tokio::spawn(
-                            storage
-                                .get(&user, path, start_pos)
-                                .and_then(|f| {
-                                    tx_sending
-                                        .send(InternalMsg::SendingData)
-                                        .map_err(|_e| Error::from(ErrorKind::LocalError))
-                                        .and_then(|_| {
-                                            tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).map_err(|_| Error::from(ErrorKind::LocalError))
-                                        })
-                                        .and_then(|(bytes, _, _)| {
-                                            tx.send(InternalMsg::SendData { bytes: bytes as i64 })
-                                                .map_err(|_| Error::from(ErrorKind::LocalError))
-                                        })
-                                })
-                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send file: {:?}", e);
-                                }),
-                        );
+                        let mut tx_sending: Sender<InternalMsg> = tx.clone();
+                        let mut tx_error: Sender<InternalMsg> = tx.clone();
+                        tokio02::spawn(async move {
+                            match storage.get(&user, path, start_pos).compat().await {
+                                Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
+                                    Ok(_) => match tokio::io::copy(f.as_tokio01_async_read(), tcp_tls_stream).compat().await {
+                                        Ok((bytes, _, _)) => {
+                                            if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes as i64 }).await {
+                                                warn!("{}", err);
+                                            }
+                                        }
+                                        Err(err) => warn!("{}", err),
+                                    },
+                                    Err(err) => warn!("{}", err),
+                                },
+                                Err(err) => {
+                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                                        warn!("{}", err);
+                                    }
+                                }
+                            }
+                        });
                     }
                     Some(ExternalCommand(Command::Stor { path })) => {
                         let path = cwd.join(path);
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage
-                                .put(&user, tcp_tls_stream, path, start_pos)
-                                .and_then(|bytes| {
-                                    tx_ok
-                                        .send(InternalMsg::WrittenData { bytes: bytes as i64 })
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                })
-                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send file: {:?}", e);
-                                }),
-                        );
+                        let mut tx_ok = tx.clone();
+                        let mut tx_error = tx.clone();
+                        tokio02::spawn(async move {
+                            match storage.put(&user, tcp_tls_stream, path, start_pos).compat().await {
+                                Ok(bytes) => {
+                                    if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
+                                        warn!("{}", err);
+                                    }
+                                }
+                                Err(err) => {
+                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                                        warn!("{}", err);
+                                    }
+                                }
+                            }
+                        });
                     }
                     Some(ExternalCommand(Command::List { path, .. })) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
                         };
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage
-                                .list_fmt(&user, path)
-                                .and_then(|cursor| {
+                        let mut tx_ok = tx.clone();
+                        tokio02::spawn(async move {
+                            match storage.list_fmt(&user, path).compat().await {
+                                Ok(cursor) => {
                                     debug!("Copying future for List");
-                                    tokio::io::copy(cursor, tcp_tls_stream)
-                                })
-                                .and_then(|reader_writer| {
-                                    debug!("Shutdown future for List");
-                                    let tcp_tls_stream = reader_writer.2;
-                                    tokio::io::shutdown(tcp_tls_stream)
-                                })
-                                .map_err(|_| Error::from(ErrorKind::LocalError))
-                                .and_then(|_| {
-                                    tx_ok
-                                        .send(InternalMsg::DirectorySuccessfullyListed)
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                })
-                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send directory list: {:?}", e);
-                                }),
-                        );
+                                    match tokio::io::copy(cursor, tcp_tls_stream).compat().await {
+                                        Ok(reader_writer) => {
+                                            debug!("Shutdown future for List");
+                                            let tcp_tls_stream = reader_writer.2;
+                                            match tokio::io::shutdown(tcp_tls_stream).compat().await {
+                                                Ok(_) => {
+                                                    if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                                                        warn!("{}", err);
+                                                    }
+                                                }
+                                                Err(err) => warn!("{}", err),
+                                            }
+                                        }
+                                        Err(err) => warn!("{}", err),
+                                    }
+                                }
+                                Err(err) => warn!("Failed to send directory list: {:?}", err),
+                            }
+                        });
                     }
                     Some(ExternalCommand(Command::Nlst { path })) => {
                         let path = match path {
                             Some(path) => cwd.join(path),
                             None => cwd,
                         };
-                        let tx_ok = tx.clone();
-                        let tx_error = tx.clone();
-                        tokio::spawn(
-                            storage
-                                .nlst(&user, path)
-                                .and_then(|res| tokio::io::copy(res, tcp_tls_stream))
-                                .map_err(|_| Error::from(ErrorKind::LocalError))
-                                .and_then(|_| {
-                                    tx_ok
-                                        .send(InternalMsg::DirectorySuccessfullyListed)
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                })
-                                .or_else(|e| tx_error.send(InternalMsg::StorageError(e)))
-                                .map(|_| ())
-                                .map_err(|e| {
-                                    warn!("Failed to send directory list: {:?}", e);
-                                }),
-                        );
+                        let mut tx_ok = tx.clone();
+                        let mut tx_error = tx.clone();
+                        tokio02::spawn(async move {
+                            match storage.nlst(&user, path).compat().await {
+                                Ok(res) => match tokio::io::copy(res, tcp_tls_stream).compat().await {
+                                    Ok(_) => {
+                                        if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                                            warn!("{}", err);
+                                        }
+                                    }
+                                    Err(err) => warn!("{}", err),
+                                },
+                                Err(_) => {
+                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                                        warn!("{}", err)
+                                    }
+                                }
+                            }
+                        });
                     }
                     // TODO: Remove catch-all Some(_) when I'm done implementing :)
                     Some(ExternalCommand(_)) => unimplemented!(),

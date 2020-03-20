@@ -25,8 +25,9 @@ use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind};
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::future::{self, Future};
-use futures::sink::Sink;
+use futures03::channel::mpsc::Sender;
+use futures03::compat::*;
+use futures03::prelude::*;
 use log::warn;
 use std::io::Read;
 use std::sync::Arc;
@@ -50,41 +51,43 @@ where
     S::Metadata: 'static + storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        match &self.path {
+        match self.path.clone() {
             None => {
-                let text = vec!["Status:", "Powered by libunftp"];
+                let text: Vec<&str> = vec!["Status:", "Powered by libunftp"];
                 // TODO: Add useful information here like libunftp version, auth type, storage type, IP etc.
                 Ok(Reply::new_multiline(ReplyCode::SystemStatus, text))
             }
             Some(path) => {
-                let path = std::str::from_utf8(&path)?;
+                let path: &str = std::str::from_utf8(&path)?;
+                let path = path.to_owned();
 
                 let session = args.session.lock().await;
+                let user = session.user.clone();
                 let storage = Arc::clone(&session.storage);
 
-                let tx_success = args.tx.clone();
-                let tx_fail = args.tx.clone();
+                let mut tx_success: Sender<InternalMsg> = args.tx.clone();
+                let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
 
-                tokio::spawn(
-                    storage
-                        .list_fmt(&session.user, path)
-                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                        .and_then(move |mut cursor| {
-                            let mut result = String::new();
-                            future::result(cursor.read_to_string(&mut result))
-                                .map_err(|_| Error::from(ErrorKind::LocalError))
-                                .and_then(|_| {
-                                    tx_success
-                                        .send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result))
-                                        .map_err(|_| Error::from(ErrorKind::LocalError))
-                                })
-                        })
-                        .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
-                        .map(|_| ())
-                        .map_err(|e| {
-                            warn!("Failed to get list_fmt: {}", e);
-                        }),
-                );
+                tokio02::spawn(async move {
+                    match storage.list_fmt(&user, path).compat().await {
+                        Ok(mut cursor) => {
+                            let mut result: String = String::new();
+                            match cursor.read_to_string(&mut result) {
+                                Ok(_) => {
+                                    if let Err(err) = tx_success.send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result)).await {
+                                        warn!("{}", err);
+                                    }
+                                }
+                                Err(err) => warn!("{}", err),
+                            }
+                        }
+                        Err(_) => {
+                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                                warn!("{}", err);
+                            }
+                        }
+                    }
+                });
                 Ok(Reply::none())
             }
         }

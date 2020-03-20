@@ -15,9 +15,6 @@ use bytes::Bytes;
 use failure::*;
 use std::{fmt, result, str};
 
-#[macro_use]
-mod macros;
-
 mod abor;
 mod acct;
 mod allo;
