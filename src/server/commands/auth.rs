@@ -11,7 +11,8 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::{sink::Sink, Future};
+use futures03::prelude::*;
+use log::warn;
 
 // The parameter that can be given to the `AUTH` command.
 #[derive(Debug, PartialEq, Clone)]
@@ -39,9 +40,14 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+        let mut tx = args.tx.clone();
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
-                spawn!(args.tx.send(InternalMsg::SecureControlChannel));
+                tokio02::spawn(async move {
+                    if let Err(err) = tx.send(InternalMsg::SecureControlChannel).await {
+                        warn!("{}", err);
+                    }
+                });
                 Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
             }
             (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),

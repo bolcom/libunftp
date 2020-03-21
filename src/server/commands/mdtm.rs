@@ -3,12 +3,13 @@ use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
-use crate::storage::{self, Error, ErrorKind, Metadata};
+use crate::storage::{self, Metadata};
 use async_trait::async_trait;
 use chrono::offset::Utc;
 use chrono::DateTime;
-use futures::future::{self, Future};
-use futures::sink::Sink;
+use futures03::channel::mpsc::Sender;
+use futures03::compat::*;
+use futures03::prelude::*;
 use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -35,31 +36,32 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock().await;
+        let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let tx_success = args.tx.clone();
-        let tx_fail = args.tx.clone();
+        let mut tx_success: Sender<InternalMsg> = args.tx.clone();
+        let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
 
-        tokio::spawn(
-            storage
-                .metadata(&session.user, &path)
-                .and_then(move |metadata| {
-                    future::result(metadata.modified()).and_then(|modified| {
-                        tx_success
-                            .send(InternalMsg::CommandChannelReply(
-                                ReplyCode::FileStatus,
-                                DateTime::<Utc>::from(modified).format(RFC3659_TIME).to_string(),
-                            ))
-                            .map_err(|_| Error::from(ErrorKind::LocalError))
-                    })
-                })
-                .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
-                .map(|_| ())
-                .map_err(|e| {
-                    warn!("Failed to get metadata: {}", e);
-                }),
-        );
-
+        tokio02::spawn(async move {
+            match storage.metadata(&user, &path).compat().await {
+                Ok(metadata) => {
+                    if let Err(err) = tx_success
+                        .send(InternalMsg::CommandChannelReply(
+                            ReplyCode::FileStatus,
+                            DateTime::<Utc>::from(metadata.modified().unwrap()).format(RFC3659_TIME).to_string(),
+                        ))
+                        .await
+                    {
+                        warn!("{}", err);
+                    }
+                }
+                Err(err) => {
+                    if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                        warn!("{}", err);
+                    }
+                }
+            }
+        });
         Ok(Reply::none())
     }
 }

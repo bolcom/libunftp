@@ -7,9 +7,9 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
-
+use futures03::channel::mpsc::Sender;
+use futures03::prelude::*;
+use log::warn;
 pub struct Ccc;
 
 #[async_trait]
@@ -21,10 +21,14 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let tx = args.tx.clone();
+        let mut tx: Sender<InternalMsg> = args.tx.clone();
         let session = args.session.lock().await;
         if session.cmd_tls {
-            spawn!(tx.send(InternalMsg::PlaintextControlChannel));
+            tokio02::spawn(async move {
+                if let Err(err) = tx.send(InternalMsg::PlaintextControlChannel).await {
+                    warn!("{}", err);
+                }
+            });
             Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))
         } else {
             Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))

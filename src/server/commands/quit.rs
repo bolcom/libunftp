@@ -19,8 +19,8 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures::sink::Sink;
-use futures03::compat::Future01CompatExt;
+use futures03::channel::mpsc::Sender;
+use futures03::prelude::*;
 use log::warn;
 
 pub struct Quit;
@@ -34,10 +34,10 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
-        let tx = args.tx.clone();
-        let send_res = tx.send(InternalMsg::Quit).compat().await;
-        if send_res.is_err() {
-            warn!("could not send internal message: QUIT");
+        let mut tx: Sender<InternalMsg> = args.tx.clone();
+        //TODO does this make sense? The command is not sent and yet an Ok is replied
+        if let Err(send_res) = tx.send(InternalMsg::Quit).await {
+            warn!("could not send internal message: QUIT. {}", send_res);
         }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
     }

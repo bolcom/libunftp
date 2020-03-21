@@ -11,10 +11,10 @@ use crate::server::error::FTPError;
 use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
-use crate::storage::{Error, ErrorKind};
 use async_trait::async_trait;
-use futures::future::Future;
-use futures::sink::Sink;
+use futures03::channel::mpsc::Sender;
+use futures03::compat::*;
+use futures03::prelude::*;
 use log::warn;
 use std::string::String;
 use std::sync::Arc;
@@ -40,19 +40,24 @@ where
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
+        let user = session.user.clone();
         let path = session.cwd.join(self.path.clone());
-        let tx_success = args.tx.clone();
-        let tx_fail = args.tx.clone();
-        tokio::spawn(
-            storage
-                .del(&session.user, path)
-                .and_then(|_| tx_success.send(InternalMsg::DelSuccess).map_err(|_| Error::from(ErrorKind::LocalError)))
-                .or_else(|e| tx_fail.send(InternalMsg::StorageError(e)))
-                .map(|_| ())
-                .map_err(|e| {
-                    warn!("Failed to delete file: {}", e);
-                }),
-        );
+        let mut tx_success: Sender<InternalMsg> = args.tx.clone();
+        let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+        tokio02::spawn(async move {
+            match storage.del(&user, path).compat().await {
+                Ok(_) => {
+                    if let Err(err) = tx_success.send(InternalMsg::DelSuccess).await {
+                        warn!("{}", err);
+                    }
+                }
+                Err(err) => {
+                    if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                        warn!("{}", err);
+                    }
+                }
+            }
+        });
         Ok(Reply::none())
     }
 }

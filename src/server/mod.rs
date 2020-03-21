@@ -24,14 +24,13 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio02::sync::Mutex;
 
-use futures::sync::mpsc::{channel, Receiver, Sender};
-use futures03::compat::Stream01CompatExt;
+use futures03::channel::mpsc::{channel, Receiver, Sender};
 use futures03::{SinkExt, StreamExt};
 use log::{info, warn};
 use session::{Session, SessionState};
 use std::ops::Range;
-use tokio02::sync::Mutex;
 use tokio02util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
@@ -315,7 +314,7 @@ where
         reply_sink.flush().await?;
 
         let mut command_source = command_source.fuse();
-        let mut internal_msg_rx = internal_msg_rx.compat().fuse();
+        let mut internal_msg_rx = internal_msg_rx.fuse();
 
         tokio02::spawn(async move {
             // The control channel event loop
@@ -327,7 +326,7 @@ where
                     Some(cmd_result) = command_source.next() => {
                         incoming = Some(cmd_result.map(Event::Command));
                     },
-                    Some(Ok(msg)) = internal_msg_rx.next() => {
+                    Some(msg) = internal_msg_rx.next() => {
                         incoming = Some(Ok(Event::InternalMsg(msg)));
                     },
                     _ = &mut timeout_delay => {
