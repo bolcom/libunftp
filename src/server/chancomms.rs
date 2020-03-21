@@ -5,7 +5,7 @@ use crate::server::reply::ReplyCode;
 use crate::storage::Error;
 
 // Commands that can be send to the data channel.
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum DataCommand {
     ExternalCommand(Command),
     Abort,

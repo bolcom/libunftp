@@ -1,17 +1,17 @@
 //! The session module implements per-connection session handling and currently also
-//! implements the control loop for the *data* channel.
+//! implements the handling for the *data* channel.
 
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
 use super::storage::AsAsyncReads;
 use crate::metrics;
 use crate::storage::{self, Error, ErrorKind};
-use futures::prelude::*;
 
 use futures03::channel::mpsc::Receiver;
 use futures03::channel::mpsc::Sender;
 use futures03::compat::*;
-use log::{debug, warn};
+use futures03::prelude::*;
+use log::{debug, info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -92,7 +92,230 @@ where
         self
     }
 
-    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    /// Processing for the data connection. This will spawn a new async task with the actual processing.
+    ///
+    /// socket: the data socket we'll be working with
+    /// tls: tells if this should be a TLS connection
+    /// tx: channel to send the result of our operation to the control process
+    pub(super) fn spawn_data_processing(&mut self, socket: tokio02::net::TcpStream, tx: Sender<InternalMsg>) {
+        let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
+        let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
+        let tls = self.data_tls;
+        let command_executor = DataCommandExecutor {
+            user: self.user.clone(),
+            socket,
+            tls,
+            tx,
+            cmd: None,
+            storage: Arc::clone(&self.storage),
+            cwd: self.cwd.clone(),
+            start_pos: self.start_pos,
+            identity_file: if tls { Some(self.certs_file.clone().unwrap()) } else { None },
+            identity_password: if tls { Some(self.certs_password.clone().unwrap()) } else { None },
+        };
+
+        tokio02::spawn(async move {
+            let mut timeout_delay = tokio02::time::delay_for(std::time::Duration::from_secs(5 * 60));
+            // TODO: Use configured timeout
+            tokio02::select! {
+                Some(command) = data_cmd_rx.next() => {
+                    Self::handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
+                },
+                Some(_) = data_abort_rx.next() => {
+                    Self::handle_incoming(DataCommand::Abort, command_executor).await;
+                },
+                _ = &mut timeout_delay => {
+                    info!("Connection timed out");
+                    return;
+                }
+            };
+
+            // This probably happened because the control channel was closed before we got here
+            warn!("Nothing received");
+        });
+    }
+
+    async fn handle_incoming(incoming: DataCommand, mut command_executor: DataCommandExecutor<S, U>) {
+        match incoming {
+            DataCommand::Abort => {
+                info!("Abort received");
+            }
+            DataCommand::ExternalCommand(command) => {
+                info!("Data command received");
+                command_executor.cmd = Some(command);
+                command_executor.execute().await;
+            }
+        }
+    }
+}
+
+impl<S, U: Send + Sync> Drop for Session<S, U>
+where
+    S: storage::StorageBackend<U>,
+    S::File: crate::storage::AsAsyncReads + Send,
+    S::Metadata: storage::Metadata,
+{
+    fn drop(&mut self) {
+        if self.with_metrics {
+            // Decrease the sessions metrics gauge when the session goes out of scope.
+            metrics::dec_session();
+        }
+    }
+}
+
+struct DataCommandExecutor<S, U: Send + Sync>
+where
+    S: storage::StorageBackend<U>,
+    S::File: crate::storage::AsAsyncReads + Send,
+    S::Metadata: storage::Metadata,
+{
+    user: Arc<Option<U>>,
+    socket: tokio02::net::TcpStream,
+    tls: bool,
+    tx: Sender<InternalMsg>,
+    cmd: Option<Command>,
+    storage: Arc<S>,
+    cwd: PathBuf,
+    start_pos: u64,
+    identity_file: Option<PathBuf>,
+    identity_password: Option<String>,
+}
+
+impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
+where
+    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S::File: crate::storage::AsAsyncReads + Send,
+    S::Metadata: storage::Metadata,
+{
+    async fn execute(self) {
+        use futures03::prelude::*;
+        match self.cmd.clone().unwrap() {
+            Command::Retr { path } => {
+                let path = self.cwd.join(path);
+                let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
+                let mut tx_error: Sender<InternalMsg> = self.tx.clone();
+                tokio02::spawn(async move {
+                    match self.storage.get(&self.user, path, self.start_pos).compat().await {
+                        Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
+                            Ok(_) => match tokio::io::copy(
+                                f.as_tokio01_async_read(),
+                                Self::writer(self.socket, self.tls, self.identity_file, self.identity_password),
+                            )
+                            .compat()
+                            .await
+                            {
+                                Ok((bytes, _, _)) => {
+                                    if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes as i64 }).await {
+                                        warn!("{}", err);
+                                    }
+                                }
+                                Err(err) => warn!("{}", err),
+                            },
+                            Err(err) => warn!("{}", err),
+                        },
+                        Err(err) => {
+                            if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                                warn!("{}", err);
+                            }
+                        }
+                    }
+                });
+            }
+            Command::Stor { path } => {
+                let path = self.cwd.join(path);
+                let mut tx_ok = self.tx.clone();
+                let mut tx_error = self.tx.clone();
+                tokio02::spawn(async move {
+                    match self
+                        .storage
+                        .put(
+                            &self.user,
+                            Self::reader(self.socket, self.tls, self.identity_file, self.identity_password),
+                            path,
+                            self.start_pos,
+                        )
+                        .compat()
+                        .await
+                    {
+                        Ok(bytes) => {
+                            if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
+                                warn!("{}", err);
+                            }
+                        }
+                        Err(err) => {
+                            if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                                warn!("{}", err);
+                            }
+                        }
+                    }
+                });
+            }
+            Command::List { path, .. } => {
+                let path = match path {
+                    Some(path) => self.cwd.join(path),
+                    None => self.cwd.clone(),
+                };
+                let mut tx_ok = self.tx.clone();
+                tokio02::spawn(async move {
+                    match self.storage.list_fmt(&self.user, path).compat().await {
+                        Ok(cursor) => {
+                            debug!("Copying future for List");
+                            match tokio::io::copy(cursor, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
+                                .compat()
+                                .await
+                            {
+                                Ok(reader_writer) => {
+                                    debug!("Shutdown future for List");
+                                    let tcp_tls_stream = reader_writer.2;
+                                    match tokio::io::shutdown(tcp_tls_stream).compat().await {
+                                        Ok(_) => {
+                                            if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                                                warn!("{}", err);
+                                            }
+                                        }
+                                        Err(err) => warn!("{}", err),
+                                    }
+                                }
+                                Err(err) => warn!("{}", err),
+                            }
+                        }
+                        Err(err) => warn!("Failed to send directory list: {:?}", err),
+                    }
+                });
+            }
+            Command::Nlst { path } => {
+                let path = match path {
+                    Some(path) => self.cwd.join(path),
+                    None => self.cwd.clone(),
+                };
+                let mut tx_ok = self.tx.clone();
+                let mut tx_error = self.tx.clone();
+                tokio02::spawn(async move {
+                    match self.storage.nlst(&self.user, path).compat().await {
+                        Ok(res) => match tokio::io::copy(res, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
+                            .compat()
+                            .await
+                        {
+                            Ok(_) => {
+                                if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                                    warn!("{}", err);
+                                }
+                            }
+                            Err(err) => warn!("{}", err),
+                        },
+                        Err(_) => {
+                            if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                                warn!("{}", err)
+                            }
+                        }
+                    }
+                });
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     fn writer(
         socket: tokio02::net::TcpStream,
         tls: bool,
@@ -115,7 +338,7 @@ where
         }
     }
 
-    // Lots of code duplication here. Should disappear completely when this module in rewritten in async/.await style
+    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     fn reader(
         socket: tokio02::net::TcpStream,
         tls: bool,
@@ -135,177 +358,6 @@ where
         } else {
             let futures03_async_read = socket.compat();
             Box::new(futures03_async_read.compat())
-        }
-    }
-
-    /// Processing for the data connection.
-    ///
-    /// socket: the data socket we'll be working with
-    /// tls: tells if this should be a TLS connection
-    /// tx: channel to send the result of our operation to the control process
-    pub(super) fn process_data(&mut self, user: Arc<Option<U>>, socket: tokio02::net::TcpStream, tls: bool, tx: Sender<InternalMsg>) {
-        // TODO: Either take the rx as argument, or properly check the result instead of
-        // `unwrap()`.
-        let rx = {
-            use futures03::stream::StreamExt;
-            use futures03::stream::TryStreamExt;
-            self.data_cmd_rx.take().unwrap().map(Ok::<Command, ()>).compat()
-        };
-        // TODO: Same as above, don't `unwrap()` here. Ideally we solve this by refactoring to a
-        // proper state machine.
-        let abort_rx: Receiver<()> = self.data_abort_rx.take().unwrap();
-        let storage: Arc<S> = Arc::clone(&self.storage);
-        let cwd = self.cwd.clone();
-        let start_pos: u64 = self.start_pos;
-        let identity_file = if tls { Some(self.certs_file.clone().unwrap()) } else { None };
-        let identity_password = if tls { Some(self.certs_password.clone().unwrap()) } else { None };
-        let task = rx
-            .take(1)
-            .map(DataCommand::ExternalCommand)
-            .select({
-                use futures03::stream::StreamExt;
-                use futures03::stream::TryStreamExt;
-                abort_rx.map(|_| Ok(DataCommand::Abort)).compat()
-            })
-            .take_while(|data_cmd| Ok(*data_cmd != DataCommand::Abort))
-            .into_future()
-            .map(move |(cmd, _)| {
-                use self::DataCommand::ExternalCommand;
-                use futures03::prelude::*;
-                match cmd {
-                    Some(ExternalCommand(Command::Retr { path })) => {
-                        let path = cwd.join(path);
-                        let mut tx_sending: Sender<InternalMsg> = tx.clone();
-                        let mut tx_error: Sender<InternalMsg> = tx.clone();
-                        tokio02::spawn(async move {
-                            match storage.get(&user, path, start_pos).compat().await {
-                                Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
-                                    Ok(_) => match tokio::io::copy(f.as_tokio01_async_read(), Self::writer(socket, tls, identity_file, identity_password))
-                                        .compat()
-                                        .await
-                                    {
-                                        Ok((bytes, _, _)) => {
-                                            if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes as i64 }).await {
-                                                warn!("{}", err);
-                                            }
-                                        }
-                                        Err(err) => warn!("{}", err),
-                                    },
-                                    Err(err) => warn!("{}", err),
-                                },
-                                Err(err) => {
-                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                        warn!("{}", err);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    Some(ExternalCommand(Command::Stor { path })) => {
-                        let path = cwd.join(path);
-                        let mut tx_ok = tx.clone();
-                        let mut tx_error = tx.clone();
-                        tokio02::spawn(async move {
-                            match storage
-                                .put(&user, Self::reader(socket, tls, identity_file, identity_password), path, start_pos)
-                                .compat()
-                                .await
-                            {
-                                Ok(bytes) => {
-                                    if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                                        warn!("{}", err);
-                                    }
-                                }
-                                Err(err) => {
-                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                        warn!("{}", err);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    Some(ExternalCommand(Command::List { path, .. })) => {
-                        let path = match path {
-                            Some(path) => cwd.join(path),
-                            None => cwd,
-                        };
-                        let mut tx_ok = tx.clone();
-                        tokio02::spawn(async move {
-                            match storage.list_fmt(&user, path).compat().await {
-                                Ok(cursor) => {
-                                    debug!("Copying future for List");
-                                    match tokio::io::copy(cursor, Self::writer(socket, tls, identity_file, identity_password))
-                                        .compat()
-                                        .await
-                                    {
-                                        Ok(reader_writer) => {
-                                            debug!("Shutdown future for List");
-                                            let tcp_tls_stream = reader_writer.2;
-                                            match tokio::io::shutdown(tcp_tls_stream).compat().await {
-                                                Ok(_) => {
-                                                    if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                                        warn!("{}", err);
-                                                    }
-                                                }
-                                                Err(err) => warn!("{}", err),
-                                            }
-                                        }
-                                        Err(err) => warn!("{}", err),
-                                    }
-                                }
-                                Err(err) => warn!("Failed to send directory list: {:?}", err),
-                            }
-                        });
-                    }
-                    Some(ExternalCommand(Command::Nlst { path })) => {
-                        let path = match path {
-                            Some(path) => cwd.join(path),
-                            None => cwd,
-                        };
-                        let mut tx_ok = tx.clone();
-                        let mut tx_error = tx.clone();
-                        tokio02::spawn(async move {
-                            match storage.nlst(&user, path).compat().await {
-                                Ok(res) => match tokio::io::copy(res, Self::writer(socket, tls, identity_file, identity_password)).compat().await {
-                                    Ok(_) => {
-                                        if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                            warn!("{}", err);
-                                        }
-                                    }
-                                    Err(err) => warn!("{}", err),
-                                },
-                                Err(_) => {
-                                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
-                                        warn!("{}", err)
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    // TODO: Remove catch-all Some(_) when I'm done implementing :)
-                    Some(ExternalCommand(_)) => unimplemented!(),
-                    Some(DataCommand::Abort) => unreachable!(),
-                    None => { /* This probably happened because the control channel was closed before we got here */ }
-                }
-            })
-            .into_future()
-            .map_err(|_| ())
-            .map(|_| ());
-
-        tokio::spawn(task);
-    }
-}
-
-impl<S, U: Send + Sync> Drop for Session<S, U>
-where
-    S: storage::StorageBackend<U>,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
-{
-    fn drop(&mut self) {
-        if self.with_metrics {
-            // Decrease the sessions metrics gauge when the session goes out of scope.
-            metrics::dec_session();
         }
     }
 }
