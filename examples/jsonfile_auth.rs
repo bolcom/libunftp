@@ -1,11 +1,10 @@
 use libunftp::auth::jsonfile_auth;
 
 use log::info;
-use std::io::Error;
 
 use std::sync::Arc;
 
-pub fn main() -> Result<(), Error> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
     let authenticator = jsonfile_auth::JsonFileAuthenticator::new(String::from("credentials.json"))?;

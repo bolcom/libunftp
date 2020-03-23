@@ -13,7 +13,7 @@ pub fn main() {
         .with_username_placeholder("{USER}".to_string())
         .with_password_placeholder("{PASS}".to_string())
         .with_url("https://authenticateme.bol.com/path".to_string())
-        .with_method(http::Method::POST)
+        .with_method(hyper13::Method::POST)
         .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string())
         .with_selector("/status".to_string())
         .with_regex("pass".to_string())
