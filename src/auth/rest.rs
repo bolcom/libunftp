@@ -8,7 +8,7 @@ use regex::Regex;
 use std::string::String;
 
 use http::uri::InvalidUri;
-use hyper13::{Body, Client, Request, Method};
+use hyper13::{Body, Client, Method, Request};
 
 use serde_json::Value;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};

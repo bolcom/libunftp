@@ -43,7 +43,7 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         // let session_arc = args.session.clone();
-        let mut session = args.session.lock().await;
+        let session = args.session.lock().await;
         match &session.state {
             SessionState::WaitPass => {
                 let pass: &str = std::str::from_utf8(&self.password.as_ref())?;
