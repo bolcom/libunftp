@@ -18,7 +18,7 @@
 //!
 //! #[async_trait]
 //! impl Authenticator<RandomUser> for RandomAuthenticator {
-//!     async fn authenticate(&self, username: &str, password: &str) -> Result<RandomUser, ()> {
+//!     async fn authenticate(&self, _username: &str, _password: &str) -> Result<RandomUser, Box<dyn std::error::Error + Send + Sync>> {
 //!         Ok(RandomUser{})
 //!     }
 //! }
