@@ -4,6 +4,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use async_trait::async_trait;
 use futures::{future, Future};
 use futures03::{
     future::{FutureExt, TryFutureExt},
@@ -89,6 +90,7 @@ impl Filesystem {
     }
 }
 
+#[async_trait]
 impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     type File = Object;
     type Metadata = std::fs::Metadata;
@@ -221,21 +223,21 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn rmd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
+            Err(e) => return Err(e),
         };
-        let fut01 = tokio02::fs::remove_dir(full_path)
-            .map_err(|error| match error.kind() {
+
+        if let Err(error) = tokio02::fs::remove_dir(full_path).await {
+            return Err(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
                 _ => Error::from(ErrorKind::LocalError),
-            })
-            .boxed()
-            .compat();
+            });
+        }
 
-        Box::new(fut01)
+        Ok(())
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
@@ -256,45 +258,39 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn rename<P: AsRef<Path>>(&self, _user: &Option<U>, from: P, to: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
         let from = match self.full_path(from) {
             Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
+            Err(e) => return Err(e),
         };
         let to = match self.full_path(to) {
             Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
+            Err(e) => return Err(e),
         };
 
         let from_rename = from.clone();
 
-        let fut01 = async move {
-            let r = tokio02::fs::symlink_metadata(from).await;
-            match r {
-                Ok(metadata) => {
-                    if metadata.is_file() {
-                        let r = tokio02::fs::rename(from_rename, to).await;
-                        match r {
-                            Ok(_) => Ok(()),
-                            Err(e) => {
-                                warn!("could not rename file: {:?}", e);
-                                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-                            }
+        let r = tokio02::fs::symlink_metadata(from).await;
+        match r {
+            Ok(metadata) => {
+                if metadata.is_file() {
+                    let r = tokio02::fs::rename(from_rename, to).await;
+                    match r {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            warn!("could not rename file: {:?}", e);
+                            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                         }
-                    } else {
-                        Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                     }
-                }
-                Err(e) => {
-                    warn!("could not get file metadata: {:?}", e);
+                } else {
                     Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                 }
             }
+            Err(e) => {
+                warn!("could not get file metadata: {:?}", e);
+                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+            }
         }
-        .boxed()
-        .compat();
-
-        Box::new(fut01)
     }
 }
 
@@ -539,8 +535,8 @@ mod tests {
         let mut rt = CompatRuntime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        rt.block_on(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename))
-            .expect("Failed to rename");
+        let r = rt.block_on_std(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename));
+        assert!(r.is_ok());
 
         let new_full_path = root.join(new_filename);
         assert!(std::fs::metadata(new_full_path).expect("new filename not found").is_file());

@@ -12,8 +12,6 @@ use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
 use futures03::prelude::*;
 use log::warn;
 use std::string::String;
@@ -39,25 +37,22 @@ where
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock().await;
-        let user = session.user.clone();
         let storage: Arc<S> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success: Sender<InternalMsg> = args.tx.clone();
-        let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
-        tokio02::spawn(async move {
-            match storage.rmd(&user, path).compat().await {
-                Ok(_) => {
-                    if let Err(err) = tx_success.send(InternalMsg::DelSuccess).await {
-                        warn!("{}", err);
-                    }
-                }
-                Err(err) => {
-                    if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
-                        warn!("{}", err);
-                    }
-                }
+        let mut tx_success = args.tx.clone();
+        let mut tx_fail = args.tx.clone();
+        if let Err(err) = storage.rmd(&session.user, path).await {
+            warn!("Failed to delete directory: {}", err);
+            let r = tx_fail.send(InternalMsg::StorageError(err)).await;
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of RMD error: {}", e);
             }
-        });
+        } else {
+            let r = tx_success.send(InternalMsg::DelSuccess).await;
+            if let Err(e) = r {
+                warn!("Could not send internal message to notify of RMD success: {}", e);
+            }
+        }
         Ok(Reply::none())
     }
 }
