@@ -99,14 +99,14 @@ where
 
         let session = args.session.clone();
 
+        // Open the data connection in a new task and process it.
+        // We cannot await this since we first need to let the client know where to connect :-)
         tokio02::spawn(async move {
             if let Ok((socket, _socket_addr)) = listener.accept().await {
                 let tx = tx.clone();
                 let session_arc = session.clone();
                 let mut session = session_arc.lock().await;
-                let user = session.user.clone();
-                let tls = session.data_tls;
-                session.process_data(user, socket, tls, tx);
+                session.spawn_data_processing(socket, tx);
             }
         });
 

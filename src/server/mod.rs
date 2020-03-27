@@ -255,15 +255,15 @@ where
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let result = self.process_control_connection(tcp_stream).await;
+            let result = self.spawn_control_channel_loop(tcp_stream).await;
             if result.is_err() {
-                warn!("Could not process connection: {:?}", result.err().unwrap())
+                warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
             }
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn process_control_connection(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
+    async fn spawn_control_channel_loop(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
