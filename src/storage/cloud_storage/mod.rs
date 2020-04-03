@@ -266,28 +266,27 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
-        let uri = match self.uris.get(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> super::Result<Self::File> {
+        let uri: Uri = self.uris.get(path)?;
+        let token: Token = self.get_token().compat().await?;
+
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
         let client = self.client.clone();
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .compat()
+            .await?;
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::GET)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .map(|body| Object::new(body.to_vec()));
-        Box::new(result)
+        let body: Chunk = unpack_response(response).compat().await?;
+
+        Ok(Object::new(body.to_vec()))
     }
 
     async fn put<P: AsRef<Path> + Send, B: tokio::prelude::AsyncRead + Send + 'static>(

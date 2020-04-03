@@ -139,13 +139,11 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn get<P: AsRef<Path>>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
+    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File> {
+        let full_path = self.full_path(path)?;
 
-        let fut01 = async move {
+        // TODO: Remove async block
+        async move {
             let mut file = tokio02::fs::File::open(full_path).await?;
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
@@ -157,10 +155,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
             _ => Error::from(ErrorKind::LocalError),
         })
-        .boxed()
-        .compat();
-
-        Box::new(fut01)
+        .await
     }
 
     async fn put<P: AsRef<Path> + Send, R: tokio::prelude::AsyncRead + Send + 'static>(
@@ -417,7 +412,7 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = CompatRuntime::new().unwrap();
-        let my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
+        let my_file = rt.block_on_std(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on_std(async move {
             let r = tokio02::io::copy(&mut my_file.as_tokio02_async_read(), &mut my_content).await;
