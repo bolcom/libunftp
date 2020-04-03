@@ -6,7 +6,7 @@ use hyper::client::connect::dns::GaiResolver;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::{future, stream, Future, Stream};
+use futures::{future, Future, Stream};
 use futures03::compat::*;
 use hyper::{
     client::connect::HttpConnector,
@@ -236,34 +236,32 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         item_to_metadata(&response)
     }
 
-    fn list<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
+    async fn list<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>, Error>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let uri = match self.uris.list(&path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(stream::once(Err(err))),
-        };
+        let uri: Uri = self.uris.list(&path)?;
 
-        let client = self.client.clone();
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::GET)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .and_then(|body_string| serde_json::from_slice::<ResponseBody>(&body_string).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(move |response_body| response_body.list())
-            .map(stream::iter_ok)
-            .flatten_stream();
-        Box::new(result)
+        let token: Token = self.get_token().compat().await?;
+
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        let response = client
+            .request(request)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .compat()
+            .await?;
+        let body: Chunk = unpack_response(response).compat().await?;
+        let response_body = serde_json::from_slice::<ResponseBody>(&body).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        response_body.list()
     }
 
     async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> super::Result<Self::File> {

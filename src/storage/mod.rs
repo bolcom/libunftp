@@ -10,7 +10,8 @@ use std::{
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
-use futures::{Future, Stream};
+use futures::Future;
+use itertools::Itertools;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
@@ -202,46 +203,40 @@ pub trait StorageBackend<U: Sync + Send> {
     async fn metadata<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
-    fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
+    async fn list<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
-    fn list_fmt<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    async fn list_fmt<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
+        P: AsRef<Path> + Send,
         Self::Metadata: Metadata + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
-        let fut = stream
-            .map(|file| format!("{}\r\n", file).into_bytes())
-            .concat2()
-            .map(std::io::Cursor::new)
-            .map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other));
+        let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
 
-        Box::new(fut)
+        let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi).into_bytes()).concat();
+
+        Ok(std::io::Cursor::new(file_infos))
     }
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be sent to the client.
-    fn nlst<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = std::io::Cursor<Vec<u8>>, Error = std::io::Error> + Send>
+    async fn nlst<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
+        P: AsRef<Path> + Send,
         Self::Metadata: Metadata + 'static,
     {
-        let stream: Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send> = self.list(user, path);
+        let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
 
-        let fut = stream
+        let bytes = list
+            .iter()
             .map(|file| {
-                format!(
-                    "{}\r\n",
-                    file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("")
-                )
-                .into_bytes()
+                let info = file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("");
+                format!("{}\r\n", info).into_bytes()
             })
-            .concat2()
-            .map(std::io::Cursor::new)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other));
-
-        Box::new(fut)
+            .concat();
+        Ok(std::io::Cursor::new(bytes))
     }
 
     /// Returns the content of the given file from offset start_pos.

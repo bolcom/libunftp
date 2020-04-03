@@ -256,7 +256,7 @@ where
                 };
                 let mut tx_ok = self.tx.clone();
                 tokio02::spawn(async move {
-                    match self.storage.list_fmt(&self.user, path).compat().await {
+                    match self.storage.list_fmt(&self.user, path).await {
                         Ok(cursor) => {
                             debug!("Copying future for List");
                             match tokio::io::copy(cursor, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
@@ -290,7 +290,7 @@ where
                 let mut tx_ok = self.tx.clone();
                 let mut tx_error = self.tx.clone();
                 tokio02::spawn(async move {
-                    match self.storage.nlst(&self.user, path).compat().await {
+                    match self.storage.nlst(&self.user, path).await {
                         Ok(res) => match tokio::io::copy(res, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
                             .compat()
                             .await
