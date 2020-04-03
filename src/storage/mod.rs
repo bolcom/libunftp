@@ -263,8 +263,8 @@ pub trait StorageBackend<U: Sync + Send> {
         start_pos: u64,
     ) -> Box<dyn Future<Item = u64, Error = Error> + Send>;
 
-    /// Delete the given file.
-    fn del<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    /// Deletes the file at the given path.
+    async fn del<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Create the given directory.
     fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
