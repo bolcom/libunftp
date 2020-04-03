@@ -43,7 +43,7 @@ where
         let mut tx = args.tx.clone();
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = tx.send(InternalMsg::SecureControlChannel).await {
                         warn!("{}", err);
                     }

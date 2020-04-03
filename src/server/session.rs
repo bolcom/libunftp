@@ -98,7 +98,7 @@ where
     /// tx: channel to send the result of our operation to the control process
     //
     // TODO: This doesn't really belong here, move to datachan.rs
-    pub(super) fn spawn_data_processing(&mut self, socket: tokio02::net::TcpStream, tx: Sender<InternalMsg>) {
+    pub(super) fn spawn_data_processing(&mut self, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>) {
         let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
         let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
         let tls = self.data_tls;
@@ -114,10 +114,10 @@ where
             identity_password: if tls { Some(self.certs_password.clone().unwrap()) } else { None },
         };
 
-        tokio02::spawn(async move {
-            let mut timeout_delay = tokio02::time::delay_for(std::time::Duration::from_secs(5 * 60));
+        tokio::spawn(async move {
+            let mut timeout_delay = tokio::time::delay_for(std::time::Duration::from_secs(5 * 60));
             // TODO: Use configured timeout
-            tokio02::select! {
+            tokio::select! {
                 Some(command) = data_cmd_rx.next() => {
                     Self::handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
                 },

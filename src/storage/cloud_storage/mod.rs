@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
-use tokio02util::codec::{BytesCodec, FramedRead};
+use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
 
@@ -126,7 +126,7 @@ impl Object {
 }
 
 impl AsAsyncReads for Object {
-    fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
+    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin> {
         unimplemented!()
     }
 }
@@ -263,7 +263,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(Object::new(body.bytes().into()))
     }
 
-    async fn put<P: AsRef<Path> + Send, B: tokio02::io::AsyncRead + Send + Sync + Unpin + 'static>(
+    async fn put<P: AsRef<Path> + Send, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         _user: &Option<U>,
         bytes: B,

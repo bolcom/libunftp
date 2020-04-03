@@ -43,7 +43,7 @@ where
         let path: PathBuf = session.cwd.join(self.path.clone());
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
-        tokio02::spawn(async move {
+        tokio::spawn(async move {
             if let Err(err) = storage.mkd(&user, &path).await {
                 if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
                     warn!("{}", err);

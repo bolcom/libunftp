@@ -58,19 +58,19 @@ where
                 // without this, the REST authenticator hangs when
                 // performing a http call through Hyper
                 let session2clone = args.session.clone();
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     match auther.authenticate(&user, &pass).await {
                         Ok(user) => {
                             let mut session = session2clone.lock().await;
                             session.user = Arc::new(Some(user));
-                            tokio02::spawn(async move {
+                            tokio::spawn(async move {
                                 if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
                                     warn!("{}", err);
                                 }
                             });
                         }
                         Err(_) => {
-                            tokio02::spawn(async move {
+                            tokio::spawn(async move {
                                 if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
                                     warn!("{}", err);
                                 }

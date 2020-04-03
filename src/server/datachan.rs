@@ -18,7 +18,7 @@ where
     S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
-    pub socket: tokio02::net::TcpStream,
+    pub socket: tokio::net::TcpStream,
     pub tls: bool,
     pub tx: Sender<InternalMsg>,
     pub storage: Arc<S>,
@@ -40,13 +40,13 @@ where
                 let path = self.cwd.join(path);
                 let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
                 let mut tx_error: Sender<InternalMsg> = self.tx.clone();
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     match self.storage.get(&self.user, path, self.start_pos).await {
                         Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
                             Ok(_) => {
                                 let mut input = f.as_tokio02_async_read();
                                 let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
-                                match tokio02::io::copy(&mut input, &mut output).await {
+                                match tokio::io::copy(&mut input, &mut output).await {
                                     Ok(bytes_copied) => {
                                         if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
                                             warn!("{}", err);
@@ -69,7 +69,7 @@ where
                 let path = self.cwd.join(path);
                 let mut tx_ok = self.tx.clone();
                 let mut tx_error = self.tx.clone();
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     match self
                         .storage
                         .put(
@@ -99,13 +99,13 @@ where
                     None => self.cwd.clone(),
                 };
                 let mut tx_ok = self.tx.clone();
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     match self.storage.list_fmt(&self.user, path).await {
                         Ok(cursor) => {
                             debug!("Copying future for List");
                             let mut input = cursor;
                             let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
-                            match tokio02::io::copy(&mut input, &mut output).await {
+                            match tokio::io::copy(&mut input, &mut output).await {
                                 Ok(_) => {
                                     if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
                                         warn!("{}", err);
@@ -126,11 +126,11 @@ where
                 };
                 let mut tx_ok = self.tx.clone();
                 let mut tx_error = self.tx.clone();
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     match self.storage.nlst(&self.user, path).await {
                         Ok(mut input) => {
                             let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
-                            match tokio02::io::copy(&mut input, &mut output).await {
+                            match tokio::io::copy(&mut input, &mut output).await {
                                 Ok(_) => {
                                     if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
                                         warn!("{}", err);
@@ -153,15 +153,15 @@ where
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     fn writer(
-        socket: tokio02::net::TcpStream,
+        socket: tokio::net::TcpStream,
         tls: bool,
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
-    ) -> Box<dyn tokio02::io::AsyncWrite + Send + Unpin + Sync> {
+    ) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         if tls {
             let io = futures::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 acceptor.accept(socket).await.unwrap()
             });
             Box::new(io)
@@ -172,15 +172,15 @@ where
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     fn reader(
-        socket: tokio02::net::TcpStream,
+        socket: tokio::net::TcpStream,
         tls: bool,
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
-    ) -> Box<dyn tokio02::io::AsyncRead + Send + Unpin + Sync> {
+    ) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         if tls {
             let io = futures::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 acceptor.accept(socket).await.unwrap()
             });
             Box::new(io)

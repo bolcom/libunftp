@@ -3,7 +3,7 @@
 use crate::server::{commands::Command, reply::Reply, FTPError, InternalMsg};
 use bytes05::BytesMut;
 use std::io::Write;
-use tokio02util::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 /// Event represents an `Event` that will be handled by our per-client event loop. It can be either
 /// a command from the client, or a status message from the data channel handler.

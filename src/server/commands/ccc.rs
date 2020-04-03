@@ -24,7 +24,7 @@ where
         let mut tx: Sender<InternalMsg> = args.tx.clone();
         let session = args.session.lock().await;
         if session.cmd_tls {
-            tokio02::spawn(async move {
+            tokio::spawn(async move {
                 if let Err(err) = tx.send(InternalMsg::PlaintextControlChannel).await {
                     warn!("{}", err);
                 }
