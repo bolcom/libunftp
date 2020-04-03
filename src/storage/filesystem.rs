@@ -99,18 +99,12 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         crate::storage::FEATURE_RESTART
     }
 
-    fn metadata<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata> {
+        let full_path = self.full_path(path)?;
 
-        let fut01 = tokio02::fs::symlink_metadata(full_path)
+        tokio02::fs::symlink_metadata(full_path)
+            .await
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .boxed()
-            .compat();
-
-        Box::new(fut01)
     }
 
     fn list<P: AsRef<Path>>(
@@ -350,7 +344,7 @@ mod tests {
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = tokio02::runtime::Builder::new().build().unwrap();
         let filename = path.file_name().unwrap();
-        let my_meta = rt.block_on(fs.metadata(&Some(AnonymousUser {}), filename).compat()).unwrap();
+        let my_meta = rt.block_on(fs.metadata(&Some(AnonymousUser {}), filename)).unwrap();
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());

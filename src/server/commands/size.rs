@@ -6,7 +6,6 @@ use crate::server::CommandArgs;
 use crate::storage::{self, Metadata};
 use async_trait::async_trait;
 use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
 use futures03::prelude::*;
 use log::warn;
 use std::path::PathBuf;
@@ -40,7 +39,7 @@ where
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
 
         tokio02::spawn(async move {
-            match storage.metadata(&user, &path).compat().await {
+            match storage.metadata(&user, &path).await {
                 Ok(metadata) => {
                     if let Err(err) = tx_success
                         .send(InternalMsg::CommandChannelReply(
