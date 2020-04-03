@@ -377,6 +377,10 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         //TODO: implement this
         unimplemented!();
     }
+
+    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> super::Result<()> {
+        Ok(())
+    }
 }
 
 fn unpack_response(response: Response<Body>) -> impl Future<Item = Chunk, Error = Error> {
