@@ -248,11 +248,7 @@ pub trait StorageBackend<U: Sync + Send> {
     /// The starting position can only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    ///
-    // TODO: Future versions of Rust will probably allow use to use `impl Future<...>` here. Use it
-    // if/when available. By that time, also see if we can replace Self::File with the AsyncRead
-    // Trait.
-    fn get<P: AsRef<Path>>(&self, user: &Option<U>, path: P, start_pos: u64) -> Box<dyn Future<Item = Self::File, Error = Error> + Send>;
+    async fn get<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
 
     /// Writes the given tokio 0.1 input stream to the specified path starting at start_pos
     async fn put<P: AsRef<Path> + Send, R: tokio::prelude::AsyncRead + Send + 'static>(

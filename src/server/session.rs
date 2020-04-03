@@ -195,7 +195,7 @@ where
                 let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
                 let mut tx_error: Sender<InternalMsg> = self.tx.clone();
                 tokio02::spawn(async move {
-                    match self.storage.get(&self.user, path, self.start_pos).compat().await {
+                    match self.storage.get(&self.user, path, self.start_pos).await {
                         Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
                             Ok(_) => match tokio::io::copy(
                                 f.as_tokio01_async_read(),
