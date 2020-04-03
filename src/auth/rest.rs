@@ -10,7 +10,7 @@ use std::string::String;
 use http::uri::InvalidUri;
 use hyper::{Body, Client, Method, Request};
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
@@ -91,16 +91,16 @@ impl Builder {
     }
 
     ///
-    pub fn build(self) -> RestAuthenticator {
-        RestAuthenticator {
+    pub fn build(self) -> Result<RestAuthenticator, Box<dyn std::error::Error>> {
+        Ok(RestAuthenticator {
             username_placeholder: self.username_placeholder,
             password_placeholder: self.password_placeholder,
             method: self.method,
             url: self.url,
             body: self.body,
             selector: self.selector,
-            regex: Regex::new(&self.regex).unwrap(),
-        }
+            regex: Regex::new(&self.regex)?,
+        })
     }
 }
 
@@ -143,13 +143,10 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
         let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
 
         let body: Value = serde_json::from_slice(&body_bytes)?;
-        let parsed = body
-            .pointer(&selector)
-            .map(|x| {
-                debug!("pointer: {:?}", x);
-                format!("{:?}", x)
-            })
-            .unwrap_or_else(|| "null".to_string());
+        let parsed = match body.pointer(&selector) {
+            Some(parsed) => parsed.to_string(),
+            None => json!(null).to_string(),
+        };
 
         if regex.is_match(&parsed) {
             Ok(AnonymousUser {})
