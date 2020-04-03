@@ -31,3 +31,10 @@ debug: # Create a debug build
 .PHONY: build
 build: # Create a release build
 	cargo build --release
+
+.PHONY: pr-prep
+pr-prep: # Runs checks to ensure you're ready for a pull request
+	cargo fmt --all -- --check
+	cargo clippy --all-features -- -D warnings
+	cargo test --all --all-features
+	cargo build --all --all-features

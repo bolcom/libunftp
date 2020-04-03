@@ -12,13 +12,9 @@ When making a feature request, please make it clear what problem you intend to s
 
 ## Checking your code
 
-We encourage you to check that the test suite passes locally and make sure that clippy and rustfmt are happy before submitting a pull request with your changes. If anything does not pass, typically it will be easier to iterate and fix it locally than waiting for the CI servers to run tests for you. Pull requests that do not pass the CI pipeline will not be merged.
+We encourage you to check that the test suite passes locally and make sure that clippy and rustfmt are happy before 
+submitting a pull request with your changes. If anything does not pass, typically it will be easier to iterate and 
+fix it locally than waiting for the CI servers to run tests for you. Pull requests that do not pass the CI pipeline 
+will not be merged.
 
-##### In the project root
-
-```sh
-# Run all tests
-cargo test --all-features
-cargo clippy --all-features
-cargo rustfmt
-```
+For your convenience we've added a makefile target. Simply run `make pr-prep` before your pull request.
