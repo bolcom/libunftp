@@ -3,6 +3,7 @@
 mod chancomms;
 pub(crate) mod commands;
 mod controlchan;
+mod datachan;
 pub mod error;
 pub(crate) mod io;
 pub(crate) mod password;
