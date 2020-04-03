@@ -3,15 +3,14 @@
 
 use super::chancomms::{DataCommand, InternalMsg};
 use super::commands::Command;
-use super::storage::AsAsyncReads;
+use super::datachan::DataCommandExecutor;
 use crate::metrics;
-use crate::storage::{self, Error, ErrorKind};
+use crate::storage;
 
 use futures03::channel::mpsc::Receiver;
 use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
 use futures03::prelude::*;
-use log::{debug, info, warn};
+use log::{info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -97,6 +96,8 @@ where
     /// socket: the data socket we'll be working with
     /// tls: tells if this should be a TLS connection
     /// tx: channel to send the result of our operation to the control process
+    //
+    // TODO: This doesn't really belong here, move to datachan.rs
     pub(super) fn spawn_data_processing(&mut self, socket: tokio02::net::TcpStream, tx: Sender<InternalMsg>) {
         let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
         let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
@@ -106,7 +107,6 @@ where
             socket,
             tls,
             tx,
-            cmd: None,
             storage: Arc::clone(&self.storage),
             cwd: self.cwd.clone(),
             start_pos: self.start_pos,
@@ -135,15 +135,16 @@ where
         });
     }
 
-    async fn handle_incoming(incoming: DataCommand, mut command_executor: DataCommandExecutor<S, U>) {
+    //
+    // TODO: This doesn't really belong here, move to datachan.rs
+    async fn handle_incoming(incoming: DataCommand, command_executor: DataCommandExecutor<S, U>) {
         match incoming {
             DataCommand::Abort => {
                 info!("Abort received");
             }
             DataCommand::ExternalCommand(command) => {
                 info!("Data command received");
-                command_executor.cmd = Some(command);
-                command_executor.execute().await;
+                command_executor.execute(command).await;
             }
         }
     }
@@ -159,204 +160,6 @@ where
         if self.with_metrics {
             // Decrease the sessions metrics gauge when the session goes out of scope.
             metrics::dec_session();
-        }
-    }
-}
-
-struct DataCommandExecutor<S, U: Send + Sync>
-where
-    S: storage::StorageBackend<U>,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
-{
-    user: Arc<Option<U>>,
-    socket: tokio02::net::TcpStream,
-    tls: bool,
-    tx: Sender<InternalMsg>,
-    cmd: Option<Command>,
-    storage: Arc<S>,
-    cwd: PathBuf,
-    start_pos: u64,
-    identity_file: Option<PathBuf>,
-    identity_password: Option<String>,
-}
-
-impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
-where
-    S: storage::StorageBackend<U> + Send + Sync + 'static,
-    S::File: crate::storage::AsAsyncReads + Send,
-    S::Metadata: storage::Metadata,
-{
-    async fn execute(self) {
-        use futures03::prelude::*;
-        match self.cmd.clone().unwrap() {
-            Command::Retr { path } => {
-                let path = self.cwd.join(path);
-                let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
-                let mut tx_error: Sender<InternalMsg> = self.tx.clone();
-                tokio02::spawn(async move {
-                    match self.storage.get(&self.user, path, self.start_pos).await {
-                        Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
-                            Ok(_) => match tokio::io::copy(
-                                f.as_tokio01_async_read(),
-                                Self::writer(self.socket, self.tls, self.identity_file, self.identity_password),
-                            )
-                            .compat()
-                            .await
-                            {
-                                Ok((bytes, _, _)) => {
-                                    if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes as i64 }).await {
-                                        warn!("{}", err);
-                                    }
-                                }
-                                Err(err) => warn!("{}", err),
-                            },
-                            Err(err) => warn!("{}", err),
-                        },
-                        Err(err) => {
-                            if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                warn!("{}", err);
-                            }
-                        }
-                    }
-                });
-            }
-            Command::Stor { path } => {
-                let path = self.cwd.join(path);
-                let mut tx_ok = self.tx.clone();
-                let mut tx_error = self.tx.clone();
-                tokio02::spawn(async move {
-                    match self
-                        .storage
-                        .put(
-                            &self.user,
-                            Self::reader(self.socket, self.tls, self.identity_file, self.identity_password),
-                            path,
-                            self.start_pos,
-                        )
-                        .await
-                    {
-                        Ok(bytes) => {
-                            if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                                warn!("{}", err);
-                            }
-                        }
-                        Err(err) => {
-                            if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                warn!("{}", err);
-                            }
-                        }
-                    }
-                });
-            }
-            Command::List { path, .. } => {
-                let path = match path {
-                    Some(path) => self.cwd.join(path),
-                    None => self.cwd.clone(),
-                };
-                let mut tx_ok = self.tx.clone();
-                tokio02::spawn(async move {
-                    match self.storage.list_fmt(&self.user, path).await {
-                        Ok(cursor) => {
-                            debug!("Copying future for List");
-                            match tokio::io::copy(cursor, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
-                                .compat()
-                                .await
-                            {
-                                Ok(reader_writer) => {
-                                    debug!("Shutdown future for List");
-                                    let tcp_tls_stream = reader_writer.2;
-                                    match tokio::io::shutdown(tcp_tls_stream).compat().await {
-                                        Ok(_) => {
-                                            if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                                warn!("{}", err);
-                                            }
-                                        }
-                                        Err(err) => warn!("{}", err),
-                                    }
-                                }
-                                Err(err) => warn!("{}", err),
-                            }
-                        }
-                        Err(err) => warn!("Failed to send directory list: {:?}", err),
-                    }
-                });
-            }
-            Command::Nlst { path } => {
-                let path = match path {
-                    Some(path) => self.cwd.join(path),
-                    None => self.cwd.clone(),
-                };
-                let mut tx_ok = self.tx.clone();
-                let mut tx_error = self.tx.clone();
-                tokio02::spawn(async move {
-                    match self.storage.nlst(&self.user, path).await {
-                        Ok(res) => match tokio::io::copy(res, Self::writer(self.socket, self.tls, self.identity_file, self.identity_password))
-                            .compat()
-                            .await
-                        {
-                            Ok(_) => {
-                                if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                    warn!("{}", err);
-                                }
-                            }
-                            Err(err) => warn!("{}", err),
-                        },
-                        Err(_) => {
-                            if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
-                                warn!("{}", err)
-                            }
-                        }
-                    }
-                });
-            }
-            _ => unimplemented!(),
-        }
-    }
-
-    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
-    fn writer(
-        socket: tokio02::net::TcpStream,
-        tls: bool,
-        identity_file: Option<PathBuf>,
-        indentity_password: Option<String>,
-    ) -> Box<dyn tokio::io::AsyncWrite + Send> {
-        use futures03::AsyncReadExt;
-        use tokio02util::compat::Tokio02AsyncReadCompatExt;
-        if tls {
-            let io = futures03::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
-                acceptor.accept(socket).await.unwrap()
-            });
-            let futures03_async_read = io.compat();
-            Box::new(futures03_async_read.compat())
-        } else {
-            let futures03_async_read = socket.compat();
-            Box::new(futures03_async_read.compat())
-        }
-    }
-
-    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
-    fn reader(
-        socket: tokio02::net::TcpStream,
-        tls: bool,
-        identity_file: Option<PathBuf>,
-        indentity_password: Option<String>,
-    ) -> Box<dyn tokio::io::AsyncRead + Send> {
-        use futures03::AsyncReadExt;
-        use tokio02util::compat::Tokio02AsyncReadCompatExt;
-        if tls {
-            let io = futures03::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
-                acceptor.accept(socket).await.unwrap()
-            });
-            let futures03_async_read = io.compat();
-            Box::new(futures03_async_read.compat())
-        } else {
-            let futures03_async_read = socket.compat();
-            Box::new(futures03_async_read.compat())
         }
     }
 }
