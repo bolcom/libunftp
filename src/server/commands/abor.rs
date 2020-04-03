@@ -32,7 +32,7 @@ where
         let mut session = args.session.lock().await;
         match session.data_abort_tx.take() {
             Some(mut tx) => {
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = tx.send(()).await {
                         warn!("abort failed: {}", err);
                     }

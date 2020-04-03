@@ -10,25 +10,18 @@ use log::warn;
 
 /// Type returned by the get method of the storage implementation
 pub struct Object {
-    inner: tokio02::fs::File,
+    inner: tokio::fs::File,
 }
 
 impl Object {
     /// Creates a new `Object`
-    pub fn new(inner: tokio02::fs::File) -> Object {
+    pub fn new(inner: tokio::fs::File) -> Object {
         Object { inner }
     }
 }
 
 impl AsAsyncReads for Object {
-    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
-        use futures::AsyncReadExt;
-        use tokio02util::compat::Tokio02AsyncReadCompatExt;
-        let futures_async_read = self.inner.compat();
-        Box::new(futures_async_read.compat())
-    }
-
-    fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
+    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin> {
         Box::new(self.inner)
     }
 }
@@ -98,7 +91,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata> {
         let full_path = self.full_path(path)?;
 
-        tokio02::fs::symlink_metadata(full_path)
+        tokio::fs::symlink_metadata(full_path)
             .await
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
@@ -112,7 +105,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
 
         let prefix: PathBuf = self.root.clone();
 
-        let mut rd: tokio02::fs::ReadDir = tokio02::fs::read_dir(full_path).await?;
+        let mut rd: tokio::fs::ReadDir = tokio::fs::read_dir(full_path).await?;
 
         let mut fis: Vec<Fileinfo<std::path::PathBuf, Self::Metadata>> = vec![];
         while let Ok(Some(dir_entry)) = rd.next_entry().await {
@@ -120,7 +113,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             let path = dir_entry.path();
             let relpath = path.strip_prefix(prefix).unwrap();
             let relpath: PathBuf = std::path::PathBuf::from(relpath);
-            let meta: Self::Metadata = tokio02::fs::symlink_metadata(dir_entry.path()).await?;
+            let meta: Self::Metadata = tokio::fs::symlink_metadata(dir_entry.path()).await?;
             fis.push(Fileinfo { path: relpath, metadata: meta })
         }
 
@@ -132,7 +125,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
 
         // TODO: Remove async block
         async move {
-            let mut file = tokio02::fs::File::open(full_path).await?;
+            let mut file = tokio::fs::File::open(full_path).await?;
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
@@ -146,7 +139,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         .await
     }
 
-    async fn put<P: AsRef<Path> + Send, R: tokio02::io::AsyncRead + Send + Sync + 'static + Unpin>(
+    async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
         &self,
         _user: &Option<U>,
         mut bytes: R,
@@ -161,11 +154,11 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        let mut file = tokio02::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
+        let mut file = tokio::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
         file.set_len(start_pos).await?;
         file.seek(std::io::SeekFrom::Start(start_pos)).await?;
 
-        let bytes_copied = tokio02::io::copy(&mut bytes, &mut file).await?;
+        let bytes_copied = tokio::io::copy(&mut bytes, &mut file).await?;
         Ok(bytes_copied)
     }
 
@@ -174,7 +167,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Ok(path) => path,
             Err(_) => return Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
         };
-        if let Err(error) = tokio02::fs::remove_file(full_path).await {
+        if let Err(error) = tokio::fs::remove_file(full_path).await {
             return Err(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
@@ -190,7 +183,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Err(e) => return Err(e),
         };
 
-        if let Err(error) = tokio02::fs::remove_dir(full_path).await {
+        if let Err(error) = tokio::fs::remove_dir(full_path).await {
             return Err(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
@@ -202,7 +195,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
     }
 
     async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        tokio02::fs::create_dir(self.full_path(path)?).await?;
+        tokio::fs::create_dir(self.full_path(path)?).await?;
 
         Ok(())
     }
@@ -219,11 +212,11 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
 
         let from_rename = from.clone();
 
-        let r = tokio02::fs::symlink_metadata(from).await;
+        let r = tokio::fs::symlink_metadata(from).await;
         match r {
             Ok(metadata) => {
                 if metadata.is_file() {
-                    let r = tokio02::fs::rename(from_rename, to).await;
+                    let r = tokio::fs::rename(from_rename, to).await;
                     match r {
                         Ok(_) => Ok(()),
                         Err(e) => {
@@ -248,7 +241,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             Err(e) => return Err(e),
         };
 
-        if let Err(error) = tokio02::fs::read_dir(full_path).await {
+        if let Err(error) = tokio::fs::read_dir(full_path).await {
             return Err(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
@@ -298,7 +291,7 @@ mod tests {
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::Write;
-    use tokio_compat::runtime::Runtime as CompatRuntime;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn fs_stat() {
@@ -314,7 +307,7 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = tokio02::runtime::Builder::new().build().unwrap();
+        let mut rt = tokio::runtime::Builder::new().build().unwrap();
         let filename = path.file_name().unwrap();
         let my_meta = rt.block_on(fs.metadata(&Some(AnonymousUser {}), filename)).unwrap();
 
@@ -339,7 +332,7 @@ mod tests {
         let fs = Filesystem::new(&root.path());
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = tokio02::runtime::Builder::new().build().unwrap();
+        let mut rt = tokio::runtime::Builder::new().build().unwrap();
         let my_list = rt.block_on(fs.list(&Some(AnonymousUser {}), "/")).unwrap();
 
         assert_eq!(my_list.len(), 1);
@@ -364,7 +357,7 @@ mod tests {
         // Create a filesystem StorageBackend with our root dir
         let fs = Filesystem::new(&root.path());
 
-        let mut rt = tokio02::runtime::Builder::new().build().unwrap();
+        let mut rt = tokio::runtime::Builder::new().build().unwrap();
         let my_list = rt.block_on(fs.list_fmt(&Some(AnonymousUser {}), "/")).unwrap();
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
@@ -387,11 +380,11 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = CompatRuntime::new().unwrap();
-        let my_file = rt.block_on_std(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
-        rt.block_on_std(async move {
-            let r = tokio02::io::copy(&mut my_file.as_tokio02_async_read(), &mut my_content).await;
+        rt.block_on(async move {
+            let r = tokio::io::copy(&mut my_file.as_tokio02_async_read(), &mut my_content).await;
             if r.is_err() {
                 return Err(());
             }
@@ -415,9 +408,9 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
-        rt.block_on_std(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
+        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
@@ -477,9 +470,9 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
-        rt.block_on_std(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
+        rt.block_on(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -495,10 +488,10 @@ mod tests {
 
         // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        let r = rt.block_on_std(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename));
+        let r = rt.block_on(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename));
         assert!(r.is_ok());
 
         let new_full_path = root.join(new_filename);

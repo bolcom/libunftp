@@ -38,7 +38,7 @@ where
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
 
-        tokio02::spawn(async move {
+        tokio::spawn(async move {
             match storage.metadata(&user, &path).await {
                 Ok(metadata) => {
                     if let Err(err) = tx_success

@@ -29,7 +29,7 @@ where
         let path: String = session.cwd.join(&filename).to_string_lossy().to_string();
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = tx.send(Command::Stor { path }).await {
                         warn!("sending command failed. {}", err);
                     }

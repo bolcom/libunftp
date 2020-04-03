@@ -25,14 +25,14 @@ use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio02::sync::Mutex;
+use tokio::sync::Mutex;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
 use session::{Session, SessionState};
 use std::ops::Range;
-use tokio02util::codec::*;
+use tokio_util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -46,7 +46,7 @@ const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 ///
 /// ```rust
 /// use libunftp::Server;
-/// use tokio02::runtime::Runtime;
+/// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
 /// let server = Server::with_root("/srv/ftp");
@@ -236,7 +236,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// use tokio02::runtime::Runtime;
+    /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
     /// let server = Server::with_root("/srv/ftp");
@@ -252,7 +252,7 @@ where
     pub async fn listener<T: Into<String>>(self, bind_address: T) {
         // TODO: Propogate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
-        let mut listener = tokio02::net::TcpListener::bind(addr).await.unwrap();
+        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
@@ -264,7 +264,7 @@ where
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio02::net::TcpStream) -> Result<(), FTPError> {
+    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), FTPError> {
         let with_metrics = self.with_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
@@ -317,13 +317,13 @@ where
         let mut command_source = command_source.fuse();
         let mut internal_msg_rx = internal_msg_rx.fuse();
 
-        tokio02::spawn(async move {
+        tokio::spawn(async move {
             // The control channel event loop
             loop {
                 #[allow(unused_assignments)]
                 let mut incoming = None;
-                let mut timeout_delay = tokio02::time::delay_for(idle_session_timeout);
-                tokio02::select! {
+                let mut timeout_delay = tokio::time::delay_for(idle_session_timeout);
+                tokio::select! {
                     Some(cmd_result) = command_source.next() => {
                         incoming = Some(cmd_result.map(Event::Command));
                     },
@@ -362,7 +362,7 @@ where
                             // Wrap in TLS Stream
                             //let config = tls::new_config(&certs, &keys);
                             let identity = tls::identity(identity_file.clone().unwrap(), identity_password.clone().unwrap());
-                            let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                            let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                             let io = acceptor.accept(io).await.unwrap().as_async_io();
 
                             // Wrap in codec again and get sink + source

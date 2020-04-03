@@ -15,7 +15,7 @@
 //!
 //! let server = libunftp::Server::with_root(std::env::temp_dir());
 //! # if false { // We don't want to actually start the server in an example.
-//! let mut runtime = tokio02::runtime::Builder::new().build().unwrap();
+//! let mut runtime = tokio::runtime::Builder::new().build().unwrap();
 //! runtime.block_on(server.listener("127.0.0.1:2121"));
 //! # }
 //! ```

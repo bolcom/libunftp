@@ -2,7 +2,7 @@ use libunftp::auth::rest;
 use log::info;
 use std::env;
 use std::sync::Arc;
-use tokio_compat::runtime::Builder;
+use tokio::runtime::Builder;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
@@ -24,6 +24,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting ftp server on {}", addr);
     let mut runtime = Builder::new().build()?;
-    runtime.block_on_std(server.listener(addr));
+    runtime.block_on(server.listener(addr));
     Ok(())
 }

@@ -171,11 +171,8 @@ where
 
 /// Provides the capability to convert StorageBackend::File instances to AsyncRead instances
 pub trait AsAsyncReads {
-    /// Converts self to a tokio 0.1 AsyncRead instance
-    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync>;
-
     /// Converts self to a tokio 0.2 AsyncRead instance
-    fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin>;
+    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>;
 }
 
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
@@ -245,7 +242,7 @@ pub trait StorageBackend<U: Sync + Send> {
     async fn get<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
 
     /// Writes the given tokio 0.1 input stream to the specified path starting at start_pos
-    async fn put<P: AsRef<Path> + Send, R: tokio02::io::AsyncRead + Send + Sync + Unpin + 'static>(
+    async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         user: &Option<U>,
         input: R,

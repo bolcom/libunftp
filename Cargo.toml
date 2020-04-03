@@ -22,12 +22,10 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.22"
 regex = "1"
-tokio = "0.1"
 futures = {version = "0.3", features = ["compat", "io-compat", "std"]}
-tokio02 = { package="tokio", version = "0.2.15", features = ["full"]}
-tokio02util = { package="tokio-util", version = "0.3.1", features=["compat", "codec"] }
-tokio02tls = { package="tokio-tls", version = "0.3.0" }
-tokio-compat = { version = "0.1", features = ["rt-full"] }
+tokio = { version = "0.2.15", features = ["full"]}
+tokio-util = { version = "0.3.1", features=["codec"] }
+tokio-tls = { version = "0.3.0" }
 native-tls = "0.2.4"
 rustls = "0.16.0"
 bytes = "0.4"

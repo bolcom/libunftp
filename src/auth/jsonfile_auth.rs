@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::fs;
 
 use std::time::Duration;
-use tokio02::time::delay_for;
+use tokio::time::delay_for;
 
 #[derive(Deserialize, Clone, Debug)]
 struct Credentials {

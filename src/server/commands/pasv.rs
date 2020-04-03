@@ -11,15 +11,16 @@ use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
+
 use async_trait::async_trait;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
 use rand::RngCore;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Range;
-use tokio::io;
-use tokio02::net::TcpListener;
-use tokio02::sync::Mutex;
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 
 use lazy_static::*;
 
@@ -101,7 +102,7 @@ where
 
         // Open the data connection in a new task and process it.
         // We cannot await this since we first need to let the client know where to connect :-)
-        tokio02::spawn(async move {
+        tokio::spawn(async move {
             if let Ok((socket, _socket_addr)) = listener.accept().await {
                 let tx = tx.clone();
                 let session_arc = session.clone();

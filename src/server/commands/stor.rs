@@ -33,7 +33,7 @@ where
         let cmd: Command = args.cmd.clone();
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
-                tokio02::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
                         warn!("{}", err);
                     }
