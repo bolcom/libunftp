@@ -146,10 +146,10 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         .await
     }
 
-    async fn put<P: AsRef<Path> + Send, R: tokio02::io::AsyncRead + Send + Sync + Unpin + 'static>(
+    async fn put<P: AsRef<Path> + Send, R: tokio02::io::AsyncRead + Send + Sync + 'static + Unpin>(
         &self,
         _user: &Option<U>,
-        _bytes: R,
+        mut bytes: R,
         path: P,
         start_pos: u64,
     ) -> Result<u64> {
@@ -164,10 +164,9 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         let mut file = tokio02::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
         file.set_len(start_pos).await?;
         file.seek(std::io::SeekFrom::Start(start_pos)).await?;
-        // FIXME
-        // let n_bytes = tokio02::io::copy(&mut bytes, &mut file).await?;
 
-        Ok(0)
+        let bytes_copied = tokio02::io::copy(&mut bytes, &mut file).await?;
+        Ok(bytes_copied)
     }
 
     async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
