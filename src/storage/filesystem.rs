@@ -291,7 +291,7 @@ mod tests {
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::Write;
-    use tokio_compat::runtime::Runtime as CompatRuntime;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn fs_stat() {
@@ -380,10 +380,10 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = CompatRuntime::new().unwrap();
-        let my_file = rt.block_on_std(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
-        rt.block_on_std(async move {
+        rt.block_on(async move {
             let r = tokio::io::copy(&mut my_file.as_tokio02_async_read(), &mut my_content).await;
             if r.is_err() {
                 return Err(());
@@ -408,9 +408,9 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
-        rt.block_on_std(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
+        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();
@@ -470,9 +470,9 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
-        rt.block_on_std(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
+        rt.block_on(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -488,10 +488,10 @@ mod tests {
 
         // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = CompatRuntime::new().unwrap();
+        let mut rt = Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
-        let r = rt.block_on_std(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename));
+        let r = rt.block_on(fs.rename(&Some(AnonymousUser {}), &old_filename, &new_filename));
         assert!(r.is_ok());
 
         let new_full_path = root.join(new_filename);

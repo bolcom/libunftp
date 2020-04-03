@@ -8,12 +8,12 @@ use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::str;
-use tokio_compat::runtime::Runtime as CompatRuntime;
+use tokio::runtime::Runtime;
 
 fn test_with(addr: &'static str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
-    let rt = CompatRuntime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let server = libunftp::Server::with_root(path.into());
-    let _thread = rt.spawn_std(server.listener(addr));
+    let _thread = rt.spawn(server.listener(addr));
     std::thread::sleep(Duration::new(1, 0));
     test();
 }
