@@ -325,29 +325,27 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let uri = match self.uris.delete(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> super::Result<()> {
+        use futures03::compat::*;
+        let uri = self.uris.delete(path)?;
+        let token = self.get_token().compat().await?;
+
+        let request = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .method(Method::DELETE)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
         let client = self.client.clone();
+        let response_res = client.request(request).compat().await;
+        if let Err(error) = response_res {
+            warn!("Error deleting cloud storage file: {:?}", error);
+            return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
+        }
+        unpack_response(response_res.unwrap()).compat().await?;
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .method(Method::DELETE)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .map(|_| ());
-
-        Box::new(result)
+        Ok(())
     }
 
     fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {

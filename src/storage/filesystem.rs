@@ -207,20 +207,19 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn del<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
+    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
-            Err(_) => return Box::new(future::err(Error::from(ErrorKind::PermanentFileNotAvailable))),
+            Err(_) => return Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
         };
-        let fut01 = tokio02::fs::remove_file(full_path)
-            .map_err(|error| match error.kind() {
+        if let Err(error) = tokio02::fs::remove_file(full_path).await {
+            return Err(match error.kind() {
                 std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
                 std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
                 _ => Error::from(ErrorKind::LocalError),
-            })
-            .boxed()
-            .compat();
-        Box::new(fut01)
+            });
+        }
+        Ok(())
     }
 
     async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
