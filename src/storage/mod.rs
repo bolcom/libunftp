@@ -199,7 +199,7 @@ pub trait StorageBackend<U: Sync + Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    fn metadata<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = Self::Metadata, Error = Error> + Send>;
+    async fn metadata<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
     fn list<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Stream<Item = Fileinfo<std::path::PathBuf, Self::Metadata>, Error = Error> + Send>
