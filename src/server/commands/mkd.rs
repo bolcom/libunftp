@@ -13,7 +13,6 @@ use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
 use futures03::prelude::*;
 use log::warn;
 use std::path::PathBuf;
@@ -45,7 +44,7 @@ where
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
         tokio02::spawn(async move {
-            match storage.mkd(&user, &path).compat().await {
+            match storage.mkd(&user, &path).await {
                 Ok(_) => {
                     if let Err(err) = tx_success.send(InternalMsg::MkdirSuccess(path)).await {
                         warn!("{}", err);
