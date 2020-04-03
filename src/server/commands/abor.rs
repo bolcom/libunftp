@@ -15,6 +15,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
+use futures::prelude::*;
 
 use log::warn;
 pub struct Abor;
@@ -32,7 +33,6 @@ where
         match session.data_abort_tx.take() {
             Some(mut tx) => {
                 tokio02::spawn(async move {
-                    use futures03::sink::SinkExt;
                     if let Err(err) = tx.send(()).await {
                         warn!("abort failed: {}", err);
                     }

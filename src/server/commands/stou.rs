@@ -6,6 +6,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
+use futures::prelude::*;
 use log::warn;
 use std::path::Path;
 use uuid::Uuid;
@@ -29,7 +30,6 @@ where
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
                 tokio02::spawn(async move {
-                    use futures03::sink::SinkExt;
                     if let Err(err) = tx.send(Command::Stor { path }).await {
                         warn!("sending command failed. {}", err);
                     }

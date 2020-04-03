@@ -27,8 +27,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio02::sync::Mutex;
 
-use futures03::channel::mpsc::{channel, Receiver, Sender};
-use futures03::{SinkExt, StreamExt};
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::{SinkExt, StreamExt};
 use log::{info, warn};
 use session::{Session, SessionState};
 use std::ops::Range;
@@ -430,7 +430,7 @@ where
             | Event::Command(Command::Feat)
             | Event::Command(Command::Quit) => next(event),
             _ => {
-                let r = futures03::executor::block_on(async {
+                let r = futures::executor::block_on(async {
                     let session = session.lock().await;
                     if session.state != SessionState::WaitCmd {
                         Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
@@ -464,7 +464,7 @@ where
     ) -> impl Fn(Event) -> Result<Reply, FTPError> {
         move |event| -> Result<Reply, FTPError> {
             match event {
-                Event::Command(cmd) => futures03::executor::block_on(Self::handle_command(
+                Event::Command(cmd) => futures::executor::block_on(Self::handle_command(
                     cmd,
                     session.clone(),
                     authenticator.clone(),
@@ -474,7 +474,7 @@ where
                     local_addr,
                     storage_features,
                 )),
-                Event::InternalMsg(msg) => futures03::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
+                Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
         }
     }

@@ -19,7 +19,8 @@ use crate::server::session::SessionState;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::channel::mpsc::Sender;
+use futures::channel::mpsc::Sender;
+use futures::prelude::*;
 use log::warn;
 
 use std::sync::Arc;
@@ -63,7 +64,6 @@ where
                             let mut session = session2clone.lock().await;
                             session.user = Arc::new(Some(user));
                             tokio02::spawn(async move {
-                                use futures03::prelude::*;
                                 if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
                                     warn!("{}", err);
                                 }
@@ -71,7 +71,6 @@ where
                         }
                         Err(_) => {
                             tokio02::spawn(async move {
-                                use futures03::prelude::*;
                                 if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
                                     warn!("{}", err);
                                 }

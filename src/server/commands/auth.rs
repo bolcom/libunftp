@@ -11,7 +11,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::prelude::*;
+use futures::prelude::*;
 use log::warn;
 
 // The parameter that can be given to the `AUTH` command.

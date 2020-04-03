@@ -7,9 +7,9 @@ use super::datachan::DataCommandExecutor;
 use crate::metrics;
 use crate::storage;
 
-use futures03::channel::mpsc::Receiver;
-use futures03::channel::mpsc::Sender;
-use futures03::prelude::*;
+use futures::channel::mpsc::Receiver;
+use futures::channel::mpsc::Sender;
+use futures::prelude::*;
 use log::{info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,9 +31,9 @@ where
     pub user: Arc<Option<U>>,
     pub username: Option<String>,
     pub storage: Arc<S>,
-    pub data_cmd_tx: Option<futures03::channel::mpsc::Sender<Command>>,
+    pub data_cmd_tx: Option<Sender<Command>>,
     pub data_cmd_rx: Option<Receiver<Command>>,
-    pub data_abort_tx: Option<futures03::channel::mpsc::Sender<()>>,
+    pub data_abort_tx: Option<Sender<()>>,
     pub data_abort_rx: Option<Receiver<()>>,
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,

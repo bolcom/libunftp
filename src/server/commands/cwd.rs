@@ -14,7 +14,7 @@ use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::prelude::*;
+use futures::prelude::*;
 use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
