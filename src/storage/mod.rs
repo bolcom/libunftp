@@ -12,6 +12,8 @@ use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
 use itertools::Itertools;
 
+use log::warn;
+
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
 pub const FEATURE_RESTART: u32 = 0b0000_0001;
@@ -146,6 +148,14 @@ where
             .modified()
             .map(|x| DateTime::<Utc>::from(x).format("%b %d %H:%M").to_string())
             .unwrap_or_else(|_| "-".to_string());
+        let basename = self.path.as_ref().components().last();
+        let path = match basename {
+            Some(v) => v.as_os_str().to_string_lossy(),
+            None => {
+                warn!("error parsing path components");
+                return Err(std::fmt::Error);
+            }
+        };
         #[allow(clippy::write_literal)]
         write!(
             f,
@@ -164,7 +174,7 @@ where
             group = self.metadata.gid(),
             size = self.metadata.len(),
             modified = modified,
-            path = self.path.as_ref().components().last().unwrap().as_os_str().to_string_lossy(),
+            path = path,
         )
     }
 }

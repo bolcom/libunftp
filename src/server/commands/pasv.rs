@@ -1,4 +1,4 @@
-//! The RFC 959 Passive (`PASSV`) command
+//! The RFC 959 Passive (`PASV`) command
 //
 // This command requests the server-DTP to "listen" on a data
 // port (which is not its default data port) and to wait for a
