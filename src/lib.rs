@@ -12,12 +12,17 @@
 //!
 //! ```rust
 //! use libunftp;
+//! use tokio::prelude::*;
 //!
-//! let server = libunftp::Server::with_root(std::env::temp_dir());
-//! # if false { // We don't want to actually start the server in an example.
-//! let mut runtime = tokio::runtime::Builder::new().build().unwrap();
-//! runtime.block_on(server.listener("127.0.0.1:2121"));
-//! # }
+//! #[tokio::main]
+//! pub async fn main() {
+//!     let ftp_home = std::env::temp_dir();
+//!     let server = libunftp::Server::with_root(ftp_home)
+//!         .greeting("Welcome to my FTP server")
+//!         .passive_ports(50000..65535);
+//!
+//!     server.listener("127.0.0.1:2121");
+//! }
 //! ```
 
 pub mod auth;

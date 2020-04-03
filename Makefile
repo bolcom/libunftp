@@ -42,3 +42,7 @@ pr-prep: examples # Runs checks to ensure you're ready for a pull request
 	cargo clippy --all-features -- -D warnings
 	cargo test --all --all-features
 	cargo build --all --all-features
+	cargo doc --all-features
+
+publish:
+	cargo publish --all-features --verbose

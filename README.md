@@ -41,24 +41,23 @@ Then add the libunftp, tokio & futures crates to your project's dependencies in 
 ```toml
 [dependencies]
 libunftp = "0.6.0"
-tokio-compat = { version = "0.1", features = ["rt-full"] }
+tokio = { version = "0.2", features = ["full"] }
 ```
 
 Now you're ready to develop your server!
 Add the following to `src/main.rs`:
 
 ```rust
-use futures::future::Future;
-use tokio_compat::runtime::Runtime;
+use tokio::prelude::*;
 
-fn main() {
+#[tokio::main]
+pub async fn main() {
     let ftp_home = std::env::temp_dir();
     let server = libunftp::Server::with_root(ftp_home)
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..65535);
 
-    let mut runtime = Runtime::new().unwrap();
-    runtime.block_on_std(server.listener("127.0.0.1:2121"));
+    server.listener("127.0.0.1:2121");
 }
 ```
 
