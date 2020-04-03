@@ -378,7 +378,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         unimplemented!();
     }
 
-    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> super::Result<()> {
+    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> super::Result<()> {
         Ok(())
     }
 }
