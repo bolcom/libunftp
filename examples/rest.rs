@@ -4,7 +4,7 @@ use std::env;
 use std::sync::Arc;
 use tokio_compat::runtime::Builder;
 
-pub fn main() {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
     let _args: Vec<String> = env::args().collect();
@@ -17,12 +17,13 @@ pub fn main() {
         .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string())
         .with_selector("/status".to_string())
         .with_regex("pass".to_string())
-        .build();
+        .build()?;
 
     let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
-    let mut runtime = Builder::new().build().unwrap();
+    let mut runtime = Builder::new().build()?;
     runtime.block_on_std(server.listener(addr));
+    Ok(())
 }
