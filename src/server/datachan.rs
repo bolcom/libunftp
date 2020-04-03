@@ -5,8 +5,9 @@ use super::commands::Command;
 use super::storage::AsAsyncReads;
 use crate::storage::{self, Error, ErrorKind};
 
-use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
+use futures::channel::mpsc::Sender;
+use futures::compat::*;
+use futures::prelude::*;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -35,7 +36,6 @@ where
     S::Metadata: storage::Metadata,
 {
     pub async fn execute(self, cmd: Command) {
-        use futures03::prelude::*;
         match cmd {
             Command::Retr { path } => {
                 let path = self.cwd.join(path);
@@ -168,19 +168,19 @@ where
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
     ) -> Box<dyn tokio::io::AsyncWrite + Send> {
-        use futures03::AsyncReadExt;
+        use futures::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
         if tls {
-            let io = futures03::executor::block_on(async move {
+            let io = futures::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 acceptor.accept(socket).await.unwrap()
             });
-            let futures03_async_read = io.compat();
-            Box::new(futures03_async_read.compat())
+            let futures_async_read = io.compat();
+            Box::new(futures_async_read.compat())
         } else {
-            let futures03_async_read = socket.compat();
-            Box::new(futures03_async_read.compat())
+            let futures_async_read = socket.compat();
+            Box::new(futures_async_read.compat())
         }
     }
 
@@ -190,20 +190,16 @@ where
         tls: bool,
         identity_file: Option<PathBuf>,
         indentity_password: Option<String>,
-    ) -> Box<dyn tokio::io::AsyncRead + Send> {
-        use futures03::AsyncReadExt;
-        use tokio02util::compat::Tokio02AsyncReadCompatExt;
+    ) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
         if tls {
-            let io = futures03::executor::block_on(async move {
+            let io = futures::executor::block_on(async move {
                 let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
                 let acceptor = tokio02tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
                 acceptor.accept(socket).await.unwrap()
             });
-            let futures03_async_read = io.compat();
-            Box::new(futures03_async_read.compat())
+            Box::new(io)
         } else {
-            let futures03_async_read = socket.compat();
-            Box::new(futures03_async_read.compat())
+            Box::new(socket)
         }
     }
 }

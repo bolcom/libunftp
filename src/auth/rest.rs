@@ -8,7 +8,7 @@ use regex::Regex;
 use std::string::String;
 
 use http::uri::InvalidUri;
-use hyper13::{Body, Client, Method, Request};
+use hyper::{Body, Client, Method, Request};
 
 use serde_json::Value;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
@@ -140,7 +140,7 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
         let client = Client::new();
 
         let resp = client.request(req).await?;
-        let body_bytes = hyper13::body::to_bytes(resp.into_body()).await?;
+        let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
 
         let body: Value = serde_json::from_slice(&body_bytes)?;
         let parsed = body

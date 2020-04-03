@@ -1,34 +1,30 @@
 mod uri;
 
 use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
-use http::uri::Uri;
-use hyper::client::connect::dns::GaiResolver;
-
 use async_trait::async_trait;
+use bytes05::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
-use futures::{future, Future, Stream};
-use futures03::compat::*;
+use futures::prelude::*;
+use http::{StatusCode, Uri};
 use hyper::{
-    client::connect::HttpConnector,
+    body::aggregate,
+    client::connect::{dns::GaiResolver, HttpConnector},
     http::{header, Method},
-    Body, Chunk, Client, Request, Response,
+    Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
-    io::{self, Read},
+    io::Read,
     iter::Extend,
     path::{Path, PathBuf},
-    sync::Mutex,
     time::SystemTime,
 };
-use tokio::{
-    codec::{BytesCodec, FramedRead},
-    io::AsyncRead,
-};
+use tokio::io::AsyncRead;
+use tokio02util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
-use yup_oauth2::{GetToken, RequestError, ServiceAccountAccess, ServiceAccountKey, Token};
+use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
 
 #[derive(Deserialize, Debug)]
 struct ResponseBody {
@@ -45,12 +41,12 @@ struct Item {
 
 impl ResponseBody {
     fn list(self) -> Result<Vec<Fileinfo<PathBuf, ObjectMetadata>>, Error> {
-        let files: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self
-            .items
-            .map_or(Ok(vec![]), move |items| items.iter().map(move |item| item_to_file_info(item)).collect())?;
-        let dirs: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self
-            .prefixes
-            .map_or(Ok(vec![]), |prefixes| prefixes.iter().map(|prefix| prefix_to_file_info(prefix)).collect())?;
+        let files: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.items.map_or(Ok(vec![]), move |items: Vec<Item>| {
+            items.iter().map(move |item: &Item| item_to_file_info(item)).collect()
+        })?;
+        let dirs: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.prefixes.map_or(Ok(vec![]), |prefixes: Vec<String>| {
+            prefixes.iter().map(|prefix| prefix_to_file_info(prefix)).collect()
+        })?;
         let result: &mut Vec<Fileinfo<PathBuf, ObjectMetadata>> = &mut vec![];
         result.extend(dirs);
         result.extend(files);
@@ -59,8 +55,7 @@ impl ResponseBody {
 }
 
 fn item_to_metadata(item: &Item) -> Result<ObjectMetadata, Error> {
-    let size = item.size.parse();
-    let size = size.map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
+    let size: u64 = item.size.parse().map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
 
     Ok(ObjectMetadata {
         size,
@@ -70,8 +65,8 @@ fn item_to_metadata(item: &Item) -> Result<ObjectMetadata, Error> {
 }
 
 fn item_to_file_info(item: &Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
-    let path = PathBuf::from(item.name.clone());
-    let metadata = item_to_metadata(item)?;
+    let path: PathBuf = PathBuf::from(item.name.clone());
+    let metadata: ObjectMetadata = item_to_metadata(item)?;
 
     Ok(Fileinfo { metadata, path })
 }
@@ -91,7 +86,7 @@ fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, ObjectMetadata>
 pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    get_token: Box<dyn Fn() -> Box<dyn Future<Item = Token, Error = RequestError> + Send> + Send + Sync>,
+    service_account_key: ServiceAccountKey,
 }
 
 impl CloudStorage {
@@ -99,20 +94,23 @@ impl CloudStorage {
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new<B: Into<String>>(bucket: B, service_account_key: ServiceAccountKey) -> Self {
-        let client = Client::builder().build(HttpsConnector::new(4));
-        let service_account_access = Mutex::new(ServiceAccountAccess::new(service_account_key).hyper_client(client.clone()).build());
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::new());
         CloudStorage {
             client,
+            service_account_key,
             uris: GcsUri::new(bucket.into()),
-            get_token: Box::new(move || match &mut service_account_access.lock() {
-                Ok(service_account_access) => service_account_access.token(vec!["https://www.googleapis.com/auth/devstorage.read_write"]),
-                Err(_) => Box::new(future::err(RequestError::LowLevelError(std::io::Error::from(io::ErrorKind::Other)))),
-            }),
         }
     }
 
-    fn get_token(&self) -> Box<dyn Future<Item = Token, Error = Error> + Send> {
-        Box::new((self.get_token)().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
+    async fn get_token(&self) -> Result<AccessToken, Error> {
+        let auth = ServiceAccountAuthenticator::builder(self.service_account_key.clone())
+            .hyper_client(self.client.clone())
+            .build()
+            .await?;
+
+        auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .await
     }
 }
 
@@ -139,7 +137,7 @@ impl AsAsyncReads for Object {
 }
 
 impl Read for Object {
-    fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
         for (i, item) in buffer.iter_mut().enumerate() {
             if i + self.index < self.data.len() {
                 *item = self.data[i + self.index];
@@ -215,28 +213,26 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: Token = self.get_token().compat().await?;
+        let token: AccessToken = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
-        let response: Response<Body> = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .compat()
-            .await?;
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
 
-        let body: Chunk = unpack_response(response).compat().await?;
+        let body = unpack_response(response).await?;
 
-        let response: Item = serde_json::from_slice::<Item>(&body).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        let body_str: &str = std::str::from_utf8(body.bytes()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        let response: Item = serde_json::from_str(body_str).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
         item_to_metadata(&response)
     }
 
-    async fn list<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>, Error>
+    async fn list<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
@@ -244,157 +240,120 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: Token = self.get_token().compat().await?;
+        let token: AccessToken = self.get_token().await?;
 
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        let response = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .compat()
-            .await?;
-        let body: Chunk = unpack_response(response).compat().await?;
-        let response_body = serde_json::from_slice::<ResponseBody>(&body).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        response_body.list()
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        let body = unpack_response(response).await?;
+        let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        response.list()
     }
 
-    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> super::Result<Self::File> {
+    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Result<Self::File, Error> {
         let uri: Uri = self.uris.get(path)?;
-        let token: Token = self.get_token().compat().await?;
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
+        let token: AccessToken = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        let client = self.client.clone();
-        let response: Response<Body> = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .compat()
-            .await?;
-
-        let body: Chunk = unpack_response(response).compat().await?;
-
-        Ok(Object::new(body.to_vec()))
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        let body = unpack_response(response).await?;
+        Ok(Object::new(body.bytes().into()))
     }
 
-    async fn put<P: AsRef<Path> + Send, B: tokio::prelude::AsyncRead + Send + 'static>(
+    async fn put<P: AsRef<Path> + Send, B: tokio02::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         _user: &Option<U>,
         bytes: B,
         path: P,
         _start_pos: u64,
-    ) -> super::Result<u64> {
-        let uri = self.uris.put(path)?;
-        let token: Token = self.get_token().compat().await?;
+    ) -> Result<u64, Error> {
+        let uri: Uri = self.uris.put(path)?;
 
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let token: AccessToken = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
-            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
+            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map_ok(|b| b.freeze())))
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        let body = unpack_response(response).await?;
+        let response: Item = serde_json::from_reader(body.reader()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
-        let client = self.client.clone();
-        let response: Response<Body> = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .compat()
-            .await?;
-
-        let body: Chunk = unpack_response(response).compat().await?;
-
-        let response: Item = serde_json::from_slice::<Item>(&body).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        let meta: ObjectMetadata = item_to_metadata(&response)?;
-        Ok(meta.len())
+        item_to_metadata(&response).map(|metadata: ObjectMetadata| metadata.len())
     }
 
-    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> super::Result<()> {
-        let uri = self.uris.delete(path)?;
-        let token = self.get_token().compat().await?;
+    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+        let uri: Uri = self.uris.delete(path)?;
 
-        let request = Request::builder()
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let token: AccessToken = self.get_token().await?;
+        let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::DELETE)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        let client = self.client.clone();
-        let response_res = client.request(request).compat().await;
-        if let Err(error) = response_res {
-            warn!("Error deleting cloud storage file: {:?}", error);
-            return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
-        }
-        unpack_response(response_res.unwrap()).compat().await?;
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        unpack_response(response).await?;
 
         Ok(())
     }
 
     async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
-        let uri = self.uris.mkd(path)?;
+        let uri: Uri = self.uris.mkd(path)?;
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: Token = self.get_token().compat().await?;
-
+        let token: AccessToken = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .header(header::CONTENT_LENGTH, "0")
             .method(Method::POST)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
-
-        let body: Response<Body> = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .compat()
-            .await?;
-        unpack_response(body).compat().await?;
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+        unpack_response(response).await?;
         Ok(())
     }
 
-    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _from: P, _to: P) -> super::Result<()> {
+    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _from: P, _to: P) -> Result<(), Error> {
         //TODO: implement this
         unimplemented!();
     }
 
-    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> super::Result<()> {
+    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
         //TODO: implement this
         unimplemented!();
     }
 
-    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> super::Result<()> {
+    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
         Ok(())
     }
 }
 
-fn unpack_response(response: Response<Body>) -> impl Future<Item = Chunk, Error = Error> {
-    let status = response.status();
-    response
-        .into_body()
-        .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-        .concat2()
-        .and_then(move |body| {
-            if status.is_success() {
-                Ok(body)
-            } else {
-                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-            }
-        })
+async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
+    let status: StatusCode = response.status();
+    let body = aggregate(response).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
+    if status.is_success() {
+        Ok(body)
+    } else {
+        Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+    }
 }
 
 #[cfg(test)]
@@ -403,16 +362,16 @@ mod test {
 
     #[test]
     fn item_to_metadata_converts() {
-        let sys_time = SystemTime::now();
-        let date_time = DateTime::from(sys_time);
+        let sys_time: SystemTime = SystemTime::now();
+        let date_time: DateTime<Utc> = DateTime::from(sys_time);
 
-        let item = Item {
+        let item: Item = Item {
             name: "".into(),
             updated: date_time,
             size: "50".into(),
         };
 
-        let metadata = item_to_metadata(&item).unwrap();
+        let metadata: ObjectMetadata = item_to_metadata(&item).unwrap();
         assert_eq!(metadata.size, 50);
         assert_eq!(metadata.modified().unwrap(), sys_time);
         assert_eq!(metadata.is_file, true);
@@ -422,13 +381,13 @@ mod test {
     fn item_to_metadata_parse_error() {
         use chrono::prelude::Utc;
 
-        let item = Item {
+        let item: Item = Item {
             name: "".into(),
             updated: Utc::now(),
             size: "unparseable".into(),
         };
 
-        let metadata = item_to_metadata(&item);
+        let metadata: Result<ObjectMetadata, Error> = item_to_metadata(&item);
         assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
     }
 }

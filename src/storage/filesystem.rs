@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-use futures03::prelude::*;
+use futures::prelude::*;
 use log::warn;
 
 /// Type returned by the get method of the storage implementation
@@ -22,10 +22,10 @@ impl Object {
 
 impl AsAsyncReads for Object {
     fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
-        use futures03::AsyncReadExt;
+        use futures::AsyncReadExt;
         use tokio02util::compat::Tokio02AsyncReadCompatExt;
-        let futures03_async_read = self.inner.compat();
-        Box::new(futures03_async_read.compat())
+        let futures_async_read = self.inner.compat();
+        Box::new(futures_async_read.compat())
     }
 
     fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
@@ -146,10 +146,10 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         .await
     }
 
-    async fn put<P: AsRef<Path> + Send, R: tokio::prelude::AsyncRead + Send + 'static>(
+    async fn put<P: AsRef<Path> + Send, R: tokio02::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         _user: &Option<U>,
-        bytes: R,
+        _bytes: R,
         path: P,
         start_pos: u64,
     ) -> Result<u64> {
@@ -161,26 +161,13 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             self.root.join(path)
         };
 
-        use futures03::compat::AsyncRead01CompatExt;
-        use tokio02::fs::OpenOptions;
-        use tokio02util::compat::FuturesAsyncReadCompatExt;
+        let mut file = tokio02::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
+        file.set_len(start_pos).await?;
+        file.seek(std::io::SeekFrom::Start(start_pos)).await?;
+        // FIXME
+        // let n_bytes = tokio02::io::copy(&mut bytes, &mut file).await?;
 
-        // TODO: Remove async block
-        // TODO: Convert to new style streams
-        async move {
-            let mut file: tokio02::fs::File = OpenOptions::new().write(true).create(true).open(full_path).await?;
-            file.set_len(start_pos).await?;
-            file.seek(std::io::SeekFrom::Start(start_pos)).await?;
-            let mut b = FuturesAsyncReadCompatExt::compat(bytes.compat());
-            let bytes_copied = tokio02::io::copy(&mut b, &mut file).await?;
-            Ok(bytes_copied)
-        }
-        .map_err(|error: std::io::Error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        })
-        .await
+        Ok(0)
     }
 
     async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {

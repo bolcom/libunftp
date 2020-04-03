@@ -11,7 +11,7 @@
 //! ```rust
 //! use rand::prelude::*;
 //! use libunftp::auth::Authenticator;
-//! use futures03::Future;
+//! use futures::Future;
 //! use async_trait::async_trait;
 //!
 //! struct RandomAuthenticator;
@@ -79,11 +79,11 @@ pub mod jsonfile_auth;
 ///
 /// ```rust
 /// use libunftp::auth::{Authenticator, AnonymousAuthenticator, AnonymousUser};
-/// use futures03::future::Future;
+/// use futures::future::Future;
 /// use async_trait::async_trait;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(futures03::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), AnonymousUser{});
+/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), AnonymousUser{});
 /// ```
 pub struct AnonymousAuthenticator;
 

@@ -12,8 +12,8 @@ use crate::server::reply::Reply;
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::channel::mpsc::Sender;
-use futures03::prelude::*;
+use futures::channel::mpsc::Sender;
+use futures::prelude::*;
 use log::warn;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,21 +40,16 @@ where
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
-        let path = session.cwd.join(self.path.clone());
+        let path: PathBuf = session.cwd.join(self.path.clone());
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
         tokio02::spawn(async move {
-            match storage.mkd(&user, &path).await {
-                Ok(_) => {
-                    if let Err(err) = tx_success.send(InternalMsg::MkdirSuccess(path)).await {
-                        warn!("{}", err);
-                    }
+            if let Err(err) = storage.mkd(&user, &path).await {
+                if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                    warn!("{}", err);
                 }
-                Err(err) => {
-                    if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
-                        warn!("{}", err);
-                    }
-                }
+            } else if let Err(err) = tx_success.send(InternalMsg::MkdirSuccess(path)).await {
+                warn!("{}", err);
             }
         });
         Ok(Reply::none())

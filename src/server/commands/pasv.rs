@@ -12,7 +12,7 @@ use crate::server::reply::{Reply, ReplyCode};
 use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
-use futures03::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::net::{IpAddr, Ipv4Addr};
