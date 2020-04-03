@@ -21,13 +21,6 @@ impl Object {
 }
 
 impl AsAsyncReads for Object {
-    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync> {
-        use futures::AsyncReadExt;
-        use tokio02util::compat::Tokio02AsyncReadCompatExt;
-        let futures_async_read = self.inner.compat();
-        Box::new(futures_async_read.compat())
-    }
-
     fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin> {
         Box::new(self.inner)
     }

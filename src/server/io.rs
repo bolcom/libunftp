@@ -1,9 +1,3 @@
-use tokio::io::AsyncWrite;
-
-// Needed to swap out TcpStream for SwitchingTlsStream and vice versa.
-pub trait AsyncStream: AsyncWrite + Send {}
-impl AsyncStream for tokio::net::TcpStream {}
-
 pub trait Async2Stream: tokio02::io::AsyncRead + tokio02::io::AsyncWrite + Send + Unpin {}
 impl Async2Stream for tokio02::net::TcpStream {}
 impl Async2Stream for tokio02tls::TlsStream<tokio02::net::TcpStream> {}

@@ -171,9 +171,6 @@ where
 
 /// Provides the capability to convert StorageBackend::File instances to AsyncRead instances
 pub trait AsAsyncReads {
-    /// Converts self to a tokio 0.1 AsyncRead instance
-    fn as_tokio01_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync>;
-
     /// Converts self to a tokio 0.2 AsyncRead instance
     fn as_tokio02_async_read(self) -> Box<dyn tokio02::io::AsyncRead + Send + Sync + Unpin>;
 }

@@ -22,7 +22,6 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.22"
 regex = "1"
-tokio = "0.1"
 futures = {version = "0.3", features = ["compat", "io-compat", "std"]}
 tokio02 = { package="tokio", version = "0.2.15", features = ["full"]}
 tokio02util = { package="tokio-util", version = "0.3.1", features=["compat", "codec"] }
