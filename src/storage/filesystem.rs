@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-use futures::{future, Future};
 use futures03::prelude::*;
 use log::warn;
 
@@ -216,22 +215,10 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Ok(())
     }
 
-    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Box::new(future::err(e)),
-        };
+    async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+        tokio02::fs::create_dir(self.full_path(path)?).await?;
 
-        let fut01 = tokio02::fs::create_dir(full_path)
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            })
-            .boxed()
-            .compat();
-
-        Box::new(fut01)
+        Ok(())
     }
 
     async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
@@ -506,7 +493,7 @@ mod tests {
         // to completion
         let mut rt = CompatRuntime::new().unwrap();
 
-        rt.block_on(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
+        rt.block_on_std(fs.mkd(&Some(AnonymousUser {}), new_dir_name)).expect("Failed to mkd");
 
         let full_path = root.join(new_dir_name);
         let metadata = std::fs::symlink_metadata(full_path).unwrap();

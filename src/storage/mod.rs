@@ -10,7 +10,6 @@ use std::{
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use failure::{Backtrace, Context, Fail};
-use futures::Future;
 use itertools::Itertools;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
@@ -258,7 +257,7 @@ pub trait StorageBackend<U: Sync + Send> {
     async fn del<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Create the given directory.
-    fn mkd<P: AsRef<Path>>(&self, user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send>;
+    async fn mkd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Rename the given file to the given filename.
     async fn rename<P: AsRef<Path> + Send>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;

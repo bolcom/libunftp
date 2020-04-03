@@ -342,30 +342,29 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(())
     }
 
-    fn mkd<P: AsRef<Path>>(&self, _user: &Option<U>, path: P) -> Box<dyn Future<Item = (), Error = Error> + Send> {
-        let uri = match self.uris.mkd(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+        let uri = self.uris.mkd(path)?;
 
-        let client = self.client.clone();
+        let token: Token = self.get_token().compat().await?;
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-                    .header(header::CONTENT_LENGTH, "0")
-                    .method(Method::POST)
-                    .body(Body::empty())
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .map(|_| ());
-        Box::new(result)
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+            .header(header::CONTENT_LENGTH, "0")
+            .method(Method::POST)
+            .body(Body::empty())
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let body: Response<Body> = client
+            .request(request)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .compat()
+            .await?;
+        unpack_response(body).compat().await?;
+        Ok(())
     }
 
     async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _from: P, _to: P) -> super::Result<()> {
