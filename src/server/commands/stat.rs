@@ -26,7 +26,6 @@ use crate::storage::{self, Error, ErrorKind};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures03::channel::mpsc::Sender;
-use futures03::compat::*;
 use futures03::prelude::*;
 use log::warn;
 use std::io::Read;
@@ -69,7 +68,7 @@ where
                 let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
 
                 tokio02::spawn(async move {
-                    match storage.list_fmt(&user, path).compat().await {
+                    match storage.list_fmt(&user, path).await {
                         Ok(mut cursor) => {
                             let mut result: String = String::new();
                             match cursor.read_to_string(&mut result) {
