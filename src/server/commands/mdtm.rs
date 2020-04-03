@@ -44,14 +44,26 @@ where
         tokio::spawn(async move {
             match storage.metadata(&user, &path).await {
                 Ok(metadata) => {
-                    if let Err(err) = tx_success
-                        .send(InternalMsg::CommandChannelReply(
-                            ReplyCode::FileStatus,
-                            DateTime::<Utc>::from(metadata.modified().unwrap()).format(RFC3659_TIME).to_string(),
-                        ))
-                        .await
-                    {
-                        warn!("{}", err);
+                    let modification_time = match metadata.modified() {
+                        Ok(v) => Some(v),
+                        Err(err) => {
+                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                                warn!("{}", err);
+                            };
+                            None
+                        }
+                    };
+
+                    if let Some(mtime) = modification_time {
+                        if let Err(err) = tx_success
+                            .send(InternalMsg::CommandChannelReply(
+                                ReplyCode::FileStatus,
+                                DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
+                            ))
+                            .await
+                        {
+                            warn!("{}", err);
+                        }
                     }
                 }
                 Err(err) => {
