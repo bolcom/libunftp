@@ -21,7 +21,7 @@ use crate::storage;
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
-use log::warn;
+use log::{error, warn};
 
 use std::sync::Arc;
 
@@ -50,7 +50,13 @@ where
             SessionState::WaitPass => {
                 let pass: &str = std::str::from_utf8(&self.password.as_ref())?;
                 let pass: String = pass.to_string();
-                let user: String = session.username.clone().unwrap();
+                let user: String = match session.username.clone() {
+                    Some(v) => v,
+                    None => {
+                        error!("NoneError for username. This shouldn't happen.");
+                        return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                    }
+                };
                 let mut tx: Sender<InternalMsg> = args.tx.clone();
 
                 let auther = args.authenticator.clone();
