@@ -26,14 +26,18 @@ doc: # Open the API docs in the browser
 
 .PHONY: debug
 debug: # Create a debug build
-	cargo build
+	cargo build --example basic
+
+.PHONY: examples
+examples:
+	cargo build --examples
 
 .PHONY: build
 build: # Create a release build
 	cargo build --release
 
 .PHONY: pr-prep
-pr-prep: # Runs checks to ensure you're ready for a pull request
+pr-prep: examples # Runs checks to ensure you're ready for a pull request
 	cargo fmt --all -- --check
 	cargo clippy --all-features -- -D warnings
 	cargo test --all --all-features
