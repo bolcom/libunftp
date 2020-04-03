@@ -163,13 +163,13 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Box::new(fut01)
     }
 
-    fn put<P: AsRef<Path>, R: tokio::prelude::AsyncRead + Send + 'static>(
+    async fn put<P: AsRef<Path> + Send, R: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         _user: &Option<U>,
         bytes: R,
         path: P,
         start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
+    ) -> Result<u64> {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -182,7 +182,9 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         use tokio02::fs::OpenOptions;
         use tokio02util::compat::FuturesAsyncReadCompatExt;
 
-        let fut01 = async move {
+        // TODO: Remove async block
+        // TODO: Convert to new style streams
+        async move {
             let mut file: tokio02::fs::File = OpenOptions::new().write(true).create(true).open(full_path).await?;
             file.set_len(start_pos).await?;
             file.seek(std::io::SeekFrom::Start(start_pos)).await?;
@@ -195,10 +197,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
             _ => Error::from(ErrorKind::LocalError),
         })
-        .boxed()
-        .compat();
-
-        Box::new(fut01)
+        .await
     }
 
     async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
@@ -447,7 +446,7 @@ mod tests {
         // to completion
         let mut rt = CompatRuntime::new().unwrap();
 
-        rt.block_on(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
+        rt.block_on_std(fs.put(&Some(AnonymousUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
 
         let mut written_content = Vec::new();

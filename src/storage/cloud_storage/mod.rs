@@ -290,44 +290,40 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Box::new(result)
     }
 
-    fn put<P: AsRef<Path>, B: tokio::prelude::AsyncRead + Send + 'static>(
+    async fn put<P: AsRef<Path> + Send, B: tokio::prelude::AsyncRead + Send + 'static>(
         &self,
         _user: &Option<U>,
         bytes: B,
         path: P,
         _start_pos: u64,
-    ) -> Box<dyn Future<Item = u64, Error = Error> + Send> {
-        let uri = match self.uris.put(path) {
-            Ok(uri) => uri,
-            Err(err) => return Box::new(future::err(err)),
-        };
+    ) -> super::Result<u64> {
+        let uri = self.uris.put(path)?;
+        let token: Token = self.get_token().compat().await?;
+
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
+            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+            .method(Method::POST)
+            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
         let client = self.client.clone();
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .compat()
+            .await?;
 
-        let result = self
-            .get_token()
-            .and_then(|token| {
-                Request::builder()
-                    .uri(uri)
-                    .header(header::AUTHORIZATION, format!("{} {}", token.token_type, token.access_token))
-                    .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-                    .method(Method::POST)
-                    .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map(|b| b.freeze())))
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            })
-            .and_then(move |request| client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)))
-            .and_then(unpack_response)
-            .and_then(|body| {
-                serde_json::from_slice::<Item>(&body)
-                    .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-                    .and_then(|item| item_to_metadata(&item))
-            })
-            .map(|metadata| metadata.len());
-        Box::new(result)
+        let body: Chunk = unpack_response(response).compat().await?;
+
+        let response: Item = serde_json::from_slice::<Item>(&body).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+
+        let meta: ObjectMetadata = item_to_metadata(&response)?;
+        Ok(meta.len())
     }
 
     async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> super::Result<()> {
-        use futures03::compat::*;
         let uri = self.uris.delete(path)?;
         let token = self.get_token().compat().await?;
 

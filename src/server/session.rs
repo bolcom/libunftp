@@ -234,7 +234,6 @@ where
                             path,
                             self.start_pos,
                         )
-                        .compat()
                         .await
                     {
                         Ok(bytes) => {
