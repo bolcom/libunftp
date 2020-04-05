@@ -17,7 +17,6 @@ use futures::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::io;
-use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Range;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
@@ -36,7 +35,7 @@ impl Pasv {
         Pasv {}
     }
 
-    async fn try_port_range(passive_addrs: Range<u16>) -> io::Result<TcpListener> {
+    async fn try_port_range(local_addr: std::net::SocketAddr, passive_addrs: Range<u16>) -> io::Result<TcpListener> {
         let rng_length = passive_addrs.end - passive_addrs.start;
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
@@ -44,7 +43,7 @@ impl Pasv {
         let mut rng = OS_RNG.lock().await;
         for _ in 1..BIND_RETRIES {
             let port = rng.next_u32() % rng_length as u32 + passive_addrs.start as u32;
-            listener = TcpListener::bind(std::net::SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port as u16)).await;
+            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
             if listener.is_ok() {
                 break;
             }
@@ -69,7 +68,7 @@ where
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
 
-        let listener = Pasv::try_port_range(args.passive_ports).await;
+        let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
 
         let mut listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
