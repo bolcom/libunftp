@@ -10,6 +10,7 @@ use futures::prelude::*;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 
 pub struct DataCommandExecutor<S, U: Send + Sync>
 where
@@ -48,18 +49,21 @@ where
                                 let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
                                 match tokio::io::copy(&mut input, &mut output).await {
                                     Ok(bytes_copied) => {
+                                        if let Err(err) = output.shutdown().await {
+                                            warn!("Could not shutdown output stream after RETR: {}", err);
+                                        }
                                         if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
-                                            warn!("{}", err);
+                                            warn!("Could not notify control channel of successful RETR: {}", err);
                                         }
                                     }
-                                    Err(err) => warn!("{}", err),
+                                    Err(err) => warn!("Error copying streams during RETR: {}", err),
                                 }
                             }
-                            Err(err) => warn!("{}", err),
+                            Err(err) => warn!("Error notifying control channel of progress during RETR: {}", err),
                         },
                         Err(err) => {
                             if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                warn!("{}", err);
+                                warn!("Could not notify control channel of error with RETR: {}", err);
                             }
                         }
                     }
@@ -82,12 +86,12 @@ where
                     {
                         Ok(bytes) => {
                             if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                                warn!("{}", err);
+                                warn!("Could not notify control channel of successful STOR: {}", err);
                             }
                         }
                         Err(err) => {
                             if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                                warn!("{}", err);
+                                warn!("Could not notify control channel of error with STOR: {}", err);
                             }
                         }
                     }
@@ -107,12 +111,14 @@ where
                             let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
                             match tokio::io::copy(&mut input, &mut output).await {
                                 Ok(_) => {
-                                    if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                        warn!("{}", err);
+                                    if let Err(err) = output.shutdown().await {
+                                        warn!("Could not shutdown output stream during LIST: {}", err);
                                     }
-                                    // TODO: tokio02 shutdown
+                                    if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                                        warn!("Could not notify control channel of successful LIST: {}", err);
+                                    }
                                 }
-                                Err(err) => warn!("{}", err),
+                                Err(err) => warn!("Could not copy from storage implementation during LIST: {}", err),
                             }
                         }
                         Err(err) => warn!("Failed to send directory list: {:?}", err),
@@ -132,16 +138,19 @@ where
                             let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
                             match tokio::io::copy(&mut input, &mut output).await {
                                 Ok(_) => {
+                                    if let Err(err) = output.shutdown().await {
+                                        warn!("Could not shutdown output stream during NLIST: {}", err);
+                                    }
                                     if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                        warn!("{}", err);
+                                        warn!("Could not notify control channel of successful NLIST: {}", err);
                                     }
                                 }
-                                Err(err) => warn!("{}", err),
+                                Err(err) => warn!("Could not copy from storage implementation during NLST: {}", err),
                             }
                         }
                         Err(_) => {
                             if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
-                                warn!("{}", err)
+                                warn!("Could not notify control channel of error with NLIST: {}", err);
                             }
                         }
                     }
