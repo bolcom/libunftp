@@ -135,7 +135,7 @@ impl Command {
         let vec = buf.into().to_vec();
         let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
         let cmd_token = normalize(iter.next().unwrap())?;
-        let cmd_params = iter.next().unwrap_or(&[]);
+        let cmd_params = String::from(str::from_utf8(iter.next().unwrap_or(&[]))?);
 
         // TODO: Make command parsing case insensitive (consider using "nom")
         let cmd = match &*cmd_token {
@@ -462,10 +462,7 @@ impl Command {
                 Command::MDTM { file }
             }
             _ => {
-                return Err(ParseErrorKind::UnknownCommand {
-                    command: cmd_token.to_string(),
-                }
-                .into());
+                return Err(ParseErrorKind::UnknownCommand { command: cmd_token }.into());
             }
         };
 

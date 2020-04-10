@@ -27,7 +27,7 @@ impl fmt::Debug for Password {
 
 impl convert::From<&str> for Password {
     fn from(s: &str) -> Self {
-        Self::new(s.into())
+        Self::new(String::from(s).into())
     }
 }
 

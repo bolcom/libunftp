@@ -2,7 +2,7 @@ mod uri;
 
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use async_trait::async_trait;
-use bytes05::{buf::BufExt, Buf};
+use bytes::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use http::{StatusCode, Uri};

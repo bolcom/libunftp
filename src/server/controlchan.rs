@@ -1,7 +1,7 @@
 //! Contains code pertaining to the FTP *control* channel
 
 use crate::server::{commands::Command, reply::Reply, FTPError, InternalMsg};
-use bytes05::BytesMut;
+use bytes::BytesMut;
 use std::io::Write;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -42,7 +42,7 @@ impl Decoder for FTPCodec {
             let newline_index = newline_offset + self.next_index;
             let line = buf.split_to(newline_index + 1);
             self.next_index = 0;
-            Ok(Some(Command::parse(&*line)?))
+            Ok(Some(Command::parse(line)?))
         } else {
             self.next_index = buf.len();
             Ok(None)
