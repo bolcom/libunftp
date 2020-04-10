@@ -1,12 +1,13 @@
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+//! StorageBackend that uses a local filesystem, like a traditional FTP server.
 
-use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.

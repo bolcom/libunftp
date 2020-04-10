@@ -22,7 +22,7 @@ run: debug # Run the `basic` example in verbose mode
 
 .PHONY: docs
 docs: # Creates the API docs and opens it in the browser
-	cargo doc --all-features --open
+	cargo doc --all-features --no-deps --open
 
 .PHONY: debug
 debug: # Create a debug build
@@ -42,7 +42,7 @@ pr-prep: examples # Runs checks to ensure you're ready for a pull request
 	cargo clippy --all-features -- -D warnings
 	cargo test --all --all-features
 	cargo build --all --all-features
-	cargo doc --all-features
+	cargo doc --all-features --no-deps
 
 .PHONY: publish
 publish: # Publishes the lib to crates.io

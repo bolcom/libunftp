@@ -20,7 +20,7 @@ struct Credentials {
 
 /// [`Authenticator`] implementation that authenticates against a JSON file.
 ///
-/// [`Authenticator`]: ../spi/trait.Authenticator.html
+/// [`Authenticator`]: ../trait.Authenticator.html
 ///
 /// Example credentials file format:
 /// [

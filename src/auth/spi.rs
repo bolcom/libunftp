@@ -1,11 +1,10 @@
 //! The service provider interface (SPI) for auth
 
+use async_trait::async_trait;
 use std::error::Error;
 use std::fmt;
 
-use async_trait::async_trait;
-
-/// Async authenticator interface (error reporting not supported yet)
+/// Defines the requirements for Authentication implementations
 #[async_trait]
 pub trait Authenticator<U>: Sync + Send {
     /// Authenticate the given user with the given password.

@@ -15,7 +15,7 @@ documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
 license = "Apache-2.0"
 readme = "README.md"
-keywords = ["ftp"]
+keywords = ["ftp", "ftps"]
 categories = ["network-programming"]
 edition = "2018"
 

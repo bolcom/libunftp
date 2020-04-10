@@ -1,10 +1,10 @@
 #![deny(missing_docs)]
 //! A FTP server library for Rust
 //!
-//! The libunftp library is a safe, fast and extensible FTP server implementation in Rust.
+//! The libunftp library is a safe, fast and extensible FTP(S) server implementation in Rust.
 //!
 //! Because of its plugable authentication and storage backends (e.g. local filesystem, Google
-//! Buckets) it's more flexible than traditional FTP servers and a perfect match for the cloud.
+//! Cloud Storage) it's more flexible than traditional FTP servers and a perfect match for the cloud.
 //!
 //! It is currently under heavy development and not yet recommended for production use.
 //!
