@@ -8,10 +8,10 @@ use crate::auth::*;
 use async_trait::async_trait;
 use http::uri::InvalidUri;
 use hyper::{Body, Client, Method, Request};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::string::String;
-use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -116,8 +116,8 @@ impl RestAuthenticator {
 #[async_trait]
 impl Authenticator<AnonymousUser> for RestAuthenticator {
     async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
-        let username_url = utf8_percent_encode(username, PATH_SEGMENT_ENCODE_SET).collect::<String>();
-        let password_url = utf8_percent_encode(password, PATH_SEGMENT_ENCODE_SET).collect::<String>();
+        let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
+        let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
 
         let username_json = encode_string_json(username);

@@ -2,8 +2,8 @@ use crate::storage::{Error, ErrorKind};
 
 use hyper::http::uri::Scheme;
 use hyper::Uri;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::Path;
-use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 pub struct GcsUri {
     bucket: String,
@@ -56,7 +56,7 @@ fn make_uri(path_and_query: String) -> Result<Uri, Error> {
 
 fn path_str<P: AsRef<Path>>(path: P) -> Result<String, Error> {
     if let Some(path) = path.as_ref().to_str() {
-        Ok(utf8_percent_encode(path, PATH_SEGMENT_ENCODE_SET).collect::<String>())
+        Ok(utf8_percent_encode(path, NON_ALPHANUMERIC).collect::<String>())
     } else {
         Err(Error::from(ErrorKind::PermanentFileNotAvailable))
     }

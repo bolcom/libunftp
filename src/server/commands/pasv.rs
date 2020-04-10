@@ -25,7 +25,7 @@ use lazy_static::*;
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
-    static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng::new().unwrap());
+    static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
 
 pub struct Pasv {}
