@@ -20,9 +20,9 @@ fuzz: # Run fuzzing tests
 run: debug # Run the `basic` example in verbose mode
 	RUST_LOG=INFO ./target/debug/examples/basic
 
-.PHONY: doc
-doc: # Open the API docs in the browser
-	cargo doc --open
+.PHONY: docs
+docs: # Creates the API docs and opens it in the browser
+	cargo doc --all-features --open
 
 .PHONY: debug
 debug: # Create a debug build
@@ -44,5 +44,6 @@ pr-prep: examples # Runs checks to ensure you're ready for a pull request
 	cargo build --all --all-features
 	cargo doc --all-features
 
-publish:
+.PHONY: publish
+publish: # Publishes the lib to crates.io
 	cargo publish --all-features --verbose

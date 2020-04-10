@@ -1,10 +1,14 @@
+//! [`Authenticator`] implementation that authenticates against a JSON file.
+//!
+//! [`Authenticator`]: trait.Authenticator.html
+
+use crate::auth::anonymous::*;
 use crate::auth::*;
 
+use async_trait::async_trait;
 use log::{info, warn};
-
 use serde::Deserialize;
 use std::fs;
-
 use std::time::Duration;
 use tokio::time::delay_for;
 
@@ -16,7 +20,7 @@ struct Credentials {
 
 /// [`Authenticator`] implementation that authenticates against a JSON file.
 ///
-/// [`Authenticator`]: ../trait.Authenticator.html
+/// [`Authenticator`]: ../spi/trait.Authenticator.html
 ///
 /// Example credentials file format:
 /// [

@@ -2,20 +2,20 @@
 //!
 //! [`Authenticator`]: trait.Authenticator.html
 
+use crate::auth::anonymous::*;
 use crate::auth::*;
 
-use regex::Regex;
-use std::string::String;
-
+use async_trait::async_trait;
 use http::uri::InvalidUri;
 use hyper::{Body, Client, Method, Request};
-
+use regex::Regex;
 use serde_json::{json, Value};
+use std::string::String;
 use url::percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
-/// [`Authenticator`]: ../trait.Authenticator.html
+/// [`Authenticator`]: ../spi/trait.Authenticator.html
 #[derive(Clone, Debug)]
 pub struct RestAuthenticator {
     username_placeholder: String,

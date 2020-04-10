@@ -17,7 +17,10 @@ pub(crate) use error::{FTPError, FTPErrorKind};
 
 use self::commands::{Cmd, Command};
 use self::reply::{Reply, ReplyCode};
-use crate::auth::{self, AnonymousUser};
+use crate::auth::{
+    anonymous::{AnonymousAuthenticator, AnonymousUser},
+    Authenticator,
+};
 use crate::metrics;
 use crate::server::io::*;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
@@ -64,7 +67,7 @@ where
     storage: Box<dyn (Fn() -> S) + Sync + Send>,
     greeting: &'static str,
     // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
-    authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
+    authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
     certs_password: Option<String>,
@@ -104,12 +107,12 @@ where
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
-        auth::AnonymousAuthenticator: auth::Authenticator<U>,
+        AnonymousAuthenticator: Authenticator<U>,
     {
         Server {
             storage: s,
             greeting: DEFAULT_GREETING,
-            authenticator: Arc::new(auth::AnonymousAuthenticator {}),
+            authenticator: Arc::new(AnonymousAuthenticator {}),
             passive_ports: 49152..65535,
             certs_file: Option::None,
             certs_password: Option::None,
@@ -151,7 +154,7 @@ where
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>) -> Self {
+    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
         self.authenticator = authenticator;
         self
     }
@@ -455,7 +458,7 @@ where
 
     fn handle_event(
         session: Arc<Mutex<Session<S, U>>>,
-        authenticator: Arc<dyn auth::Authenticator<U> + Send + Sync>,
+        authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
@@ -483,7 +486,7 @@ where
     async fn handle_command(
         cmd: Command,
         session: Arc<Mutex<Session<S, U>>>,
-        authenticator: Arc<dyn auth::Authenticator<U>>,
+        authenticator: Arc<dyn Authenticator<U>>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
@@ -629,7 +632,7 @@ where
 {
     cmd: Command,
     session: Arc<Mutex<Session<S, U>>>,
-    authenticator: Arc<dyn auth::Authenticator<U>>,
+    authenticator: Arc<dyn Authenticator<U>>,
     tls_configured: bool,
     passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
