@@ -1,18 +1,17 @@
 //! Contains the `StorageBackend` trait that is by the `Server` and its various implementations.
 
+use async_trait::async_trait;
+use chrono::prelude::{DateTime, Utc};
+use failure::{Backtrace, Context, Fail};
+use itertools::Itertools;
+use log::warn;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{
     fmt::{self, Display},
     result,
 };
-
-use async_trait::async_trait;
-use chrono::prelude::{DateTime, Utc};
-use failure::{Backtrace, Context, Fail};
-use itertools::Itertools;
-
-use log::warn;
+use tokio::io::AsyncRead;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
@@ -179,12 +178,6 @@ where
     }
 }
 
-/// Provides the capability to convert StorageBackend::File instances to AsyncRead instances
-pub trait AsAsyncReads {
-    /// Converts self to a tokio 0.2 AsyncRead instance
-    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>;
-}
-
 /// The `Storage` trait defines a common interface to different storage backends for our FTP
 /// [`Server`], e.g. for a [`Filesystem`] or GCP buckets.
 ///
@@ -193,7 +186,7 @@ pub trait AsAsyncReads {
 #[async_trait]
 pub trait StorageBackend<U: Sync + Send> {
     /// The concrete type of the Files returned by this StorageBackend.
-    type File: AsAsyncReads + Sync + Send;
+    type File: AsyncRead + Sync + Send + Unpin;
     /// The concrete type of the `Metadata` used by this StorageBackend.
     type Metadata: Metadata + Sync + Send;
 

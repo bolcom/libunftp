@@ -1,4 +1,4 @@
-use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -7,24 +7,6 @@ use std::time::SystemTime;
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
-
-/// Type returned by the get method of the storage implementation
-pub struct Object {
-    inner: tokio::fs::File,
-}
-
-impl Object {
-    /// Creates a new `Object`
-    pub fn new(inner: tokio::fs::File) -> Object {
-        Object { inner }
-    }
-}
-
-impl AsAsyncReads for Object {
-    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin> {
-        Box::new(self.inner)
-    }
-}
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.
@@ -81,7 +63,7 @@ impl Filesystem {
 
 #[async_trait]
 impl<U: Send + Sync> StorageBackend<U> for Filesystem {
-    type File = Object;
+    type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -129,7 +111,7 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(Object::new(file))
+            Ok(file)
         }
         .map_err(|error: std::io::Error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
@@ -381,10 +363,10 @@ mod tests {
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
         let mut rt = Runtime::new().unwrap();
-        let my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
+        let mut my_file = rt.block_on(fs.get(&Some(AnonymousUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(async move {
-            let r = tokio::io::copy(&mut my_file.as_tokio02_async_read(), &mut my_content).await;
+            let r = tokio::io::copy(&mut my_file, &mut my_content).await;
             if r.is_err() {
                 return Err(());
             }

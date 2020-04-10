@@ -2,7 +2,6 @@
 
 use super::chancomms::InternalMsg;
 use super::commands::Command;
-use super::storage::AsAsyncReads;
 use crate::storage::{self, Error, ErrorKind};
 
 use futures::channel::mpsc::Sender;
@@ -15,7 +14,7 @@ use tokio::io::AsyncWriteExt;
 pub struct DataCommandExecutor<S, U: Send + Sync>
 where
     S: storage::StorageBackend<U>,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     pub user: Arc<Option<U>>,
@@ -32,7 +31,7 @@ where
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     pub async fn execute(self, cmd: Command) {
@@ -59,11 +58,10 @@ where
         let mut tx_error: Sender<InternalMsg> = self.tx.clone();
         tokio::spawn(async move {
             match self.storage.get(&self.user, path, self.start_pos).await {
-                Ok(f) => match tx_sending.send(InternalMsg::SendingData).await {
+                Ok(mut f) => match tx_sending.send(InternalMsg::SendingData).await {
                     Ok(_) => {
-                        let mut input = f.as_tokio02_async_read();
                         let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
-                        match tokio::io::copy(&mut input, &mut output).await {
+                        match tokio::io::copy(&mut f, &mut output).await {
                             Ok(bytes_copied) => {
                                 if let Err(err) = output.shutdown().await {
                                     warn!("Could not shutdown output stream after RETR: {}", err);
