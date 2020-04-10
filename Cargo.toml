@@ -59,15 +59,15 @@ pretty_assertions = "0.5"
 tokio = { version = "0.2.17", features = ["rt-threaded"]}
 
 [features]
-pam = ["pam-auth"]
-rest = ["hyper", "url", "http", "serde", "serde_json"]
+pam_auth = ["pam-auth"]
+rest_auth = ["hyper", "url", "http", "serde", "serde_json"]
 jsonfile_auth = ["serde", "serde_json"]
 cloud_storage = ["oauth2", "mime", "url", "hyper", "serde", "serde_json"]
 oauth2 = ["yup-oauth2", "hyper-rustls"]
 
 [[example]]
 name = "pam"
-required-features = ["pam"]
+required-features = ["pam_auth"]
 
 [[example]]
 name = "gcs"
@@ -75,7 +75,7 @@ required-features = ["cloud_storage"]
 
 [[example]]
 name = "rest"
-required-features = ["rest"]
+required-features = ["rest_auth"]
 
 [[example]]
 name = "jsonfile_auth"
