@@ -27,8 +27,10 @@
 //! ```
 //! [`Server`]: ../server/struct.Server.html
 
-pub mod spi;
-pub use spi::*;
+pub(crate) mod spi;
+pub use spi::Authenticator;
+#[allow(unused_imports)]
+pub(crate) use spi::{BadPasswordError, UnknownUsernameError};
 
 pub mod anonymous;
 pub use anonymous::{AnonymousAuthenticator, AnonymousUser};

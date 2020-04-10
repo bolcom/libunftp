@@ -66,7 +66,6 @@ where
 {
     storage: Box<dyn (Fn() -> S) + Sync + Send>,
     greeting: &'static str,
-    // FIXME: this is an Arc<>, but during call, it effectively creates a clone of Authenticator -> maybe the `Box<(Fn() -> S) + Send>` pattern is better here, too?
     authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
