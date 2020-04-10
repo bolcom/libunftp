@@ -18,9 +18,11 @@ use serde::Deserialize;
 use std::{
     iter::Extend,
     path::{Path, PathBuf},
-    task::Poll,
+    pin::Pin,
+    task::{Context, Poll},
     time::SystemTime,
 };
+use tokio::io::AsyncRead;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
@@ -138,8 +140,8 @@ impl Object {
     }
 }
 
-impl tokio::io::AsyncRead for Object {
-    fn poll_read(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+impl AsyncRead for Object {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
         Poll::Ready(self.get_mut().read(buf))
     }
 }
