@@ -23,7 +23,7 @@ impl<S, U> Cmd<S, U> for Syst
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {

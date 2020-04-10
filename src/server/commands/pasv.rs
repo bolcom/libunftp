@@ -58,7 +58,7 @@ impl<S, U> Cmd<S, U> for Pasv
 where
     U: 'static + Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {

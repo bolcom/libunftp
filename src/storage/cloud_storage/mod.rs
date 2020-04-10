@@ -1,6 +1,6 @@
 mod uri;
 
-use crate::storage::{AsAsyncReads, Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use async_trait::async_trait;
 use bytes05::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
@@ -16,9 +16,9 @@ use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use serde::Deserialize;
 use std::{
-    io::Read,
     iter::Extend,
     path::{Path, PathBuf},
+    task::Poll,
     time::SystemTime,
 };
 use tokio_util::codec::{BytesCodec, FramedRead};
@@ -123,15 +123,7 @@ impl Object {
     fn new(data: Vec<u8>) -> Object {
         Object { data, index: 0 }
     }
-}
 
-impl AsAsyncReads for Object {
-    fn as_tokio02_async_read(self) -> Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin> {
-        unimplemented!()
-    }
-}
-
-impl Read for Object {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
         for (i, item) in buffer.iter_mut().enumerate() {
             if i + self.index < self.data.len() {
@@ -143,6 +135,12 @@ impl Read for Object {
         }
         self.index += buffer.len();
         Ok(buffer.len())
+    }
+}
+
+impl tokio::io::AsyncRead for Object {
+    fn poll_read(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
+        Poll::Ready(self.get_mut().read(buf))
     }
 }
 

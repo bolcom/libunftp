@@ -30,7 +30,7 @@ impl<S, U> Cmd<S, U> for Mdtm
 where
     U: Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send + Sync,
+    S::File: tokio::io::AsyncRead + Send + Sync,
     S::Metadata: 'static + storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {

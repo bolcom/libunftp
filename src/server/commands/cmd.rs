@@ -9,7 +9,7 @@ use std::result::Result;
 pub(crate) trait Cmd<S: Send + Sync, U: Send + Sync>: Send + Sync
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError>;

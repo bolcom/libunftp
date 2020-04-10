@@ -94,7 +94,7 @@ impl Server<Filesystem, AnonymousUser> {
 impl<S, U: Send + Sync + 'static> Server<S, U>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send,
+    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
@@ -624,7 +624,7 @@ where
 pub(crate) struct CommandArgs<S: Send + Sync, U: Send + Sync + 'static>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: crate::storage::AsAsyncReads + Send + Sync,
+    S::File: tokio::io::AsyncRead + Send + Sync,
     S::Metadata: storage::Metadata + Sync,
 {
     cmd: Command,
