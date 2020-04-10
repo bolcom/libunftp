@@ -1,4 +1,4 @@
-use libunftp::auth::jsonfile_auth;
+use libunftp::auth::jsonfile;
 
 use log::info;
 
@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
-    let authenticator = jsonfile_auth::JsonFileAuthenticator::new(String::from("credentials.json"))?;
+    let authenticator = jsonfile::JsonFileAuthenticator::new(String::from("credentials.json"))?;
 
     let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));

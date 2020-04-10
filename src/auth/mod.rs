@@ -33,11 +33,11 @@ pub use spi::*;
 pub mod anonymous;
 pub use anonymous::{AnonymousAuthenticator, AnonymousUser};
 
-#[cfg(feature = "pam")]
+#[cfg(feature = "pam_auth")]
 pub mod pam;
 
-#[cfg(feature = "rest")]
+#[cfg(feature = "rest_auth")]
 pub mod rest;
 
 #[cfg(feature = "jsonfile_auth")]
-pub mod jsonfile_auth;
+pub mod jsonfile;
