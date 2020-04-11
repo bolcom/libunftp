@@ -6,10 +6,10 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
+use super::cmd::CmdArgs;
 use crate::server::commands::{Cmd, Command};
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::CommandArgs;
 use crate::storage;
 
 use async_trait::async_trait;
@@ -61,7 +61,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CmdArgs<S, U>) -> Result<Reply, FTPError> {
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,

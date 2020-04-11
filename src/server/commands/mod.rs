@@ -51,7 +51,7 @@ pub use allo::Allo;
 pub use auth::{Auth, AuthParam};
 pub use ccc::Ccc;
 pub use cdup::Cdup;
-pub(crate) use cmd::Cmd;
+pub(crate) use cmd::{Cmd, CmdArgs};
 pub use command::Command;
 pub use cwd::Cwd;
 pub use dele::Dele;

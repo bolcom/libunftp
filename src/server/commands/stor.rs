@@ -8,11 +8,11 @@
 // created at the server site if the file specified in the
 // pathname does not already exist.
 
+use super::cmd::CmdArgs;
 use crate::server::commands::Cmd;
 use crate::server::commands::Command;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::prelude::*;
@@ -28,7 +28,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CmdArgs<S, U>) -> Result<Reply, FTPError> {
         let mut session = args.session.lock().await;
         let cmd: Command = args.cmd.clone();
         match session.data_cmd_tx.take() {

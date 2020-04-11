@@ -17,11 +17,11 @@
 // should include current values of all transfer parameters and
 // the status of connections.
 
+use super::cmd::CmdArgs;
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::CommandArgs;
 use crate::storage::{self, Error, ErrorKind};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -49,7 +49,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CmdArgs<S, U>) -> Result<Reply, FTPError> {
         match self.path.clone() {
             None => {
                 let text: Vec<&str> = vec!["Status:", "Powered by libunftp"];

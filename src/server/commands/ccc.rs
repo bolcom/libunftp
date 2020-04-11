@@ -1,10 +1,10 @@
 //! The RFC 2228 Clear Command Channel (`CCC`) command
 
+use super::cmd::CmdArgs;
 use crate::server::chancomms::InternalMsg;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
@@ -20,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, args: CmdArgs<S, U>) -> Result<Reply, FTPError> {
         let mut tx: Sender<InternalMsg> = args.tx.clone();
         let session = args.session.lock().await;
         if session.cmd_tls {

@@ -18,10 +18,10 @@
 // the maximum record or page size should accept a dummy value
 // in the first argument and ignore it.
 
+use super::cmd::CmdArgs;
 use crate::server::commands::Cmd;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
-use crate::server::CommandArgs;
 use crate::storage;
 use async_trait::async_trait;
 
@@ -35,7 +35,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, _args: CommandArgs<S, U>) -> Result<Reply, FTPError> {
+    async fn execute(&self, _args: CmdArgs<S, U>) -> Result<Reply, FTPError> {
         // ALLO is obsolete and we'll just ignore it.
         Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
     }
