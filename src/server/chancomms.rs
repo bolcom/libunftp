@@ -14,6 +14,7 @@ pub enum DataCommand {
 /// InternalMsg represents a status message from the data channel handler to our main (per connection)
 /// event handler.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum InternalMsg {
     /// Permission Denied
     PermissionDenied,
