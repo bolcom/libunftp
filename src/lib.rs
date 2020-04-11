@@ -20,7 +20,7 @@
 //! ```
 
 pub mod auth;
-pub mod metrics;
+pub(crate) mod metrics;
 pub mod server;
 pub mod storage;
 
