@@ -24,7 +24,7 @@ pub mod metrics;
 pub mod server;
 pub mod storage;
 
-pub use crate::server::Server;
+pub use crate::server::ftpserver::Server;
 
 #[cfg(any(feature = "rest_auth", feature = "pam_auth"))]
 #[macro_use]
