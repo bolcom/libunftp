@@ -1,10 +1,6 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
 
-use crate::server::{
-    commands::Command,
-    reply::{Reply, ReplyCode},
-    Event, FTPErrorKind, InternalMsg,
-};
+use crate::server::{Command, Event, FTPErrorKind, InternalMsg, Reply, ReplyCode};
 
 use lazy_static::*;
 use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
