@@ -12,8 +12,8 @@ use tokio::runtime::Runtime;
 
 fn test_with(addr: &'static str, path: impl Into<PathBuf> + Send, test: impl FnOnce() -> ()) {
     let rt = Runtime::new().unwrap();
-    let server = libunftp::Server::with_root(path.into());
-    let _thread = rt.spawn(server.listener(addr));
+    let server = libunftp::Server::new_with_fs_root(path.into());
+    let _thread = rt.spawn(server.listen(addr));
     std::thread::sleep(Duration::new(1, 0));
     test();
 }

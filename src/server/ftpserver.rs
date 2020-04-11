@@ -36,8 +36,8 @@ const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
-/// let server = Server::with_root("/srv/ftp");
-/// rt.spawn(server.listener("127.0.0.1:2121"));
+/// let server = Server::new_with_fs_root("/srv/ftp");
+/// rt.spawn(server.listen("127.0.0.1:2121"));
 /// // ...
 /// drop(rt);
 /// ```
@@ -54,7 +54,7 @@ where
     passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
     certs_password: Option<String>,
-    with_metrics: bool,
+    collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
 }
 
@@ -66,9 +66,9 @@ impl Server<Filesystem, AnonymousUser> {
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::with_root("/srv/ftp");
+    /// let server = Server::new_with_fs_root("/srv/ftp");
     /// ```
-    pub fn with_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
+    pub fn new_with_fs_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
         Server::new(Box::new(move || {
             let p = &p.clone();
@@ -99,7 +99,7 @@ where
             passive_ports: 49152..65535,
             certs_file: Option::None,
             certs_password: Option::None,
-            with_metrics: false,
+            collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
         }
     }
@@ -112,10 +112,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").greeting("Welcome to my FTP Server");
+    /// let mut server = Server::new_with_fs_root("/tmp").greeting("Welcome to my FTP Server");
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_root("/tmp");
+    /// let mut server = Server::new_with_fs_root("/tmp");
     /// server.greeting("Welcome to my FTP Server");
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
@@ -132,7 +132,7 @@ where
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp")
+    /// let mut server = Server::new_with_fs_root("/tmp")
     ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
     /// ```
     ///
@@ -150,11 +150,11 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").passive_ports(49152..65535);
+    /// let mut server = Server::new_with_fs_root("/tmp").passive_ports(49152..65535);
     ///
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_root("/tmp");
+    /// let mut server = Server::new_with_fs_root("/tmp");
     /// server.passive_ports(49152..65535);
     /// ```
     pub fn passive_ports(mut self, range: Range<u16>) -> Self {
@@ -170,9 +170,9 @@ where
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::with_root("/tmp").with_ftps("/srv/unftp/server-certs.pfx", "thepassword");
+    /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server-certs.pfx", "thepassword");
     /// ```
-    pub fn with_ftps<P: Into<PathBuf>, T: Into<String>>(mut self, certs_file: P, password: T) -> Self {
+    pub fn ftps<P: Into<PathBuf>, T: Into<String>>(mut self, certs_file: P, password: T) -> Self {
         self.certs_file = Option::Some(certs_file.into());
         self.certs_password = Option::Some(password.into());
         self
@@ -186,14 +186,14 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").with_metrics();
+    /// let mut server = Server::new_with_fs_root("/tmp").metrics();
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_root("/tmp");
-    /// server.with_metrics();
+    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// server.metrics();
     /// ```
-    pub fn with_metrics(mut self) -> Self {
-        self.with_metrics = true;
+    pub fn metrics(mut self) -> Self {
+        self.collect_metrics = true;
         self
     }
 
@@ -205,10 +205,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").idle_session_timeout(600);
+    /// let mut server = Server::new_with_fs_root("/tmp").idle_session_timeout(600);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_root("/tmp");
+    /// let mut server = Server::new_with_fs_root("/tmp");
     /// server.idle_session_timeout(600);
     /// ```
     pub fn idle_session_timeout(mut self, secs: u64) -> Self {
@@ -225,8 +225,8 @@ where
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
-    /// let server = Server::with_root("/srv/ftp");
-    /// rt.spawn(server.listener("127.0.0.1:2121"));
+    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// rt.spawn(server.listen("127.0.0.1:2121"));
     /// // ...
     /// drop(rt);
     /// ```
@@ -235,7 +235,7 @@ where
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub async fn listener<T: Into<String>>(self, bind_address: T) {
+    pub async fn listen<T: Into<String>>(self, bind_address: T) {
         // TODO: Propogate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -251,7 +251,7 @@ where
 
     /// Does TCP processing when a FTP client connects
     async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), FTPError> {
-        let with_metrics = self.with_metrics;
+        let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
         } else {
@@ -260,9 +260,9 @@ where
         let storage = Arc::new((self.storage)());
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
-        let session = Session::with_storage(storage)
-            .with_ftps(self.certs_file.clone(), self.certs_password.clone())
-            .with_metrics(with_metrics);
+        let session = Session::new(storage)
+            .ftps(self.certs_file.clone(), self.certs_password.clone())
+            .metrics(with_metrics);
         let session = Arc::new(Mutex::new(session));
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_ports = self.passive_ports.clone();

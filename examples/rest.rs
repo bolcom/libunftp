@@ -20,10 +20,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let addr = "127.0.0.1:2121";
-    let server = libunftp::Server::with_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
+    let server = libunftp::Server::new_with_fs_root(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
     let mut runtime = Builder::new().build()?;
-    runtime.block_on(server.listener(addr));
+    runtime.block_on(server.listen(addr));
     Ok(())
 }
