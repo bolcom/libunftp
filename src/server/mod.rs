@@ -15,7 +15,7 @@ pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 
-use self::commands::{Cmd, Command};
+use self::commands::{Cmd, CmdArgs, Command};
 use self::reply::{Reply, ReplyCode};
 use crate::auth::{
     anonymous::{AnonymousAuthenticator, AnonymousUser},
@@ -25,16 +25,15 @@ use crate::metrics;
 use crate::server::io::*;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Mutex;
-
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
 use session::{Session, SessionState};
 use std::ops::Range;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
 use tokio_util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
@@ -492,7 +491,7 @@ where
         local_addr: std::net::SocketAddr,
         storage_features: u32,
     ) -> Result<Reply, FTPError> {
-        let args = CommandArgs {
+        let args = CmdArgs {
             cmd: cmd.clone(),
             session,
             authenticator,
@@ -620,21 +619,4 @@ where
             _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
         }
     }
-}
-
-/// Convenience struct to group command args
-pub(crate) struct CommandArgs<S: Send + Sync, U: Send + Sync + 'static>
-where
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send + Sync,
-    S::Metadata: storage::Metadata + Sync,
-{
-    cmd: Command,
-    session: Arc<Mutex<Session<S, U>>>,
-    authenticator: Arc<dyn Authenticator<U>>,
-    tls_configured: bool,
-    passive_ports: Range<u16>,
-    tx: Sender<InternalMsg>,
-    local_addr: std::net::SocketAddr,
-    storage_features: u32,
 }
