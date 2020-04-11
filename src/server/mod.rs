@@ -4,7 +4,7 @@ mod chancomms;
 mod commands;
 mod controlchan;
 mod datachan;
-pub mod error;
+pub(crate) mod error;
 pub(crate) mod ftpserver;
 mod io;
 mod password;
