@@ -1,17 +1,14 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::chancomms::{DataCommand, InternalMsg};
+use super::chancomms::InternalMsg;
 use super::controlchan::command::Command;
-use super::datachan::DataCommandExecutor;
 use super::proxy_protocol::ConnectionTuple;
 use crate::metrics;
 use crate::storage;
 
 use futures::channel::mpsc::Receiver;
 use futures::channel::mpsc::Sender;
-use futures::prelude::*;
-use log::{info, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -97,64 +94,6 @@ where
         }
         self.collect_metrics = collect_metrics;
         self
-    }
-
-    /// Processing for the data connection. This will spawn a new async task with the actual processing.
-    ///
-    /// socket: the data socket we'll be working with
-    /// tls: tells if this should be a TLS connection
-    /// tx: channel to send the result of our operation to the control process
-    //
-    // TODO: This doesn't really belong here, move to datachan.rs
-    pub(super) fn spawn_data_processing(&mut self, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>) {
-        let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
-        let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
-        let tls = self.data_tls;
-        let command_executor = DataCommandExecutor {
-            user: self.user.clone(),
-            socket,
-            tls,
-            tx,
-            storage: Arc::clone(&self.storage),
-            cwd: self.cwd.clone(),
-            start_pos: self.start_pos,
-            identity_file: if tls { Some(self.certs_file.clone().unwrap()) } else { None },
-            identity_password: if tls { Some(self.certs_password.clone().unwrap()) } else { None },
-        };
-
-        tokio::spawn(async move {
-            let mut timeout_delay = tokio::time::delay_for(std::time::Duration::from_secs(5 * 60));
-            // TODO: Use configured timeout
-            tokio::select! {
-                Some(command) = data_cmd_rx.next() => {
-                    Self::handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
-                },
-                Some(_) = data_abort_rx.next() => {
-                    Self::handle_incoming(DataCommand::Abort, command_executor).await;
-                },
-                _ = &mut timeout_delay => {
-                    info!("Connection timed out");
-                    return;
-                }
-            };
-
-            // This probably happened because the control channel was closed before we got here
-            warn!("Nothing received");
-        });
-    }
-
-    //
-    // TODO: This doesn't really belong here, move to datachan.rs
-    async fn handle_incoming(incoming: DataCommand, command_executor: DataCommandExecutor<S, U>) {
-        match incoming {
-            DataCommand::Abort => {
-                info!("Abort received");
-            }
-            DataCommand::ExternalCommand(command) => {
-                info!("Data command received");
-                command_executor.execute(command).await;
-            }
-        }
     }
 }
 
