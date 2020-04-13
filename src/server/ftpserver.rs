@@ -284,14 +284,14 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
+    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
     /// ```
     pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
         self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
         Ok(self)
     }
 
-    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
+    /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
     ///
     /// # Example
     ///
@@ -325,7 +325,7 @@ where
         }
     }
 
-    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
+    /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
     /// This is the proxy protocol mode version.
     ///
     /// # Example
@@ -336,7 +336,7 @@ where
     ///
     /// let mut rt = Runtime::new().unwrap();
     /// let server = Server::new_with_fs_root("/srv/ftp");
-    /// rt.spawn(server.listen_proxy_mode("127.0.0.1:2121"));
+    /// rt.spawn(server.listen_proxy_protocol_mode("127.0.0.1:2121"));
     /// // ...
     /// drop(rt);
     /// ```
