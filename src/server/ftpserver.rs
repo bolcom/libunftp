@@ -21,10 +21,26 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::codec::*;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
+
+#[derive(Clone, Copy)]
+struct ProxyParams {
+    #[allow(dead_code)]
+    external_ip: IpAddr,
+    external_control_port: u16,
+}
+
+impl ProxyParams {
+    fn new(ip: &str, port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(ProxyParams {
+            external_ip: ip.parse()?,
+            external_control_port: port,
+        })
+    }
+}
 
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
@@ -59,7 +75,7 @@ where
     certs_password: Option<String>,
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
-    with_proxy_port: Option<u16>,
+    proxy_protocol_mode: Option<ProxyParams>,
 }
 
 impl Server<Filesystem, DefaultUser> {
@@ -106,7 +122,7 @@ where
             certs_password: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            with_proxy_port: Option::None,
+            proxy_protocol_mode: Option::None,
         }
     }
 
@@ -240,7 +256,27 @@ where
         self
     }
 
-    /// Enable proxy protocol.
+    /// Enable PROXY protocol mode.
+    ///
+    /// If you use a proxy such as haproxy or nginx, you can enable
+    /// the PROXY protocol
+    /// (https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt).
+    ///
+    /// Configure your proxy to enable PROXY protocol encoding for
+    /// control and data external listening ports, forwarding these
+    /// connections to the libunFTP listening port in proxy protocol
+    /// mode.
+    ///
+    /// In PROXY protocol mode, libunftp receives both control and
+    /// data connections on the listening port. It then distinguishes
+    /// control and data connections by comparing the original
+    /// destination port (extracted from the PROXY header) with the
+    /// port specified as the `external_control_port`
+    /// `proxy_protocol_mode` parameter.
+    ///
+    /// For the passive listening port, libunftp reports the IP
+    /// address specified as the `external_ip` `proxy_protocol_mode`
+    /// parameter.
     ///
     /// # Example
     ///
@@ -248,11 +284,11 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").with_proxy_protocol();
+    /// let mut server = Server::with_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121)?;
     /// ```
-    pub fn with_proxy_protocol(mut self, proxy_port: u16) -> Self {
-        self.with_proxy_port = Some(proxy_port);
-        self
+    pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
+        Ok(self)
     }
 
     /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
@@ -282,19 +318,20 @@ where
             let (mut tcp_stream, mut socket_addr) = listener.accept().await.unwrap();
 
             // if we are set for proxy protocol mode, decode the protocol header
-            if let Some(control_port) = self.with_proxy_port {
+            if let Some(proxy_params) = self.proxy_protocol_mode {
                 info!("Incoming proxy connection from {:?}", socket_addr);
-                let connection = match super::proxy_protocol::get_peer_with_proxy_protocol(&mut tcp_stream).await {
+                let connection = match super::proxy_protocol::get_peer_from_proxy_header(&mut tcp_stream).await {
                     Ok(v) => v,
                     Err(e) => {
                         warn!("proxy protocol decode error: {:?}", e);
                         continue;
-                    },
+                    }
                 };
-                if connection.to_port == control_port {
+                if connection.to_port == proxy_params.external_control_port {
                     socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                 } else {
-                    panic!("data connections via proxy port not yet supported.");
+                    warn!("data connections via proxy port not yet supported.");
+                    continue;
                 }
             };
 
