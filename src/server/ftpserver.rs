@@ -284,7 +284,7 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121)?;
+    /// let mut server = Server::with_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
     /// ```
     pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
         self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
@@ -315,30 +315,69 @@ where
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
-            let (mut tcp_stream, mut socket_addr) = listener.accept().await.unwrap();
-
-            // if we are set for proxy protocol mode, decode the protocol header
-            if let Some(proxy_params) = self.proxy_protocol_mode {
-                info!("Incoming proxy connection from {:?}", socket_addr);
-                let connection = match super::proxy_protocol::get_peer_from_proxy_header(&mut tcp_stream).await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("proxy protocol decode error: {:?}", e);
-                        continue;
-                    }
-                };
-                if connection.to_port == proxy_params.external_control_port {
-                    socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                } else {
-                    warn!("data connections via proxy port not yet supported.");
-                    continue;
-                }
-            };
+            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
 
             info!("Incoming control channel connection from {:?}", socket_addr);
             let result = self.spawn_control_channel_loop(tcp_stream).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+            }
+        }
+    }
+
+    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
+    /// This is the proxy protocol mode version.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use tokio::runtime::Runtime;
+    ///
+    /// let mut rt = Runtime::new().unwrap();
+    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// rt.spawn(server.listen_proxy_mode("127.0.0.1:2121"));
+    /// // ...
+    /// drop(rt);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics when called with invalid addresses or when the process is unable to
+    /// `bind()` to the address.
+    pub async fn listen_proxy_protocol_mode<T: Into<String>>(self, bind_address: T) {
+        assert!(self.proxy_protocol_mode.is_some(), true);
+
+        // TODO: Propagate errors to caller instead of doing unwraps.
+        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
+        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+        loop {
+            let (mut tcp_stream, socket_addr) = listener.accept().await.unwrap();
+
+            info!("Incoming proxy connection from {:?}", socket_addr);
+            let connection = match super::proxy_protocol::get_peer_from_proxy_header(&mut tcp_stream).await {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("proxy protocol decode error: {:?}", e);
+                    continue;
+                }
+            };
+
+            if let Some(proxy_params) = self.proxy_protocol_mode {
+                info!("Incoming proxy connection from {:?}", socket_addr);
+
+                if connection.to_port == proxy_params.external_control_port {
+                    let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+                    info!("Incoming control channel connection from {:?}", socket_addr);
+                    let result = self.spawn_control_channel_loop(tcp_stream).await;
+                    if result.is_err() {
+                        warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                    }
+                } else {
+                    warn!("data connections via proxy port not yet supported.");
+                    continue;
+                }
             }
         }
     }
