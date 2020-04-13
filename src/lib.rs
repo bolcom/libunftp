@@ -12,11 +12,11 @@
 //!
 //! ```rust
 //!  let ftp_home = std::env::temp_dir();
-//!  let server = libunftp::Server::with_root(ftp_home)
+//!  let server = libunftp::Server::new_with_fs_root(ftp_home)
 //!    .greeting("Welcome to my FTP server")
 //!    .passive_ports(50000..65535);
 //!
-//!  server.listener("127.0.0.1:2121");
+//!  server.listen("127.0.0.1:2121");
 //! ```
 
 pub mod auth;

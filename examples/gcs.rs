@@ -14,6 +14,6 @@ pub fn main() -> std::io::Result<()> {
     }));
 
     info!("Starting ftp server on {}", addr);
-    runtime.block_on(server.listener(addr));
+    runtime.block_on(server.listen(addr));
     Ok(())
 }

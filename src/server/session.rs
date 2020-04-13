@@ -44,7 +44,7 @@ where
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
     pub data_tls: bool,
-    pub with_metrics: bool,
+    pub collect_metrics: bool,
     // The starting byte for a STOR or RETR command. Set by the _Restart of Interrupted Transfer (REST)_
     // command to support resume functionality.
     pub start_pos: u64,
@@ -56,7 +56,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    pub(super) fn with_storage(storage: Arc<S>) -> Self {
+    pub(super) fn new(storage: Arc<S>) -> Self {
         Session {
             user: Arc::new(None),
             username: None,
@@ -72,22 +72,22 @@ where
             certs_password: Option::None,
             cmd_tls: false,
             data_tls: false,
-            with_metrics: false,
+            collect_metrics: false,
             start_pos: 0,
         }
     }
 
-    pub(super) fn with_ftps(mut self, certs_file: Option<PathBuf>, password: Option<String>) -> Self {
+    pub(super) fn ftps(mut self, certs_file: Option<PathBuf>, password: Option<String>) -> Self {
         self.certs_file = certs_file;
         self.certs_password = password;
         self
     }
 
-    pub(super) fn with_metrics(mut self, with_metrics: bool) -> Self {
-        if with_metrics {
+    pub(super) fn metrics(mut self, collect_metrics: bool) -> Self {
+        if collect_metrics {
             metrics::inc_session();
         }
-        self.with_metrics = with_metrics;
+        self.collect_metrics = collect_metrics;
         self
     }
 
@@ -157,7 +157,7 @@ where
     S::Metadata: storage::Metadata,
 {
     fn drop(&mut self) {
-        if self.with_metrics {
+        if self.collect_metrics {
             // Decrease the sessions metrics gauge when the session goes out of scope.
             metrics::dec_session();
         }
