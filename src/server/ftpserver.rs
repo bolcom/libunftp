@@ -21,6 +21,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::codec::*;
 
+use std::net::SocketAddr;
+
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 
@@ -57,6 +59,7 @@ where
     certs_password: Option<String>,
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
+    with_proxy_port: Option<u16>,
 }
 
 impl Server<Filesystem, DefaultUser> {
@@ -103,6 +106,7 @@ where
             certs_password: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
+            with_proxy_port: Option::None,
         }
     }
 
@@ -236,6 +240,21 @@ where
         self
     }
 
+    /// Enable proxy protocol.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_root("/tmp").with_proxy_protocol();
+    /// ```
+    pub fn with_proxy_protocol(mut self, proxy_port: u16) -> Self {
+        self.with_proxy_port = Some(proxy_port);
+        self
+    }
+
     /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
     ///
     /// # Example
@@ -256,11 +275,29 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub async fn listen<T: Into<String>>(self, bind_address: T) {
-        // TODO: Propogate errors to caller instead of doing unwraps.
+        // TODO: Propagate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
-            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
+            let (mut tcp_stream, mut socket_addr) = listener.accept().await.unwrap();
+
+            // if we are set for proxy protocol mode, decode the protocol header
+            if let Some(control_port) = self.with_proxy_port {
+                info!("Incoming proxy connection from {:?}", socket_addr);
+                let connection = match super::proxy_protocol::get_peer_with_proxy_protocol(&mut tcp_stream).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("proxy protocol decode error: {:?}", e);
+                        continue;
+                    },
+                };
+                if connection.to_port == control_port {
+                    socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+                } else {
+                    panic!("data connections via proxy port not yet supported.");
+                }
+            };
+
             info!("Incoming control channel connection from {:?}", socket_addr);
             let result = self.spawn_control_channel_loop(tcp_stream).await;
             if result.is_err() {

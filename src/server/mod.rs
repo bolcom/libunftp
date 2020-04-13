@@ -8,6 +8,7 @@ mod io;
 mod password;
 mod session;
 mod tls;
+mod proxy_protocol;
 
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::command::Command;
