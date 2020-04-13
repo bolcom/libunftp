@@ -6,9 +6,9 @@ mod datachan;
 pub(crate) mod ftpserver;
 mod io;
 mod password;
+mod proxy_protocol;
 mod session;
 mod tls;
-mod proxy_protocol;
 
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::command::Command;
