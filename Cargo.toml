@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.7.0"
+version = "0.8.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -10,7 +10,7 @@ authors = [
     "Steven Meunier <smeunier@bol.com>",
     "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
    ]
-description = "Safe, fast and extensible FTP server library for Rust."
+description = "Safe, fast and extensible FTP(S) server library for Rust."
 documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
 license = "Apache-2.0"

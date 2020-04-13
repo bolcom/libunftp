@@ -11,6 +11,7 @@ pub struct FTPError {
 
 /// A list specifying categories of FTP errors. It is meant to be used with the [FTPError] type.
 #[derive(Eq, PartialEq, Debug, Fail)]
+#[allow(dead_code)]
 pub enum FTPErrorKind {
     /// We encountered a system IO error.
     #[fail(display = "Failed to perform IO")]

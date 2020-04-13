@@ -12,7 +12,7 @@ When you need to FTP, but don't want to.
 The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). Its a safe, fast and extensible FTP(S) server 
 implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
-Because of its plug-able authentication and storage backends (e.g. local filesystem, 
+Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem, 
 [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a 
 perfect match for the cloud.
 
@@ -40,7 +40,7 @@ Then add the libunftp, tokio & futures crates to your project's dependencies in 
 
 ```toml
 [dependencies]
-libunftp = "0.7.0"
+libunftp = "0.8.0"
 tokio = { version = "0.2", features = ["full"] }
 ```
 
@@ -56,8 +56,8 @@ pub async fn main() {
     let server = libunftp::Server::new_with_fs_root(ftp_home)
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..65535);
-
-    server.listen("127.0.0.1:2121");
+    
+    server.listen("127.0.0.1:2121").await;
 }
 ```
 
