@@ -53,7 +53,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, _args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, FTPError> {
         match &self.params {
             StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
             _ => Ok(Reply::new(

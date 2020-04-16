@@ -43,7 +43,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
         // let session_arc = args.session.clone();
         let session = args.session.lock().await;
         match &session.state {

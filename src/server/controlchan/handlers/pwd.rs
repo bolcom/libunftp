@@ -20,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
         let session = args.session.lock().await;
         // TODO: properly escape double quotes in `cwd`
         Ok(Reply::new_with_string(

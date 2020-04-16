@@ -38,7 +38,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    async fn execute(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
         match (args.tls_configured, self.param.clone()) {
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock().await;

@@ -33,7 +33,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn execute(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
         let mut tx: Sender<InternalMsg> = args.tx.clone();
         //TODO does this make sense? The command is not sent and yet an Ok is replied
         if let Err(send_res) = tx.send(InternalMsg::Quit).await {
