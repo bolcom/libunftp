@@ -1,4 +1,4 @@
-use super::handlers::{ControlCommandHandler, CommandContext, Command};
+use super::controlchan::handlers::{ControlCommandHandler, CommandContext, Command};
 use super::controlchan::FTPCodec;
 use super::io::*;
 use super::*;
@@ -10,6 +10,7 @@ use crate::auth::{
 };
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
+use controlchan::handlers;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
