@@ -1,6 +1,6 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
-use super::controlchan::handlers::Command;
+use super::controlchan::command::Command;
 use crate::server::reply::ReplyCode;
 use crate::storage::Error;
 

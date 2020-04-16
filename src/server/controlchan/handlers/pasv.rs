@@ -7,7 +7,8 @@
 // host and port address this server is listening on.
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::{ControlCommandHandler, Command};
+use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::Command;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::storage;

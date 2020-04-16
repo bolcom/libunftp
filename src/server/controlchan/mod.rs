@@ -1,10 +1,11 @@
 //! Contains code pertaining to the FTP *control* channel
 
+pub mod command;
 pub(super) mod handlers;
 
-use handlers::Command;
 use crate::server::{reply::Reply, FTPError, InternalMsg};
 use bytes::BytesMut;
+use command::Command;
 use std::io::Write;
 use tokio_util::codec::{Decoder, Encoder};
 

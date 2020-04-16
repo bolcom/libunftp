@@ -12,7 +12,7 @@ mod session;
 mod tls;
 
 pub(crate) use chancomms::InternalMsg;
-pub(crate) use controlchan::handlers::Command;
+pub(crate) use controlchan::command::Command;
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
 pub(crate) use reply::{Reply, ReplyCode};

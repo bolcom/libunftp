@@ -6,8 +6,8 @@
 // contents of the file at the server site shall be unaffected.
 
 use super::handler::CommandContext;
+use crate::server::controlchan::command::Command;
 use crate::server::controlchan::handlers::ControlCommandHandler;
-use crate::server::controlchan::handlers::Command;
 use crate::server::error::{FTPError, FTPErrorKind};
 use crate::server::reply::Reply;
 use crate::storage;

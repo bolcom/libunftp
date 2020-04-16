@@ -1,7 +1,8 @@
 //! The RFC 959 Store File Uniquely (`STOU`) command
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::{ControlCommandHandler, Command};
+use crate::server::controlchan::command::Command;
+use crate::server::controlchan::handlers::ControlCommandHandler;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::storage;

@@ -1,4 +1,5 @@
 use crate::auth::Authenticator;
+use crate::server::controlchan::command::Command;
 use crate::server::FTPError;
 use crate::server::InternalMsg;
 use crate::server::Reply;
@@ -11,8 +12,6 @@ use std::ops::Range;
 use std::result::Result;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-use super::command::Command;
 
 #[async_trait]
 pub(crate) trait ControlCommandHandler<S: Send + Sync, U: Send + Sync>: Send + Sync

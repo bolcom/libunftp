@@ -1,4 +1,5 @@
-use super::controlchan::handlers::{ControlCommandHandler, CommandContext, Command};
+use super::controlchan::command::Command;
+use super::controlchan::handlers::{CommandContext, ControlCommandHandler};
 use super::controlchan::FTPCodec;
 use super::io::*;
 use super::*;

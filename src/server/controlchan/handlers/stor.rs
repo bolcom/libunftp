@@ -9,8 +9,8 @@
 // pathname does not already exist.
 
 use super::handler::CommandContext;
+use crate::server::controlchan::command::Command;
 use crate::server::controlchan::handlers::ControlCommandHandler;
-use crate::server::controlchan::handlers::Command;
 use crate::server::error::FTPError;
 use crate::server::reply::{Reply, ReplyCode};
 use crate::storage;
