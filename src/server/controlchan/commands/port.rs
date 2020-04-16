@@ -16,8 +16,8 @@
 // where h1 is the high order 8 bits of the internet host
 // address.
 
-use super::handler::CommandContext;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;

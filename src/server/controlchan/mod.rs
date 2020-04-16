@@ -3,6 +3,8 @@
 pub mod command;
 use command::Command;
 
+pub(crate) mod handler;
+
 pub(super) mod commands;
 
 pub(super) mod parse_error;

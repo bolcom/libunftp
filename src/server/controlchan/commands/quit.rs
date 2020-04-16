@@ -12,9 +12,9 @@
 // server to take the effective action of an abort (ABOR) and a
 // logout (QUIT).
 
-use super::handler::CommandContext;
 use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;

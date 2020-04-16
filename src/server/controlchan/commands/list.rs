@@ -13,8 +13,8 @@
 // to system, this information may be hard to use automatically
 // in a program, but may be quite useful to a human user.
 
-use super::handler::CommandContext;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;

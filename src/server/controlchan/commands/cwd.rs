@@ -7,9 +7,9 @@
 // pathname specifying a directory or other system dependent
 // file group designator.
 
-use super::handler::CommandContext;
 use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Reply;
 use crate::server::error::FTPError;
 use crate::storage;

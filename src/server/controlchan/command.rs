@@ -1,6 +1,7 @@
 use super::parse_error::{ParseErrorKind, Result};
 use crate::server::controlchan::commands::{AuthParam, ModeParam, Opt, ProtParam, StruParam};
 use crate::server::password::Password;
+
 use bytes::Bytes;
 use failure::*;
 use std::{fmt, str};

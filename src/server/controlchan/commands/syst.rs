@@ -9,8 +9,8 @@
 // the capabilities of the other peer. D.J. Bernstein recommends to just respond with
 // `UNIX Type: L8` for greatest compatibility.
 
-use super::handler::CommandContext;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;

@@ -5,9 +5,9 @@
 // at the other end of the data connection.  The status and
 // contents of the file at the server site shall be unaffected.
 
-use super::handler::CommandContext;
 use crate::server::controlchan::command::Command;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Reply;
 use crate::server::error::{FTPError, FTPErrorKind};
 use crate::storage;

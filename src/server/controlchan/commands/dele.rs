@@ -5,9 +5,9 @@
 // is desired (such as the query, "Do you really wish to delete?"),
 // it should be provided by the user-FTP process.
 
-use super::handler::CommandContext;
 use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Reply;
 use crate::server::error::FTPError;
 use crate::storage;

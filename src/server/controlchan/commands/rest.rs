@@ -6,8 +6,8 @@
 //! See also: https://cr.yp.to/ftp/retr.html
 //!
 
-use super::handler::CommandContext;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::CommandContext;
+use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;

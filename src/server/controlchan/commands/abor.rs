@@ -9,8 +9,7 @@
 // connection is not to be closed by the server, but the data
 // connection must be closed.
 
-use super::CommandContext;
-use crate::server::controlchan::commands::CommandHandler;
+use crate::server::controlchan::handler::{CommandContext, CommandHandler};
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;

@@ -1,5 +1,5 @@
 use super::controlchan::command::Command;
-use super::controlchan::commands::{CommandContext, CommandHandler};
+use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
 use super::io::*;
 use super::*;
@@ -489,7 +489,7 @@ where
             storage_features,
         };
 
-        let command: Box<dyn CommandHandler<S, U>> = match cmd {
+        let handler: Box<dyn CommandHandler<S, U>> = match cmd {
             Command::User { username } => Box::new(commands::User::new(username)),
             Command::Pass { password } => Box::new(commands::Pass::new(password)),
             Command::Syst => Box::new(commands::Syst),
@@ -529,7 +529,7 @@ where
             Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
-        command.handle(args).await
+        handler.handle(args).await
     }
 
     async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
