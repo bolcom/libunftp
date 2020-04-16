@@ -7,13 +7,12 @@ pub(crate) mod error;
 pub(crate) mod ftpserver;
 mod io;
 mod password;
-mod reply;
 mod session;
 mod tls;
 
 pub(crate) use chancomms::InternalMsg;
 pub(crate) use controlchan::command::Command;
+pub(crate) use controlchan::reply::{Reply, ReplyCode};
 pub(crate) use controlchan::Event;
 pub(crate) use error::{FTPError, FTPErrorKind};
-pub(crate) use reply::{Reply, ReplyCode};
 pub(self) use session::{Session, SessionState};

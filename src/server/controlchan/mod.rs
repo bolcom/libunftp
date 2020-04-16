@@ -13,3 +13,6 @@ pub(crate) use event::Event;
 
 pub(crate) mod codecs;
 pub(crate) use codecs::FTPCodec;
+
+pub(crate) mod reply;
+pub(crate) use reply::{Reply, ReplyCode};

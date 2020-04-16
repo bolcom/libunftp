@@ -1,8 +1,8 @@
 use crate::auth::Authenticator;
-use crate::server::controlchan::command::Command;
+use crate::server::controlchan::Command;
+use crate::server::controlchan::Reply;
 use crate::server::FTPError;
 use crate::server::InternalMsg;
-use crate::server::Reply;
 use crate::server::Session;
 use crate::storage;
 

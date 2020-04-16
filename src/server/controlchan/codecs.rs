@@ -1,5 +1,6 @@
 use super::command::Command;
-use crate::server::{reply::Reply, FTPError};
+use super::Reply;
+use crate::server::FTPError;
 
 use bytes::BytesMut;
 use std::io::Write;
