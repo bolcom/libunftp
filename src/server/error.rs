@@ -101,16 +101,16 @@ impl From<std::str::Utf8Error> for FTPError {
     }
 }
 
-impl From<super::controlchan::handlers::ParseError> for FTPError {
-    fn from(err: super::controlchan::handlers::ParseError) -> FTPError {
+impl From<super::controlchan::ParseError> for FTPError {
+    fn from(err: super::controlchan::ParseError) -> FTPError {
         match err.kind().clone() {
-            super::controlchan::handlers::ParseErrorKind::UnknownCommand { command } => {
+            super::controlchan::ParseErrorKind::UnknownCommand { command } => {
                 // TODO: Do something smart with CoW to prevent copying the command around.
                 err.context(FTPErrorKind::UnknownCommand { command }).into()
             }
-            super::controlchan::handlers::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            super::controlchan::handlers::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
-            super::controlchan::handlers::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
+            super::controlchan::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
+            super::controlchan::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
+            super::controlchan::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
             _ => err.context(FTPErrorKind::InvalidCommand).into(),
         }
     }

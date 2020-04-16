@@ -1,4 +1,5 @@
-use crate::server::controlchan::handlers::{AuthParam, ModeParam, Opt, ParseErrorKind, ProtParam, Result, StruParam};
+use super::parse_error::{ParseErrorKind, Result};
+use crate::server::controlchan::handlers::{AuthParam, ModeParam, Opt, ProtParam, StruParam};
 use crate::server::password::Password;
 use bytes::Bytes;
 use failure::*;
@@ -514,7 +515,7 @@ fn is_valid_token_char(b: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::controlchan::handlers::{ParseError, ParseErrorKind};
+    use crate::server::controlchan::parse_error::{ParseError, ParseErrorKind};
     use pretty_assertions::assert_eq;
 
     #[test]

@@ -2,6 +2,8 @@
 
 pub mod command;
 pub(super) mod handlers;
+pub(super) mod parse_error;
+pub use parse_error::{ParseError, ParseErrorKind};
 
 use crate::server::{reply::Reply, FTPError, InternalMsg};
 use bytes::BytesMut;
