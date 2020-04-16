@@ -7,7 +7,7 @@
 
 use super::handler::CommandContext;
 use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::Reply;
 use crate::server::error::FTPError;
 use crate::storage;
@@ -29,7 +29,7 @@ impl Mkd {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Mkd
+impl<S, U> CommandHandler<S, U> for Mkd
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

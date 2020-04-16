@@ -1,7 +1,7 @@
 //! The RFC 959 Rename From (`RNFR`) command
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;
@@ -19,7 +19,7 @@ impl Rnfr {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Rnfr
+impl<S, U> CommandHandler<S, U> for Rnfr
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

@@ -10,7 +10,7 @@
 // `UNIX Type: L8` for greatest compatibility.
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;
@@ -19,7 +19,7 @@ use async_trait::async_trait;
 pub struct Syst;
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Syst
+impl<S, U> CommandHandler<S, U> for Syst
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

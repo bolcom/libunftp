@@ -1,5 +1,5 @@
 use super::controlchan::command::Command;
-use super::controlchan::handlers::{CommandContext, ControlCommandHandler};
+use super::controlchan::handlers::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
 use super::io::*;
 use super::*;
@@ -489,7 +489,7 @@ where
             storage_features,
         };
 
-        let command: Box<dyn ControlCommandHandler<S, U>> = match cmd {
+        let command: Box<dyn CommandHandler<S, U>> = match cmd {
             Command::User { username } => Box::new(handlers::User::new(username)),
             Command::Pass { password } => Box::new(handlers::Pass::new(password)),
             Command::Syst => Box::new(handlers::Syst),

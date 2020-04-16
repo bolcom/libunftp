@@ -7,7 +7,7 @@
 // host and port address this server is listening on.
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
@@ -55,7 +55,7 @@ impl Pasv {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Pasv
+impl<S, U> CommandHandler<S, U> for Pasv
 where
     U: 'static + Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

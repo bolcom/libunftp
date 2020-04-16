@@ -52,7 +52,7 @@ pub use cdup::Cdup;
 pub use cwd::Cwd;
 pub use dele::Dele;
 pub use feat::Feat;
-pub(crate) use handler::{CommandContext, ControlCommandHandler};
+pub(crate) use handler::{CommandContext, CommandHandler};
 pub use help::Help;
 pub use list::List;
 pub use mdtm::Mdtm;

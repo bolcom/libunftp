@@ -7,7 +7,7 @@
 
 use super::handler::CommandContext;
 use crate::server::controlchan::command::Command;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::Reply;
 use crate::server::error::{FTPError, FTPErrorKind};
 use crate::storage;
@@ -18,7 +18,7 @@ use log::warn;
 pub struct Retr;
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Retr
+impl<S, U> CommandHandler<S, U> for Retr
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

@@ -1,5 +1,5 @@
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::server::session::SessionState;
@@ -18,7 +18,7 @@ impl User {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for User
+impl<S, U> CommandHandler<S, U> for User
 where
     U: Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

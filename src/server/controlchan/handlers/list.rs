@@ -14,7 +14,7 @@
 // in a program, but may be quite useful to a human user.
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
@@ -26,7 +26,7 @@ use log::warn;
 pub struct List;
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for List
+impl<S, U> CommandHandler<S, U> for List
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

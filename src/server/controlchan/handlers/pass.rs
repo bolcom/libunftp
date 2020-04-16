@@ -12,7 +12,7 @@
 
 use super::handler::CommandContext;
 use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::server::password;
@@ -36,7 +36,7 @@ impl Pass {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Pass
+impl<S, U> CommandHandler<S, U> for Pass
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

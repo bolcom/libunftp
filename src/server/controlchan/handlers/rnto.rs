@@ -1,7 +1,7 @@
 //! The RFC 959 Rename To (`RNTO`) command
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;
@@ -21,7 +21,7 @@ impl Rnto {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Rnto
+impl<S, U> CommandHandler<S, U> for Rnto
 where
     U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

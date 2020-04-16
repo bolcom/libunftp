@@ -1,7 +1,7 @@
 //! The RFC 2228 Data Channel Protection Level (`PROT`) command.
 
 use super::handler::CommandContext;
-use crate::server::controlchan::handlers::ControlCommandHandler;
+use crate::server::controlchan::handlers::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::error::FTPError;
 use crate::storage;
@@ -31,7 +31,7 @@ impl Prot {
 }
 
 #[async_trait]
-impl<S, U> ControlCommandHandler<S, U> for Prot
+impl<S, U> CommandHandler<S, U> for Prot
 where
     U: Send + Sync,
     S: 'static + storage::StorageBackend<U> + Sync + Send,

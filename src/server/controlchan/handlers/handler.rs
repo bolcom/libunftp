@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[async_trait]
-pub(crate) trait ControlCommandHandler<S: Send + Sync, U: Send + Sync>: Send + Sync
+pub(crate) trait CommandHandler<S: Send + Sync, U: Send + Sync>: Send + Sync
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
