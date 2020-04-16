@@ -3,7 +3,7 @@
 pub mod command;
 use command::Command;
 
-pub(super) mod handlers;
+pub(super) mod commands;
 
 pub(super) mod parse_error;
 pub use parse_error::{ParseError, ParseErrorKind};

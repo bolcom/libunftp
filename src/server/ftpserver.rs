@@ -1,5 +1,5 @@
 use super::controlchan::command::Command;
-use super::controlchan::handlers::{CommandContext, CommandHandler};
+use super::controlchan::commands::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
 use super::io::*;
 use super::*;
@@ -11,7 +11,7 @@ use crate::auth::{
 };
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
-use controlchan::handlers;
+use controlchan::commands;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
@@ -490,43 +490,43 @@ where
         };
 
         let command: Box<dyn CommandHandler<S, U>> = match cmd {
-            Command::User { username } => Box::new(handlers::User::new(username)),
-            Command::Pass { password } => Box::new(handlers::Pass::new(password)),
-            Command::Syst => Box::new(handlers::Syst),
-            Command::Stat { path } => Box::new(handlers::Stat::new(path)),
-            Command::Acct { .. } => Box::new(handlers::Acct),
-            Command::Type => Box::new(handlers::Type),
-            Command::Stru { structure } => Box::new(handlers::Stru::new(structure)),
-            Command::Mode { mode } => Box::new(handlers::Mode::new(mode)),
-            Command::Help => Box::new(handlers::Help),
-            Command::Noop => Box::new(handlers::Noop),
-            Command::Pasv => Box::new(handlers::Pasv::new()),
-            Command::Port => Box::new(handlers::Port),
-            Command::Retr { .. } => Box::new(handlers::Retr),
-            Command::Stor { .. } => Box::new(handlers::Stor),
-            Command::List { .. } => Box::new(handlers::List),
-            Command::Nlst { .. } => Box::new(handlers::Nlst),
-            Command::Feat => Box::new(handlers::Feat),
-            Command::Pwd => Box::new(handlers::Pwd),
-            Command::Cwd { path } => Box::new(handlers::Cwd::new(path)),
-            Command::Cdup => Box::new(handlers::Cdup),
-            Command::Opts { option } => Box::new(handlers::Opts::new(option)),
-            Command::Dele { path } => Box::new(handlers::Dele::new(path)),
-            Command::Rmd { path } => Box::new(handlers::Rmd::new(path)),
-            Command::Quit => Box::new(handlers::Quit),
-            Command::Mkd { path } => Box::new(handlers::Mkd::new(path)),
-            Command::Allo { .. } => Box::new(handlers::Allo),
-            Command::Abor => Box::new(handlers::Abor),
-            Command::Stou => Box::new(handlers::Stou),
-            Command::Rnfr { file } => Box::new(handlers::Rnfr::new(file)),
-            Command::Rnto { file } => Box::new(handlers::Rnto::new(file)),
-            Command::Auth { protocol } => Box::new(handlers::Auth::new(protocol)),
-            Command::PBSZ {} => Box::new(handlers::Pbsz),
-            Command::CCC {} => Box::new(handlers::Ccc),
-            Command::PROT { param } => Box::new(handlers::Prot::new(param)),
-            Command::SIZE { file } => Box::new(handlers::Size::new(file)),
-            Command::Rest { offset } => Box::new(handlers::Rest::new(offset)),
-            Command::MDTM { file } => Box::new(handlers::Mdtm::new(file)),
+            Command::User { username } => Box::new(commands::User::new(username)),
+            Command::Pass { password } => Box::new(commands::Pass::new(password)),
+            Command::Syst => Box::new(commands::Syst),
+            Command::Stat { path } => Box::new(commands::Stat::new(path)),
+            Command::Acct { .. } => Box::new(commands::Acct),
+            Command::Type => Box::new(commands::Type),
+            Command::Stru { structure } => Box::new(commands::Stru::new(structure)),
+            Command::Mode { mode } => Box::new(commands::Mode::new(mode)),
+            Command::Help => Box::new(commands::Help),
+            Command::Noop => Box::new(commands::Noop),
+            Command::Pasv => Box::new(commands::Pasv::new()),
+            Command::Port => Box::new(commands::Port),
+            Command::Retr { .. } => Box::new(commands::Retr),
+            Command::Stor { .. } => Box::new(commands::Stor),
+            Command::List { .. } => Box::new(commands::List),
+            Command::Nlst { .. } => Box::new(commands::Nlst),
+            Command::Feat => Box::new(commands::Feat),
+            Command::Pwd => Box::new(commands::Pwd),
+            Command::Cwd { path } => Box::new(commands::Cwd::new(path)),
+            Command::Cdup => Box::new(commands::Cdup),
+            Command::Opts { option } => Box::new(commands::Opts::new(option)),
+            Command::Dele { path } => Box::new(commands::Dele::new(path)),
+            Command::Rmd { path } => Box::new(commands::Rmd::new(path)),
+            Command::Quit => Box::new(commands::Quit),
+            Command::Mkd { path } => Box::new(commands::Mkd::new(path)),
+            Command::Allo { .. } => Box::new(commands::Allo),
+            Command::Abor => Box::new(commands::Abor),
+            Command::Stou => Box::new(commands::Stou),
+            Command::Rnfr { file } => Box::new(commands::Rnfr::new(file)),
+            Command::Rnto { file } => Box::new(commands::Rnto::new(file)),
+            Command::Auth { protocol } => Box::new(commands::Auth::new(protocol)),
+            Command::PBSZ {} => Box::new(commands::Pbsz),
+            Command::CCC {} => Box::new(commands::Ccc),
+            Command::PROT { param } => Box::new(commands::Prot::new(param)),
+            Command::SIZE { file } => Box::new(commands::Size::new(file)),
+            Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
+            Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
         };
 
         command.handle(args).await
