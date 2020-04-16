@@ -1,7 +1,7 @@
 //! Contains code pertaining to the FTP *data* channel
 
 use super::chancomms::InternalMsg;
-use super::commands::Command;
+use super::handlers::Command;
 use crate::storage::{self, Error, ErrorKind};
 
 use futures::channel::mpsc::Sender;

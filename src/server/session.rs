@@ -2,7 +2,7 @@
 //! implements the handling for the *data* channel.
 
 use super::chancomms::{DataCommand, InternalMsg};
-use super::commands::Command;
+use super::handlers::Command;
 use super::datachan::DataCommandExecutor;
 use crate::metrics;
 use crate::storage;
