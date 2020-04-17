@@ -56,6 +56,7 @@ ftp = "3.0.1"
 pretty_env_logger = "0.4.0"
 pretty_assertions = "0.6.1"
 tokio = { version = "0.2.17", features = ["rt-threaded"]}
+clap = "2.33.0"
 
 [features]
 pam_auth = ["pam-auth"]

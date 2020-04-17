@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use bytes::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
-use http::{StatusCode, Uri};
+use hyper::http::{StatusCode, Uri};
 use hyper::{
     body::aggregate,
     client::connect::{dns::GaiResolver, HttpConnector},
