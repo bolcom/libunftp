@@ -6,8 +6,7 @@ use crate::auth::anonymous::*;
 use crate::auth::*;
 
 use async_trait::async_trait;
-use http::uri::InvalidUri;
-use hyper::{Body, Client, Method, Request};
+use hyper::{http::uri::InvalidUri, Body, Client, Method, Request};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
