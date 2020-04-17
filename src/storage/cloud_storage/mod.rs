@@ -86,7 +86,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
 
         let response: Item = serde_json::from_str(body_str).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
-        response.as_metadata()
+        response.to_metadata()
     }
 
     async fn list<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
@@ -150,7 +150,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         let body = unpack_response(response).await?;
         let response: Item = serde_json::from_reader(body.reader()).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
-        Ok(response.as_metadata()?.len())
+        Ok(response.to_metadata()?.len())
     }
 
     async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {

@@ -20,7 +20,7 @@ pub(crate) struct Item {
 impl ResponseBody {
     pub(crate) fn list(self) -> Result<Vec<Fileinfo<PathBuf, ObjectMetadata>>, Error> {
         let files: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.items.map_or(Ok(vec![]), move |items: Vec<Item>| {
-            items.iter().map(move |item: &Item| item_to_file_info(item)).collect()
+            items.iter().map(move |item: &Item| item.to_file_info()).collect()
         })?;
         let dirs: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.prefixes.map_or(Ok(vec![]), |prefixes: Vec<String>| {
             prefixes.iter().map(|prefix| prefix_to_file_info(prefix)).collect()
@@ -33,7 +33,7 @@ impl ResponseBody {
 }
 
 impl Item {
-    pub(crate) fn as_metadata(&self) -> Result<ObjectMetadata, Error> {
+    pub(crate) fn to_metadata(&self) -> Result<ObjectMetadata, Error> {
         let size: u64 = self.size.parse().map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
 
         Ok(ObjectMetadata {
@@ -42,13 +42,13 @@ impl Item {
             is_file: !self.name.ends_with('/'),
         })
     }
-}
 
-pub(crate) fn item_to_file_info(item: &Item) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
-    let path: PathBuf = PathBuf::from(item.name.clone());
-    let metadata: ObjectMetadata = item.as_metadata()?;
+    pub(crate) fn to_file_info(&self) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
+        let path: PathBuf = PathBuf::from(self.name.clone());
+        let metadata: ObjectMetadata = self.to_metadata()?;
 
-    Ok(Fileinfo { metadata, path })
+        Ok(Fileinfo { metadata, path })
+    }
 }
 
 pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
@@ -68,7 +68,7 @@ mod test {
     use std::time::SystemTime;
 
     #[test]
-    fn as_metadata() {
+    fn to_metadata() {
         let sys_time: SystemTime = SystemTime::now();
         let date_time: DateTime<Utc> = DateTime::from(sys_time);
 
@@ -78,14 +78,14 @@ mod test {
             size: "50".into(),
         };
 
-        let metadata: ObjectMetadata = item.as_metadata().unwrap();
+        let metadata: ObjectMetadata = item.to_metadata().unwrap();
         assert_eq!(metadata.size, 50);
         assert_eq!(metadata.modified().unwrap(), sys_time);
         assert_eq!(metadata.is_file, true);
     }
 
     #[test]
-    fn as_metadata_parse_error() {
+    fn to_metadata_parse_error() {
         use chrono::prelude::Utc;
 
         let item: Item = Item {
@@ -94,7 +94,7 @@ mod test {
             size: "unparseable".into(),
         };
 
-        let metadata: Result<ObjectMetadata, Error> = item.as_metadata();
+        let metadata: Result<ObjectMetadata, Error> = item.to_metadata();
         assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
     }
 }
