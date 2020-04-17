@@ -6,10 +6,10 @@
 //! See also: https://cr.yp.to/ftp/retr.html
 //!
 
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage;
 use async_trait::async_trait;
 
@@ -31,7 +31,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         if args.storage_features & storage::FEATURE_RESTART == 0 {
             return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
         }

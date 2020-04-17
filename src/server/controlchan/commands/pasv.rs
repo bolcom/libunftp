@@ -6,11 +6,11 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage;
 
 use async_trait::async_trait;
@@ -62,7 +62,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,

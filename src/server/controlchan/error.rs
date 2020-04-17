@@ -1,20 +1,20 @@
-//! Contains the `FTPError` struct that that defines the libunftp custom error type.
+//! Contains the `ControlChanError` struct that that defines the control channel error type.
 
-use super::controlchan::{ParseError, ParseErrorKind};
+use super::parse_error::{ParseError, ParseErrorKind};
 
 use failure::{Backtrace, Context, Fail};
 use std::fmt;
 
 /// The error type returned by this library.
 #[derive(Debug)]
-pub struct FTPError {
-    inner: Context<FTPErrorKind>,
+pub struct ControlChanError {
+    inner: Context<ControlChanErrorKind>,
 }
 
-/// A list specifying categories of FTP errors. It is meant to be used with the [FTPError] type.
+/// A list specifying categories of FTP errors. It is meant to be used with the [ControlChanError] type.
 #[derive(Eq, PartialEq, Debug, Fail)]
 #[allow(dead_code)]
-pub enum FTPErrorKind {
+pub enum ControlChanErrorKind {
     /// We encountered a system IO error.
     #[fail(display = "Failed to perform IO")]
     IOError,
@@ -50,20 +50,20 @@ pub enum FTPErrorKind {
     ControlChannelTimeout,
 }
 
-impl FTPError {
+impl ControlChanError {
     /// Creates a new FTP Error with the specific kind
-    pub fn new(kind: FTPErrorKind) -> Self {
-        FTPError { inner: Context::new(kind) }
+    pub fn new(kind: ControlChanErrorKind) -> Self {
+        ControlChanError { inner: Context::new(kind) }
     }
 
     /// Return the inner error kind of this error.
     #[allow(unused)]
-    pub fn kind(&self) -> &FTPErrorKind {
+    pub fn kind(&self) -> &ControlChanErrorKind {
         self.inner.get_context()
     }
 }
 
-impl Fail for FTPError {
+impl Fail for ControlChanError {
     fn cause(&self) -> Option<&dyn Fail> {
         self.inner.cause()
     }
@@ -73,47 +73,47 @@ impl Fail for FTPError {
     }
 }
 
-impl fmt::Display for FTPError {
+impl fmt::Display for ControlChanError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
     }
 }
 
-impl From<FTPErrorKind> for FTPError {
-    fn from(kind: FTPErrorKind) -> FTPError {
-        FTPError { inner: Context::new(kind) }
+impl From<ControlChanErrorKind> for ControlChanError {
+    fn from(kind: ControlChanErrorKind) -> ControlChanError {
+        ControlChanError { inner: Context::new(kind) }
     }
 }
 
-impl From<Context<FTPErrorKind>> for FTPError {
-    fn from(inner: Context<FTPErrorKind>) -> FTPError {
-        FTPError { inner }
+impl From<Context<ControlChanErrorKind>> for ControlChanError {
+    fn from(inner: Context<ControlChanErrorKind>) -> ControlChanError {
+        ControlChanError { inner }
     }
 }
 
-impl From<std::io::Error> for FTPError {
-    fn from(err: std::io::Error) -> FTPError {
-        err.context(FTPErrorKind::IOError).into()
+impl From<std::io::Error> for ControlChanError {
+    fn from(err: std::io::Error) -> ControlChanError {
+        err.context(ControlChanErrorKind::IOError).into()
     }
 }
 
-impl From<std::str::Utf8Error> for FTPError {
-    fn from(err: std::str::Utf8Error) -> FTPError {
-        err.context(FTPErrorKind::UTF8Error).into()
+impl From<std::str::Utf8Error> for ControlChanError {
+    fn from(err: std::str::Utf8Error) -> ControlChanError {
+        err.context(ControlChanErrorKind::UTF8Error).into()
     }
 }
 
-impl From<ParseError> for FTPError {
-    fn from(err: ParseError) -> FTPError {
+impl From<ParseError> for ControlChanError {
+    fn from(err: ParseError) -> ControlChanError {
         match err.kind().clone() {
             ParseErrorKind::UnknownCommand { command } => {
                 // TODO: Do something smart with CoW to prevent copying the command around.
-                err.context(FTPErrorKind::UnknownCommand { command }).into()
+                err.context(ControlChanErrorKind::UnknownCommand { command }).into()
             }
-            ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
-            ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
-            _ => err.context(FTPErrorKind::InvalidCommand).into(),
+            ParseErrorKind::InvalidUTF8 => err.context(ControlChanErrorKind::UTF8Error).into(),
+            ParseErrorKind::InvalidCommand => err.context(ControlChanErrorKind::InvalidCommand).into(),
+            ParseErrorKind::InvalidToken { .. } => err.context(ControlChanErrorKind::UTF8Error).into(),
+            _ => err.context(ControlChanErrorKind::InvalidCommand).into(),
         }
     }
 }

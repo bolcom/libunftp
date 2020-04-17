@@ -9,9 +9,9 @@
 // connection is not to be closed by the server, but the data
 // connection must be closed.
 
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::{CommandContext, CommandHandler};
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage;
 use async_trait::async_trait;
 use futures::prelude::*;
@@ -27,7 +27,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         match session.data_abort_tx.take() {
             Some(mut tx) => {

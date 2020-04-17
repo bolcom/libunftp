@@ -11,10 +11,10 @@
 // the sensitive password information.
 
 use crate::server::chancomms::InternalMsg;
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::server::password;
 use crate::server::session::SessionState;
 use crate::storage;
@@ -43,7 +43,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         // let session_arc = args.session.clone();
         let session = args.session.lock().await;
         match &session.state {

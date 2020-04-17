@@ -1,6 +1,6 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
 
-use crate::server::{Command, Event, FTPErrorKind, InternalMsg, Reply, ReplyCode};
+use crate::server::{Command, ControlChanErrorKind, Event, InternalMsg, Reply, ReplyCode};
 
 use lazy_static::*;
 use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
@@ -53,7 +53,7 @@ pub fn dec_session() {
 }
 
 /// Add a metric for an FTP server error.
-pub fn add_error_metric(error: &FTPErrorKind) {
+pub fn add_error_metric(error: &ControlChanErrorKind) {
     let error_str = error.to_string();
     let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
     FTP_ERROR_TOTAL.with_label_values(&[&label]).inc();

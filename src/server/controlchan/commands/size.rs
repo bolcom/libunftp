@@ -1,8 +1,8 @@
 use crate::server::chancomms::InternalMsg;
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage::{self, Metadata};
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
@@ -29,7 +29,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let user = session.user.clone();
         let start_pos: u64 = session.start_pos;

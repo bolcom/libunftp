@@ -7,10 +7,10 @@
 // definition of that command.  Where no OPTS behavior is defined for a
 // particular command there are no options available for that command.
 
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage;
 use async_trait::async_trait;
 
@@ -40,7 +40,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         match &self.option {
             Opt::UTF8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
             Opt::UTF8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),

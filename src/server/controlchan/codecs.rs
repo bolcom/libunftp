@@ -1,6 +1,6 @@
 use super::command::Command;
+use super::error::ControlChanError;
 use super::Reply;
-use crate::server::FTPError;
 
 use bytes::BytesMut;
 use std::io::Write;
@@ -24,7 +24,7 @@ impl FTPCodec {
 
 impl Decoder for FTPCodec {
     type Item = Command;
-    type Error = FTPError;
+    type Error = ControlChanError;
 
     // Here we decode the incoming bytes into a meaningful command. We'll split on newlines, and
     // parse the resulting line using `Command::parse()`. This method will be called by tokio.
@@ -42,7 +42,7 @@ impl Decoder for FTPCodec {
 }
 
 impl Encoder<Reply> for FTPCodec {
-    type Error = FTPError;
+    type Error = ControlChanError;
 
     // Here we encode the outgoing response
     fn encode(&mut self, reply: Reply, buf: &mut BytesMut) -> Result<(), Self::Error> {

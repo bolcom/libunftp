@@ -1,7 +1,7 @@
+use super::error::ControlChanError;
 use crate::auth::Authenticator;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::Reply;
-use crate::server::FTPError;
 use crate::server::InternalMsg;
 use crate::server::Session;
 use crate::storage;
@@ -20,7 +20,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError>;
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>;
 }
 
 /// Convenience struct to group command args
