@@ -1,11 +1,11 @@
 use crate::storage::{Error, ErrorKind};
-
 use hyper::http::uri::Scheme;
 use hyper::Uri;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::Path;
 
-pub struct GcsUri {
+#[derive(Clone, Debug)]
+pub(crate) struct GcsUri {
     bucket: String,
 }
 
