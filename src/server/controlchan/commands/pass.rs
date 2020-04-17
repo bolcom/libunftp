@@ -10,6 +10,7 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -18,11 +19,11 @@ use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::password;
 use crate::server::session::SessionState;
 use crate::storage;
+
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
 use log::{error, warn};
-
 use std::sync::Arc;
 
 pub struct Pass {
@@ -38,7 +39,7 @@ impl Pass {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Pass
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
@@ -68,6 +69,7 @@ where
                     match auther.authenticate(&user, &pass).await {
                         Ok(user) => {
                             let mut session = session2clone.lock().await;
+                            info!("User {} logged in", user);
                             session.user = Arc::new(Some(user));
                             tokio::spawn(async move {
                                 if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {

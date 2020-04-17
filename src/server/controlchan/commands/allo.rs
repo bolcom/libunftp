@@ -18,6 +18,7 @@
 // the maximum record or page size should accept a dummy value
 // in the first argument and ignore it.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -30,7 +31,7 @@ pub struct Allo;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Allo
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

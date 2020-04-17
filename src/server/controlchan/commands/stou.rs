@@ -1,5 +1,6 @@
 //! The RFC 959 Store File Uniquely (`STOU`) command
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::command::Command;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -18,7 +19,7 @@ pub struct Stou;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Stou
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

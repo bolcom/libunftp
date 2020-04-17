@@ -1,5 +1,6 @@
 //! The RFC 2389 Feature (`FEAT`) command
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -12,7 +13,7 @@ pub struct Feat;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Feat
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

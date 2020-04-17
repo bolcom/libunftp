@@ -30,3 +30,11 @@ impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
 /// AnonymousUser
 #[derive(Debug, PartialEq)]
 pub struct AnonymousUser;
+
+impl UserDetail for AnonymousUser {}
+
+impl std::fmt::Display for AnonymousUser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AnonymousUser")
+    }
+}

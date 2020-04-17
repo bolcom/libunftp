@@ -12,6 +12,7 @@
 //
 // The default structure is File.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -48,7 +49,7 @@ impl Stru {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Stru
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

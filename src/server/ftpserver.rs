@@ -8,7 +8,7 @@ use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
 use crate::auth::{
     anonymous::{AnonymousAuthenticator, AnonymousUser},
-    Authenticator,
+    Authenticator, UserDetail,
 };
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
@@ -47,9 +47,10 @@ const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 ///
 /// [`Authenticator`]: auth/trait.Authenticator.html
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
-pub struct Server<S: Send + Sync, U: Send + Sync>
+pub struct Server<S, U>
 where
-    S: storage::StorageBackend<U>,
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail,
 {
     storage: Box<dyn (Fn() -> S) + Sync + Send>,
     greeting: &'static str,
@@ -80,11 +81,12 @@ impl Server<Filesystem, AnonymousUser> {
     }
 }
 
-impl<S, U: Send + Sync + 'static> Server<S, U>
+impl<S, U> Server<S, U>
 where
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
+    U: UserDetail + 'static,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
     /// set to defaults.

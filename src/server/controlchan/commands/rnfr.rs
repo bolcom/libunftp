@@ -1,5 +1,6 @@
 //! The RFC 959 Rename From (`RNFR`) command
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -21,7 +22,7 @@ impl Rnfr {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Rnfr
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

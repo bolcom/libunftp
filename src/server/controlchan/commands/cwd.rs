@@ -7,6 +7,7 @@
 // pathname specifying a directory or other system dependent
 // file group designator.
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -32,7 +33,7 @@ impl Cwd {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Cwd
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

@@ -5,6 +5,7 @@
 // at the other end of the data connection.  The status and
 // contents of the file at the server site shall be unaffected.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::command::Command;
 use crate::server::controlchan::error::{ControlChanError, ControlChanErrorKind};
 use crate::server::controlchan::handler::CommandContext;
@@ -20,7 +21,7 @@ pub struct Retr;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Retr
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

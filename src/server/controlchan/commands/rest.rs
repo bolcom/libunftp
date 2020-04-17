@@ -6,6 +6,7 @@
 //! See also: https://cr.yp.to/ftp/retr.html
 //!
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -26,7 +27,7 @@ impl Rest {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Rest
 where
-    U: Send + Sync,
+    U: UserDetail,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,

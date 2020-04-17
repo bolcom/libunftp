@@ -27,6 +27,9 @@
 //! ```
 //! [`Server`]: ../server/struct.Server.html
 
+mod user;
+pub use user::UserDetail;
+
 pub(crate) mod spi;
 pub use spi::Authenticator;
 #[allow(unused_imports)]

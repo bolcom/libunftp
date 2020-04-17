@@ -1,5 +1,6 @@
 //! The RFC 2228 Data Channel Protection Level (`PROT`) command.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -33,7 +34,7 @@ impl Prot {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Prot
 where
-    U: Send + Sync,
+    U: UserDetail,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,

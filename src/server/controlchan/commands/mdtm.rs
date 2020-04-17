@@ -1,3 +1,4 @@
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -28,7 +29,7 @@ impl Mdtm {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Mdtm
 where
-    U: Send + Sync,
+    U: UserDetail,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send + Sync,
     S::Metadata: 'static + storage::Metadata,

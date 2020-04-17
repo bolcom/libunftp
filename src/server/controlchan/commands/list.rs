@@ -13,6 +13,7 @@
 // to system, this information may be hard to use automatically
 // in a program, but may be quite useful to a human user.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -28,7 +29,7 @@ pub struct List;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for List
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
