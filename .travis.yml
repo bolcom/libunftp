@@ -14,9 +14,9 @@ before_script:
 
 script:
   - cargo fmt --all -- --check
-  - cargo clippy --all-features -- -D warnings
-  - cargo test --verbose --all --all-features
-  - cargo build --verbose --all --all-features
+  - cargo clippy --all-features --all-targets -- -D warnings
+  - cargo test --verbose --all-features --all-targets
+  - cargo build --verbose --all-features --all-targets
 
 cache: cargo
 

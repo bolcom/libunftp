@@ -31,10 +31,10 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
     let service_account_key = matches
         .value_of(SERVICE_ACCOUNT_KEY)
-        .ok_or_else(|| "Internal error: use of an undefined command line parameter")?;
+        .ok_or("Internal error: use of an undefined command line parameter")?;
     let bucket_name = matches
         .value_of(BUCKET_NAME)
-        .ok_or_else(|| "Internal error: use of an undefined command line parameter")?
+        .ok_or("Internal error: use of an undefined command line parameter")?
         .to_owned();
 
     let service_account_key = yup_oauth2::read_service_account_key(service_account_key).await?;

@@ -8,11 +8,11 @@ use async_trait::async_trait;
 use bytes::{buf::BufExt, Buf};
 use chrono::{DateTime, Utc};
 use futures::prelude::*;
-use hyper::http::{StatusCode, Uri};
 use hyper::{
     body::aggregate,
     client::connect::{dns::GaiResolver, HttpConnector},
     http::{header, Method},
+    http::{StatusCode, Uri},
     Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
