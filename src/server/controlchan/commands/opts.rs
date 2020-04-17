@@ -7,6 +7,7 @@
 // definition of that command.  Where no OPTS behavior is defined for a
 // particular command there are no options available for that command.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -35,7 +36,7 @@ impl Opts {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Opts
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

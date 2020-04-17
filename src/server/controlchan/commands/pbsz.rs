@@ -9,6 +9,7 @@
 //! of '0' to indicate that no buffering is taking place and the data connection should
 //! not be encapsulated.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -21,7 +22,7 @@ pub struct Pbsz;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Pbsz
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

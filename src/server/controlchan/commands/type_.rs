@@ -26,6 +26,7 @@
 // argument is changed, Format then returns to the Non-print
 // default.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -38,7 +39,7 @@ pub struct Type;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Type
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

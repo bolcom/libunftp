@@ -1,5 +1,5 @@
 use super::error::ControlChanError;
-use crate::auth::Authenticator;
+use crate::auth::{Authenticator, UserDetail};
 use crate::server::controlchan::Command;
 use crate::server::controlchan::Reply;
 use crate::server::InternalMsg;
@@ -14,21 +14,23 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[async_trait]
-pub(crate) trait CommandHandler<S: Send + Sync, U: Send + Sync>: Send + Sync
+pub(crate) trait CommandHandler<S, U>: Send + Sync
 where
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: 'static + storage::StorageBackend<U> + Send + Sync,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
+    U: UserDetail,
 {
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>;
 }
 
 /// Convenience struct to group command args
-pub(crate) struct CommandContext<S: Send + Sync, U: Send + Sync + 'static>
+pub(crate) struct CommandContext<S, U>
 where
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: 'static + storage::StorageBackend<U> + Send + Sync,
     S::File: tokio::io::AsyncRead + Send + Sync,
     S::Metadata: storage::Metadata + Sync,
+    U: UserDetail + 'static,
 {
     pub cmd: Command,
     pub session: Arc<Mutex<Session<S, U>>>,

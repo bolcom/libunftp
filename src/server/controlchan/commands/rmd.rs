@@ -5,6 +5,7 @@
 // or as a subdirectory of the current working directory (if
 // the pathname is relative).
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -30,7 +31,7 @@ impl Rmd {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Rmd
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

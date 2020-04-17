@@ -1,5 +1,6 @@
 //! The RFC 2228 Clear Command Channel (`CCC`) command
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -15,7 +16,7 @@ pub struct Ccc;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Ccc
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

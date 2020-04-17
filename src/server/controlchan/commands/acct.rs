@@ -17,6 +17,7 @@
 // (pending receipt of the ACCounT command) or discards the
 // command, respectively.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
@@ -29,7 +30,7 @@ pub struct Acct;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Acct
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

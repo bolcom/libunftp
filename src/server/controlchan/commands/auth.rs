@@ -4,6 +4,7 @@
 //! wishes to secure the data connections by use of the PBSZ and PROT
 //! commands.
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -34,7 +35,7 @@ impl Auth {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Auth
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

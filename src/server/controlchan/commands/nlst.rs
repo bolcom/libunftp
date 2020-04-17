@@ -13,6 +13,7 @@
 // further process the files automatically.  For example, in
 // the implementation of a "multiple get" function.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::command::Command;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -28,7 +29,7 @@ pub struct Nlst;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Nlst
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

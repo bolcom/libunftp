@@ -8,6 +8,7 @@
 // created at the server site if the file specified in the
 // pathname does not already exist.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::command::Command;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -23,7 +24,7 @@ pub struct Stor;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Stor
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

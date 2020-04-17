@@ -9,23 +9,25 @@
 // connection is not to be closed by the server, but the data
 // connection must be closed.
 
+use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::{CommandContext, CommandHandler};
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::storage;
+
 use async_trait::async_trait;
 use futures::prelude::*;
-
 use log::warn;
+
 pub struct Abor;
 
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Abor
 where
-    U: Send + Sync + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
+    U: UserDetail + 'static,
 {
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;

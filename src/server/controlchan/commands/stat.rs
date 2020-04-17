@@ -17,6 +17,7 @@
 // should include current values of all transfer parameters and
 // the status of connections.
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -44,7 +45,7 @@ impl Stat {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Stat
 where
-    U: Send + Sync,
+    U: UserDetail,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,

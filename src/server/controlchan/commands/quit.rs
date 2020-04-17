@@ -12,6 +12,7 @@
 // server to take the effective action of an abort (ABOR) and a
 // logout (QUIT).
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::InternalMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -28,7 +29,7 @@ pub struct Quit;
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Quit
 where
-    U: Send + Sync + 'static,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,

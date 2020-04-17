@@ -13,6 +13,7 @@ use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::storage;
 
+use crate::auth::UserDetail;
 use async_trait::async_trait;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
@@ -57,7 +58,7 @@ impl Pasv {
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Pasv
 where
-    U: 'static + Send + Sync,
+    U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
