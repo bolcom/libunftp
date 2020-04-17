@@ -1,9 +1,9 @@
 //! The RFC 2228 Data Channel Protection Level (`PROT`) command.
 
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::error::FTPError;
 use crate::storage;
 use async_trait::async_trait;
 
@@ -38,7 +38,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         match (args.tls_configured, self.param.clone()) {
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock().await;

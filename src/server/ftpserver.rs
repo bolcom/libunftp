@@ -1,6 +1,7 @@
 use super::controlchan::command::Command;
 use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
+use super::controlchan::{ControlChanError, ControlChanErrorKind};
 use super::io::*;
 use super::*;
 use super::{Reply, ReplyCode};
@@ -252,7 +253,7 @@ where
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), FTPError> {
+    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
@@ -320,7 +321,7 @@ where
                     },
                     _ = &mut timeout_delay => {
                         info!("Connection timed out");
-                        incoming = Some(Err(FTPError::new(FTPErrorKind::ControlChannelTimeout)));
+                        incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
                     }
                 };
 
@@ -407,7 +408,10 @@ where
         Ok(())
     }
 
-    fn handle_with_auth(session: Arc<Mutex<Session<S, U>>>, next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
+    fn handle_with_auth(
+        session: Arc<Mutex<Session<S, U>>>,
+        next: impl Fn(Event) -> Result<Reply, ControlChanError>,
+    ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| match event {
             // internal messages and the below commands are exempt from auth checks.
             Event::InternalMsg(_)
@@ -434,7 +438,7 @@ where
         }
     }
 
-    fn handle_with_logging(next: impl Fn(Event) -> Result<Reply, FTPError>) -> impl Fn(Event) -> Result<Reply, FTPError> {
+    fn handle_with_logging(next: impl Fn(Event) -> Result<Reply, ControlChanError>) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| {
             info!("Processing event {:?}", event);
             next(event)
@@ -449,8 +453,8 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-    ) -> impl Fn(Event) -> Result<Reply, FTPError> {
-        move |event| -> Result<Reply, FTPError> {
+    ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
+        move |event| -> Result<Reply, ControlChanError> {
             match event {
                 Event::Command(cmd) => futures::executor::block_on(Self::handle_command(
                     cmd,
@@ -477,7 +481,7 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-    ) -> Result<Reply, FTPError> {
+    ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
             cmd: cmd.clone(),
             session,
@@ -532,7 +536,7 @@ where
         handler.handle(args).await
     }
 
-    async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, FTPError> {
+    async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, ControlChanError> {
         use self::InternalMsg::*;
         use SessionState::*;
 
@@ -593,16 +597,16 @@ where
         }
     }
 
-    fn handle_control_channel_error(error: FTPError, with_metrics: bool) -> Reply {
+    fn handle_control_channel_error(error: ControlChanError, with_metrics: bool) -> Reply {
         if with_metrics {
             metrics::add_error_metric(&error.kind());
         };
         warn!("Control channel error: {}", error);
         match error.kind() {
-            FTPErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
-            FTPErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
-            FTPErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
-            FTPErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+            ControlChanErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
+            ControlChanErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
+            ControlChanErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
+            ControlChanErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
             _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
         }
     }

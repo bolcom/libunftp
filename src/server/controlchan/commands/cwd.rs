@@ -8,10 +8,10 @@
 // file group designator.
 
 use crate::server::chancomms::InternalMsg;
+use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Reply;
-use crate::server::error::FTPError;
 use crate::storage;
 use async_trait::async_trait;
 use futures::prelude::*;
@@ -37,7 +37,7 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, FTPError> {
+    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let storage: Arc<S> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
