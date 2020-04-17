@@ -21,7 +21,7 @@
 
 pub mod auth;
 pub(crate) mod metrics;
-pub mod server;
+pub(crate) mod server;
 pub mod storage;
 
 pub use crate::server::ftpserver::Server;

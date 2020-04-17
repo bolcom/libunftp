@@ -1,5 +1,7 @@
 //! Contains the `FTPError` struct that that defines the libunftp custom error type.
 
+use super::controlchan::{ParseError, ParseErrorKind};
+
 use failure::{Backtrace, Context, Fail};
 use std::fmt;
 
@@ -101,16 +103,16 @@ impl From<std::str::Utf8Error> for FTPError {
     }
 }
 
-impl From<super::commands::ParseError> for FTPError {
-    fn from(err: super::commands::ParseError) -> FTPError {
+impl From<ParseError> for FTPError {
+    fn from(err: ParseError) -> FTPError {
         match err.kind().clone() {
-            super::commands::ParseErrorKind::UnknownCommand { command } => {
+            ParseErrorKind::UnknownCommand { command } => {
                 // TODO: Do something smart with CoW to prevent copying the command around.
                 err.context(FTPErrorKind::UnknownCommand { command }).into()
             }
-            super::commands::ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
-            super::commands::ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
-            super::commands::ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
+            ParseErrorKind::InvalidUTF8 => err.context(FTPErrorKind::UTF8Error).into(),
+            ParseErrorKind::InvalidCommand => err.context(FTPErrorKind::InvalidCommand).into(),
+            ParseErrorKind::InvalidToken { .. } => err.context(FTPErrorKind::UTF8Error).into(),
             _ => err.context(FTPErrorKind::InvalidCommand).into(),
         }
     }
