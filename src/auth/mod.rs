@@ -27,16 +27,16 @@
 //! ```
 //! [`Server`]: ../server/struct.Server.html
 
-mod user;
-pub use user::UserDetail;
+pub mod anonymous;
+pub use anonymous::AnonymousAuthenticator;
 
 pub(crate) mod spi;
 pub use spi::Authenticator;
 #[allow(unused_imports)]
 pub(crate) use spi::{BadPasswordError, UnknownUsernameError};
 
-pub mod anonymous;
-pub use anonymous::{AnonymousAuthenticator, AnonymousUser};
+mod user;
+pub use user::{DefaultUser, UserDetail};
 
 #[cfg(feature = "pam_auth")]
 pub mod pam;

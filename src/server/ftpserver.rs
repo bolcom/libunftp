@@ -6,10 +6,7 @@ use super::io::*;
 use super::*;
 use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
-use crate::auth::{
-    anonymous::{AnonymousAuthenticator, AnonymousUser},
-    Authenticator, UserDetail,
-};
+use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use controlchan::commands;
@@ -62,7 +59,7 @@ where
     idle_session_timeout: std::time::Duration,
 }
 
-impl Server<Filesystem, AnonymousUser> {
+impl Server<Filesystem, DefaultUser> {
     /// Create a new `Server` with the given filesystem root.
     ///
     /// # Example

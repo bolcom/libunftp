@@ -9,32 +9,20 @@ use async_trait::async_trait;
 /// # Example
 ///
 /// ```rust
-/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, AnonymousUser};
+/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, DefaultUser};
 /// use futures::future::Future;
 /// use async_trait::async_trait;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), AnonymousUser{});
+/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), DefaultUser{});
 /// ```
 /// [`Authenticator`]: ../spi/trait.Authenticator.html
 ///
 pub struct AnonymousAuthenticator;
 
 #[async_trait]
-impl Authenticator<AnonymousUser> for AnonymousAuthenticator {
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(AnonymousUser {})
-    }
-}
-
-/// AnonymousUser
-#[derive(Debug, PartialEq)]
-pub struct AnonymousUser;
-
-impl UserDetail for AnonymousUser {}
-
-impl std::fmt::Display for AnonymousUser {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnonymousUser")
+impl Authenticator<DefaultUser> for AnonymousAuthenticator {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(DefaultUser {})
     }
 }
