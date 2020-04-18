@@ -30,10 +30,10 @@
 pub mod anonymous;
 pub use anonymous::AnonymousAuthenticator;
 
-pub(crate) mod spi;
-pub use spi::Authenticator;
+pub(crate) mod authenticator;
+pub use authenticator::Authenticator;
 #[allow(unused_imports)]
-pub(crate) use spi::{BadPasswordError, UnknownUsernameError};
+pub(crate) use authenticator::{BadPasswordError, UnknownUsernameError};
 
 mod user;
 pub use user::{DefaultUser, UserDetail};
