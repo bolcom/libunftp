@@ -2,7 +2,6 @@
 //!
 //! [`Authenticator`]: trait.Authenticator.html
 
-use crate::auth::anonymous::*;
 use crate::auth::*;
 
 use async_trait::async_trait;
@@ -113,8 +112,8 @@ impl RestAuthenticator {
 
 // FIXME: add support for authenticated user
 #[async_trait]
-impl Authenticator<AnonymousUser> for RestAuthenticator {
-    async fn authenticate(&self, username: &str, password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
+impl Authenticator<DefaultUser> for RestAuthenticator {
+    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
@@ -148,7 +147,7 @@ impl Authenticator<AnonymousUser> for RestAuthenticator {
         };
 
         if regex.is_match(&parsed) {
-            Ok(AnonymousUser {})
+            Ok(DefaultUser {})
         } else {
             Err(Box::new(BadPasswordError))
         }

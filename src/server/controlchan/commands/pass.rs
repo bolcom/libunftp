@@ -23,7 +23,7 @@ use crate::storage;
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
-use log::{error, warn};
+use log::{error, info, warn};
 use std::sync::Arc;
 
 pub struct Pass {

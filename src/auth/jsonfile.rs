@@ -2,7 +2,6 @@
 //!
 //! [`Authenticator`]: trait.Authenticator.html
 
-use crate::auth::anonymous::*;
 use crate::auth::*;
 
 use async_trait::async_trait;
@@ -48,8 +47,8 @@ impl JsonFileAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<AnonymousUser, Box<dyn std::error::Error + Send + Sync>> {
+impl Authenticator<DefaultUser> for JsonFileAuthenticator {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username = _username.to_string();
         let password = _password.to_string();
         let credentials_list = self.credentials_list.clone();
@@ -58,7 +57,7 @@ impl Authenticator<AnonymousUser> for JsonFileAuthenticator {
             if username == c.username {
                 if password == c.password {
                     info!("Successful login by user {}", username);
-                    return Ok(AnonymousUser {});
+                    return Ok(DefaultUser {});
                 } else {
                     warn!("Failed login for user {}: bad password", username);
                     // punish the failed login with a 1500ms delay before returning the error
