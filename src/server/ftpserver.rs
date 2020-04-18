@@ -6,6 +6,7 @@ use super::io::*;
 use super::*;
 use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
+use super::proxy_protocol::*;
 use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
@@ -76,6 +77,7 @@ where
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: Option<ProxyParams>,
+    proxy_protocol_switchboard: Option<Arc<ProxyProtocolSwitchboard>>,
 }
 
 impl Server<Filesystem, DefaultUser> {
@@ -123,6 +125,7 @@ where
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: Option::None,
+            proxy_protocol_switchboard: Option::None,
         }
     }
 
@@ -288,6 +291,8 @@ where
     /// ```
     pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
         self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
+        self.proxy_protocol_switchboard = Some(Arc::new(ProxyProtocolSwitchboard::new()));
+
         Ok(self)
     }
 
@@ -318,7 +323,7 @@ where
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
 
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let result = self.spawn_control_channel_loop(tcp_stream).await;
+            let result = self.spawn_control_channel_loop(tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
             }
@@ -352,11 +357,29 @@ where
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
-        loop {
-            let (mut tcp_stream, socket_addr) = listener.accept().await.unwrap();
+        // this callback is used by all sessions, basically only to
+        // request for a passive listening port.
+        let (callback_msg_tx, callback_msg_rx): (Sender<ProxyProtocolCallback>, Receiver<ProxyProtocolCallback>) = channel(1);
 
+        let mut incoming = listener.incoming();
+        loop {
+            // let (mut tcp_stream, socket_addr) = listener.accept().await.unwrap();
+
+            tokio::select! {
+                Some(tcp_stream) = incoming.next() => {
+                    let socket_addr = tcp_stream.unwrap().peer_addr();
+                    println!("{:?}", tcp_stream);
+                }
+                // will add handling channel here
+            };
+
+
+
+
+
+            // TODO: spawn a task here, to prevent blocking the main process
             info!("Incoming proxy connection from {:?}", socket_addr);
-            let connection = match super::proxy_protocol::get_peer_from_proxy_header(&mut tcp_stream).await {
+            let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
                 Ok(v) => v,
                 Err(e) => {
                     warn!("proxy protocol decode error: {:?}", e);
@@ -370,7 +393,10 @@ where
                 if connection.to_port == proxy_params.external_control_port {
                     let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                     info!("Incoming control channel connection from {:?}", socket_addr);
-                    let result = self.spawn_control_channel_loop(tcp_stream).await;
+
+                    // the callback_msg_tx is used to request a port
+                    // for the data channel
+                    let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(callback_msg_tx.clone())).await;
                     if result.is_err() {
                         warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                     }
@@ -383,7 +409,7 @@ where
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), ControlChanError> {
+    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream, connection: Option<ConnectionTuple>, callback_msg_tx: Option<Sender<ProxyProtocolCallback>>) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
