@@ -45,7 +45,6 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        // let session_arc = args.session.clone();
         let session = args.session.lock().await;
         match &session.state {
             SessionState::WaitPass => {
@@ -66,25 +65,25 @@ where
                 // performing a http call through Hyper
                 let session2clone = args.session.clone();
                 tokio::spawn(async move {
-                    match auther.authenticate(&user, &pass).await {
+                    let msg = match auther.authenticate(&user, &pass).await {
                         Ok(user) => {
-                            let mut session = session2clone.lock().await;
-                            info!("User {} logged in", user);
-                            session.user = Arc::new(Some(user));
-                            tokio::spawn(async move {
-                                if let Err(err) = tx.send(InternalMsg::AuthSuccess).await {
-                                    warn!("{}", err);
-                                }
-                            });
+                            if user.account_enabled() {
+                                let mut session = session2clone.lock().await;
+                                info!("User {} logged in", user);
+                                session.user = Arc::new(Some(user));
+                                InternalMsg::AuthSuccess
+                            } else {
+                                warn!("User {} authenticated but account is disabled", user);
+                                InternalMsg::AuthFailed
+                            }
                         }
-                        Err(_) => {
-                            tokio::spawn(async move {
-                                if let Err(err) = tx.send(InternalMsg::AuthFailed).await {
-                                    warn!("{}", err);
-                                }
-                            });
-                        }
+                        Err(_) => InternalMsg::AuthFailed,
                     };
+                    tokio::spawn(async move {
+                        if let Err(err) = tx.send(msg).await {
+                            warn!("{}", err);
+                        }
+                    });
                 });
                 Ok(Reply::none())
             }
