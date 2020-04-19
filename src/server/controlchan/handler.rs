@@ -5,6 +5,7 @@ use crate::server::controlchan::Reply;
 use crate::server::InternalMsg;
 use crate::server::Session;
 use crate::storage;
+use crate::server::proxy_protocol::{ConnectionTuple,ProxyProtocolCallback};
 
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
@@ -40,4 +41,6 @@ where
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
+    pub callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+    pub connection: Option<ConnectionTuple>,
 }

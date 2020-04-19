@@ -11,10 +11,12 @@ use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
+use crate::server::proxy_protocol::ProxyProtocolCallback;
 use crate::storage;
 
 use crate::auth::UserDetail;
 use async_trait::async_trait;
+use futures::prelude::*;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -24,6 +26,8 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
 use lazy_static::*;
+
+use log::warn;
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
@@ -69,6 +73,13 @@ where
             std::net::SocketAddr::V4(addr) => addr,
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
+
+        if let Some(tx) = args.callback_msg_tx {
+            let mut tx_ok = tx.clone();
+            if let Some(conn) = args.connection {
+                tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(conn)).await.unwrap();
+            }
+        }
 
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
 

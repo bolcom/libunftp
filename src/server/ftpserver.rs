@@ -359,7 +359,7 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (callback_msg_tx, callback_msg_rx): (Sender<ProxyProtocolCallback>, Receiver<ProxyProtocolCallback>) = channel(1);
+        let (callback_msg_tx, mut callback_msg_rx): (Sender<ProxyProtocolCallback>, Receiver<ProxyProtocolCallback>) = channel(1);
 
         let mut incoming = listener.incoming();
         loop {
@@ -367,44 +367,45 @@ where
 
             tokio::select! {
                 Some(tcp_stream) = incoming.next() => {
-                    let socket_addr = tcp_stream.unwrap().peer_addr();
-                    println!("{:?}", tcp_stream);
-                }
-                // will add handling channel here
-            };
+                    let mut tcp_stream = tcp_stream.unwrap();
+                    let socket_addr = tcp_stream.peer_addr();
 
+                    // TODO: spawn a task here, to prevent blocking the main process
+                    info!("Incoming proxy connection from {:?}", socket_addr);
+                    let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("proxy protocol decode error: {:?}", e);
+                            continue;
+                        }
+                    };
 
+                    if let Some(proxy_params) = self.proxy_protocol_mode {
+                        info!("Incoming proxy connection from {:?}", socket_addr);
 
+                        if connection.to_port == proxy_params.external_control_port {
+                            let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+                            info!("Incoming control channel connection from {:?}", socket_addr);
 
-
-            // TODO: spawn a task here, to prevent blocking the main process
-            info!("Incoming proxy connection from {:?}", socket_addr);
-            let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!("proxy protocol decode error: {:?}", e);
-                    continue;
-                }
-            };
-
-            if let Some(proxy_params) = self.proxy_protocol_mode {
-                info!("Incoming proxy connection from {:?}", socket_addr);
-
-                if connection.to_port == proxy_params.external_control_port {
-                    let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                    info!("Incoming control channel connection from {:?}", socket_addr);
-
-                    // the callback_msg_tx is used to request a port
-                    // for the data channel
-                    let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(callback_msg_tx.clone())).await;
-                    if result.is_err() {
-                        warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                            // the callback_msg_tx is used to request a port
+                            // for the data channel
+                            let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(callback_msg_tx.clone())).await;
+                            if result.is_err() {
+                                warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                            }
+                        } else {
+                            warn!("data connections via proxy port not yet supported.");
+                            continue;
+                        }
                     }
-                } else {
-                    warn!("data connections via proxy port not yet supported.");
-                    continue;
-                }
-            }
+
+                },
+                Some(msg) = callback_msg_rx.next() => {
+                    println!("{:?}", msg);
+                },
+            };
+
+
         }
     }
 
@@ -448,6 +449,8 @@ where
             internal_msg_tx,
             local_addr,
             storage_features,
+            callback_msg_tx,
+            connection,
         );
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
@@ -609,6 +612,8 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
+        callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+        connection: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
             match event {
@@ -621,6 +626,8 @@ where
                     tx.clone(),
                     local_addr,
                     storage_features,
+                    callback_msg_tx.clone(),
+                    connection.clone(),
                 )),
                 Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
@@ -637,6 +644,8 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
+        callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+        connection: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
             cmd: cmd.clone(),
@@ -647,6 +656,8 @@ where
             tx,
             local_addr,
             storage_features,
+            callback_msg_tx,
+            connection,
         };
 
         let handler: Box<dyn CommandHandler<S, U>> = match cmd {
