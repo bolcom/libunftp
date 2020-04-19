@@ -126,6 +126,7 @@ pub enum ProxyProtocolCallback {
     /// ConnectionTuple (namely: source_ip) and the unique (control)
     /// session is identified by the entire ConnectionTuple
     AssignDataPortCommand(ConnectionTuple),
+//    AssignDataPortCommand,
 }
 
 pub struct ProxyDataChannel {
