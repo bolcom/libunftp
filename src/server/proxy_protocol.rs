@@ -130,9 +130,7 @@ where
      S: storage::StorageBackend<U> + Send + Sync,
      U: UserDetail,
 {
-    /// Command to assign a data port based on data from the
-    /// ConnectionTuple (namely: source_ip) and the unique (control)
-    /// session is identified by the entire ConnectionTuple
+    /// Command to assign a data port to a session
     AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
 //    AssignDataPortCommand,
 }
@@ -174,38 +172,46 @@ where
         }
     }
 
-    fn try_and_claim(&mut self, hash: String) -> Result<(),ProxyProtocolError> {
+    fn try_and_claim(&mut self, hash: String, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<(),ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
-            None => match self.switchboard.insert(hash, None) {
+            None => match self.switchboard.insert(hash, Some(session_arc)) {
                 Some(_) => {
                     warn!("This is a data race condition. This shouldn't happen");
                     // just return Ok anyway however
                     Ok(())
                 }
                 None => {
-                    warn!("yes here i am");
                     Ok(())
                 },
             }
         }
     }
 
+    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<Arc<Mutex<Session<S, U>>>> {
+        let hash = format!("{}.{}", connection.from_ip, connection.to_port);
+
+        match self.switchboard.get(&hash) {
+            Some(session) => session.clone(),
+            None => None,
+        }
+    }
+
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
-    pub async fn reserve_next_free_port(mut self, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<String, ProxyProtocolError> {
+    pub async fn reserve_next_free_port(&mut self, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
         let mut rng = OS_RNG.lock().await;
         // change this to a "shuffle" method later on, to make sure we tried all available ports
         for _ in 1..10 {
             let port = rng.next_u32() % rng_length as u32 + self.port_range.start as u32;
-            let mut session = session_arc.lock().await;
+            let session = session_arc.lock().await;
             if let Some(conn) = session.connection {
                 let hash = construct_proxy_hash_key(&conn, port as u16);
 
-                match &self.try_and_claim(hash.clone()) {
-                    Ok(_) => return Ok(hash),
+                match &self.try_and_claim(hash.clone(), session_arc.clone()) {
+                    Ok(_) => return Ok(port as u16),
                     Err(_) => continue,
                 }
             }
