@@ -22,6 +22,7 @@ use mime::APPLICATION_OCTET_STREAM;
 use object::Object;
 use object_metadata::ObjectMetadata;
 use response_body::Item;
+use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
@@ -64,6 +65,10 @@ impl CloudStorage {
 impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
+
+    fn supported_features(&self) -> u32 {
+        crate::storage::FEATURE_RESTART
+    }
 
     async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
         let uri: Uri = self.uris.metadata(path)?;
@@ -111,7 +116,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         response.list()
     }
 
-    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, _start_pos: u64) -> Result<Self::File, Error> {
+    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File, Error> {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -124,7 +129,11 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
         let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
         let body = unpack_response(response).await?;
-        Ok(Object::new(body.bytes().into()))
+        let start_pos: usize = usize::try_from(start_pos).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        if body.bytes().len() < start_pos {
+            return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
+        }
+        Ok(Object::new(body.bytes()[start_pos..].into()))
     }
 
     async fn put<P: AsRef<Path> + Send, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
