@@ -4,12 +4,17 @@ use proxy_protocol::ProxyHeader;
 use std::net::IpAddr;
 use tokio::io::AsyncReadExt;
 use futures::channel::mpsc::{channel, Receiver, Sender};
-use chashmap::CHashMap;
+use std::collections::HashMap;
 use std::ops::Range;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use super::Session;
+use std::sync::Arc;
 use lazy_static::*;
+use super::chancomms::{DataCommand, InternalMsg};
 use tokio::sync::Mutex;
+use crate::auth::UserDetail;
+use crate::storage;
 use log::warn;
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
@@ -120,25 +125,16 @@ pub enum ProxyProtocolMsg {
     TcpStream(tokio::net::TcpStream),
 }
 
-#[derive(Debug)]
-pub enum ProxyProtocolCallback {
+pub enum ProxyProtocolCallback<S, U>
+where
+     S: storage::StorageBackend<U> + Send + Sync,
+     U: UserDetail,
+{
     /// Command to assign a data port based on data from the
     /// ConnectionTuple (namely: source_ip) and the unique (control)
     /// session is identified by the entire ConnectionTuple
-    AssignDataPortCommand(ConnectionTuple),
+    AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
 //    AssignDataPortCommand,
-}
-
-pub struct ProxyDataChannel {
-    tx: Sender<ProxyProtocolMsg>,
-    rx: Receiver<ProxyProtocolMsg>,
-    key: Option<String>,
-}
-
-impl ProxyDataChannel {
-    pub fn new(tx: Sender<ProxyProtocolMsg>, rx: Receiver<ProxyProtocolMsg>) -> Self {
-        Self { tx, rx, key: None }
-    }
 }
 
 /// Constructs a hash key based on the source ip and the destination port
@@ -148,9 +144,13 @@ pub fn construct_proxy_hash_key(connection: &ConnectionTuple, port: u16) -> Stri
 }
 
 /// Connect clients to the right data channel
-#[derive(Debug)]
-pub struct ProxyProtocolSwitchboard {
-    switchboard: CHashMap<String, Option<Sender<ProxyProtocolMsg>>>,
+pub struct ProxyProtocolSwitchboard<S, U>
+where
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail,
+{
+    switchboard: HashMap<String, Option<Arc<Mutex<Session<S, U>>>>>,
+    port_range: Range<u16>,
 }
 
 #[derive(Debug)]
@@ -161,15 +161,20 @@ pub enum ProxyProtocolError {
     MaxRetriesError,
 }
 
-impl ProxyProtocolSwitchboard {
-    pub fn new() -> Self {
-        let board = CHashMap::new();
+impl<S, U> ProxyProtocolSwitchboard<S, U>
+where
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail + 'static,
+{
+    pub fn new(passive_ports: Range<u16>) -> Self {
+        let board = HashMap::new();
         Self {
             switchboard: board,
+            port_range: passive_ports,
         }
     }
 
-    fn try_and_claim(&self, hash: String) -> Result<(),ProxyProtocolError> {
+    fn try_and_claim(&mut self, hash: String) -> Result<(),ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, None) {
@@ -179,6 +184,7 @@ impl ProxyProtocolSwitchboard {
                     Ok(())
                 }
                 None => {
+                    warn!("yes here i am");
                     Ok(())
                 },
             }
@@ -187,17 +193,21 @@ impl ProxyProtocolSwitchboard {
 
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
-    pub async fn reserve_next_free_port(self, channel: &ProxyDataChannel, conn: &ConnectionTuple, port_range: Range<u16>) -> Result<String, ProxyProtocolError> {
-        let rng_length = port_range.end - port_range.start;
+    pub async fn reserve_next_free_port(mut self, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<String, ProxyProtocolError> {
+        let rng_length = self.port_range.end - self.port_range.start;
 
         let mut rng = OS_RNG.lock().await;
         // change this to a "shuffle" method later on, to make sure we tried all available ports
         for _ in 1..10 {
-            let port = rng.next_u32() % rng_length as u32 + port_range.start as u32;
-            let hash = construct_proxy_hash_key(conn, port as u16);
-            match &self.try_and_claim(hash.clone()) {
-                Ok(_) => return Ok(hash),
-                Err(_) => continue,
+            let port = rng.next_u32() % rng_length as u32 + self.port_range.start as u32;
+            let mut session = session_arc.lock().await;
+            if let Some(conn) = session.connection {
+                let hash = construct_proxy_hash_key(&conn, port as u16);
+
+                match &self.try_and_claim(hash.clone()) {
+                    Ok(_) => return Ok(hash),
+                    Err(_) => continue,
+                }
             }
         }
         // out of tries

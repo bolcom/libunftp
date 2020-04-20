@@ -11,6 +11,7 @@ use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser,
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use controlchan::commands;
+use super::chancomms::InternalMsg;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
@@ -77,7 +78,7 @@ where
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: Option<ProxyParams>,
-    proxy_protocol_switchboard: Option<Arc<ProxyProtocolSwitchboard>>,
+    proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
 }
 
 impl Server<Filesystem, DefaultUser> {
@@ -293,7 +294,7 @@ where
     /// ```
     pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
         self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
-        self.proxy_protocol_switchboard = Some(Arc::new(ProxyProtocolSwitchboard::new()));
+        self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.passive_ports.clone()));
 
         Ok(self)
     }
@@ -361,7 +362,7 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (callback_msg_tx, mut callback_msg_rx): (Sender<ProxyProtocolCallback>, Receiver<ProxyProtocolCallback>) = channel(1);
+        let (callback_msg_tx, mut callback_msg_rx): (Sender<ProxyProtocolCallback<S, U>>, Receiver<ProxyProtocolCallback<S, U>>) = channel(1);
 
         let mut incoming = listener.incoming();
         loop {
@@ -397,22 +398,58 @@ where
                             }
                         } else {
                             warn!("data connections via proxy port not yet supported.");
+
+                            // 1. lookup session and tx in the hashmap using srcip+dstport as key
+                            //    -> If not found -> drop the connection
+                            // 2. let mut session = session_arc.lock().await;
+                            // 3. session.spawn_data_processing(tcp_stream, tx);
+                            // 4. remove the srcip+dstport key from the hashmap
+                            // 5. clean up some expired connections?
+
                             continue;
                         }
                     }
-
                 },
                 Some(msg) = callback_msg_rx.next() => {
-                    println!("{:?}", msg);
+                    match msg {
+                        ProxyProtocolCallback::AssignDataPortCommand (session_arc) => {
+                            info!("Received command to allocate data port");
+                            // 1. reserve a port
+                            // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
+                            // 3. put expiry time in the LIFO list
+                            // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})" <<- how ?
+
+                            if let Some(&mut switchboard) = self.proxy_protocol_switchboard {
+                                switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+                            }
+                            let mut session = session_arc.lock().await;
+                            if let Some(conn) = session.connection {
+                                let octets = match conn.from_ip {
+                                    IpAddr::V4(ip) => ip.octets(),
+                                    IpAddr::V6(_) => panic!("Won't happen."),
+                                };
+                                let tx_some = session.internal_msg_tx.clone();
+                                if let Some(tx) = tx_some {
+                                    let mut tx = tx.clone();
+                                    tx.send(
+                                        InternalMsg::CommandChannelReply(
+                                            ReplyCode::EnteringPassiveMode,
+                                            format!("Entering Passive Mode ({},{},{},{})", octets[0], octets[1], octets[2], octets[3]),
+                                        )).await.unwrap();
+                                }
+                            }
+                        },
+                        _ => {
+                            println!("What is this?!?");
+                        },
+                    }
                 },
             };
-
-
         }
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream, connection: Option<ConnectionTuple>, callback_msg_tx: Option<Sender<ProxyProtocolCallback>>) -> Result<(), ControlChanError> {
+    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream, connection: Option<ConnectionTuple>, callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
@@ -422,11 +459,13 @@ where
         let storage = Arc::new((self.storage)());
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
-        let session = Session::new(storage)
+        let mut session = Session::new(storage)
             .ftps(self.certs_file.clone(), self.certs_password.clone())
             .metrics(with_metrics);
-        let session = Arc::new(Mutex::new(session));
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+        session.internal_msg_tx = Some(internal_msg_tx.clone());
+        session.connection = connection.clone();
+        let session = Arc::new(Mutex::new(session));
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
         let local_addr = tcp_stream.local_addr().unwrap();
@@ -493,6 +532,7 @@ where
                         return;
                     }
                     Some(Ok(event)) => {
+                        println!("{:?}", event);
                         if with_metrics {
                             metrics::add_event_metric(&event);
                         };
@@ -614,7 +654,7 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
         connection: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
@@ -646,7 +686,7 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
         connection: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
