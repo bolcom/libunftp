@@ -353,7 +353,7 @@ where
     ///
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
-    pub async fn listen_proxy_protocol_mode<T: Into<String>>(self, bind_address: T) {
+    pub async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
         assert!(self.proxy_protocol_mode.is_some(), true);
 
         // TODO: Propagate errors to caller instead of doing unwraps.
@@ -406,7 +406,34 @@ where
                             // 4. remove the srcip+dstport key from the hashmap
                             // 5. clean up some expired connections?
 
-                            continue;
+                            if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+                                match switchboard.get_session_by_incoming_data_connection(&connection).await {
+                                    Some (session) => {
+                                        warn!("yes baby.");
+                                        let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
+                                        let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
+
+                                        let mut session = session.lock().await;
+                                        {
+                                            session.data_cmd_tx = Some(cmd_tx);
+                                            session.data_cmd_rx = Some(cmd_rx);
+                                            session.data_abort_tx = Some(data_abort_tx);
+                                            session.data_abort_rx = Some(data_abort_rx);
+                                        
+                                        }
+                                        let tx_some = session.internal_msg_tx.clone();
+                                        if let Some(tx) = tx_some {
+                                            let mut tx = tx.clone();
+
+                                            session.spawn_data_processing(tcp_stream, tx);
+                                        }
+                                    },
+                                    None => {
+                                        warn!("Unexpected connection ({:?})", connection);
+                                        continue; // ignore this fellow
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -419,10 +446,16 @@ where
                             // 3. put expiry time in the LIFO list
                             // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})" <<- how ?
 
-                            if let Some(&mut switchboard) = self.proxy_protocol_switchboard {
-                                switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+                            let mut p1 = 0;
+                            let mut p2 = 0;
+                            if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+                                let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+                                warn!("port: {:?}", port);
+                                p1 = port >> 8;
+                                p2 = port - (p1 * 256);
+
                             }
-                            let mut session = session_arc.lock().await;
+                            let session = session_arc.lock().await;
                             if let Some(conn) = session.connection {
                                 let octets = match conn.from_ip {
                                     IpAddr::V4(ip) => ip.octets(),
@@ -434,7 +467,7 @@ where
                                     tx.send(
                                         InternalMsg::CommandChannelReply(
                                             ReplyCode::EnteringPassiveMode,
-                                            format!("Entering Passive Mode ({},{},{},{})", octets[0], octets[1], octets[2], octets[3]),
+                                            format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
                                         )).await.unwrap();
                                 }
                             }
