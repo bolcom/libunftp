@@ -77,7 +77,7 @@ where
         if let Some(tx) = args.callback_msg_tx {
             let mut tx_ok = tx.clone();
             if let Some(conn) = args.connection {
-                tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(conn)).await.unwrap();
+                tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(args.session.clone())).await.unwrap();
             }
         }
 
@@ -123,6 +123,7 @@ where
             }
         });
 
+//        Ok(Reply::None)
         Ok(Reply::new_with_string(
             ReplyCode::EnteringPassiveMode,
             format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
