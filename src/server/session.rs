@@ -4,6 +4,7 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::controlchan::command::Command;
 use super::datachan::DataCommandExecutor;
+use super::proxy_protocol::ConnectionTuple;
 use crate::metrics;
 use crate::storage;
 
@@ -35,6 +36,8 @@ where
     pub data_cmd_rx: Option<Receiver<Command>>,
     pub data_abort_tx: Option<Sender<()>>,
     pub data_abort_rx: Option<Receiver<()>>,
+    pub internal_msg_tx: Option<Sender<InternalMsg>>,
+    pub connection: Option<ConnectionTuple>,
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
@@ -65,6 +68,8 @@ where
             data_cmd_rx: None,
             data_abort_tx: None,
             data_abort_rx: None,
+            internal_msg_tx: None,
+            connection: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,

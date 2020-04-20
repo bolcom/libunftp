@@ -41,6 +41,6 @@ where
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub callback_msg_tx: Option<Sender<ProxyProtocolCallback>>,
+    pub callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
     pub connection: Option<ConnectionTuple>,
 }
