@@ -144,6 +144,8 @@ where
             certs_password: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
+            proxy_protocol_mode: Option::None,
+            proxy_protocol_switchboard: Option::None,
         }
     }
 
