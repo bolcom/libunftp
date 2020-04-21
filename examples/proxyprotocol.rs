@@ -11,5 +11,5 @@ pub async fn main() {
         .unwrap();
 
     info!("Starting ftp server with proxy protocol on {}", addr);
-    server.listen_proxy_protocol_mode(addr).await;
+    server.listen(addr).await;
 }
