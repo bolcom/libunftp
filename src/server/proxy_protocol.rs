@@ -177,6 +177,7 @@ where
 
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
+    // TODO: set a TTL on the hashmap entries
     pub async fn reserve_next_free_port(&mut self, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
