@@ -432,6 +432,7 @@ where
                     let tx_some = session.control_msg_tx.clone();
                     if let Some(tx) = tx_some {
                         session.spawn_data_processing(tcp_stream, tx);
+                        // TODO: here delete the entry from the proxy protocol switchboard hashmap
                     }
                 }
                 None => {
