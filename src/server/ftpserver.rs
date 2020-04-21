@@ -319,6 +319,13 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub async fn listen<T: Into<String>>(self, bind_address: T) {
+        match self.proxy_protocol_mode {
+            Some(_) => self.listen_proxy_protocol_mode(bind_address).await,
+            None => self.listen_normal_mode(bind_address).await
+        }
+    }
+
+    async fn listen_normal_mode<T: Into<String>>(self, bind_address: T) {
         // TODO: Propagate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -333,27 +340,7 @@ where
         }
     }
 
-    /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
-    /// This is the proxy protocol mode version.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    /// use tokio::runtime::Runtime;
-    ///
-    /// let mut rt = Runtime::new().unwrap();
-    /// let server = Server::new_with_fs_root("/srv/ftp");
-    /// rt.spawn(server.listen_proxy_protocol_mode("127.0.0.1:2121"));
-    /// // ...
-    /// drop(rt);
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// This function panics when called with invalid addresses or when the process is unable to
-    /// `bind()` to the address.
-    pub async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
+    async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
         assert!(self.proxy_protocol_mode.is_some(), true);
 
         // TODO: Propagate errors to caller instead of doing unwraps.
