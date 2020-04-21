@@ -1,8 +1,9 @@
 use super::error::ControlChanError;
 use crate::auth::{Authenticator, UserDetail};
+use crate::server::chancomms::ProxyLoopMsg;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::Reply;
-use crate::server::proxy_protocol::{ConnectionTuple, ProxyProtocolCallback};
+use crate::server::proxy_protocol::ConnectionTuple;
 use crate::server::InternalMsg;
 use crate::server::Session;
 use crate::storage;
@@ -41,6 +42,6 @@ where
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
-    pub connection: Option<ConnectionTuple>,
+    pub proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+    pub control_connection: Option<ConnectionTuple>,
 }
