@@ -1,4 +1,4 @@
-use super::chancomms::InternalMsg;
+use super::chancomms::{InternalMsg, ProxyLoopMsg};
 use super::controlchan::command::Command;
 use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
@@ -349,7 +349,7 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (callback_msg_tx, mut callback_msg_rx): (Sender<ProxyProtocolCallback<S, U>>, Receiver<ProxyProtocolCallback<S, U>>) = channel(1);
+        let (proxyloop_msg_tx, mut callback_msg_rx): (Sender<ProxyLoopMsg<S, U>>, Receiver<ProxyLoopMsg<S, U>>) = channel(1);
 
         let mut incoming = listener.incoming();
         loop {
@@ -377,9 +377,9 @@ where
                             let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                             info!("Incoming control channel connection from {:?}", socket_addr);
 
-                            // the callback_msg_tx is used to request a port
+                            // the proxyloop_msg_tx is used to request a port
                             // for the data channel
-                            let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(callback_msg_tx.clone())).await;
+                            let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                             if result.is_err() {
                                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                             }
@@ -426,7 +426,7 @@ where
                 },
                 Some(msg) = callback_msg_rx.next() => {
                     match msg {
-                        ProxyProtocolCallback::AssignDataPortCommand (session_arc) => {
+                        ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
                             info!("Received command to allocate data port");
                             // 1. reserve a port
                             // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
@@ -443,7 +443,7 @@ where
 
                             }
                             let session = session_arc.lock().await;
-                            if let Some(conn) = session.connection {
+                            if let Some(conn) = session.control_connection {
                                 let octets = match conn.from_ip {
                                     IpAddr::V4(ip) => ip.octets(),
                                     IpAddr::V6(_) => panic!("Won't happen."),
@@ -469,8 +469,8 @@ where
     async fn spawn_control_channel_loop(
         &self,
         tcp_stream: tokio::net::TcpStream,
-        connection: Option<ConnectionTuple>,
-        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
+        control_connection: Option<ConnectionTuple>,
+        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
     ) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
@@ -486,7 +486,7 @@ where
             .metrics(with_metrics);
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         session.internal_msg_tx = Some(internal_msg_tx.clone());
-        session.connection = connection;
+        session.control_connection = control_connection;
         let session = Arc::new(Mutex::new(session));
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
@@ -512,8 +512,8 @@ where
             internal_msg_tx,
             local_addr,
             storage_features,
-            callback_msg_tx,
-            connection,
+            proxyloop_msg_tx,
+            control_connection,
         );
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
@@ -677,8 +677,8 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
-        connection: Option<ConnectionTuple>,
+        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+        control_connection: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
             match event {
@@ -691,8 +691,8 @@ where
                     tx.clone(),
                     local_addr,
                     storage_features,
-                    callback_msg_tx.clone(),
-                    connection,
+                    proxyloop_msg_tx.clone(),
+                    control_connection,
                 )),
                 Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
@@ -709,8 +709,8 @@ where
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
-        connection: Option<ConnectionTuple>,
+        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+        control_connection: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
             cmd: cmd.clone(),
@@ -721,8 +721,8 @@ where
             tx,
             local_addr,
             storage_features,
-            callback_msg_tx,
-            connection,
+            proxyloop_msg_tx,
+            control_connection,
         };
 
         let handler: Box<dyn CommandHandler<S, U>> = match cmd {

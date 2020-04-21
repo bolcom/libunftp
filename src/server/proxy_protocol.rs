@@ -115,15 +115,6 @@ pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) 
     }
 }
 
-pub enum ProxyProtocolCallback<S, U>
-where
-    S: storage::StorageBackend<U> + Send + Sync,
-    U: UserDetail,
-{
-    /// Command to assign a data port to a session
-    AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
-}
-
 /// Constructs a hash key based on the source ip and the destination port
 /// in a straightforward consistent way
 pub fn construct_proxy_hash_key(connection: &ConnectionTuple, port: u16) -> String {
@@ -194,7 +185,7 @@ where
         for _ in 1..10 {
             let port = rng.next_u32() % rng_length as u32 + self.port_range.start as u32;
             let session = session_arc.lock().await;
-            if let Some(conn) = session.connection {
+            if let Some(conn) = session.control_connection {
                 let hash = construct_proxy_hash_key(&conn, port as u16);
 
                 match &self.try_and_claim(hash.clone(), session_arc.clone()) {

@@ -1,8 +1,13 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
 use super::controlchan::command::Command;
+use super::Session;
+use crate::auth::UserDetail;
 use crate::server::controlchan::ReplyCode;
+use crate::storage;
 use crate::storage::Error;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // Commands that can be send to the data channel.
 #[derive(PartialEq, Debug)]
@@ -66,4 +71,13 @@ pub enum InternalMsg {
     StorageError(Error),
     /// Reply on the command channel
     CommandChannelReply(ReplyCode, String),
+}
+
+pub enum ProxyLoopMsg<S, U>
+where
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail,
+{
+    /// Command to assign a data port to a session
+    AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
 }

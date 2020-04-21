@@ -6,12 +6,12 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
+use crate::server::chancomms::ProxyLoopMsg;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::proxy_protocol::ProxyProtocolCallback;
 use crate::storage;
 
 use crate::auth::UserDetail;
@@ -72,9 +72,9 @@ where
             std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
         };
 
-        if let Some(tx) = args.callback_msg_tx {
+        if let Some(tx) = args.proxyloop_msg_tx {
             let mut tx_ok = tx.clone();
-            tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(args.session.clone())).await.unwrap();
+            tx_ok.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
         }
 
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
