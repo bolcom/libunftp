@@ -15,7 +15,7 @@ use controlchan::commands;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
-use log::{info, warn};
+use log::{error, info, warn};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::codec::*;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Shutdown, SocketAddr};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -341,7 +341,9 @@ where
     }
 
     async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
-        assert!(self.proxy_protocol_mode.is_some(), true);
+        let proxy_params = self
+            .proxy_protocol_mode
+            .expect("You cannot use the proxy protocol listener without setting the proxy_protocol_mode parameters.");
 
         // TODO: Propagate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
@@ -349,13 +351,17 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (proxyloop_msg_tx, mut callback_msg_rx): (Sender<ProxyLoopMsg<S, U>>, Receiver<ProxyLoopMsg<S, U>>) = channel(1);
+        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (Sender<ProxyLoopMsg<S, U>>, Receiver<ProxyLoopMsg<S, U>>) = channel(1);
 
         let mut incoming = listener.incoming();
+
         loop {
-            // let (mut tcp_stream, socket_addr) = listener.accept().await.unwrap();
+            // The 'proxy loop' handles two kinds of events:
+            // - incoming tcp connections originating from the proxy
+            // - channel messages originating from PASV, to handle the passive listening port
 
             tokio::select! {
+
                 Some(tcp_stream) = incoming.next() => {
                     let mut tcp_stream = tcp_stream.unwrap();
                     let socket_addr = tcp_stream.peer_addr();
@@ -370,98 +376,104 @@ where
                         }
                     };
 
-                    if let Some(proxy_params) = self.proxy_protocol_mode {
-                        info!("Incoming proxy connection from {:?}", socket_addr);
+                    // Based on the proxy protocol header, and the configured control port number,
+                    // we differentiate between connections for the control channel,
+                    // and connections for the data channel.
+                    if connection.to_port == proxy_params.external_control_port {
+                        let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+                        info!("Incoming control channel connection from {:?}", socket_addr);
 
-                        if connection.to_port == proxy_params.external_control_port {
-                            let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                            info!("Incoming control channel connection from {:?}", socket_addr);
-
-                            // the proxyloop_msg_tx is used to request a port
-                            // for the data channel
-                            let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
-                            if result.is_err() {
-                                warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
-                            }
-                        } else {
-                            warn!("data connections via proxy port not yet supported.");
-
-                            // 1. lookup session and tx in the hashmap using srcip+dstport as key
-                            //    -> If not found -> drop the connection
-                            // 2. let mut session = session_arc.lock().await;
-                            // 3. session.spawn_data_processing(tcp_stream, tx);
-                            // 4. remove the srcip+dstport key from the hashmap
-                            // 5. clean up some expired connections?
-
-                            if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-                                match switchboard.get_session_by_incoming_data_connection(&connection).await {
-                                    Some (session) => {
-                                        warn!("yes baby.");
-                                        let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
-                                        let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
-
-                                        let mut session = session.lock().await;
-                                        {
-                                            session.data_cmd_tx = Some(cmd_tx);
-                                            session.data_cmd_rx = Some(cmd_rx);
-                                            session.data_abort_tx = Some(data_abort_tx);
-                                            session.data_abort_rx = Some(data_abort_rx);
-
-                                        }
-                                        let tx_some = session.internal_msg_tx.clone();
-                                        if let Some(tx) = tx_some {
-                                            let tx = tx.clone();
-
-                                            session.spawn_data_processing(tcp_stream, tx);
-                                        }
-                                    },
-                                    None => {
-                                        warn!("Unexpected connection ({:?})", connection);
-                                        continue; // ignore this fellow
-                                    }
-                                }
-                            }
+                        let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                        if result.is_err() {
+                            warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
+                    } else {
+                        // handle incoming data connections
+                        println!("{:?}, {}", self.passive_ports, connection.to_port);
+                        if !self.passive_ports.contains(&connection.to_port) {
+                            error!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                            tcp_stream.shutdown(Shutdown::Both).unwrap();
+                            continue;
+                        }
+
+                        self.dispatch_data_connection(tcp_stream, connection).await;
+
                     }
                 },
-                Some(msg) = callback_msg_rx.next() => {
+                Some(msg) = proxyloop_msg_rx.next() => {
                     match msg {
                         ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
-                            info!("Received command to allocate data port");
-                            // 1. reserve a port
-                            // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
-                            // 3. put expiry time in the LIFO list
-                            // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})" <<- how ?
-
-                            let mut p1 = 0;
-                            let mut p2 = 0;
-                            if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-                                let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
-                                warn!("port: {:?}", port);
-                                p1 = port >> 8;
-                                p2 = port - (p1 * 256);
-
-                            }
-                            let session = session_arc.lock().await;
-                            if let Some(conn) = session.control_connection {
-                                let octets = match conn.from_ip {
-                                    IpAddr::V4(ip) => ip.octets(),
-                                    IpAddr::V6(_) => panic!("Won't happen."),
-                                };
-                                let tx_some = session.internal_msg_tx.clone();
-                                if let Some(tx) = tx_some {
-                                    let mut tx = tx.clone();
-                                    tx.send(
-                                        InternalMsg::CommandChannelReply(
-                                            ReplyCode::EnteringPassiveMode,
-                                            format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
-                                        )).await.unwrap();
-                                }
-                            }
+                            self.select_and_register_passive_port(session_arc).await;
                         },
                     }
                 },
             };
+        }
+    }
+
+    // this function finds (by hashing <srcip>.<dstport>) the session
+    // that requested this data channel connection in the proxy
+    // protocol switchboard hashmap, and then calls the
+    // spawn_data_processing function with the tcp_stream
+    async fn dispatch_data_connection(&mut self, tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+            match switchboard.get_session_by_incoming_data_connection(&connection).await {
+                Some(session) => {
+                    let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
+                    let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
+
+                    let mut session = session.lock().await;
+                    {
+                        session.data_cmd_tx = Some(cmd_tx);
+                        session.data_cmd_rx = Some(cmd_rx);
+                        session.data_abort_tx = Some(data_abort_tx);
+                        session.data_abort_rx = Some(data_abort_rx);
+                    }
+                    let tx_some = session.control_msg_tx.clone();
+                    if let Some(tx) = tx_some {
+                        session.spawn_data_processing(tcp_stream, tx);
+                    }
+                }
+                None => {
+                    warn!("Unexpected connection ({:?})", connection);
+                    tcp_stream.shutdown(Shutdown::Both).unwrap();
+                    return;
+                }
+            }
+        }
+    }
+
+    async fn select_and_register_passive_port(&mut self, session_arc: Arc<Mutex<Session<S, U>>>) {
+        info!("Received command to allocate data port");
+        // 1. reserve a port
+        // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
+        // 3. put expiry time in the LIFO list
+        // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})"
+
+        let mut p1 = 0;
+        let mut p2 = 0;
+        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+            let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+            warn!("port: {:?}", port);
+            p1 = port >> 8;
+            p2 = port - (p1 * 256);
+        }
+        let session = session_arc.lock().await;
+        if let Some(conn) = session.control_connection {
+            let octets = match conn.from_ip {
+                IpAddr::V4(ip) => ip.octets(),
+                IpAddr::V6(_) => panic!("Won't happen."),
+            };
+            let tx_some = session.control_msg_tx.clone();
+            if let Some(tx) = tx_some {
+                let mut tx = tx.clone();
+                tx.send(InternalMsg::CommandChannelReply(
+                    ReplyCode::EnteringPassiveMode,
+                    format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
+                ))
+                .await
+                .unwrap();
+            }
         }
     }
 
@@ -484,8 +496,8 @@ where
         let mut session = Session::new(storage)
             .ftps(self.certs_file.clone(), self.certs_password.clone())
             .metrics(with_metrics);
-        let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-        session.internal_msg_tx = Some(internal_msg_tx.clone());
+        let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+        session.control_msg_tx = Some(control_msg_tx.clone());
         session.control_connection = control_connection;
         let session = Arc::new(Mutex::new(session));
         let passive_ports = self.passive_ports.clone();
@@ -509,7 +521,7 @@ where
             authenticator,
             tls_configured,
             passive_ports,
-            internal_msg_tx,
+            control_msg_tx,
             local_addr,
             storage_features,
             proxyloop_msg_tx,
@@ -526,7 +538,7 @@ where
         reply_sink.flush().await?;
 
         let mut command_source = command_source.fuse();
-        let mut internal_msg_rx = internal_msg_rx.fuse();
+        let mut control_msg_rx = control_msg_rx.fuse();
 
         tokio::spawn(async move {
             // The control channel event loop
@@ -538,7 +550,7 @@ where
                     Some(cmd_result) = command_source.next() => {
                         incoming = Some(cmd_result.map(Event::Command));
                     },
-                    Some(msg) = internal_msg_rx.next() => {
+                    Some(msg) = control_msg_rx.next() => {
                         incoming = Some(Ok(Event::InternalMsg(msg)));
                     },
                     _ = &mut timeout_delay => {
