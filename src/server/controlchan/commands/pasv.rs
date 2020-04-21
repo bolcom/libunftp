@@ -27,8 +27,6 @@ use tokio::sync::Mutex;
 
 use lazy_static::*;
 
-use log::warn;
-
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
@@ -76,9 +74,7 @@ where
 
         if let Some(tx) = args.callback_msg_tx {
             let mut tx_ok = tx.clone();
-            if let Some(conn) = args.connection {
-                tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(args.session.clone())).await.unwrap();
-            }
+            tx_ok.send(ProxyProtocolCallback::AssignDataPortCommand(args.session.clone())).await.unwrap();
         }
 
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
@@ -123,7 +119,7 @@ where
             }
         });
 
-//        Ok(Reply::None)
+        //Ok(Reply::None)
         Ok(Reply::new_with_string(
             ReplyCode::EnteringPassiveMode,
             format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),

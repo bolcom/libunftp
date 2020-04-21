@@ -321,7 +321,7 @@ where
     pub async fn listen<T: Into<String>>(self, bind_address: T) {
         match self.proxy_protocol_mode {
             Some(_) => self.listen_proxy_protocol_mode(bind_address).await,
-            None => self.listen_normal_mode(bind_address).await
+            None => self.listen_normal_mode(bind_address).await,
         }
     }
 
@@ -410,7 +410,7 @@ where
                                         }
                                         let tx_some = session.internal_msg_tx.clone();
                                         if let Some(tx) = tx_some {
-                                            let mut tx = tx.clone();
+                                            let tx = tx.clone();
 
                                             session.spawn_data_processing(tcp_stream, tx);
                                         }
@@ -459,9 +459,6 @@ where
                                 }
                             }
                         },
-                        _ => {
-                            println!("What is this?!?");
-                        },
                     }
                 },
             };
@@ -489,7 +486,7 @@ where
             .metrics(with_metrics);
         let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         session.internal_msg_tx = Some(internal_msg_tx.clone());
-        session.connection = connection.clone();
+        session.connection = connection;
         let session = Arc::new(Mutex::new(session));
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
@@ -671,6 +668,7 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_event(
         session: Arc<Mutex<Session<S, U>>>,
         authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
@@ -694,7 +692,7 @@ where
                     local_addr,
                     storage_features,
                     callback_msg_tx.clone(),
-                    connection.clone(),
+                    connection,
                 )),
                 Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
