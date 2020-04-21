@@ -1,9 +1,7 @@
-use super::chancomms::{DataCommand, InternalMsg};
 use super::Session;
 use crate::auth::UserDetail;
 use crate::storage;
 use bytes::Bytes;
-use futures::channel::mpsc::{channel, Receiver, Sender};
 use lazy_static::*;
 use log::warn;
 use proxy_protocol::version1::ProxyAddressFamily;
@@ -117,14 +115,6 @@ pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) 
     }
 }
 
-#[derive(Debug)]
-pub enum ProxyProtocolMsg {
-    /// to be responded
-    PassivePort(std::net::SocketAddr),
-    /// TcpStream
-    TcpStream(tokio::net::TcpStream),
-}
-
 pub enum ProxyProtocolCallback<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync,
@@ -132,7 +122,6 @@ where
 {
     /// Command to assign a data port to a session
     AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
-    // AssignDataPortCommand,
 }
 
 /// Constructs a hash key based on the source ip and the destination port
@@ -153,9 +142,9 @@ where
 
 #[derive(Debug)]
 pub enum ProxyProtocolError {
-    SwitchBoardNotInitialized,
+    // SwitchBoardNotInitialized,
     EntryNotAvailable,
-    EntryCreationFailed,
+    // EntryCreationFailed,
     MaxRetriesError,
 }
 
