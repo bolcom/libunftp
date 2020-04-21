@@ -1,21 +1,21 @@
-use bytes::Bytes;
-use proxy_protocol::version1::ProxyAddressFamily;
-use proxy_protocol::ProxyHeader;
-use std::net::IpAddr;
-use tokio::io::AsyncReadExt;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use std::collections::HashMap;
-use std::ops::Range;
-use rand::rngs::OsRng;
-use rand::RngCore;
-use super::Session;
-use std::sync::Arc;
-use lazy_static::*;
 use super::chancomms::{DataCommand, InternalMsg};
-use tokio::sync::Mutex;
+use super::Session;
 use crate::auth::UserDetail;
 use crate::storage;
+use bytes::Bytes;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use lazy_static::*;
 use log::warn;
+use proxy_protocol::version1::ProxyAddressFamily;
+use proxy_protocol::ProxyHeader;
+use rand::rngs::OsRng;
+use rand::RngCore;
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::ops::Range;
+use std::sync::Arc;
+use tokio::io::AsyncReadExt;
+use tokio::sync::Mutex;
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
@@ -127,12 +127,12 @@ pub enum ProxyProtocolMsg {
 
 pub enum ProxyProtocolCallback<S, U>
 where
-     S: storage::StorageBackend<U> + Send + Sync,
-     U: UserDetail,
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail,
 {
     /// Command to assign a data port to a session
     AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
-//    AssignDataPortCommand,
+    // AssignDataPortCommand,
 }
 
 /// Constructs a hash key based on the source ip and the destination port
@@ -172,7 +172,7 @@ where
         }
     }
 
-    fn try_and_claim(&mut self, hash: String, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<(),ProxyProtocolError> {
+    fn try_and_claim(&mut self, hash: String, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<(), ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, Some(session_arc)) {
@@ -181,10 +181,8 @@ where
                     // just return Ok anyway however
                     Ok(())
                 }
-                None => {
-                    Ok(())
-                },
-            }
+                None => Ok(()),
+            },
         }
     }
 

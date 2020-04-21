@@ -2,10 +2,10 @@ use super::error::ControlChanError;
 use crate::auth::{Authenticator, UserDetail};
 use crate::server::controlchan::Command;
 use crate::server::controlchan::Reply;
+use crate::server::proxy_protocol::{ConnectionTuple, ProxyProtocolCallback};
 use crate::server::InternalMsg;
 use crate::server::Session;
 use crate::storage;
-use crate::server::proxy_protocol::{ConnectionTuple,ProxyProtocolCallback};
 
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;

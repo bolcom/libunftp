@@ -1,17 +1,17 @@
+use super::chancomms::InternalMsg;
 use super::controlchan::command::Command;
 use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
 use super::controlchan::{ControlChanError, ControlChanErrorKind};
 use super::io::*;
+use super::proxy_protocol::*;
 use super::*;
 use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
-use super::proxy_protocol::*;
 use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail};
 use crate::metrics;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use controlchan::commands;
-use super::chancomms::InternalMsg;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
@@ -406,7 +406,7 @@ where
                                             session.data_cmd_rx = Some(cmd_rx);
                                             session.data_abort_tx = Some(data_abort_tx);
                                             session.data_abort_rx = Some(data_abort_rx);
-                                        
+
                                         }
                                         let tx_some = session.internal_msg_tx.clone();
                                         if let Some(tx) = tx_some {
@@ -469,7 +469,12 @@ where
     }
 
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream, connection: Option<ConnectionTuple>, callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>) -> Result<(), ControlChanError> {
+    async fn spawn_control_channel_loop(
+        &self,
+        tcp_stream: tokio::net::TcpStream,
+        connection: Option<ConnectionTuple>,
+        callback_msg_tx: Option<Sender<ProxyProtocolCallback<S, U>>>,
+    ) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true

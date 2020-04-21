@@ -16,8 +16,8 @@ use crate::storage;
 
 use crate::auth::UserDetail;
 use async_trait::async_trait;
-use futures::prelude::*;
 use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::prelude::*;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::io;
