@@ -420,7 +420,7 @@ where
                     let mut session = session.lock().await;
                     let tx_some = session.control_msg_tx.clone();
                     if let Some(tx) = tx_some {
-                        session.spawn_data_processing(tcp_stream, tx);
+                        datachan::spawn_processing(&mut session, tcp_stream, tx);
                         switchboard.unregister(&connection);
                     }
                 }

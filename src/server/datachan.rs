@@ -1,21 +1,25 @@
 //! Contains code pertaining to the FTP *data* channel
 
-use super::chancomms::InternalMsg;
+use super::chancomms::{DataCommand, InternalMsg};
 use super::controlchan::command::Command;
+use crate::auth::UserDetail;
+use crate::server::Session;
 use crate::storage::{self, Error, ErrorKind};
 
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
+use log::info;
 use log::{debug, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
-pub struct DataCommandExecutor<S, U: Send + Sync>
+pub struct DataCommandExecutor<S, U>
 where
     S: storage::StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
+    U: UserDetail,
 {
     pub user: Arc<Option<U>>,
     pub socket: tokio::net::TcpStream,
@@ -33,6 +37,7 @@ where
     S: storage::StorageBackend<U> + Send + Sync + 'static,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
+    U: UserDetail,
 {
     pub async fn execute(self, cmd: Command) {
         match cmd {
@@ -209,6 +214,72 @@ where
             Box::new(io)
         } else {
             Box::new(socket)
+        }
+    }
+}
+
+/// Processing for the data connection. This will spawn a new async task with the actual processing.
+///
+/// socket: the data socket we'll be working with
+/// tls: tells if this should be a TLS connection
+/// tx: channel to send the result of our operation to the control process
+pub fn spawn_processing<S, U>(session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
+where
+    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S::File: tokio::io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+    U: UserDetail + 'static,
+{
+    let mut data_cmd_rx = session.data_cmd_rx.take().unwrap().fuse();
+    let mut data_abort_rx = session.data_abort_rx.take().unwrap().fuse();
+    let tls = session.data_tls;
+    let command_executor = DataCommandExecutor {
+        user: session.user.clone(),
+        socket,
+        tls,
+        tx,
+        storage: Arc::clone(&session.storage),
+        cwd: session.cwd.clone(),
+        start_pos: session.start_pos,
+        identity_file: if tls { Some(session.certs_file.clone().unwrap()) } else { None },
+        identity_password: if tls { Some(session.certs_password.clone().unwrap()) } else { None },
+    };
+
+    tokio::spawn(async move {
+        let mut timeout_delay = tokio::time::delay_for(std::time::Duration::from_secs(5 * 60));
+        // TODO: Use configured timeout
+        tokio::select! {
+            Some(command) = data_cmd_rx.next() => {
+                handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
+            },
+            Some(_) = data_abort_rx.next() => {
+                handle_incoming(DataCommand::Abort, command_executor).await;
+            },
+            _ = &mut timeout_delay => {
+                info!("Connection timed out");
+                return;
+            }
+        };
+
+        // This probably happened because the control channel was closed before we got here
+        warn!("Nothing received");
+    });
+}
+
+async fn handle_incoming<S, U>(incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
+where
+    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S::File: tokio::io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+    U: UserDetail + 'static,
+{
+    match incoming {
+        DataCommand::Abort => {
+            info!("Abort received");
+        }
+        DataCommand::ExternalCommand(command) => {
+            info!("Data command received");
+            command_executor.execute(command).await;
         }
     }
 }

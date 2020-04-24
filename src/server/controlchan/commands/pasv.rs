@@ -12,6 +12,7 @@ use crate::server::controlchan::handler::CommandContext;
 use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
+use crate::server::datachan;
 use crate::server::session::SharedSession;
 use crate::storage;
 
@@ -121,7 +122,7 @@ impl Pasv {
                 let tx = tx.clone();
                 let session_arc = session.clone();
                 let mut session = session_arc.lock().await;
-                session.spawn_data_processing(socket, tx);
+                datachan::spawn_processing(&mut session, socket, tx);
             }
         });
 
