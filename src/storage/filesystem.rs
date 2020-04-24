@@ -5,7 +5,6 @@ use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBacken
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -258,11 +257,11 @@ impl Metadata for std::fs::Metadata {
     }
 
     fn gid(&self) -> u32 {
-        MetadataExt::gid(self)
+        0
     }
 
     fn uid(&self) -> u32 {
-        MetadataExt::uid(self)
+        0
     }
 }
 
