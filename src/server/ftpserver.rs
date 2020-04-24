@@ -1,4 +1,4 @@
-use super::chancomms::{InternalMsg, ProxyLoopMsg};
+use super::chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender};
 use super::controlchan::command::Command;
 use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
@@ -351,7 +351,7 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (Sender<ProxyLoopMsg<S, U>>, Receiver<ProxyLoopMsg<S, U>>) = channel(1);
+        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<S, U>, ProxyLoopReceiver<S, U>) = channel(1);
 
         let mut incoming = listener.incoming();
 
