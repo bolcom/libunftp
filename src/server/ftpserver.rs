@@ -10,20 +10,20 @@ use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
 use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail};
 use crate::metrics;
+use crate::server::session::SharedSession;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use controlchan::commands;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
 use log::{error, info, warn};
+use std::net::{IpAddr, Shutdown, SocketAddr};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::codec::*;
-
-use std::net::{IpAddr, Shutdown, SocketAddr};
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -444,7 +444,7 @@ where
         }
     }
 
-    async fn select_and_register_passive_port(&mut self, session_arc: Arc<Mutex<Session<S, U>>>) {
+    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
         info!("Received command to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
@@ -483,7 +483,7 @@ where
         &self,
         tcp_stream: tokio::net::TcpStream,
         control_connection: Option<ConnectionTuple>,
-        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
     ) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
@@ -645,7 +645,7 @@ where
     }
 
     fn handle_with_auth(
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         next: impl Fn(Event) -> Result<Reply, ControlChanError>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| match event {
@@ -683,14 +683,14 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn handle_event(
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
         control_connection: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
@@ -715,14 +715,14 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn handle_command(
         cmd: Command,
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         authenticator: Arc<dyn Authenticator<U>>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
-        proxyloop_msg_tx: Option<Sender<ProxyLoopMsg<S, U>>>,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
         control_connection: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
@@ -781,7 +781,7 @@ where
         handler.handle(args).await
     }
 
-    async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, ControlChanError> {
+    async fn handle_internal_msg(msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError> {
         use self::InternalMsg::*;
         use SessionState::*;
 

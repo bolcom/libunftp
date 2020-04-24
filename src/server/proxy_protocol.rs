@@ -1,6 +1,7 @@
-use super::{session::SharedSession, Session};
+use super::session::SharedSession;
 use crate::auth::UserDetail;
 use crate::storage;
+
 use bytes::Bytes;
 use lazy_static::*;
 use log::warn;
@@ -11,9 +12,9 @@ use rand::RngCore;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::ops::Range;
-use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use tokio::sync::Mutex;
+
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
@@ -178,7 +179,7 @@ where
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
     // TODO: set a TTL on the hashmap entries
-    pub async fn reserve_next_free_port(&mut self, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<u16, ProxyProtocolError> {
+    pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
         let mut rng = OS_RNG.lock().await;
