@@ -1,10 +1,9 @@
-use std::sync::Arc;
-
-use libunftp::auth::pam;
-use log::*;
-
 #[cfg(unix)]
 pub fn main() {
+    use std::sync::Arc;
+
+    use libunftp::auth::pam;
+    use log::*;
     pretty_env_logger::init();
 
     let addr = "127.0.0.1:2121";
