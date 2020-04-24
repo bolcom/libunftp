@@ -331,7 +331,6 @@ where
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
-
             info!("Incoming control channel connection from {:?}", socket_addr);
             let result = self.spawn_control_channel_loop(tcp_stream, None, None).await;
             if result.is_err() {
@@ -366,7 +365,6 @@ where
                     let mut tcp_stream = tcp_stream.unwrap();
                     let socket_addr = tcp_stream.peer_addr();
 
-                    // TODO: spawn a task here, to prevent blocking the main process
                     info!("Incoming proxy connection from {:?}", socket_addr);
                     let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
                         Ok(v) => v,
@@ -419,10 +417,11 @@ where
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
+                    let mut session = session.lock().await;
                     let tx_some = session.control_msg_tx.clone();
                     if let Some(tx) = tx_some {
                         session.spawn_data_processing(tcp_stream, tx);
-                        // TODO: here delete the entry from the proxy protocol switchboard hashmap
+                        switchboard.unregister(&connection);
                     }
                 }
                 None => {
@@ -557,7 +556,6 @@ where
                         return;
                     }
                     Some(Ok(event)) => {
-                        println!("{:?}", event);
                         if with_metrics {
                             metrics::add_event_metric(&event);
                         };

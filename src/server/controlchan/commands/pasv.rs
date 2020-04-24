@@ -58,7 +58,7 @@ impl Pasv {
         listener
     }
 
-    // modifies the session by adding channels that is used to communicate with the data connection
+    // modifies the session by adding channels that are used to communicate with the data connection
     // processing loop.
     async fn setup_data_loop_comms<S, U>(&self, session: SharedSession<S, U>)
     where
@@ -78,7 +78,7 @@ impl Pasv {
     }
 
     // For non-proxy mode we choose a data port here and start listening on it while letting the control
-    // channel know (via method return) what the address is that the client should connect on.
+    // channel know (via method return) what the address is that the client should connect to.
     async fn handle_nonproxy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,

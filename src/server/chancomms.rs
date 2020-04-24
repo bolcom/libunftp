@@ -72,8 +72,8 @@ pub enum InternalMsg {
     CommandChannelReply(ReplyCode, String),
 }
 
-// ProxyLoopMsg is send to the proxy loop when proxy protocol mode is enabled. See the
-// Server::proxy_protocol_mode and Sever::listen_proxy_protocol_mode methods.
+// ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
+// Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
 pub enum ProxyLoopMsg<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync,

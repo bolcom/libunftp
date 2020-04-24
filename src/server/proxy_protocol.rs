@@ -167,8 +167,22 @@ where
         }
     }
 
+    fn get_hash_with_connection(connection: &ConnectionTuple) -> String {
+        format!("{}.{}", connection.from_ip, connection.to_port)
+    }
+
+    pub fn unregister(&mut self, connection: &ConnectionTuple) {
+        let hash = Self::get_hash_with_connection(connection);
+        match self.switchboard.remove(&hash) {
+            Some(_) => (),
+            None => {
+                warn!("Entry already removed?");
+            }
+        }
+    }
+
     pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
-        let hash = format!("{}.{}", connection.from_ip, connection.to_port);
+        let hash = Self::get_hash_with_connection(connection);
 
         match self.switchboard.get(&hash) {
             Some(session) => session.clone(),
