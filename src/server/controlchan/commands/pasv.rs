@@ -140,8 +140,8 @@ impl Pasv {
         S::File: tokio::io::AsyncRead + Send,
         S::Metadata: storage::Metadata,
     {
-        tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
         self.setup_data_loop_comms(args.session.clone()).await;
+        tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
         Ok(Reply::None)
     }
 }
