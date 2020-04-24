@@ -419,16 +419,6 @@ where
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
-                    let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
-                    let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
-
-                    let mut session = session.lock().await;
-                    {
-                        session.data_cmd_tx = Some(cmd_tx);
-                        session.data_cmd_rx = Some(cmd_rx);
-                        session.data_abort_tx = Some(data_abort_tx);
-                        session.data_abort_rx = Some(data_abort_rx);
-                    }
                     let tx_some = session.control_msg_tx.clone();
                     if let Some(tx) = tx_some {
                         session.spawn_data_processing(tcp_stream, tx);
