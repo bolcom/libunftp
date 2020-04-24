@@ -22,6 +22,9 @@ pub enum SessionState {
     WaitCmd,
 }
 
+// The session shared via an asynchronous lock
+pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
+
 // This is where we keep the state for a ftp session.
 pub struct Session<S, U: Send + Sync>
 where

@@ -6,6 +6,7 @@ use crate::auth::UserDetail;
 use crate::server::controlchan::ReplyCode;
 use crate::storage;
 use crate::storage::Error;
+use futures::channel::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -81,3 +82,6 @@ where
     /// Command to assign a data port to a session
     AssignDataPortCommand(Arc<Mutex<Session<S, U>>>),
 }
+
+pub type ProxyLoopSender<S, U> = Sender<ProxyLoopMsg<S, U>>;
+pub type ProxyLoopReceiver<S, U> = Receiver<ProxyLoopMsg<S, U>>;

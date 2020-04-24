@@ -1,4 +1,4 @@
-use super::Session;
+use super::{session::SharedSession, Session};
 use crate::auth::UserDetail;
 use crate::storage;
 use bytes::Bytes;
@@ -127,7 +127,7 @@ where
     S: storage::StorageBackend<U> + Send + Sync,
     U: UserDetail,
 {
-    switchboard: HashMap<String, Option<Arc<Mutex<Session<S, U>>>>>,
+    switchboard: HashMap<String, Option<SharedSession<S, U>>>,
     port_range: Range<u16>,
 }
 
@@ -152,7 +152,7 @@ where
         }
     }
 
-    fn try_and_claim(&mut self, hash: String, session_arc: Arc<Mutex<Session<S, U>>>) -> Result<(), ProxyProtocolError> {
+    fn try_and_claim(&mut self, hash: String, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, Some(session_arc)) {
@@ -166,7 +166,7 @@ where
         }
     }
 
-    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<Arc<Mutex<Session<S, U>>>> {
+    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
         let hash = format!("{}.{}", connection.from_ip, connection.to_port);
 
         match self.switchboard.get(&hash) {
