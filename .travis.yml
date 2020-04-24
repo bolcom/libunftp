@@ -10,6 +10,7 @@ os:
   - osx
 
 before_script:
+  - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
   - rustup component add rustfmt clippy
 
 script:
@@ -23,7 +24,4 @@ cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
-
-branches:
-  only:
-  - master
+  fast_finish: true
