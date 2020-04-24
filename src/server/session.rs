@@ -4,6 +4,7 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::controlchan::command::Command;
 use super::datachan::DataCommandExecutor;
+use super::proxy_protocol::ConnectionTuple;
 use crate::metrics;
 use crate::storage;
 
@@ -21,6 +22,9 @@ pub enum SessionState {
     WaitCmd,
 }
 
+// The session shared via an asynchronous lock
+pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
+
 // This is where we keep the state for a ftp session.
 pub struct Session<S, U: Send + Sync>
 where
@@ -35,6 +39,8 @@ where
     pub data_cmd_rx: Option<Receiver<Command>>,
     pub data_abort_tx: Option<Sender<()>>,
     pub data_abort_rx: Option<Receiver<()>>,
+    pub control_msg_tx: Option<Sender<InternalMsg>>,
+    pub control_connection_info: Option<ConnectionTuple>,
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
@@ -65,6 +71,8 @@ where
             data_cmd_rx: None,
             data_abort_tx: None,
             data_abort_rx: None,
+            control_msg_tx: None,
+            control_connection_info: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,

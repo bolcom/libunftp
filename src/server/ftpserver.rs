@@ -1,19 +1,23 @@
+use super::chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender};
 use super::controlchan::command::Command;
 use super::controlchan::handler::{CommandContext, CommandHandler};
 use super::controlchan::FTPCodec;
 use super::controlchan::{ControlChanError, ControlChanErrorKind};
 use super::io::*;
+use super::proxy_protocol::*;
 use super::*;
 use super::{Reply, ReplyCode};
 use super::{Session, SessionState};
 use crate::auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail};
 use crate::metrics;
+use crate::server::session::SharedSession;
 use crate::storage::{self, filesystem::Filesystem, ErrorKind};
 use controlchan::commands;
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
-use log::{info, warn};
+use log::{error, info, warn};
+use std::net::{IpAddr, Shutdown, SocketAddr};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,6 +27,22 @@ use tokio_util::codec::*;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
+
+#[derive(Clone, Copy)]
+struct ProxyParams {
+    #[allow(dead_code)]
+    external_ip: IpAddr,
+    external_control_port: u16,
+}
+
+impl ProxyParams {
+    fn new(ip: &str, port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(ProxyParams {
+            external_ip: ip.parse()?,
+            external_control_port: port,
+        })
+    }
+}
 
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
@@ -57,6 +77,8 @@ where
     certs_password: Option<String>,
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
+    proxy_protocol_mode: Option<ProxyParams>,
+    proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
 }
 
 impl Server<Filesystem, DefaultUser> {
@@ -103,6 +125,8 @@ where
             certs_password: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
+            proxy_protocol_mode: Option::None,
+            proxy_protocol_switchboard: Option::None,
         }
     }
 
@@ -121,6 +145,8 @@ where
             certs_password: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
+            proxy_protocol_mode: Option::None,
+            proxy_protocol_switchboard: Option::None,
         }
     }
 
@@ -236,7 +262,44 @@ where
         self
     }
 
-    /// Runs the main ftp process asyncronously. Should be started in a async runtime context.
+    /// Enable PROXY protocol mode.
+    ///
+    /// If you use a proxy such as haproxy or nginx, you can enable
+    /// the PROXY protocol
+    /// (https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt).
+    ///
+    /// Configure your proxy to enable PROXY protocol encoding for
+    /// control and data external listening ports, forwarding these
+    /// connections to the libunFTP listening port in proxy protocol
+    /// mode.
+    ///
+    /// In PROXY protocol mode, libunftp receives both control and
+    /// data connections on the listening port. It then distinguishes
+    /// control and data connections by comparing the original
+    /// destination port (extracted from the PROXY header) with the
+    /// port specified as the `external_control_port`
+    /// `proxy_protocol_mode` parameter.
+    ///
+    /// For the passive listening port, libunftp reports the IP
+    /// address specified as the `external_ip` `proxy_protocol_mode`
+    /// parameter.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
+    /// ```
+    pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
+        self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.passive_ports.clone()));
+
+        Ok(self)
+    }
+
+    /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
     ///
     /// # Example
     ///
@@ -256,21 +319,161 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     pub async fn listen<T: Into<String>>(self, bind_address: T) {
-        // TODO: Propogate errors to caller instead of doing unwraps.
+        match self.proxy_protocol_mode {
+            Some(_) => self.listen_proxy_protocol_mode(bind_address).await,
+            None => self.listen_normal_mode(bind_address).await,
+        }
+    }
+
+    async fn listen_normal_mode<T: Into<String>>(self, bind_address: T) {
+        // TODO: Propagate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let result = self.spawn_control_channel_loop(tcp_stream).await;
+            let result = self.spawn_control_channel_loop(tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
             }
         }
     }
 
+    async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
+        let proxy_params = self
+            .proxy_protocol_mode
+            .expect("You cannot use the proxy protocol listener without setting the proxy_protocol_mode parameters.");
+
+        // TODO: Propagate errors to caller instead of doing unwraps.
+        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
+        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+        // this callback is used by all sessions, basically only to
+        // request for a passive listening port.
+        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<S, U>, ProxyLoopReceiver<S, U>) = channel(1);
+
+        let mut incoming = listener.incoming();
+
+        loop {
+            // The 'proxy loop' handles two kinds of events:
+            // - incoming tcp connections originating from the proxy
+            // - channel messages originating from PASV, to handle the passive listening port
+
+            tokio::select! {
+
+                Some(tcp_stream) = incoming.next() => {
+                    let mut tcp_stream = tcp_stream.unwrap();
+                    let socket_addr = tcp_stream.peer_addr();
+
+                    info!("Incoming proxy connection from {:?}", socket_addr);
+                    let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("proxy protocol decode error: {:?}", e);
+                            continue;
+                        }
+                    };
+
+                    // Based on the proxy protocol header, and the configured control port number,
+                    // we differentiate between connections for the control channel,
+                    // and connections for the data channel.
+                    if connection.to_port == proxy_params.external_control_port {
+                        let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+                        info!("Incoming control channel connection from {:?}", socket_addr);
+
+                        let result = self.spawn_control_channel_loop(tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                        if result.is_err() {
+                            warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                        }
+                    } else {
+                        // handle incoming data connections
+                        println!("{:?}, {}", self.passive_ports, connection.to_port);
+                        if !self.passive_ports.contains(&connection.to_port) {
+                            error!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                            tcp_stream.shutdown(Shutdown::Both).unwrap();
+                            continue;
+                        }
+
+                        self.dispatch_data_connection(tcp_stream, connection).await;
+
+                    }
+                },
+                Some(msg) = proxyloop_msg_rx.next() => {
+                    match msg {
+                        ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
+                            self.select_and_register_passive_port(session_arc).await;
+                        },
+                    }
+                },
+            };
+        }
+    }
+
+    // this function finds (by hashing <srcip>.<dstport>) the session
+    // that requested this data channel connection in the proxy
+    // protocol switchboard hashmap, and then calls the
+    // spawn_data_processing function with the tcp_stream
+    async fn dispatch_data_connection(&mut self, tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+            match switchboard.get_session_by_incoming_data_connection(&connection).await {
+                Some(session) => {
+                    let mut session = session.lock().await;
+                    let tx_some = session.control_msg_tx.clone();
+                    if let Some(tx) = tx_some {
+                        session.spawn_data_processing(tcp_stream, tx);
+                        switchboard.unregister(&connection);
+                    }
+                }
+                None => {
+                    warn!("Unexpected connection ({:?})", connection);
+                    tcp_stream.shutdown(Shutdown::Both).unwrap();
+                    return;
+                }
+            }
+        }
+    }
+
+    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
+        info!("Received command to allocate data port");
+        // 1. reserve a port
+        // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
+        // 3. put expiry time in the LIFO list
+        // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})"
+
+        let mut p1 = 0;
+        let mut p2 = 0;
+        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+            let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+            warn!("port: {:?}", port);
+            p1 = port >> 8;
+            p2 = port - (p1 * 256);
+        }
+        let session = session_arc.lock().await;
+        if let Some(conn) = session.control_connection_info {
+            let octets = match conn.from_ip {
+                IpAddr::V4(ip) => ip.octets(),
+                IpAddr::V6(_) => panic!("Won't happen."),
+            };
+            let tx_some = session.control_msg_tx.clone();
+            if let Some(tx) = tx_some {
+                let mut tx = tx.clone();
+                tx.send(InternalMsg::CommandChannelReply(
+                    ReplyCode::EnteringPassiveMode,
+                    format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
+                ))
+                .await
+                .unwrap();
+            }
+        }
+    }
+
     /// Does TCP processing when a FTP client connects
-    async fn spawn_control_channel_loop(&self, tcp_stream: tokio::net::TcpStream) -> Result<(), ControlChanError> {
+    async fn spawn_control_channel_loop(
+        &self,
+        tcp_stream: tokio::net::TcpStream,
+        control_connection_info: Option<ConnectionTuple>,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+    ) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
         let tls_configured = if let (Some(_), Some(_)) = (&self.certs_file, &self.certs_password) {
             true
@@ -280,11 +483,13 @@ where
         let storage = Arc::new((self.storage)());
         let storage_features = storage.supported_features();
         let authenticator = self.authenticator.clone();
-        let session = Session::new(storage)
+        let mut session = Session::new(storage)
             .ftps(self.certs_file.clone(), self.certs_password.clone())
             .metrics(with_metrics);
+        let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+        session.control_msg_tx = Some(control_msg_tx.clone());
+        session.control_connection_info = control_connection_info;
         let session = Arc::new(Mutex::new(session));
-        let (internal_msg_tx, internal_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
         let local_addr = tcp_stream.local_addr().unwrap();
@@ -306,9 +511,11 @@ where
             authenticator,
             tls_configured,
             passive_ports,
-            internal_msg_tx,
+            control_msg_tx,
             local_addr,
             storage_features,
+            proxyloop_msg_tx,
+            control_connection_info,
         );
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
@@ -321,7 +528,7 @@ where
         reply_sink.flush().await?;
 
         let mut command_source = command_source.fuse();
-        let mut internal_msg_rx = internal_msg_rx.fuse();
+        let mut control_msg_rx = control_msg_rx.fuse();
 
         tokio::spawn(async move {
             // The control channel event loop
@@ -333,7 +540,7 @@ where
                     Some(cmd_result) = command_source.next() => {
                         incoming = Some(cmd_result.map(Event::Command));
                     },
-                    Some(msg) = internal_msg_rx.next() => {
+                    Some(msg) = control_msg_rx.next() => {
                         incoming = Some(Ok(Event::InternalMsg(msg)));
                     },
                     _ = &mut timeout_delay => {
@@ -426,7 +633,7 @@ where
     }
 
     fn handle_with_auth(
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         next: impl Fn(Event) -> Result<Reply, ControlChanError>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| match event {
@@ -462,14 +669,17 @@ where
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_event(
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+        control_connection_info: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
             match event {
@@ -482,6 +692,8 @@ where
                     tx.clone(),
                     local_addr,
                     storage_features,
+                    proxyloop_msg_tx.clone(),
+                    control_connection_info,
                 )),
                 Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
@@ -491,13 +703,15 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn handle_command(
         cmd: Command,
-        session: Arc<Mutex<Session<S, U>>>,
+        session: SharedSession<S, U>,
         authenticator: Arc<dyn Authenticator<U>>,
         tls_configured: bool,
         passive_ports: Range<u16>,
         tx: Sender<InternalMsg>,
         local_addr: std::net::SocketAddr,
         storage_features: u32,
+        proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+        control_connection_info: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
             cmd: cmd.clone(),
@@ -508,6 +722,8 @@ where
             tx,
             local_addr,
             storage_features,
+            proxyloop_msg_tx,
+            control_connection_info,
         };
 
         let handler: Box<dyn CommandHandler<S, U>> = match cmd {
@@ -553,7 +769,7 @@ where
         handler.handle(args).await
     }
 
-    async fn handle_internal_msg(msg: InternalMsg, session: Arc<Mutex<Session<S, U>>>) -> Result<Reply, ControlChanError> {
+    async fn handle_internal_msg(msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError> {
         use self::InternalMsg::*;
         use SessionState::*;
 

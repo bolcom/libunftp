@@ -1,9 +1,11 @@
 use super::error::ControlChanError;
 use crate::auth::{Authenticator, UserDetail};
+use crate::server::chancomms::ProxyLoopSender;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::Reply;
+use crate::server::proxy_protocol::ConnectionTuple;
+use crate::server::session::SharedSession;
 use crate::server::InternalMsg;
-use crate::server::Session;
 use crate::storage;
 
 use async_trait::async_trait;
@@ -11,7 +13,6 @@ use futures::channel::mpsc::Sender;
 use std::ops::Range;
 use std::result::Result;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[async_trait]
 pub(crate) trait CommandHandler<S, U>: Send + Sync
@@ -33,11 +34,13 @@ where
     U: UserDetail + 'static,
 {
     pub cmd: Command,
-    pub session: Arc<Mutex<Session<S, U>>>,
+    pub session: SharedSession<S, U>,
     pub authenticator: Arc<dyn Authenticator<U>>,
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
+    pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+    pub control_connection_info: Option<ConnectionTuple>,
 }
