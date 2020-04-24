@@ -3,10 +3,14 @@ use std::{error::Error, result::Result};
 
 const BUCKET_NAME: &str = "bucket-name";
 const SERVICE_ACCOUNT_KEY: &str = "service-account-key";
-
+const FTPS_CERTS_FILE: &str = "ftps-certs-file";
+const FTPS_CERTS_PASSWORD: &str = "ftps-certs-password";
+const BIND_ADDRESS: &str = "127.0.0.1:2121";
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
-    let matches = App::new("Example for using libunftp with Google Cloud Storage backend")
+    pretty_env_logger::try_init_timed()?;
+
+    let matches = App::new("Example for using libunftp with Google Cloud Storage backend with optionally enabling TLS")
         .about("An FTP server that uses Google Cloud Storage as a backend")
         .author("The bol.com unFTP team")
         .arg(
@@ -27,6 +31,24 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .help("The service account key JSON file of the Google Cloud Storage bucket to be used")
                 .required(true),
         )
+        .arg(
+            Arg::with_name(FTPS_CERTS_FILE)
+                .short("c")
+                .long(FTPS_CERTS_FILE)
+                .value_name("FTPS_CERTS_FILE")
+                .env("LIBUNFTP_FTPS_CERTS_FILE")
+                .help("The ftps certs file")
+                .requires(FTPS_CERTS_PASSWORD),
+        )
+        .arg(
+            Arg::with_name(FTPS_CERTS_PASSWORD)
+                .short("p")
+                .long(FTPS_CERTS_PASSWORD)
+                .value_name("FTPS_CERTS_PASSWORD")
+                .env("LIBUNFTP_FTPS_CERTS_PASSWORD")
+                .help("The ftps certs file password")
+                .requires(FTPS_CERTS_FILE),
+        )
         .get_matches();
 
     let service_account_key = matches
@@ -38,11 +60,23 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         .to_owned();
 
     let service_account_key = yup_oauth2::read_service_account_key(service_account_key).await?;
+    if let Some(ftps_certs_file) = matches.value_of(FTPS_CERTS_FILE) {
+        let ftps_certs_password = matches
+            .value_of(FTPS_CERTS_PASSWORD)
+            .ok_or("Internal error: use of an undefined command line parameter")?;
+        libunftp::Server::new(Box::new(move || {
+            libunftp::storage::cloud_storage::CloudStorage::new(&bucket_name, service_account_key.clone())
+        }))
+        .ftps(ftps_certs_file, ftps_certs_password)
+        .listen(BIND_ADDRESS)
+        .await;
+    } else {
+        libunftp::Server::new(Box::new(move || {
+            libunftp::storage::cloud_storage::CloudStorage::new(&bucket_name, service_account_key.clone())
+        }))
+        .listen(BIND_ADDRESS)
+        .await;
+    }
 
-    let server = libunftp::Server::new(Box::new(move || {
-        libunftp::storage::cloud_storage::CloudStorage::new(&bucket_name, service_account_key.clone())
-    }));
-
-    server.listen("127.0.0.1:2121").await;
     Ok(())
 }
