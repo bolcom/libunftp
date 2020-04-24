@@ -48,7 +48,7 @@ pub(crate) use authenticator::{BadPasswordError, UnknownUsernameError};
 mod user;
 pub use user::{DefaultUser, UserDetail};
 
-#[cfg(feature = "pam_auth")]
+#[cfg(all(feature = "pam_auth", target_family = "unix"))]
 pub mod pam;
 
 #[cfg(feature = "rest_auth")]

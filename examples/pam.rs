@@ -3,6 +3,7 @@ use std::sync::Arc;
 use libunftp::auth::pam;
 use log::*;
 
+#[cfg(unix)]
 pub fn main() {
     pretty_env_logger::init();
 
