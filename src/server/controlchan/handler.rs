@@ -42,5 +42,5 @@ where
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
     pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    pub control_connection: Option<ConnectionTuple>,
+    pub control_connection_info: Option<ConnectionTuple>,
 }

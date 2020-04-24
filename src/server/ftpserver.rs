@@ -449,7 +449,7 @@ where
             p2 = port - (p1 * 256);
         }
         let session = session_arc.lock().await;
-        if let Some(conn) = session.control_connection {
+        if let Some(conn) = session.control_connection_info {
             let octets = match conn.from_ip {
                 IpAddr::V4(ip) => ip.octets(),
                 IpAddr::V6(_) => panic!("Won't happen."),
@@ -471,7 +471,7 @@ where
     async fn spawn_control_channel_loop(
         &self,
         tcp_stream: tokio::net::TcpStream,
-        control_connection: Option<ConnectionTuple>,
+        control_connection_info: Option<ConnectionTuple>,
         proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
     ) -> Result<(), ControlChanError> {
         let with_metrics = self.collect_metrics;
@@ -488,7 +488,7 @@ where
             .metrics(with_metrics);
         let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
         session.control_msg_tx = Some(control_msg_tx.clone());
-        session.control_connection = control_connection;
+        session.control_connection_info = control_connection_info;
         let session = Arc::new(Mutex::new(session));
         let passive_ports = self.passive_ports.clone();
         let idle_session_timeout = self.idle_session_timeout;
@@ -515,7 +515,7 @@ where
             local_addr,
             storage_features,
             proxyloop_msg_tx,
-            control_connection,
+            control_connection_info,
         );
         let event_handler_chain = Self::handle_with_auth(session, event_handler_chain);
         let event_handler_chain = Self::handle_with_logging(event_handler_chain);
@@ -679,7 +679,7 @@ where
         local_addr: std::net::SocketAddr,
         storage_features: u32,
         proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-        control_connection: Option<ConnectionTuple>,
+        control_connection_info: Option<ConnectionTuple>,
     ) -> impl Fn(Event) -> Result<Reply, ControlChanError> {
         move |event| -> Result<Reply, ControlChanError> {
             match event {
@@ -693,7 +693,7 @@ where
                     local_addr,
                     storage_features,
                     proxyloop_msg_tx.clone(),
-                    control_connection,
+                    control_connection_info,
                 )),
                 Event::InternalMsg(msg) => futures::executor::block_on(Self::handle_internal_msg(msg, session.clone())),
             }
@@ -711,7 +711,7 @@ where
         local_addr: std::net::SocketAddr,
         storage_features: u32,
         proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-        control_connection: Option<ConnectionTuple>,
+        control_connection_info: Option<ConnectionTuple>,
     ) -> Result<Reply, ControlChanError> {
         let args = CommandContext {
             cmd: cmd.clone(),
@@ -723,7 +723,7 @@ where
             local_addr,
             storage_features,
             proxyloop_msg_tx,
-            control_connection,
+            control_connection_info,
         };
 
         let handler: Box<dyn CommandHandler<S, U>> = match cmd {
