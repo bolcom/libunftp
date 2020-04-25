@@ -68,10 +68,6 @@ cloud_storage = ["oauth2", "mime", "percent-encoding", "hyper", "serde", "serde_
 oauth2 = ["yup-oauth2", "hyper-rustls"]
 
 [[example]]
-name = "pam"
-required-features = ["pam_auth"]
-
-[[example]]
 name = "gcs"
 required-features = ["cloud_storage"]
 
