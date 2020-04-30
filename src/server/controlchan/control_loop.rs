@@ -23,7 +23,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::codec::*;
 
-pub struct ControlParams<S, U>
+pub struct Params<S, U>
 where
     S: storage::StorageBackend<U> + Send + Sync,
     U: UserDetail,
@@ -39,8 +39,8 @@ where
 }
 
 /// Does TCP processing when a FTP client connects
-pub async fn spawn_control_channel_loop<S, U>(
-    params: ControlParams<S, U>,
+pub async fn spawn<S, U>(
+    params: Params<S, U>,
     tcp_stream: tokio::net::TcpStream,
     control_connection_info: Option<ConnectionTuple>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
