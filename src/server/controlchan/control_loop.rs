@@ -1,10 +1,10 @@
 use crate::auth::{Authenticator, UserDetail};
 use crate::metrics;
 use crate::server::chancomms::{InternalMsg, ProxyLoopSender};
+use crate::server::controlchan::codecs::FTPCodec;
 use crate::server::controlchan::command::Command;
+use crate::server::controlchan::error::{ControlChanError, ControlChanErrorKind};
 use crate::server::controlchan::handler::{CommandContext, CommandHandler};
-use crate::server::controlchan::FTPCodec;
-use crate::server::controlchan::{ControlChanError, ControlChanErrorKind};
 use crate::server::io::*;
 use crate::server::proxy_protocol::*;
 use crate::server::session::SharedSession;
@@ -155,7 +155,7 @@ where
                         let io = acceptor.accept(io).await.unwrap().as_async_io();
 
                         // Wrap in codec again and get sink + source
-                        let codec = controlchan::FTPCodec::new();
+                        let codec = FTPCodec::new();
                         let cmd_and_reply_stream = codec.framed(io);
                         let (sink, src) = cmd_and_reply_stream.split();
                         let src = src.fuse();
