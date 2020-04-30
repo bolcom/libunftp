@@ -322,16 +322,7 @@ where
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let params = controlchan::LoopParams {
-                authenticator: self.authenticator.clone(),
-                storage: (self.storage)(),
-                certs_file: self.certs_file.clone(),
-                certs_password: self.certs_password.clone(),
-                collect_metrics: self.collect_metrics,
-                greeting: self.greeting,
-                idle_session_timeout: self.idle_session_timeout,
-                passive_ports: self.passive_ports.clone(),
-            };
+            let params: controlchan::LoopParams<S, U> = (&self).into();
             let result = controlchan::spawn_loop::<S, U>(params, tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -380,18 +371,7 @@ where
                     if connection.to_port == proxy_params.external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         info!("Incoming control channel connection from {:?}", socket_addr);
-
-                        let params = controlchan::LoopParams{
-                            authenticator: self.authenticator.clone(),
-                            storage: (self.storage)(),
-                            certs_file: self.certs_file.clone(),
-                            certs_password: self.certs_password.clone(),
-                            collect_metrics: self.collect_metrics,
-                            greeting: self.greeting,
-                            idle_session_timeout: self.idle_session_timeout,
-                            passive_ports: self.passive_ports.clone(),
-                        };
-
+                        let params: controlchan::LoopParams<S,U> = (&self).into();
                         let result = controlchan::spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -475,6 +455,27 @@ where
                 .await
                 .unwrap();
             }
+        }
+    }
+}
+
+impl<S, U> From<&Server<S, U>> for controlchan::LoopParams<S, U>
+where
+    U: UserDetail + 'static,
+    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S::File: tokio::io::AsyncRead + Send,
+    S::Metadata: storage::Metadata,
+{
+    fn from(server: &Server<S, U>) -> Self {
+        controlchan::LoopParams {
+            authenticator: server.authenticator.clone(),
+            storage: (server.storage)(),
+            certs_file: server.certs_file.clone(),
+            certs_password: server.certs_password.clone(),
+            collect_metrics: server.collect_metrics,
+            greeting: server.greeting,
+            idle_session_timeout: server.idle_session_timeout,
+            passive_ports: server.passive_ports.clone(),
         }
     }
 }

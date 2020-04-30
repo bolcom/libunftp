@@ -1,18 +1,18 @@
 use crate::auth::{Authenticator, UserDetail};
 use crate::metrics;
 use crate::server::chancomms::{InternalMsg, ProxyLoopSender};
-use crate::server::controlchan::codecs::FTPCodec;
-use crate::server::controlchan::command::Command;
-use crate::server::controlchan::error::{ControlChanError, ControlChanErrorKind};
-use crate::server::controlchan::handler::{CommandContext, CommandHandler};
 use crate::server::io::*;
 use crate::server::proxy_protocol::*;
 use crate::server::session::SharedSession;
 use crate::server::*;
-use crate::server::{Reply, ReplyCode};
 use crate::server::{Session, SessionState};
 use crate::storage::{self, ErrorKind};
+use controlchan::codecs::FTPCodec;
+use controlchan::command::Command;
 use controlchan::commands;
+use controlchan::error::{ControlChanError, ControlChanErrorKind};
+use controlchan::handler::{CommandContext, CommandHandler};
+use controlchan::{Reply, ReplyCode};
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
