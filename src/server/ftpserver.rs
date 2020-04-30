@@ -506,7 +506,7 @@ where
 
 /// Does TCP processing when a FTP client connects
 async fn spawn_control_channel_loop<S, U>(
-    server: ControlParams<S, U>,
+    params: ControlParams<S, U>,
     tcp_stream: tokio::net::TcpStream,
     control_connection_info: Option<ConnectionTuple>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
@@ -517,32 +517,32 @@ where
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: storage::Metadata,
 {
-    let with_metrics = server.collect_metrics;
-    let tls_configured = if let (Some(_), Some(_)) = (&server.certs_file, &server.certs_password) {
+    let with_metrics = params.collect_metrics;
+    let tls_configured = if let (Some(_), Some(_)) = (&params.certs_file, &params.certs_password) {
         true
     } else {
         false
     };
-    let storage_features = server.storage.supported_features();
-    let authenticator = server.authenticator.clone();
-    let mut session = Session::new(Arc::new(server.storage))
-        .ftps(server.certs_file.clone(), server.certs_password.clone())
+    let storage_features = params.storage.supported_features();
+    let authenticator = params.authenticator.clone();
+    let mut session = Session::new(Arc::new(params.storage))
+        .ftps(params.certs_file.clone(), params.certs_password.clone())
         .metrics(with_metrics);
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
     session.control_msg_tx = Some(control_msg_tx.clone());
     session.control_connection_info = control_connection_info;
     let session = Arc::new(Mutex::new(session));
-    let passive_ports = server.passive_ports.clone();
-    let idle_session_timeout = server.idle_session_timeout;
+    let passive_ports = params.passive_ports.clone();
+    let idle_session_timeout = params.idle_session_timeout;
     let local_addr = tcp_stream.local_addr().unwrap();
     let identity_file: Option<PathBuf> = if tls_configured {
-        let p: PathBuf = server.certs_file.clone().unwrap();
+        let p: PathBuf = params.certs_file.clone().unwrap();
         Some(p)
     } else {
         None
     };
     let identity_password: Option<String> = if tls_configured {
-        let p: String = server.certs_password.clone().unwrap();
+        let p: String = params.certs_password.clone().unwrap();
         Some(p)
     } else {
         None
@@ -566,7 +566,7 @@ where
     let cmd_and_reply_stream = codec.framed(tcp_stream.as_async_io());
     let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
-    reply_sink.send(Reply::new(ReplyCode::ServiceReady, server.greeting)).await?;
+    reply_sink.send(Reply::new(ReplyCode::ServiceReady, params.greeting)).await?;
     reply_sink.flush().await?;
 
     let mut command_source = command_source.fuse();
