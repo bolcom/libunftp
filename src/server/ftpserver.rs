@@ -332,7 +332,17 @@ where
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let result = spawn_control_channel_loop::<S, U>(&self, tcp_stream, None, None).await;
+            let params = ControlParams {
+                authenticator: self.authenticator.clone(),
+                storage: (self.storage)(),
+                certs_file: self.certs_file.clone(),
+                certs_password: self.certs_password.clone(),
+                collect_metrics: self.collect_metrics,
+                greeting: self.greeting,
+                idle_session_timeout: self.idle_session_timeout,
+                passive_ports: self.passive_ports.clone(),
+            };
+            let result = spawn_control_channel_loop::<S, U>(params, tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
             }
@@ -381,7 +391,18 @@ where
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         info!("Incoming control channel connection from {:?}", socket_addr);
 
-                        let result = spawn_control_channel_loop::<S,U>(&self, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                        let params = ControlParams{
+                            authenticator: self.authenticator.clone(),
+                            storage: (self.storage)(),
+                            certs_file: self.certs_file.clone(),
+                            certs_password: self.certs_password.clone(),
+                            collect_metrics: self.collect_metrics,
+                            greeting: self.greeting,
+                            idle_session_timeout: self.idle_session_timeout,
+                            passive_ports: self.passive_ports.clone(),
+                        };
+
+                        let result = spawn_control_channel_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
@@ -468,9 +489,24 @@ where
     }
 }
 
+pub struct ControlParams<S, U>
+where
+    S: storage::StorageBackend<U> + Send + Sync,
+    U: UserDetail,
+{
+    storage: S,
+    greeting: &'static str,
+    authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
+    passive_ports: Range<u16>,
+    certs_file: Option<PathBuf>,
+    certs_password: Option<String>,
+    collect_metrics: bool,
+    idle_session_timeout: std::time::Duration,
+}
+
 /// Does TCP processing when a FTP client connects
 async fn spawn_control_channel_loop<S, U>(
-    server: &Server<S, U>,
+    server: ControlParams<S, U>,
     tcp_stream: tokio::net::TcpStream,
     control_connection_info: Option<ConnectionTuple>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
@@ -487,10 +523,9 @@ where
     } else {
         false
     };
-    let storage = Arc::new((server.storage)());
-    let storage_features = storage.supported_features();
+    let storage_features = server.storage.supported_features();
     let authenticator = server.authenticator.clone();
-    let mut session = Session::new(storage)
+    let mut session = Session::new(Arc::new(server.storage))
         .ftps(server.certs_file.clone(), server.certs_password.clone())
         .metrics(with_metrics);
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
