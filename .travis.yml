@@ -15,6 +15,7 @@ before_script:
   - rustup component add rustfmt
   - if [ $TRAVIS_RUST_VERSION != 'nightly' ]; then rustup component add clippy; else rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy; fi
 
+cache: cargo
 
 script:
   - cargo fmt --all -- --check
