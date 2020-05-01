@@ -14,7 +14,7 @@ use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::datachan;
-use crate::server::session::SharedSession;
+use crate::server::{session::SharedSession, ControlChanErrorKind};
 use crate::storage;
 use async_trait::async_trait;
 use futures::channel::mpsc::{channel, Receiver, Sender};
