@@ -27,7 +27,3 @@ matrix:
     - rust: nightly
     - os: windows
   fast_finish: true
-
-branches:
-  only:
-    - master
