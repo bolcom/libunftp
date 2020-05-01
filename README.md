@@ -40,7 +40,7 @@ Then add the libunftp, tokio & futures crates to your project's dependencies in 
 
 ```toml
 [dependencies]
-libunftp = "0.9.0"
+libunftp = "0.10.0"
 tokio = { version = "0.2", features = ["full"] }
 ```
 

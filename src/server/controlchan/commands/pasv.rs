@@ -88,7 +88,10 @@ impl Pasv {
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,
-            std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
+            std::net::SocketAddr::V6(_) => {
+                log::error!("local address is ipv6! we only listen on ipv4, so this shouldn't happen");
+                return Err(ControlChanErrorKind::InternalServerError.into());
+            }
         };
 
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
@@ -98,13 +101,8 @@ impl Pasv {
             Ok(l) => l,
         };
 
-        let addr = match listener.local_addr()? {
-            std::net::SocketAddr::V4(addr) => addr,
-            std::net::SocketAddr::V6(_) => panic!("we only listen on ipv4, so this shouldn't happen"),
-        };
-
         let octets = conn_addr.ip().octets();
-        let port = addr.port();
+        let port = listener.local_addr()?.port();
         let p1 = port >> 8;
         let p2 = port - (p1 * 256);
         let tx = args.tx.clone();
