@@ -28,8 +28,8 @@ use std::ops::Range;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
-use lazy_static::*;
 use crate::server::ControlChanErrorKind;
+use lazy_static::*;
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
@@ -93,7 +93,7 @@ impl Pasv {
             std::net::SocketAddr::V4(addr) => addr,
             std::net::SocketAddr::V6(_) => {
                 log::error!("local address is ipv6! we only listen on ipv4, so this shouldn't happen");
-                return Err(ControlChanErrorKind::InternalServerError.into())
+                return Err(ControlChanErrorKind::InternalServerError.into());
             }
         };
 
@@ -103,7 +103,6 @@ impl Pasv {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
             Ok(l) => l,
         };
-
 
         let octets = conn_addr.ip().octets();
         let port = listener.local_addr()?.port();
