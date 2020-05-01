@@ -28,6 +28,6 @@ where
     S::Metadata: storage::Metadata,
 {
     async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8"))
+        Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8")) // TODO change this for windows
     }
 }

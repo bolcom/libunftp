@@ -5,7 +5,6 @@ use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBacken
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -258,11 +257,11 @@ impl Metadata for std::fs::Metadata {
     }
 
     fn gid(&self) -> u32 {
-        MetadataExt::gid(self)
+        0
     }
 
     fn uid(&self) -> u32 {
-        MetadataExt::uid(self)
+        0
     }
 }
 
@@ -426,10 +425,10 @@ mod tests {
                 Ok(std::time::SystemTime::UNIX_EPOCH)
             }
             fn uid(&self) -> u32 {
-                1
+                0
             }
             fn gid(&self) -> u32 {
-                2
+                0
             }
         }
 
@@ -441,7 +440,7 @@ mod tests {
         };
         let my_format = format!("{}", fileinfo);
         let basename = std::path::Path::new(&dir).file_name().unwrap().to_string_lossy();
-        let format = format!("-rwxr-xr-x            1            2              5 Jan 01 00:00 {}", basename);
+        let format = format!("-rwxr-xr-x            0            0              5 Jan 01 00:00 {}", basename);
         assert_eq!(my_format, format);
     }
 
@@ -469,7 +468,7 @@ mod tests {
         let old_filename = file.path().file_name().unwrap().to_str().unwrap();
         let new_filename = "hello.txt";
 
-        // Since the Filesystem StorageBAckend is based on futures, we need a runtime to run them
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
         let mut rt = Runtime::new().unwrap();
 

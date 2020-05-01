@@ -37,7 +37,7 @@ build: # Create a release build
 	cargo build --release
 
 .PHONY: pr-prep
-pr-prep: examples # Runs checks to ensure you're ready for a pull request
+pr-prep: # Runs checks to ensure you're ready for a pull request
 	cargo fmt --all -- --check
 	cargo clippy --all-features --all-targets -- -D warnings
 	cargo test --all-features --all-targets

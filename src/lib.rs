@@ -26,6 +26,6 @@ pub mod storage;
 
 pub use crate::server::ftpserver::Server;
 
-#[cfg(any(feature = "rest_auth", feature = "pam_auth"))]
+#[cfg(feature = "rest_auth")]
 #[macro_use]
 extern crate log;

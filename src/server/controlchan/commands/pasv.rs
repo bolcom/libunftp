@@ -6,6 +6,7 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
+use crate::auth::UserDetail;
 use crate::server::chancomms::{ProxyLoopMsg, ProxyLoopSender};
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::CommandContext;
@@ -13,13 +14,12 @@ use crate::server::controlchan::handler::CommandHandler;
 use crate::server::controlchan::Command;
 use crate::server::controlchan::{Reply, ReplyCode};
 use crate::server::datachan;
-use crate::server::session::SharedSession;
+use crate::server::{session::SharedSession, ControlChanErrorKind};
 use crate::storage;
-
-use crate::auth::UserDetail;
 use async_trait::async_trait;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::prelude::*;
+use lazy_static::*;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::io;
@@ -27,9 +27,6 @@ use std::net::SocketAddr;
 use std::ops::Range;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
-
-use crate::server::ControlChanErrorKind;
-use lazy_static::*;
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
