@@ -11,9 +11,9 @@ os:
   - windows
 
 before_script: 
-    - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
-    - rustup component add rustfmt
-    - if [ $TRAVIS_RUST_VERSION != 'nightly' ]; then rustup component add clippy; else rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy; fi
+  - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
+  - rustup component add rustfmt
+  - if [ $TRAVIS_RUST_VERSION != 'nightly' ]; then rustup component add clippy; else rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy; fi
 
 
 script:
@@ -27,6 +27,7 @@ cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
+    - os: windows
   fast_finish: true
 
 branches:
