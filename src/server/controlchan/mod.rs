@@ -1,4 +1,4 @@
-//! Contains code pertaining to the FTP *control* channel
+//! Contains code pertaining to the FTP *control* channel/connection.
 
 pub mod command;
 use command::Command;

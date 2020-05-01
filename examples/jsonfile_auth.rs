@@ -1,7 +1,5 @@
 use libunftp::auth::jsonfile;
-
 use log::info;
-
 use std::sync::Arc;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {

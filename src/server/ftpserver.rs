@@ -8,7 +8,7 @@ use crate::storage::{self, filesystem::Filesystem};
 
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
-use log::{error, info, warn};
+use log::{info, warn};
 use std::net::{IpAddr, Shutdown, SocketAddr};
 use std::ops::Range;
 use std::path::PathBuf;
@@ -370,7 +370,7 @@ where
                     // and connections for the data channel.
                     if connection.to_port == proxy_params.external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                        info!("Incoming control channel connection from {:?}", socket_addr);
+                        info!("Connection from {:?} is a control connection", socket_addr);
                         let params: controlchan::LoopParams<S,U> = (&self).into();
                         let result = controlchan::spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
@@ -378,15 +378,13 @@ where
                         }
                     } else {
                         // handle incoming data connections
-                        println!("{:?}, {}", self.passive_ports, connection.to_port);
+                        info!("Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
                         if !self.passive_ports.contains(&connection.to_port) {
-                            error!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                            warn!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
                             tcp_stream.shutdown(Shutdown::Both).unwrap();
                             continue;
                         }
-
                         self.dispatch_data_connection(tcp_stream, connection).await;
-
                     }
                 },
                 Some(msg) = proxyloop_msg_rx.next() => {
@@ -425,7 +423,7 @@ where
     }
 
     async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
-        info!("Received command to allocate data port");
+        info!("Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
         // 3. put expiry time in the LIFO list
@@ -435,7 +433,7 @@ where
         let mut p2 = 0;
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
-            warn!("port: {:?}", port);
+            info!("Reserving data port: {:?}", port);
             p1 = port >> 8;
             p2 = port - (p1 * 256);
         }
