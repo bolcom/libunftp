@@ -1,19 +1,22 @@
-use crate::auth::{Authenticator, UserDetail};
-use crate::metrics;
-use crate::server::chancomms::{InternalMsg, ProxyLoopSender};
-use crate::server::io::*;
-use crate::server::proxy_protocol::*;
-use crate::server::session::SharedSession;
-use crate::server::*;
-use crate::server::{Session, SessionState};
-use crate::storage::{self, ErrorKind};
+use crate::{
+    auth::{Authenticator, UserDetail},
+    metrics,
+    server::*,
+    server::{
+        chancomms::{InternalMsg, ProxyLoopSender},
+        io::*,
+        proxy_protocol::*,
+        session::SharedSession,
+    },
+    server::{Session, SessionState},
+    storage::{self, ErrorKind},
+};
 use controlchan::codecs::FTPCodec;
 use controlchan::command::Command;
 use controlchan::commands;
 use controlchan::error::{ControlChanError, ControlChanErrorKind};
 use controlchan::handler::{CommandContext, CommandHandler};
 use controlchan::{Reply, ReplyCode};
-
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
@@ -33,7 +36,7 @@ where
     pub authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     pub passive_ports: Range<u16>,
     pub certs_file: Option<PathBuf>,
-    pub certs_password: Option<String>,
+    pub key_file: Option<PathBuf>,
     pub collect_metrics: bool,
     pub idle_session_timeout: std::time::Duration,
 }
@@ -52,7 +55,7 @@ where
     S::Metadata: storage::Metadata,
 {
     let with_metrics = params.collect_metrics;
-    let tls_configured = if let (Some(_), Some(_)) = (&params.certs_file, &params.certs_password) {
+    let tls_configured = if let (Some(_), Some(_)) = (&params.certs_file, &params.key_file) {
         true
     } else {
         false
@@ -60,7 +63,7 @@ where
     let storage_features = params.storage.supported_features();
     let authenticator = params.authenticator.clone();
     let mut session = Session::new(Arc::new(params.storage))
-        .ftps(params.certs_file.clone(), params.certs_password.clone())
+        .ftps(params.certs_file.clone(), params.key_file.clone())
         .metrics(with_metrics);
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
     session.control_msg_tx = Some(control_msg_tx.clone());
@@ -69,18 +72,8 @@ where
     let passive_ports = params.passive_ports.clone();
     let idle_session_timeout = params.idle_session_timeout;
     let local_addr = tcp_stream.local_addr().unwrap();
-    let identity_file: Option<PathBuf> = if tls_configured {
-        let p: PathBuf = params.certs_file.clone().unwrap();
-        Some(p)
-    } else {
-        None
-    };
-    let identity_password: Option<String> = if tls_configured {
-        let p: String = params.certs_password.clone().unwrap();
-        Some(p)
-    } else {
-        None
-    };
+    let certs_file: Option<PathBuf> = if tls_configured { Some(params.certs_file.clone().unwrap()) } else { None };
+    let key_file: Option<PathBuf> = if tls_configured { Some(params.key_file.clone().unwrap()) } else { None };
 
     let event_handler_chain = handle_event::<S, U>(
         session.clone(),
@@ -149,9 +142,7 @@ where
                         let io = codec_io.into_inner();
 
                         // Wrap in TLS Stream
-                        //let config = tls::new_config(&certs, &keys);
-                        let identity = tls::identity(identity_file.clone().unwrap(), identity_password.clone().unwrap());
-                        let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                        let acceptor: tokio_rustls::TlsAcceptor = tls::new_config(certs_file.clone().unwrap(), key_file.clone().unwrap()).into();
                         let io = acceptor.accept(io).await.unwrap().as_async_io();
 
                         // Wrap in codec again and get sink + source

@@ -64,7 +64,7 @@ where
     authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     passive_ports: Range<u16>,
     certs_file: Option<PathBuf>,
-    certs_password: Option<String>,
+    key_file: Option<PathBuf>,
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: Option<ProxyParams>,
@@ -112,7 +112,7 @@ where
             authenticator: Arc::new(AnonymousAuthenticator {}),
             passive_ports: 49152..65535,
             certs_file: Option::None,
-            certs_password: Option::None,
+            key_file: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: Option::None,
@@ -132,7 +132,7 @@ where
             authenticator,
             passive_ports: 49152..65535,
             certs_file: Option::None,
-            certs_password: Option::None,
+            key_file: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: Option::None,
@@ -206,11 +206,11 @@ where
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server-certs.pfx", "thepassword");
+    /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
-    pub fn ftps<P: Into<PathBuf>, T: Into<String>>(mut self, certs_file: P, password: T) -> Self {
+    pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
         self.certs_file = Option::Some(certs_file.into());
-        self.certs_password = Option::Some(password.into());
+        self.key_file = Option::Some(key_file.into());
         self
     }
 
@@ -471,7 +471,7 @@ where
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
             certs_file: server.certs_file.clone(),
-            certs_password: server.certs_password.clone(),
+            key_file: server.key_file.clone(),
             collect_metrics: server.collect_metrics,
             greeting: server.greeting,
             idle_session_timeout: server.idle_session_timeout,

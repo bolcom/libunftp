@@ -3,8 +3,9 @@
 use super::chancomms::{DataCommand, InternalMsg};
 use super::controlchan::command::Command;
 use crate::auth::UserDetail;
-use crate::server::Session;
+use crate::server::{tls::new_config, Session};
 use crate::storage::{self, Error, ErrorKind};
+use tokio_rustls::TlsAcceptor;
 
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
@@ -28,8 +29,8 @@ where
     pub storage: Arc<S>,
     pub cwd: PathBuf,
     pub start_pos: u64,
-    pub identity_file: Option<PathBuf>,
-    pub identity_password: Option<String>,
+    pub certs_file: Option<PathBuf>,
+    pub key_file: Option<PathBuf>,
 }
 
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
@@ -65,7 +66,7 @@ where
             match self.storage.get(&self.user, path, self.start_pos).await {
                 Ok(mut f) => match tx_sending.send(InternalMsg::SendingData).await {
                     Ok(_) => {
-                        let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
+                        let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
                         match tokio::io::copy(&mut f, &mut output).await {
                             Ok(bytes_copied) => {
                                 if let Err(err) = output.shutdown().await {
@@ -98,7 +99,7 @@ where
                 .storage
                 .put(
                     &self.user,
-                    Self::reader(self.socket, self.tls, self.identity_file, self.identity_password),
+                    Self::reader(self.socket, self.tls, self.certs_file, self.key_file),
                     path,
                     self.start_pos,
                 )
@@ -129,7 +130,7 @@ where
                 Ok(cursor) => {
                     debug!("Copying future for List");
                     let mut input = cursor;
-                    let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
+                    let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => {
                             if let Err(err) = output.shutdown().await {
@@ -157,7 +158,7 @@ where
         tokio::spawn(async move {
             match self.storage.nlst(&self.user, path).await {
                 Ok(mut input) => {
-                    let mut output = Self::writer(self.socket, self.tls, self.identity_file, self.identity_password);
+                    let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => {
                             if let Err(err) = output.shutdown().await {
@@ -183,13 +184,12 @@ where
     fn writer(
         socket: tokio::net::TcpStream,
         tls: bool,
-        identity_file: Option<PathBuf>,
-        indentity_password: Option<String>,
+        certs_file: Option<PathBuf>,
+        key_file: Option<PathBuf>,
     ) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         if tls {
             let io = futures::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let acceptor: TlsAcceptor = new_config(certs_file.unwrap(), key_file.unwrap()).into();
                 acceptor.accept(socket).await.unwrap()
             });
             Box::new(io)
@@ -202,13 +202,12 @@ where
     fn reader(
         socket: tokio::net::TcpStream,
         tls: bool,
-        identity_file: Option<PathBuf>,
-        indentity_password: Option<String>,
+        certs_file: Option<PathBuf>,
+        key_file: Option<PathBuf>,
     ) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         if tls {
             let io = futures::executor::block_on(async move {
-                let identity = crate::server::tls::identity(identity_file.unwrap(), indentity_password.unwrap());
-                let acceptor = tokio_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build().unwrap());
+                let acceptor: TlsAcceptor = new_config(certs_file.unwrap(), key_file.unwrap()).into();
                 acceptor.accept(socket).await.unwrap()
             });
             Box::new(io)
@@ -241,8 +240,8 @@ where
         storage: Arc::clone(&session.storage),
         cwd: session.cwd.clone(),
         start_pos: session.start_pos,
-        identity_file: if tls { Some(session.certs_file.clone().unwrap()) } else { None },
-        identity_password: if tls { Some(session.certs_password.clone().unwrap()) } else { None },
+        certs_file: if tls { Some(session.certs_file.clone().unwrap()) } else { None },
+        key_file: if tls { Some(session.key_file.clone().unwrap()) } else { None },
     };
 
     tokio::spawn(async move {

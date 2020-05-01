@@ -42,7 +42,7 @@ where
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
     pub certs_file: Option<PathBuf>,
-    pub certs_password: Option<String>,
+    pub key_file: Option<PathBuf>,
     // True if the command channel is in secure mode
     pub cmd_tls: bool,
     // True if the data channel is in secure mode.
@@ -74,7 +74,7 @@ where
             rename_from: None,
             state: SessionState::New,
             certs_file: Option::None,
-            certs_password: Option::None,
+            key_file: Option::None,
             cmd_tls: false,
             data_tls: false,
             collect_metrics: false,
@@ -82,9 +82,9 @@ where
         }
     }
 
-    pub(super) fn ftps(mut self, certs_file: Option<PathBuf>, password: Option<String>) -> Self {
+    pub(super) fn ftps(mut self, certs_file: Option<PathBuf>, password: Option<PathBuf>) -> Self {
         self.certs_file = certs_file;
-        self.certs_password = password;
+        self.key_file = password;
         self
     }
 
