@@ -4,7 +4,6 @@ mod chancomms;
 mod controlchan;
 mod datachan;
 pub(crate) mod ftpserver;
-mod io;
 mod password;
 mod proxy_protocol;
 mod session;

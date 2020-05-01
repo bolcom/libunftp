@@ -1,34 +1,44 @@
 use crate::{
     auth::{Authenticator, UserDetail},
-    metrics,
-    server::*,
+    metrics::{add_error_metric, add_event_metric, add_reply_metric},
     server::{
         chancomms::{InternalMsg, ProxyLoopSender},
-        io::*,
-        proxy_protocol::*,
+        controlchan::{
+            codecs::FTPCodec,
+            command::Command,
+            commands,
+            error::{ControlChanError, ControlChanErrorKind},
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+        proxy_protocol::ConnectionTuple,
         session::SharedSession,
+        tls::new_config,
+        Event, Session, SessionState,
     },
-    server::{Session, SessionState},
-    storage::{self, ErrorKind},
+    storage::{ErrorKind, Metadata, StorageBackend},
 };
-use controlchan::codecs::FTPCodec;
-use controlchan::command::Command;
-use controlchan::commands;
-use controlchan::error::{ControlChanError, ControlChanErrorKind};
-use controlchan::handler::{CommandContext, CommandHandler};
-use controlchan::{Reply, ReplyCode};
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::{SinkExt, StreamExt};
+use futures::{
+    channel::mpsc::{channel, Receiver, Sender},
+    executor::block_on,
+    SinkExt, StreamExt,
+};
 use log::{info, warn};
-use std::ops::Range;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio_util::codec::*;
+use std::{net::SocketAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+    sync::Mutex,
+};
+use tokio_util::codec::{Decoder, Framed};
+
+trait AsyncReadAsyncWriteSendUnpin: AsyncRead + AsyncWrite + Send + Unpin {}
+
+impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for T {}
 
 pub struct Params<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U> + Send + Sync,
     U: UserDetail,
 {
     pub storage: S,
@@ -38,21 +48,21 @@ where
     pub certs_file: Option<PathBuf>,
     pub key_file: Option<PathBuf>,
     pub collect_metrics: bool,
-    pub idle_session_timeout: std::time::Duration,
+    pub idle_session_timeout: Duration,
 }
 
 /// Does TCP processing when a FTP client connects
 pub async fn spawn<S, U>(
     params: Params<S, U>,
-    tcp_stream: tokio::net::TcpStream,
+    tcp_stream: TcpStream,
     control_connection_info: Option<ConnectionTuple>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
 ) -> Result<(), ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
 {
     let with_metrics = params.collect_metrics;
     let tls_configured = if let (Some(_), Some(_)) = (&params.certs_file, &params.key_file) {
@@ -90,7 +100,7 @@ where
     let event_handler_chain = handle_with_logging::<S, U, _>(event_handler_chain);
 
     let codec = FTPCodec::new();
-    let cmd_and_reply_stream = codec.framed(tcp_stream.as_async_io());
+    let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FTPCodec> = codec.framed(Box::new(tcp_stream));
     let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
     reply_sink.send(Reply::new(ReplyCode::ServiceReady, params.greeting)).await?;
@@ -126,7 +136,7 @@ where
                 }
                 Some(Ok(event)) => {
                     if with_metrics {
-                        metrics::add_event_metric(&event);
+                        add_event_metric(&event);
                     };
 
                     if let Event::InternalMsg(InternalMsg::Quit) = event {
@@ -142,8 +152,8 @@ where
                         let io = codec_io.into_inner();
 
                         // Wrap in TLS Stream
-                        let acceptor: tokio_rustls::TlsAcceptor = tls::new_config(certs_file.clone().unwrap(), key_file.clone().unwrap()).into();
-                        let io = acceptor.accept(io).await.unwrap().as_async_io();
+                        let acceptor: tokio_rustls::TlsAcceptor = new_config(certs_file.clone().unwrap(), key_file.clone().unwrap()).into();
+                        let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = Box::new(acceptor.accept(io).await.unwrap());
 
                         // Wrap in codec again and get sink + source
                         let codec = FTPCodec::new();
@@ -163,7 +173,7 @@ where
                         }
                         Ok(reply) => {
                             if with_metrics {
-                                metrics::add_reply_metric(&reply);
+                                add_reply_metric(&reply);
                             }
                             let result = reply_sink.send(reply).await;
                             if result.is_err() {
@@ -202,9 +212,9 @@ where
 fn handle_with_auth<S, U, N>(session: SharedSession<S, U>, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
     move |event| match event {
@@ -217,7 +227,7 @@ where
         | Event::Command(Command::Feat)
         | Event::Command(Command::Quit) => next(event),
         _ => {
-            let r = futures::executor::block_on(async {
+            let r = block_on(async {
                 let session = session.lock().await;
                 if session.state != SessionState::WaitCmd {
                     Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
@@ -236,9 +246,9 @@ where
 fn handle_with_logging<S, U, N>(next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
     move |event| {
@@ -254,20 +264,20 @@ fn handle_event<S, U>(
     tls_configured: bool,
     passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
-    local_addr: std::net::SocketAddr,
+    local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
     control_connection_info: Option<ConnectionTuple>,
 ) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
 {
     move |event| -> Result<Reply, ControlChanError> {
         match event {
-            Event::Command(cmd) => futures::executor::block_on(handle_command(
+            Event::Command(cmd) => block_on(handle_command(
                 cmd,
                 session.clone(),
                 authenticator.clone(),
@@ -279,7 +289,7 @@ where
                 proxyloop_msg_tx.clone(),
                 control_connection_info,
             )),
-            Event::InternalMsg(msg) => futures::executor::block_on(handle_internal_msg(msg, session.clone())),
+            Event::InternalMsg(msg) => block_on(handle_internal_msg(msg, session.clone())),
         }
     }
 }
@@ -292,16 +302,16 @@ async fn handle_command<S, U>(
     tls_configured: bool,
     passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
-    local_addr: std::net::SocketAddr,
+    local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
     control_connection_info: Option<ConnectionTuple>,
 ) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
 {
     let args = CommandContext {
         cmd: cmd.clone(),
@@ -362,9 +372,9 @@ where
 async fn handle_internal_msg<S, U>(msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
 {
     use self::InternalMsg::*;
     use SessionState::*;
@@ -429,12 +439,12 @@ where
 fn handle_control_channel_error<S, U>(error: ControlChanError, with_metrics: bool) -> Reply
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
-    S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S: 'static + StorageBackend<U> + Sync + Send,
+    S::File: AsyncRead + Send,
+    S::Metadata: Metadata,
 {
     if with_metrics {
-        metrics::add_error_metric(&error.kind());
+        add_error_metric(&error.kind());
     };
     warn!("Control channel error: {}", error);
     match error.kind() {
