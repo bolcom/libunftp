@@ -123,7 +123,7 @@ where
                     incoming = Some(Ok(Event::InternalMsg(msg)));
                 },
                 _ = &mut timeout_delay => {
-                    info!("Connection timed out");
+                    info!("Control connection timed out");
                     incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
                 }
             };
@@ -131,7 +131,7 @@ where
             match incoming {
                 None => {
                     // Should not happen.
-                    warn!("No event polled...");
+                    warn!("No event polled in control channel...");
                     return;
                 }
                 Some(Ok(event)) => {
@@ -177,7 +177,7 @@ where
                             }
                             let result = reply_sink.send(reply).await;
                             if result.is_err() {
-                                warn!("could not send reply");
+                                warn!("Could not send reply to client");
                                 return;
                             }
                         }
@@ -195,7 +195,7 @@ where
                     }
                     let result = reply_sink.send(reply).await;
                     if result.is_err() {
-                        warn!("could not send error reply");
+                        warn!("Could not send error reply to client");
                         return;
                     }
                     if close_connection {
@@ -252,7 +252,7 @@ where
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
     move |event| {
-        info!("Processing event {:?}", event);
+        info!("Processing control channel event {:?}", event);
         next(event)
     }
 }

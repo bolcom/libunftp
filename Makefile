@@ -1,23 +1,23 @@
 .PHONY: help
-help: # Show available `make` commands
+help: # Shows available `make` commands
 	@echo 'Available `make` commands:' >/dev/stderr
 	@echo >/dev/stderr
 	@awk -F'#' '/^[a-z][A-Za-z0-9]+/ {if (NF > 1) { sub(/:[^#]*/, ""); print $$1 "\t\t" $$2}}' Makefile
 
 .PHONY: watch
-watch: # Continuously run `cargo check` and `cargo test` on file changes
+watch: # Continuously runs `cargo check` and `cargo test` on file changes
 	cargo watch -x check -x "test --all-features" --clear
 
 .PHONY: test
-test: # Run all tests
+test: # Runs all tests
 	cargo test --all-features
 
 .PHONY: fuzz
-fuzz: # Run fuzzing tests
+fuzz: # Runs fuzzing tests
 	cargo +nightly fuzz run parse_command
 
 .PHONY: run
-run: debug # Run the `basic` example in verbose mode
+run: debug # Runs the `basic` example in verbose mode
 	RUST_LOG=INFO ./target/debug/examples/basic
 
 .PHONY: docs
@@ -25,7 +25,7 @@ docs: # Creates the API docs and opens it in the browser
 	cargo doc --all-features --no-deps --open
 
 .PHONY: debug
-debug: # Create a debug build
+debug: # Creates a debug build
 	cargo build --example basic
 
 .PHONY: examples
@@ -33,7 +33,7 @@ examples:
 	cargo build --examples
 
 .PHONY: build
-build: # Create a release build
+build: # Creates a release build
 	cargo build --release
 
 .PHONY: pr-prep

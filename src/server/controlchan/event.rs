@@ -7,6 +7,6 @@ use crate::server::InternalMsg;
 pub enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(Command),
-    /// A status message from the data channel handler
+    /// A status message from the data channel loop
     InternalMsg(InternalMsg),
 }

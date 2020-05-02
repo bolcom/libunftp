@@ -10,7 +10,7 @@ use tokio_rustls::TlsAcceptor;
 use futures::channel::mpsc::Sender;
 use futures::prelude::*;
 use log::info;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
@@ -73,7 +73,7 @@ where
                                     warn!("Could not shutdown output stream after RETR: {}", err);
                                 }
                                 if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
-                                    warn!("Could not notify control channel of successful RETR: {}", err);
+                                    error!("Could not notify control channel of successful RETR: {}", err);
                                 }
                             }
                             Err(err) => warn!("Error copying streams during RETR: {}", err),
@@ -107,12 +107,12 @@ where
             {
                 Ok(bytes) => {
                     if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                        warn!("Could not notify control channel of successful STOR: {}", err);
+                        error!("Could not notify control channel of successful STOR: {}", err);
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                        warn!("Could not notify control channel of error with STOR: {}", err);
+                        error!("Could not notify control channel of error with STOR: {}", err);
                     }
                 }
             }
@@ -137,7 +137,7 @@ where
                                 warn!("Could not shutdown output stream during LIST: {}", err);
                             }
                             if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                warn!("Could not notify control channel of successful LIST: {}", err);
+                                error!("Could not notify control channel of successful LIST: {}", err);
                             }
                         }
                         Err(err) => warn!("Could not copy from storage implementation during LIST: {}", err),
@@ -165,7 +165,7 @@ where
                                 warn!("Could not shutdown output stream during NLIST: {}", err);
                             }
                             if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                warn!("Could not notify control channel of successful NLIST: {}", err);
+                                error!("Could not notify control channel of successful NLIST: {}", err);
                             }
                         }
                         Err(err) => warn!("Could not copy from storage implementation during NLST: {}", err),
@@ -255,13 +255,10 @@ where
                 handle_incoming(DataCommand::Abort, command_executor).await;
             },
             _ = &mut timeout_delay => {
-                info!("Connection timed out");
+                warn!("Data channel connection timed out");
                 return;
             }
         };
-
-        // This probably happened because the control channel was closed before we got here
-        warn!("Nothing received");
     });
 }
 
@@ -274,10 +271,10 @@ where
 {
     match incoming {
         DataCommand::Abort => {
-            info!("Abort received");
+            info!("Data channel abort received");
         }
         DataCommand::ExternalCommand(command) => {
-            info!("Data command received");
+            info!("Data command received: {:?}", command);
             command_executor.execute(command).await;
         }
     }
