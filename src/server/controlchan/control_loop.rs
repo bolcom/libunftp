@@ -13,7 +13,7 @@ use crate::{
         },
         proxy_protocol::ConnectionTuple,
         session::SharedSession,
-        tls::new_config,
+        tls::FTPSConfig,
         Event, Session, SessionState,
     },
     storage::{ErrorKind, Metadata, StorageBackend},
@@ -24,7 +24,7 @@ use futures::{
     SinkExt, StreamExt,
 };
 use log::{info, warn};
-use std::{net::SocketAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
+use std::{convert::TryInto, net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -36,7 +36,7 @@ trait AsyncReadAsyncWriteSendUnpin: AsyncRead + AsyncWrite + Send + Unpin {}
 
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for T {}
 
-pub struct Params<S, U>
+pub struct Config<S, U>
 where
     S: StorageBackend<U> + Send + Sync,
     U: UserDetail,
@@ -45,15 +45,14 @@ where
     pub greeting: &'static str,
     pub authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     pub passive_ports: Range<u16>,
-    pub certs_file: Option<PathBuf>,
-    pub key_file: Option<PathBuf>,
+    pub ftps_config: FTPSConfig,
     pub collect_metrics: bool,
     pub idle_session_timeout: Duration,
 }
 
 /// Does TCP processing when a FTP client connects
 pub async fn spawn<S, U>(
-    params: Params<S, U>,
+    config: Config<S, U>,
     tcp_stream: TcpStream,
     control_connection_info: Option<ConnectionTuple>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
@@ -64,29 +63,30 @@ where
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
-    let with_metrics = params.collect_metrics;
-    let tls_configured = if let (Some(_), Some(_)) = (&params.certs_file, &params.key_file) {
-        true
-    } else {
-        false
-    };
-    let storage_features = params.storage.supported_features();
-    let authenticator = params.authenticator.clone();
-    let mut session = Session::new(Arc::new(params.storage))
-        .ftps(params.certs_file.clone(), params.key_file.clone())
-        .metrics(with_metrics);
+    let Config {
+        storage,
+        authenticator,
+        passive_ports,
+        ftps_config,
+        collect_metrics,
+        idle_session_timeout,
+        ..
+    } = config;
+
+    let tls_configured = if let FTPSConfig::On { .. } = ftps_config { true } else { false };
+    let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-    session.control_msg_tx = Some(control_msg_tx.clone());
-    session.control_connection_info = control_connection_info;
-    let session = Arc::new(Mutex::new(session));
-    let passive_ports = params.passive_ports.clone();
-    let idle_session_timeout = params.idle_session_timeout;
+    let session: Session<S, U> = Session::new(Arc::new(storage))
+        .ftps(ftps_config.clone())
+        .metrics(config.collect_metrics)
+        .control_msg_tx(control_msg_tx.clone())
+        .control_connection_info(control_connection_info);
+
+    let shared_session: SharedSession<S, U> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr().unwrap();
-    let certs_file: Option<PathBuf> = if tls_configured { Some(params.certs_file.clone().unwrap()) } else { None };
-    let key_file: Option<PathBuf> = if tls_configured { Some(params.key_file.clone().unwrap()) } else { None };
 
     let event_handler_chain = handle_event::<S, U>(
-        session.clone(),
+        shared_session.clone(),
         authenticator,
         tls_configured,
         passive_ports,
@@ -96,14 +96,14 @@ where
         proxyloop_msg_tx,
         control_connection_info,
     );
-    let event_handler_chain = handle_with_auth::<S, U, _>(session, event_handler_chain);
+    let event_handler_chain = handle_with_auth::<S, U, _>(shared_session, event_handler_chain);
     let event_handler_chain = handle_with_logging::<S, U, _>(event_handler_chain);
 
     let codec = FTPCodec::new();
     let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FTPCodec> = codec.framed(Box::new(tcp_stream));
     let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
-    reply_sink.send(Reply::new(ReplyCode::ServiceReady, params.greeting)).await?;
+    reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
     reply_sink.flush().await?;
 
     let mut command_source = command_source.fuse();
@@ -135,7 +135,7 @@ where
                     return;
                 }
                 Some(Ok(event)) => {
-                    if with_metrics {
+                    if collect_metrics {
                         add_event_metric(&event);
                     };
 
@@ -152,7 +152,7 @@ where
                         let io = codec_io.into_inner();
 
                         // Wrap in TLS Stream
-                        let acceptor: tokio_rustls::TlsAcceptor = new_config(certs_file.clone().unwrap(), key_file.clone().unwrap()).into();
+                        let acceptor: tokio_rustls::TlsAcceptor = ftps_config.clone().try_into().unwrap(); // unwrap because we can't be in upgrading to TLS if it was never configured.
                         let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = Box::new(acceptor.accept(io).await.unwrap());
 
                         // Wrap in codec again and get sink + source
@@ -172,7 +172,7 @@ where
                             return;
                         }
                         Ok(reply) => {
-                            if with_metrics {
+                            if collect_metrics {
                                 add_reply_metric(&reply);
                             }
                             let result = reply_sink.send(reply).await;
@@ -184,7 +184,7 @@ where
                     }
                 }
                 Some(Err(e)) => {
-                    let reply = handle_control_channel_error::<S, U>(e, with_metrics);
+                    let reply = handle_control_channel_error::<S, U>(e, collect_metrics);
                     let mut close_connection = false;
                     if let Reply::CodeAndMsg {
                         code: ReplyCode::ClosingControlConnection,

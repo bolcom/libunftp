@@ -2,6 +2,7 @@
 
 use super::chancomms::{DataCommand, InternalMsg};
 use super::controlchan::command::Command;
+use super::tls::FTPSConfig;
 use crate::auth::UserDetail;
 use crate::server::{tls::new_config, Session};
 use crate::storage::{self, Error, ErrorKind};
@@ -24,13 +25,11 @@ where
 {
     pub user: Arc<Option<U>>,
     pub socket: tokio::net::TcpStream,
-    pub tls: bool,
-    pub tx: Sender<InternalMsg>,
+    pub control_msg_tx: Sender<InternalMsg>,
     pub storage: Arc<S>,
     pub cwd: PathBuf,
     pub start_pos: u64,
-    pub certs_file: Option<PathBuf>,
-    pub key_file: Option<PathBuf>,
+    pub ftps_mode: FTPSConfig,
 }
 
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
@@ -60,13 +59,13 @@ where
 
     async fn exec_retr(self, path: String) {
         let path = self.cwd.join(path);
-        let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
-        let mut tx_error: Sender<InternalMsg> = self.tx.clone();
+        let mut tx_sending: Sender<InternalMsg> = self.control_msg_tx.clone();
+        let mut tx_error: Sender<InternalMsg> = self.control_msg_tx.clone();
         tokio::spawn(async move {
             match self.storage.get(&self.user, path, self.start_pos).await {
                 Ok(mut f) => match tx_sending.send(InternalMsg::SendingData).await {
                     Ok(_) => {
-                        let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
+                        let mut output = Self::writer(self.socket, self.ftps_mode);
                         match tokio::io::copy(&mut f, &mut output).await {
                             Ok(bytes_copied) => {
                                 if let Err(err) = output.shutdown().await {
@@ -92,17 +91,12 @@ where
 
     async fn exec_stor(self, path: String) {
         let path = self.cwd.join(path);
-        let mut tx_ok = self.tx.clone();
-        let mut tx_error = self.tx.clone();
+        let mut tx_ok = self.control_msg_tx.clone();
+        let mut tx_error = self.control_msg_tx.clone();
         tokio::spawn(async move {
             match self
                 .storage
-                .put(
-                    &self.user,
-                    Self::reader(self.socket, self.tls, self.certs_file, self.key_file),
-                    path,
-                    self.start_pos,
-                )
+                .put(&self.user, Self::reader(self.socket, self.ftps_mode), path, self.start_pos)
                 .await
             {
                 Ok(bytes) => {
@@ -124,9 +118,9 @@ where
             Some(path) => self.cwd.join(path),
             None => self.cwd.clone(),
         };
-        let mut tx_ok = self.tx.clone();
+        let mut tx_ok = self.control_msg_tx.clone();
         tokio::spawn(async move {
-            let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
+            let mut output = Self::writer(self.socket, self.ftps_mode);
             let result = match self.storage.list_fmt(&self.user, path).await {
                 Ok(cursor) => {
                     debug!("Copying future for List");
@@ -163,12 +157,12 @@ where
             Some(path) => self.cwd.join(path),
             None => self.cwd.clone(),
         };
-        let mut tx_ok = self.tx.clone();
-        let mut tx_error = self.tx.clone();
+        let mut tx_ok = self.control_msg_tx.clone();
+        let mut tx_error = self.control_msg_tx.clone();
         tokio::spawn(async move {
             match self.storage.nlst(&self.user, path).await {
                 Ok(mut input) => {
-                    let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
+                    let mut output = Self::writer(self.socket, self.ftps_mode);
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => {
                             if let Err(err) = output.shutdown().await {
@@ -191,38 +185,30 @@ where
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
-    fn writer(
-        socket: tokio::net::TcpStream,
-        tls: bool,
-        certs_file: Option<PathBuf>,
-        key_file: Option<PathBuf>,
-    ) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
-        if tls {
-            let io = futures::executor::block_on(async move {
-                let acceptor: TlsAcceptor = new_config(certs_file.unwrap(), key_file.unwrap()).into();
-                acceptor.accept(socket).await.unwrap()
-            });
-            Box::new(io)
-        } else {
-            Box::new(socket)
+    fn writer(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
+        match ftps_mode {
+            FTPSConfig::Off => Box::new(socket),
+            FTPSConfig::On { certs_file, key_file } => {
+                let io = futures::executor::block_on(async move {
+                    let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
+                    acceptor.accept(socket).await.unwrap()
+                });
+                Box::new(io)
+            }
         }
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
-    fn reader(
-        socket: tokio::net::TcpStream,
-        tls: bool,
-        certs_file: Option<PathBuf>,
-        key_file: Option<PathBuf>,
-    ) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
-        if tls {
-            let io = futures::executor::block_on(async move {
-                let acceptor: TlsAcceptor = new_config(certs_file.unwrap(), key_file.unwrap()).into();
-                acceptor.accept(socket).await.unwrap()
-            });
-            Box::new(io)
-        } else {
-            Box::new(socket)
+    fn reader(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
+        match ftps_mode {
+            FTPSConfig::Off => Box::new(socket),
+            FTPSConfig::On { certs_file, key_file } => {
+                let io = futures::executor::block_on(async move {
+                    let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
+                    acceptor.accept(socket).await.unwrap()
+                });
+                Box::new(io)
+            }
         }
     }
 }
@@ -241,17 +227,15 @@ where
 {
     let mut data_cmd_rx = session.data_cmd_rx.take().unwrap().fuse();
     let mut data_abort_rx = session.data_abort_rx.take().unwrap().fuse();
-    let tls = session.data_tls;
+    let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FTPSConfig::Off };
     let command_executor = DataCommandExecutor {
         user: session.user.clone(),
         socket,
-        tls,
-        tx,
+        control_msg_tx: tx,
         storage: Arc::clone(&session.storage),
         cwd: session.cwd.clone(),
         start_pos: session.start_pos,
-        certs_file: if tls { Some(session.certs_file.clone().unwrap()) } else { None },
-        key_file: if tls { Some(session.key_file.clone().unwrap()) } else { None },
+        ftps_mode,
     };
 
     tokio::spawn(async move {

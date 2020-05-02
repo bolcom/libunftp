@@ -21,4 +21,4 @@ mod error;
 pub(crate) use error::ControlChanErrorKind;
 
 mod control_loop;
-pub(crate) use control_loop::{spawn as spawn_loop, Params as LoopParams};
+pub(crate) use control_loop::{spawn as spawn_loop, Config as LoopConfig};
