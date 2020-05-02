@@ -4,7 +4,7 @@ use std::{error::Error, result::Result};
 const BUCKET_NAME: &str = "bucket-name";
 const SERVICE_ACCOUNT_KEY: &str = "service-account-key";
 const FTPS_CERTS_FILE: &str = "ftps-certs-file";
-const FTPS_CERTS_PASSWORD: &str = "ftps-certs-password";
+const FTPS_KEY_FILE: &str = "ftps-key-file";
 const BIND_ADDRESS: &str = "127.0.0.1:2121";
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
@@ -38,15 +38,15 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .value_name("FTPS_CERTS_FILE")
                 .env("LIBUNFTP_FTPS_CERTS_FILE")
                 .help("The ftps certs file")
-                .requires(FTPS_CERTS_PASSWORD),
+                .requires(FTPS_KEY_FILE),
         )
         .arg(
-            Arg::with_name(FTPS_CERTS_PASSWORD)
+            Arg::with_name(FTPS_KEY_FILE)
                 .short("p")
-                .long(FTPS_CERTS_PASSWORD)
-                .value_name("FTPS_CERTS_PASSWORD")
-                .env("LIBUNFTP_FTPS_CERTS_PASSWORD")
-                .help("The ftps certs file password")
+                .long(FTPS_KEY_FILE)
+                .value_name("FTPS_KEY_FILE")
+                .env("LIBUNFTP_FTPS_KEY_FILE")
+                .help("The ftps certs key file")
                 .requires(FTPS_CERTS_FILE),
         )
         .get_matches();
@@ -61,13 +61,13 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
     let service_account_key = yup_oauth2::read_service_account_key(service_account_key).await?;
     if let Some(ftps_certs_file) = matches.value_of(FTPS_CERTS_FILE) {
-        let ftps_certs_password = matches
-            .value_of(FTPS_CERTS_PASSWORD)
+        let ftps_key_file = matches
+            .value_of(FTPS_KEY_FILE)
             .ok_or("Internal error: use of an undefined command line parameter")?;
         libunftp::Server::new(Box::new(move || {
             libunftp::storage::cloud_storage::CloudStorage::new(&bucket_name, service_account_key.clone())
         }))
-        .ftps(ftps_certs_file, ftps_certs_password)
+        .ftps(ftps_certs_file, ftps_key_file)
         .listen(BIND_ADDRESS)
         .await;
     } else {
