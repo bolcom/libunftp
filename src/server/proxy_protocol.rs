@@ -19,7 +19,7 @@ lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ProxyError {
     CrlfError,
     HeaderSize,
@@ -59,14 +59,14 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
         match pbuf.iter().position(|b| *b == b'\n') {
             Some(pos) => {
                 // invalid header size
-                if i + pos > rbuf.capacity() || pos < 13 {
+                if i + pos > rbuf.capacity() || i + pos < 13 {
                     return Err(ProxyError::HeaderSize);
                 }
 
                 read_half.read(&mut rbuf[i..=i + pos]).await.unwrap();
 
                 // make sure the message ends with crlf or it will panic
-                if rbuf[pos - 1] != 0x0d {
+                if rbuf[i + pos - 1] != 0x0d {
                     return Err(ProxyError::CrlfError);
                 }
 
@@ -211,7 +211,103 @@ where
             }
         }
         // out of tries
-        println!("Out of tries!");
+        warn!("Out of tries!");
         Err(ProxyProtocolError::MaxRetriesError)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProxyError;
+    use proxy_protocol::version1::ProxyAddressFamily;
+    use proxy_protocol::ProxyHeader;
+    use std::net::Shutdown;
+    use std::net::{IpAddr::V4, Ipv4Addr};
+    use std::time::Duration;
+    use tokio::io::AsyncWriteExt;
+    use tokio::time::delay_for;
+
+    async fn listen_server(mut listener: tokio::net::TcpListener) -> tokio::net::TcpStream {
+        listener.accept().await.unwrap().0
+    }
+
+    async fn connect_client(port: u16) -> tokio::net::TcpStream {
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.unwrap()
+    }
+
+    async fn get_connected_tcp_streams() -> (tokio::net::TcpStream, tokio::net::TcpStream) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::join!(listen_server(listener), connect_client(port))
+    }
+
+    #[tokio::test]
+    async fn long_header_parses_fine() {
+        let (mut s, mut c) = get_connected_tcp_streams().await;
+
+        let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await.unwrap() });
+        let client = tokio::spawn(async move {
+            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\r\n".as_ref())
+                .await
+                .unwrap();
+            c.shutdown(Shutdown::Both).unwrap();
+        });
+
+        let res = tokio::join!(server, client);
+
+        assert_eq!(
+            res.0.unwrap(),
+            ProxyHeader::Version1 {
+                family: ProxyAddressFamily::IPv4,
+                source: V4(Ipv4Addr::new(255, 255, 255, 255)),
+                destination: V4(Ipv4Addr::new(255, 255, 255, 255)),
+                source_port: 65535,
+                destination_port: 65535
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn bad_crlf_throws_error() {
+        let (mut s, mut c) = get_connected_tcp_streams().await;
+
+        let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
+        let client = tokio::spawn(async move {
+            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\n".as_ref()).await.unwrap();
+            c.shutdown(Shutdown::Both).unwrap();
+        });
+
+        let res = tokio::join!(server, client);
+        let res = res.0.unwrap();
+
+        assert_eq!(res, Err(ProxyError::CrlfError));
+    }
+
+    #[tokio::test]
+    async fn in_pieces_parses_fine() {
+        let (mut s, mut c) = get_connected_tcp_streams().await;
+        c.set_nodelay(true).unwrap();
+
+        let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
+        let client = tokio::spawn(async move {
+            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535".as_ref()).await.unwrap();
+            delay_for(Duration::from_millis(100)).await;
+            c.write_all("\r\n".as_ref()).await.unwrap();
+            c.shutdown(Shutdown::Both).unwrap();
+        });
+
+        let res = tokio::join!(server, client);
+
+        assert_eq!(
+            res.0.unwrap(),
+            Ok(ProxyHeader::Version1 {
+                family: ProxyAddressFamily::IPv4,
+                source: V4(Ipv4Addr::new(255, 255, 255, 255)),
+                destination: V4(Ipv4Addr::new(255, 255, 255, 255)),
+                source_port: 65535,
+                destination_port: 65535
+            })
+        );
     }
 }
