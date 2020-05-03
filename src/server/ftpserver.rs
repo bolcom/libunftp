@@ -20,17 +20,12 @@ const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 
 #[derive(Clone, Copy)]
 struct ProxyParams {
-    #[allow(dead_code)]
-    external_ip: IpAddr,
     external_control_port: u16,
 }
 
 impl ProxyParams {
-    fn new(ip: &str, port: u16) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(ProxyParams {
-            external_ip: ip.parse()?,
-            external_control_port: port,
-        })
+    fn new(port: u16) -> Self {
+        ProxyParams { external_control_port: port }
     }
 }
 
@@ -280,10 +275,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
+    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode(2121).unwrap();
     /// ```
-    pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
-        self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
+    pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        self.proxy_protocol_mode = Some(ProxyParams::new(external_control_port));
         self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.passive_ports.clone()));
 
         Ok(self)
