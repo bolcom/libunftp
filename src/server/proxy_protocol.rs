@@ -3,13 +3,13 @@ use crate::auth::UserDetail;
 use crate::storage;
 
 use bytes::Bytes;
+use chashmap::CHashMap;
 use lazy_static::*;
 use log::warn;
 use proxy_protocol::version1::ProxyAddressFamily;
 use proxy_protocol::ProxyHeader;
 use rand::rngs::OsRng;
 use rand::RngCore;
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::ops::Range;
 use tokio::io::AsyncReadExt;
@@ -128,7 +128,7 @@ where
     S: storage::StorageBackend<U> + Send + Sync,
     U: UserDetail,
 {
-    switchboard: HashMap<String, Option<SharedSession<S, U>>>,
+    switchboard: CHashMap<String, Option<SharedSession<S, U>>>,
     port_range: Range<u16>,
 }
 
@@ -146,14 +146,14 @@ where
     U: UserDetail + 'static,
 {
     pub fn new(passive_ports: Range<u16>) -> Self {
-        let board = HashMap::new();
+        let board = CHashMap::new();
         Self {
             switchboard: board,
             port_range: passive_ports,
         }
     }
 
-    fn try_and_claim(&mut self, hash: String, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
+    fn try_and_claim(&self, hash: String, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, Some(session_arc)) {
@@ -171,7 +171,7 @@ where
         format!("{}.{}", connection.from_ip, connection.to_port)
     }
 
-    pub fn unregister(&mut self, connection: &ConnectionTuple) {
+    pub fn unregister(&self, connection: &ConnectionTuple) {
         let hash = Self::get_hash_with_connection(connection);
         match self.switchboard.remove(&hash) {
             Some(_) => (),
@@ -181,7 +181,7 @@ where
         }
     }
 
-    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
+    pub async fn get_session_by_incoming_data_connection(&self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
         let hash = Self::get_hash_with_connection(connection);
 
         match self.switchboard.get(&hash) {
@@ -193,7 +193,7 @@ where
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
     // TODO: set a TTL on the hashmap entries
-    pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
+    pub async fn reserve_next_free_port(&self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
         let mut rng = OS_RNG.lock().await;

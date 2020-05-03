@@ -325,7 +325,7 @@ where
         }
     }
 
-    async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
+    async fn listen_proxy_protocol_mode<T: Into<String>>(self, bind_address: T) {
         let proxy_params = self
             .proxy_protocol_mode
             .expect("You cannot use the proxy protocol listener without setting the proxy_protocol_mode parameters.");
@@ -348,39 +348,8 @@ where
             tokio::select! {
 
                 Some(tcp_stream) = incoming.next() => {
-                    let mut tcp_stream = tcp_stream.unwrap();
-                    let socket_addr = tcp_stream.peer_addr();
-
-                    info!("Incoming proxy connection from {:?}", socket_addr);
-                    let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
-                        Ok(v) => v,
-                        Err(e) => {
-                            warn!("proxy protocol decode error: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    // Based on the proxy protocol header, and the configured control port number,
-                    // we differentiate between connections for the control channel,
-                    // and connections for the data channel.
-                    if connection.to_port == proxy_params.external_control_port {
-                        let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                        info!("Connection from {:?} is a control connection", socket_addr);
-                        let params: controlchan::LoopParams<S,U> = (&self).into();
-                        let result = controlchan::spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
-                        if result.is_err() {
-                            warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
-                        }
-                    } else {
-                        // handle incoming data connections
-                        info!("Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
-                        if !self.passive_ports.contains(&connection.to_port) {
-                            warn!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
-                            tcp_stream.shutdown(Shutdown::Both).unwrap();
-                            continue;
-                        }
-                        self.dispatch_data_connection(tcp_stream, connection).await;
-                    }
+                    // spawn this function as an async task
+                    self.handle_incoming_proxy_connection(proxy_params, tcp_stream, proxyloop_msg_tx.clone()).await;
                 },
                 Some(msg) = proxyloop_msg_rx.next() => {
                     match msg {
@@ -393,12 +362,56 @@ where
         }
     }
 
+    async fn handle_incoming_proxy_connection(
+        &self,
+        proxy_params: ProxyParams,
+        tcp_stream: Result<tokio::net::TcpStream, std::io::Error>,
+        proxyloop_msg_tx: ProxyLoopSender<S, U>,
+    ) {
+        let mut tcp_stream = tcp_stream.unwrap();
+        let socket_addr = tcp_stream.peer_addr();
+
+        info!("Incoming proxy connection from {:?}", socket_addr);
+        let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("proxy protocol decode error: {:?}", e);
+                return;
+            }
+        };
+
+        // Based on the proxy protocol header, and the configured control port number,
+        // we differentiate between connections for the control channel,
+        // and connections for the data channel.
+        if connection.to_port == proxy_params.external_control_port {
+            let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
+            info!("Connection from {:?} is a control connection", socket_addr);
+            let params: controlchan::LoopParams<S, U> = (self).into();
+            let result = controlchan::spawn_loop::<S, U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx)).await;
+            if result.is_err() {
+                warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+            }
+        } else {
+            // handle incoming data connections
+            info!(
+                "Connection from {:?} is a data connection: {:?}, {}",
+                socket_addr, self.passive_ports, connection.to_port
+            );
+            if !self.passive_ports.contains(&connection.to_port) {
+                warn!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                tcp_stream.shutdown(Shutdown::Both).unwrap();
+                return;
+            }
+            self.dispatch_data_connection(tcp_stream, connection).await;
+        }
+    }
+
     // this function finds (by hashing <srcip>.<dstport>) the session
     // that requested this data channel connection in the proxy
     // protocol switchboard hashmap, and then calls the
     // spawn_data_processing function with the tcp_stream
-    async fn dispatch_data_connection(&mut self, tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
-        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+    async fn dispatch_data_connection(&self, tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+        if let Some(switchboard) = &self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
                     let mut session = session.lock().await;
@@ -417,7 +430,7 @@ where
         }
     }
 
-    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
+    async fn select_and_register_passive_port(&self, session_arc: SharedSession<S, U>) {
         info!("Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
@@ -426,7 +439,7 @@ where
 
         let mut p1 = 0;
         let mut p2 = 0;
-        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+        if let Some(switchboard) = &self.proxy_protocol_switchboard {
             let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
             info!("Reserving data port: {:?}", port);
             p1 = port >> 8;
