@@ -18,22 +18,6 @@ use std::time::Duration;
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 
-#[derive(Clone, Copy)]
-struct ProxyParams {
-    #[allow(dead_code)]
-    external_ip: IpAddr,
-    external_control_port: u16,
-}
-
-impl ProxyParams {
-    fn new(ip: &str, port: u16) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(ProxyParams {
-            external_ip: ip.parse()?,
-            external_control_port: port,
-        })
-    }
-}
-
 /// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
 ///
@@ -67,7 +51,7 @@ where
     key_file: Option<PathBuf>,
     collect_metrics: bool,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: Option<ProxyParams>,
+    proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
 }
 
@@ -106,18 +90,7 @@ where
     where
         AnonymousAuthenticator: Authenticator<U>,
     {
-        Server {
-            storage: s,
-            greeting: DEFAULT_GREETING,
-            authenticator: Arc::new(AnonymousAuthenticator {}),
-            passive_ports: 49152..65535,
-            certs_file: Option::None,
-            key_file: Option::None,
-            collect_metrics: false,
-            idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: Option::None,
-            proxy_protocol_switchboard: Option::None,
-        }
+        Self::new_with_authenticator(s, Arc::new(AnonymousAuthenticator {}))
     }
 
     /// Construct a new [`Server`] with the given [`StorageBackend`] and [`Authenticator`]. The other parameters will be set to defaults.
@@ -135,7 +108,7 @@ where
             key_file: Option::None,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: Option::None,
+            proxy_protocol_mode: ProxyMode::Off,
             proxy_protocol_switchboard: Option::None,
         }
     }
@@ -267,12 +240,7 @@ where
     /// data connections on the listening port. It then distinguishes
     /// control and data connections by comparing the original
     /// destination port (extracted from the PROXY header) with the
-    /// port specified as the `external_control_port`
-    /// `proxy_protocol_mode` parameter.
-    ///
-    /// For the passive listening port, libunftp reports the IP
-    /// address specified as the `external_ip` `proxy_protocol_mode`
-    /// parameter.
+    /// port specified as the `external_control_port` parameter.
     ///
     /// # Example
     ///
@@ -280,13 +248,12 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode("10.0.0.1", 2121).unwrap();
+    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode(2121);
     /// ```
-    pub fn proxy_protocol_mode(mut self, external_ip: &str, external_control_port: u16) -> Result<Self, Box<dyn std::error::Error>> {
-        self.proxy_protocol_mode = Some(ProxyParams::new(external_ip, external_control_port)?);
+    pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
+        self.proxy_protocol_mode = external_control_port.into();
         self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.passive_ports.clone()));
-
-        Ok(self)
+        self
     }
 
     /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
@@ -310,8 +277,8 @@ where
     /// `bind()` to the address.
     pub async fn listen<T: Into<String>>(self, bind_address: T) {
         match self.proxy_protocol_mode {
-            Some(_) => self.listen_proxy_protocol_mode(bind_address).await,
-            None => self.listen_normal_mode(bind_address).await,
+            ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
+            ProxyMode::Off => self.listen_normal_mode(bind_address).await,
         }
     }
 
@@ -330,11 +297,7 @@ where
         }
     }
 
-    async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T) {
-        let proxy_params = self
-            .proxy_protocol_mode
-            .expect("You cannot use the proxy protocol listener without setting the proxy_protocol_mode parameters.");
-
+    async fn listen_proxy_protocol_mode<T: Into<String>>(mut self, bind_address: T, external_control_port: u16) {
         // TODO: Propagate errors to caller instead of doing unwraps.
         let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -368,7 +331,7 @@ where
                     // Based on the proxy protocol header, and the configured control port number,
                     // we differentiate between connections for the control channel,
                     // and connections for the data channel.
-                    if connection.to_port == proxy_params.external_control_port {
+                    if connection.to_port == external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         info!("Connection from {:?} is a control connection", socket_addr);
                         let params: controlchan::LoopParams<S,U> = (&self).into();

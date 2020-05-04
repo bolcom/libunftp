@@ -19,6 +19,18 @@ lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ProxyMode {
+    Off,
+    On { external_control_port: u16 },
+}
+
+impl From<u16> for ProxyMode {
+    fn from(port: u16) -> Self {
+        ProxyMode::On { external_control_port: port }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ProxyError {
     CrlfError,
