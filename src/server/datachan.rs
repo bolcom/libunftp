@@ -126,24 +126,34 @@ where
         };
         let mut tx_ok = self.tx.clone();
         tokio::spawn(async move {
-            match self.storage.list_fmt(&self.user, path).await {
+            let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
+            let result = match self.storage.list_fmt(&self.user, path).await {
                 Ok(cursor) => {
                     debug!("Copying future for List");
                     let mut input = cursor;
-                    let mut output = Self::writer(self.socket, self.tls, self.certs_file, self.key_file);
                     match tokio::io::copy(&mut input, &mut output).await {
-                        Ok(_) => {
-                            if let Err(err) = output.shutdown().await {
-                                warn!("Could not shutdown output stream during LIST: {}", err);
-                            }
-                            if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                error!("Could not notify control channel of successful LIST: {}", err);
-                            }
-                        }
-                        Err(err) => warn!("Could not copy from storage implementation during LIST: {}", err),
+                        Ok(_) => Ok(InternalMsg::DirectorySuccessfullyListed),
+                        Err(e) => Err(e),
                     }
                 }
-                Err(err) => warn!("Failed to send directory list: {:?}", err),
+                Err(err) => {
+                    warn!("Failed to send directory list: {:?}", err);
+                    match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
+                        Ok(_) => Ok(InternalMsg::DirectoryListFailure),
+                        Err(e) => Err(e),
+                    }
+                }
+            };
+            match result {
+                Ok(msg) => {
+                    if let Err(err) = output.shutdown().await {
+                        warn!("Could not shutdown output stream during LIST: {}", err);
+                    }
+                    if let Err(err) = tx_ok.send(msg).await {
+                        error!("Could not notify control channel of LIST result: {}", err);
+                    }
+                }
+                Err(err) => warn!("Failed to send reply to LIST: {}", err),
             }
         });
     }
