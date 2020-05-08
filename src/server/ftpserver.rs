@@ -14,6 +14,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tls::FTPSConfig;
 
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
@@ -47,9 +48,8 @@ where
     greeting: &'static str,
     authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
     passive_ports: Range<u16>,
-    certs_file: Option<PathBuf>,
-    key_file: Option<PathBuf>,
     collect_metrics: bool,
+    ftps_mode: FTPSConfig,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
@@ -104,8 +104,7 @@ where
             greeting: DEFAULT_GREETING,
             authenticator,
             passive_ports: 49152..65535,
-            certs_file: Option::None,
-            key_file: Option::None,
+            ftps_mode: FTPSConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: ProxyMode::Off,
@@ -182,8 +181,10 @@ where
     /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.certs_file = Option::Some(certs_file.into());
-        self.key_file = Option::Some(key_file.into());
+        self.ftps_mode = FTPSConfig::On {
+            certs_file: certs_file.into(),
+            key_file: key_file.into(),
+        };
         self
     }
 
@@ -289,7 +290,7 @@ where
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let params: controlchan::LoopParams<S, U> = (&self).into();
+            let params: controlchan::LoopConfig<S, U> = (&self).into();
             let result = controlchan::spawn_loop::<S, U>(params, tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -334,7 +335,7 @@ where
                     if connection.to_port == external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         info!("Connection from {:?} is a control connection", socket_addr);
-                        let params: controlchan::LoopParams<S,U> = (&self).into();
+                        let params: controlchan::LoopConfig<S,U> = (&self).into();
                         let result = controlchan::spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -420,7 +421,7 @@ where
     }
 }
 
-impl<S, U> From<&Server<S, U>> for controlchan::LoopParams<S, U>
+impl<S, U> From<&Server<S, U>> for controlchan::LoopConfig<S, U>
 where
     U: UserDetail + 'static,
     S: 'static + storage::StorageBackend<U> + Sync + Send,
@@ -428,11 +429,10 @@ where
     S::Metadata: storage::Metadata,
 {
     fn from(server: &Server<S, U>) -> Self {
-        controlchan::LoopParams {
+        controlchan::LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
-            certs_file: server.certs_file.clone(),
-            key_file: server.key_file.clone(),
+            ftps_config: server.ftps_mode.clone(),
             collect_metrics: server.collect_metrics,
             greeting: server.greeting,
             idle_session_timeout: server.idle_session_timeout,

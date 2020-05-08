@@ -4,6 +4,7 @@
 use super::chancomms::InternalMsg;
 use super::controlchan::command::Command;
 use super::proxy_protocol::ConnectionTuple;
+use super::tls::FTPSConfig;
 use crate::metrics;
 use crate::storage;
 
@@ -41,12 +42,14 @@ where
     pub cwd: std::path::PathBuf,
     pub rename_from: Option<PathBuf>,
     pub state: SessionState,
-    pub certs_file: Option<PathBuf>,
-    pub key_file: Option<PathBuf>,
-    // True if the command channel is in secure mode
+    // Tells if FTPS/TLS security is available to the session or not. The variables cmd_tls and
+    // data_tls tells if the channels are actually encrypted or not.
+    pub ftps_config: FTPSConfig,
+    // True if the command channel is in secure mode at the moment. Changed by AUTH and CCC commands.
     pub cmd_tls: bool,
-    // True if the data channel is in secure mode.
+    // True if the data channel is in secure mode at the moment. Changed by the PROT command.
     pub data_tls: bool,
+    // True if metrics for prometheus are updated.
     pub collect_metrics: bool,
     // The starting byte for a STOR or RETR command. Set by the _Restart of Interrupted Transfer (REST)_
     // command to support resume functionality.
@@ -73,8 +76,7 @@ where
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
-            certs_file: Option::None,
-            key_file: Option::None,
+            ftps_config: FTPSConfig::Off,
             cmd_tls: false,
             data_tls: false,
             collect_metrics: false,
@@ -82,17 +84,26 @@ where
         }
     }
 
-    pub(super) fn ftps(mut self, certs_file: Option<PathBuf>, password: Option<PathBuf>) -> Self {
-        self.certs_file = certs_file;
-        self.key_file = password;
+    pub fn ftps(mut self, mode: FTPSConfig) -> Self {
+        self.ftps_config = mode;
         self
     }
 
-    pub(super) fn metrics(mut self, collect_metrics: bool) -> Self {
+    pub fn metrics(mut self, collect_metrics: bool) -> Self {
         if collect_metrics {
             metrics::inc_session();
         }
         self.collect_metrics = collect_metrics;
+        self
+    }
+
+    pub fn control_msg_tx(mut self, sender: Sender<InternalMsg>) -> Self {
+        self.control_msg_tx = Some(sender);
+        self
+    }
+
+    pub fn control_connection_info(mut self, info: Option<ConnectionTuple>) -> Self {
+        self.control_connection_info = info;
         self
     }
 }
