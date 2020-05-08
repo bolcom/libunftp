@@ -1,7 +1,8 @@
 use super::{
     chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
-    controlchan::{spawn_loop, LoopParams},
+    controlchan::{spawn_loop, LoopConfig},
     datachan::spawn_processing,
+    tls::FTPSConfig,
     ReplyCode,
 };
 use crate::{
@@ -55,9 +56,8 @@ where
     greeting: &'static str,
     authenticator: Arc<dyn Authenticator<U>>,
     passive_ports: Range<u16>,
-    certs_file: Option<PathBuf>,
-    key_file: Option<PathBuf>,
     collect_metrics: bool,
+    ftps_mode: FTPSConfig,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
@@ -73,9 +73,8 @@ where
             .field("greeting", &self.greeting)
             .field("authenticator", &self.authenticator)
             .field("passive_ports", &self.passive_ports)
-            .field("certs_file", &self.certs_file)
-            .field("key_file", &self.key_file)
             .field("collect_metrics", &self.collect_metrics)
+            .field("ftps_mode", &self.ftps_mode)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -132,8 +131,7 @@ where
             greeting: DEFAULT_GREETING,
             authenticator,
             passive_ports: 49152..65535,
-            certs_file: Option::None,
-            key_file: Option::None,
+            ftps_mode: FTPSConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: ProxyMode::Off,
@@ -210,8 +208,10 @@ where
     /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.certs_file = Option::Some(certs_file.into());
-        self.key_file = Option::Some(key_file.into());
+        self.ftps_mode = FTPSConfig::On {
+            certs_file: certs_file.into(),
+            key_file: key_file.into(),
+        };
         self
     }
 
@@ -319,7 +319,7 @@ where
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
             info!("Incoming control channel connection from {:?}", socket_addr);
-            let params: LoopParams<S, U> = (&self).into();
+            let params: LoopConfig<S, U> = (&self).into();
             let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
             if result.is_err() {
                 warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -365,7 +365,7 @@ where
                     if connection.to_port == external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         info!("Connection from {:?} is a control connection", socket_addr);
-                        let params: LoopParams<S,U> = (&self).into();
+                        let params: LoopConfig<S,U> = (&self).into();
                         let result = spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
@@ -453,7 +453,7 @@ where
     }
 }
 
-impl<S, U> From<&Server<S, U>> for LoopParams<S, U>
+impl<S, U> From<&Server<S, U>> for LoopConfig<S, U>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
@@ -461,11 +461,10 @@ where
     S::Metadata: Metadata,
 {
     fn from(server: &Server<S, U>) -> Self {
-        LoopParams {
+        LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
-            certs_file: server.certs_file.clone(),
-            key_file: server.key_file.clone(),
+            ftps_config: server.ftps_mode.clone(),
             collect_metrics: server.collect_metrics,
             greeting: server.greeting,
             idle_session_timeout: server.idle_session_timeout,
