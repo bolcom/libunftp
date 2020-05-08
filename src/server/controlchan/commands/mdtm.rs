@@ -1,21 +1,24 @@
-use crate::auth::UserDetail;
-use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage::{self, Metadata};
+use crate::{
+    auth::UserDetail,
+    server::{
+        chancomms::InternalMsg,
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
-use chrono::offset::Utc;
-use chrono::DateTime;
-use futures::channel::mpsc::Sender;
-use futures::prelude::*;
+use chrono::{offset::Utc, DateTime};
+use futures::{channel::mpsc::Sender, prelude::*};
 use log::warn;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 const RFC3659_TIME: &str = "%Y%m%d%H%M%S";
 
+#[derive(Debug)]
 pub struct Mdtm {
     path: PathBuf,
 }
@@ -30,10 +33,11 @@ impl Mdtm {
 impl<S, U> CommandHandler<S, U> for Mdtm
 where
     U: UserDetail,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send + Sync,
-    S::Metadata: 'static + storage::Metadata,
+    S::Metadata: 'static + Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let user = session.user.clone();

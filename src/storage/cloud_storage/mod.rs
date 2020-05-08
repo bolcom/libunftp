@@ -5,25 +5,28 @@ pub mod object_metadata;
 mod response_body;
 mod uri;
 
-use crate::storage::cloud_storage::response_body::*;
-use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use crate::storage::{
+    cloud_storage::response_body::{Item, ResponseBody},
+    Error, ErrorKind, Fileinfo, Metadata, StorageBackend,
+};
 use async_trait::async_trait;
 use bytes::{buf::BufExt, Buf};
 use futures::prelude::*;
 use hyper::{
     body::aggregate,
     client::connect::{dns::GaiResolver, HttpConnector},
-    http::{header, Method},
-    http::{StatusCode, Uri},
+    http::{header, Method, StatusCode, Uri},
     Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use object::Object;
 use object_metadata::ObjectMetadata;
-use response_body::Item;
 use std::convert::TryFrom;
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
@@ -49,6 +52,7 @@ impl CloudStorage {
         }
     }
 
+    #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<AccessToken, Error> {
         let auth = ServiceAccountAuthenticator::builder(self.service_account_key.clone())
             .hyper_client(self.client.clone())
@@ -62,7 +66,7 @@ impl CloudStorage {
 }
 
 #[async_trait]
-impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
+impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     type File = Object;
     type Metadata = ObjectMetadata;
 
@@ -70,7 +74,8 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         crate::storage::FEATURE_RESTART
     }
 
-    async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
+    #[tracing_attributes::instrument]
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
         let uri: Uri = self.uris.metadata(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
@@ -94,7 +99,9 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         response.to_metadata()
     }
 
-    async fn list<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
+    async fn list<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
@@ -116,7 +123,8 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         response.list()
     }
 
-    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File, Error> {
+    #[tracing_attributes::instrument]
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File, Error> {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -136,7 +144,7 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(Object::new(body.bytes()[start_pos..].into()))
     }
 
-    async fn put<P: AsRef<Path> + Send, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
+    async fn put<P: AsRef<Path> + Send + Debug, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         _user: &Option<U>,
         bytes: B,
@@ -162,7 +170,8 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(response.to_metadata()?.len())
     }
 
-    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+    #[tracing_attributes::instrument]
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.delete(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
@@ -179,7 +188,8 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(())
     }
 
-    async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+    #[tracing_attributes::instrument]
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.mkd(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -197,21 +207,25 @@ impl<U: Sync + Send> StorageBackend<U> for CloudStorage {
         Ok(())
     }
 
-    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _from: P, _to: P) -> Result<(), Error> {
+    #[tracing_attributes::instrument]
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _from: P, _to: P) -> Result<(), Error> {
         //TODO: implement this
         unimplemented!();
     }
 
-    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
+    #[tracing_attributes::instrument]
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
         //TODO: implement this
         unimplemented!();
     }
 
-    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
+    #[tracing_attributes::instrument]
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
         Ok(())
     }
 }
 
+#[tracing_attributes::instrument]
 async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     let status: StatusCode = response.status();
     let body = aggregate(response).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;

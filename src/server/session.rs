@@ -1,18 +1,15 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::chancomms::InternalMsg;
-use super::controlchan::command::Command;
-use super::proxy_protocol::ConnectionTuple;
-use crate::metrics;
-use crate::storage;
+use super::{chancomms::InternalMsg, controlchan::command::Command, proxy_protocol::ConnectionTuple};
+use crate::{
+    metrics,
+    storage::{Metadata, StorageBackend},
+};
+use futures::channel::mpsc::{Receiver, Sender};
+use std::{fmt::Debug, path::PathBuf, sync::Arc};
 
-use futures::channel::mpsc::Receiver;
-use futures::channel::mpsc::Sender;
-use std::path::PathBuf;
-use std::sync::Arc;
-
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum SessionState {
     New,
     WaitPass,
@@ -23,11 +20,12 @@ pub enum SessionState {
 pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 
 // This is where we keep the state for a ftp session.
-pub struct Session<S, U: Send + Sync>
+#[derive(Debug)]
+pub struct Session<S, U: Send + Sync + Debug>
 where
-    S: storage::StorageBackend<U>,
+    S: StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
     pub user: Arc<Option<U>>,
     pub username: Option<String>,
@@ -53,11 +51,11 @@ where
     pub start_pos: u64,
 }
 
-impl<S, U: Send + Sync + 'static> Session<S, U>
+impl<S, U: Send + Sync + Debug + 'static> Session<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
     pub(super) fn new(storage: Arc<S>) -> Self {
         Session {
@@ -97,11 +95,11 @@ where
     }
 }
 
-impl<S, U: Send + Sync> Drop for Session<S, U>
+impl<S, U: Send + Sync + Debug> Drop for Session<S, U>
 where
-    S: storage::StorageBackend<U>,
+    S: StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
     fn drop(&mut self) {
         if self.collect_metrics {

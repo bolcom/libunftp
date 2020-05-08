@@ -1,25 +1,26 @@
 //! Contains code pertaining to the FTP *data* channel
 
-use super::chancomms::{DataCommand, InternalMsg};
-use super::controlchan::command::Command;
-use crate::auth::UserDetail;
-use crate::server::{tls::new_config, Session};
-use crate::storage::{self, Error, ErrorKind};
+use super::{
+    chancomms::{DataCommand, InternalMsg},
+    controlchan::command::Command,
+};
+use crate::{
+    auth::UserDetail,
+    server::{tls::new_config, Session},
+    storage::{Error, ErrorKind, Metadata, StorageBackend},
+};
+use futures::{channel::mpsc::Sender, prelude::*};
+use log::{debug, error, info, warn};
+use std::{path::PathBuf, sync::Arc};
+use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
 
-use futures::channel::mpsc::Sender;
-use futures::prelude::*;
-use log::info;
-use log::{debug, error, warn};
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
-
+#[derive(Debug)]
 pub struct DataCommandExecutor<S, U>
 where
-    S: storage::StorageBackend<U>,
+    S: StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail,
 {
     pub user: Arc<Option<U>>,
@@ -35,11 +36,12 @@ where
 
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail,
 {
+    #[tracing_attributes::instrument]
     pub async fn execute(self, cmd: Command) {
         match cmd {
             Command::Retr { path } => {
@@ -58,6 +60,7 @@ where
         }
     }
 
+    #[tracing_attributes::instrument]
     async fn exec_retr(self, path: String) {
         let path = self.cwd.join(path);
         let mut tx_sending: Sender<InternalMsg> = self.tx.clone();
@@ -90,6 +93,7 @@ where
         });
     }
 
+    #[tracing_attributes::instrument]
     async fn exec_stor(self, path: String) {
         let path = self.cwd.join(path);
         let mut tx_ok = self.tx.clone();
@@ -119,6 +123,7 @@ where
         });
     }
 
+    #[tracing_attributes::instrument]
     async fn exec_list(self, path: Option<String>) {
         let path = match path {
             Some(path) => self.cwd.join(path),
@@ -158,6 +163,7 @@ where
         });
     }
 
+    #[tracing_attributes::instrument]
     async fn exec_nlst(self, path: Option<String>) {
         let path = match path {
             Some(path) => self.cwd.join(path),
@@ -191,6 +197,7 @@ where
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
+    #[tracing_attributes::instrument]
     fn writer(
         socket: tokio::net::TcpStream,
         tls: bool,
@@ -209,6 +216,7 @@ where
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
+    #[tracing_attributes::instrument]
     fn reader(
         socket: tokio::net::TcpStream,
         tls: bool,
@@ -232,11 +240,12 @@ where
 /// socket: the data socket we'll be working with
 /// tls: tells if this should be a TLS connection
 /// tx: channel to send the result of our operation to the control process
+#[tracing_attributes::instrument]
 pub fn spawn_processing<S, U>(session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
 where
-    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
     let mut data_cmd_rx = session.data_cmd_rx.take().unwrap().fuse();
@@ -272,11 +281,12 @@ where
     });
 }
 
+#[tracing_attributes::instrument]
 async fn handle_incoming<S, U>(incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
 where
-    S: storage::StorageBackend<U> + Send + Sync + 'static,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
     match incoming {

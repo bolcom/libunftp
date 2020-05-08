@@ -1,11 +1,14 @@
 //! The RFC 2228 Data Channel Protection Level (`PROT`) command.
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::controlchan::{
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
+        Reply, ReplyCode,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 
 // The parameter that can be given to the `PROT` command.
@@ -21,6 +24,7 @@ pub enum ProtParam {
     Private,
 }
 
+#[derive(Debug)]
 pub struct Prot {
     param: ProtParam,
 }
@@ -35,10 +39,11 @@ impl Prot {
 impl<S, U> CommandHandler<S, U> for Prot
 where
     U: UserDetail,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: 'static + storage::Metadata,
+    S::Metadata: 'static + Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         match (args.tls_configured, self.param.clone()) {
             (true, ProtParam::Clear) => {

@@ -18,10 +18,13 @@ use async_trait::async_trait;
 /// ```
 /// [`Authenticator`]: ../spi/trait.Authenticator.html
 ///
+#[derive(Debug)]
 pub struct AnonymousAuthenticator;
 
 #[async_trait]
 impl Authenticator<DefaultUser> for AnonymousAuthenticator {
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         Ok(DefaultUser {})
     }

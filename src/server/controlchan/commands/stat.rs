@@ -17,21 +17,25 @@
 // should include current values of all transfer parameters and
 // the status of connections.
 
-use crate::auth::UserDetail;
-use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage::{self, Error, ErrorKind};
+use crate::{
+    auth::UserDetail,
+    server::{
+        chancomms::InternalMsg,
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+    },
+    storage::{Error, ErrorKind, Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::channel::mpsc::Sender;
-use futures::prelude::*;
+use futures::{channel::mpsc::Sender, prelude::*};
 use log::warn;
-use std::io::Read;
-use std::sync::Arc;
+use std::{io::Read, sync::Arc};
 
+#[derive(Debug)]
 pub struct Stat {
     path: Option<Bytes>,
 }
@@ -46,10 +50,11 @@ impl Stat {
 impl<S, U> CommandHandler<S, U> for Stat
 where
     U: UserDetail,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: 'static + storage::Metadata,
+    S::Metadata: 'static + Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         match self.path.clone() {
             None => {

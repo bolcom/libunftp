@@ -4,13 +4,18 @@
 //! wishes to secure the data connections by use of the PBSZ and PROT
 //! commands.
 
-use crate::auth::UserDetail;
-use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::{
+        chancomms::InternalMsg,
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
@@ -22,6 +27,7 @@ pub enum AuthParam {
     Tls,
 }
 
+#[derive(Debug)]
 pub struct Auth {
     protocol: AuthParam,
 }
@@ -36,10 +42,11 @@ impl Auth {
 impl<S, U> CommandHandler<S, U> for Auth
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut tx = args.tx.clone();
         match (args.tls_configured, self.protocol.clone()) {

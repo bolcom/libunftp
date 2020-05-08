@@ -1,13 +1,19 @@
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::session::SessionState;
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::{
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+        session::SessionState,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use bytes::Bytes;
 
+#[derive(Debug)]
 pub struct User {
     username: Bytes,
 }
@@ -22,10 +28,11 @@ impl User {
 impl<S, U> CommandHandler<S, U> for User
 where
     U: UserDetail,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         match session.state {

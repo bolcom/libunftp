@@ -3,12 +3,10 @@
 //! [`Authenticator`]: trait.Authenticator.html
 
 use crate::auth::*;
-
 use async_trait::async_trait;
 use log::{info, warn};
 use serde::Deserialize;
-use std::fs;
-use std::time::Duration;
+use std::{fs, time::Duration};
 use tokio::time::delay_for;
 
 #[derive(Deserialize, Clone, Debug)]
@@ -48,6 +46,8 @@ impl JsonFileAuthenticator {
 
 #[async_trait]
 impl Authenticator<DefaultUser> for JsonFileAuthenticator {
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username = _username.to_string();
         let password = _password.to_string();

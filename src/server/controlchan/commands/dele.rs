@@ -5,20 +5,24 @@
 // is desired (such as the query, "Do you really wish to delete?"),
 // it should be provided by the user-FTP process.
 
-use crate::auth::UserDetail;
-use crate::server::chancomms::InternalMsg;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::Reply;
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::{
+        chancomms::InternalMsg,
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply,
+        },
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
-use futures::channel::mpsc::Sender;
-use futures::prelude::*;
+use futures::{channel::mpsc::Sender, prelude::*};
 use log::warn;
-use std::string::String;
-use std::sync::Arc;
+use std::{string::String, sync::Arc};
 
+#[derive(Debug)]
 pub struct Dele {
     path: String,
 }
@@ -33,10 +37,11 @@ impl Dele {
 impl<S, U> CommandHandler<S, U> for Dele
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
