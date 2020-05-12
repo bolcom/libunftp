@@ -403,7 +403,7 @@ where
         }
         let session = session_arc.lock().await;
         if let Some(conn) = session.control_connection_info {
-            let octets = match conn.from_ip {
+            let octets = match conn.to_ip {
                 IpAddr::V4(ip) => ip.octets(),
                 IpAddr::V6(_) => panic!("Won't happen."),
             };
