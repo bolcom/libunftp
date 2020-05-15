@@ -1,19 +1,12 @@
 use super::session::SharedSession;
-use crate::auth::UserDetail;
-use crate::storage;
-
+use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
-use lazy_static::*;
+use lazy_static::lazy_static;
 use log::warn;
-use proxy_protocol::version1::ProxyAddressFamily;
-use proxy_protocol::ProxyHeader;
-use rand::rngs::OsRng;
-use rand::RngCore;
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::ops::Range;
-use tokio::io::AsyncReadExt;
-use tokio::sync::Mutex;
+use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
+use rand::{rngs::OsRng, RngCore};
+use std::{collections::HashMap, net::IpAddr, ops::Range};
+use tokio::{io::AsyncReadExt, sync::Mutex};
 
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
@@ -60,6 +53,7 @@ impl ConnectionTuple {
     }
 }
 
+#[tracing_attributes::instrument]
 async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
     let mut pbuf = vec![0; 108];
     let mut rbuf = vec![0; 108];
@@ -102,6 +96,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
     }
 }
 
+#[tracing_attributes::instrument]
 pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ConnectionTuple, ProxyError> {
     let proxyhdr = match read_proxy_header(tcp_stream).await {
         Ok(v) => v,
@@ -135,9 +130,10 @@ pub fn construct_proxy_hash_key(connection: &ConnectionTuple, port: u16) -> Stri
 }
 
 /// Connect clients to the right data channel
+#[derive(Debug)]
 pub struct ProxyProtocolSwitchboard<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U>,
     U: UserDetail,
 {
     switchboard: HashMap<String, Option<SharedSession<S, U>>>,
@@ -154,7 +150,7 @@ pub enum ProxyProtocolError {
 
 impl<S, U> ProxyProtocolSwitchboard<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U>,
     U: UserDetail + 'static,
 {
     pub fn new(passive_ports: Range<u16>) -> Self {
@@ -193,6 +189,7 @@ where
         }
     }
 
+    #[tracing_attributes::instrument]
     pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
         let hash = Self::get_hash_with_connection(connection);
 
@@ -205,6 +202,7 @@ where
     /// based on source ip of the client, select a free entry
     /// but initialize it to None
     // TODO: set a TTL on the hashmap entries
+    #[tracing_attributes::instrument]
     pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 

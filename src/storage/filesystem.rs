@@ -1,17 +1,20 @@
 //! StorageBackend that uses a local filesystem, like a traditional FTP server.
 
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
-
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.
 ///
 /// [`Filesystem`]: ./trait.Filesystem.html
+#[derive(Debug)]
 pub struct Filesystem {
     root: PathBuf,
 }
@@ -62,7 +65,7 @@ impl Filesystem {
 }
 
 #[async_trait]
-impl<U: Send + Sync> StorageBackend<U> for Filesystem {
+impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     type File = tokio::fs::File;
     type Metadata = std::fs::Metadata;
 
@@ -70,7 +73,8 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         crate::storage::FEATURE_RESTART
     }
 
-    async fn metadata<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata> {
+    #[tracing_attributes::instrument]
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata> {
         let full_path = self.full_path(path)?;
 
         tokio::fs::symlink_metadata(full_path)
@@ -78,9 +82,11 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn list<P>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
-        P: AsRef<Path> + Send,
+        P: AsRef<Path> + Send + Debug,
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
         let full_path: PathBuf = self.full_path(path)?;
@@ -102,7 +108,8 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Ok(fis)
     }
 
-    async fn get<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File> {
+    #[tracing_attributes::instrument]
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File> {
         let full_path = self.full_path(path)?;
 
         // TODO: Remove async block
@@ -144,7 +151,8 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Ok(bytes_copied)
     }
 
-    async fn del<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+    #[tracing_attributes::instrument]
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(_) => return Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
@@ -159,7 +167,8 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Ok(())
     }
 
-    async fn rmd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+    #[tracing_attributes::instrument]
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Err(e),
@@ -176,13 +185,15 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         Ok(())
     }
 
-    async fn mkd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+    #[tracing_attributes::instrument]
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
         tokio::fs::create_dir(self.full_path(path)?).await?;
 
         Ok(())
     }
 
-    async fn rename<P: AsRef<Path> + Send>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
+    #[tracing_attributes::instrument]
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
         let from = match self.full_path(from) {
             Ok(path) => path,
             Err(e) => return Err(e),
@@ -217,7 +228,8 @@ impl<U: Send + Sync> StorageBackend<U> for Filesystem {
         }
     }
 
-    async fn cwd<P: AsRef<Path> + Send>(&self, _user: &Option<U>, path: P) -> Result<()> {
+    #[tracing_attributes::instrument]
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = match self.full_path(path) {
             Ok(path) => path,
             Err(e) => return Err(e),

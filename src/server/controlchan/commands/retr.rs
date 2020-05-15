@@ -5,27 +5,32 @@
 // at the other end of the data connection.  The status and
 // contents of the file at the server site shall be unaffected.
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::command::Command;
-use crate::server::controlchan::error::{ControlChanError, ControlChanErrorKind};
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::Reply;
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::controlchan::{
+        command::Command,
+        error::{ControlChanError, ControlChanErrorKind},
+        handler::{CommandContext, CommandHandler},
+        Reply,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
 
+#[derive(Debug)]
 pub struct Retr;
 
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Retr
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let cmd: Command = args.cmd.clone();

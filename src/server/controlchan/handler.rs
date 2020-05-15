@@ -1,36 +1,37 @@
 use super::error::ControlChanError;
-use crate::auth::{Authenticator, UserDetail};
-use crate::server::chancomms::ProxyLoopSender;
-use crate::server::controlchan::Command;
-use crate::server::controlchan::Reply;
-use crate::server::proxy_protocol::ConnectionTuple;
-use crate::server::session::SharedSession;
-use crate::server::InternalMsg;
-use crate::storage;
-
+use crate::{
+    auth::{Authenticator, UserDetail},
+    server::{
+        chancomms::ProxyLoopSender,
+        controlchan::{Command, Reply},
+        proxy_protocol::ConnectionTuple,
+        session::SharedSession,
+        InternalMsg,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
-use std::ops::Range;
-use std::result::Result;
-use std::sync::Arc;
+use std::{ops::Range, result::Result, sync::Arc};
 
 #[async_trait]
-pub(crate) trait CommandHandler<S, U>: Send + Sync
+pub(crate) trait CommandHandler<S, U>: Send + Sync + std::fmt::Debug
 where
-    S: 'static + storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail,
 {
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>;
 }
 
 /// Convenience struct to group command args
+#[derive(Debug)]
 pub(crate) struct CommandContext<S, U>
 where
-    S: 'static + storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send + Sync,
-    S::Metadata: storage::Metadata + Sync,
+    S::Metadata: Metadata + Sync,
     U: UserDetail + 'static,
 {
     pub cmd: Command,

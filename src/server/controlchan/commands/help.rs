@@ -5,24 +5,29 @@
 // A HELP request may include a parameter. The meaning of the parameter is defined by the server. Some servers interpret the parameter as an FTP verb,
 // and respond by briefly explaining the syntax of the verb.
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::controlchan::{
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
+        Reply, ReplyCode,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 
+#[derive(Debug)]
 pub struct Help;
 
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Help
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let text = vec!["Help:", "Powered by libunftp"];
         // TODO: Add useful information here like operating server type and app name.

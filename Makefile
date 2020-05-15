@@ -39,7 +39,8 @@ build: # Creates a release build
 .PHONY: pr-prep
 pr-prep: # Runs checks to ensure you're ready for a pull request
 	cargo fmt --all -- --check
-	cargo clippy --all-features --all-targets -- -D warnings
+	# TODO remove the `-A clippy::suspicious_else_formatting`
+	cargo clippy --all-features --all-targets -- -D warnings -A clippy::suspicious_else_formatting
 	cargo test --all-features --all-targets
 	cargo build --all-features --all-targets
 	cargo doc --all-features --no-deps

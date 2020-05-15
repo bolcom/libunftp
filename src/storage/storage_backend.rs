@@ -1,15 +1,16 @@
 //! StorageBackend that uses a local filesystem, like a traditional FTP server.
 
 use super::error::Error;
-
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use itertools::Itertools;
 use log::warn;
-use std::fmt;
-use std::path::Path;
-use std::result;
-use std::time::SystemTime;
+use std::{
+    fmt::{self, Debug, Formatter},
+    path::Path,
+    result,
+    time::SystemTime,
+};
 use tokio::io::AsyncRead;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
@@ -68,7 +69,7 @@ where
     P: AsRef<Path>,
     M: Metadata,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let modified: String = self
             .metadata
             .modified()
@@ -111,7 +112,7 @@ where
 /// [`Server`]: ../server/struct.Server.html
 /// [`filesystem`]: ./struct.Filesystem.html
 #[async_trait]
-pub trait StorageBackend<U: Sync + Send> {
+pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The concrete type of the _FTP File_ returned by this storage backend.
     type File: AsyncRead + Sync + Send + Unpin;
     /// The concrete type of the _metadata_ used by this storage backend.
@@ -126,17 +127,19 @@ pub trait StorageBackend<U: Sync + Send> {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    async fn metadata<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
     /// Returns the list of files in the given directory.
-    async fn list<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
+    async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         <Self as StorageBackend<U>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn list_fmt<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, Error>
     where
-        P: AsRef<Path> + Send,
+        P: AsRef<Path> + Send + Debug,
         Self::Metadata: Metadata + 'static,
     {
         let list = self.list(user, path).await?;
@@ -148,9 +151,11 @@ pub trait StorageBackend<U: Sync + Send> {
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be sent to the client.
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn nlst<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
-        P: AsRef<Path> + Send,
+        P: AsRef<Path> + Send + Debug,
         Self::Metadata: Metadata + 'static,
     {
         let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
@@ -169,10 +174,10 @@ pub trait StorageBackend<U: Sync + Send> {
     /// The starting position can only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    async fn get<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
 
     /// Writes bytes from the given reader to the specified path starting at offset start_pos in the file
-    async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
+    async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         user: &Option<U>,
         input: R,
@@ -181,17 +186,17 @@ pub trait StorageBackend<U: Sync + Send> {
     ) -> Result<u64>;
 
     /// Deletes the file at the given path.
-    async fn del<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Creates the given directory.
-    async fn mkd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Renames the given file to the given new filename.
-    async fn rename<P: AsRef<Path> + Send>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
 
     /// Deletes the given directory.
-    async fn rmd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
 
     /// Changes the working directory to the given path.
-    async fn cwd<P: AsRef<Path> + Send>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
 }

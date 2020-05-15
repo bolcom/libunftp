@@ -3,7 +3,6 @@
 //! [`Authenticator`]: trait.Authenticator.html
 
 use crate::auth::*;
-
 use async_trait::async_trait;
 use hyper::{http::uri::InvalidUri, Body, Client, Method, Request};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -113,6 +112,8 @@ impl RestAuthenticator {
 // FIXME: add support for authenticated user
 #[async_trait]
 impl Authenticator<DefaultUser> for RestAuthenticator {
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();

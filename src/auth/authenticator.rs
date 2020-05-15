@@ -1,14 +1,15 @@
 //! The service provider interface (SPI) for auth
 
 use super::UserDetail;
-
 use async_trait::async_trait;
-use std::error::Error;
-use std::fmt;
+use std::{
+    error::Error,
+    fmt::{self, Debug},
+};
 
 /// Defines the requirements for Authentication implementations
 #[async_trait]
-pub trait Authenticator<U>: Sync + Send
+pub trait Authenticator<U>: Sync + Send + Debug
 where
     U: UserDetail,
 {

@@ -10,25 +10,30 @@
 // connection must be closed.
 
 use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::{CommandContext, CommandHandler};
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
-
+use crate::{
+    server::controlchan::{
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
+        Reply, ReplyCode,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 use futures::prelude::*;
 use log::warn;
 
+#[derive(Debug)]
 pub struct Abor;
 
 #[async_trait]
 impl<S, U> CommandHandler<S, U> for Abor
 where
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         match session.data_abort_tx.take() {

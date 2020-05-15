@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use std::{error::Error, result::Result};
+use tracing::Level;
 
 const BUCKET_NAME: &str = "bucket-name";
 const SERVICE_ACCOUNT_KEY: &str = "service-account-key";
@@ -9,7 +10,7 @@ const BIND_ADDRESS: &str = "127.0.0.1:2121";
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
-    pretty_env_logger::try_init_timed()?;
+    tracing_subscriber::fmt().with_max_level(Level::TRACE).init();
 
     let matches = App::new("Example for using libunftp with Google Cloud Storage backend with optionally enabling TLS")
         .about("An FTP server that uses Google Cloud Storage as a backend")

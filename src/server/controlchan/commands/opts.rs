@@ -7,12 +7,15 @@
 // definition of that command.  Where no OPTS behavior is defined for a
 // particular command there are no options available for that command.
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::controlchan::{
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
+        Reply, ReplyCode,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
 
 /// The parameters that can be given to the `OPTS` command, specifying the option the client wants
@@ -23,6 +26,7 @@ pub enum Opt {
     UTF8 { on: bool },
 }
 
+#[derive(Debug)]
 pub struct Opts {
     option: Opt,
 }
@@ -37,10 +41,11 @@ impl Opts {
 impl<S, U> CommandHandler<S, U> for Opts
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         match &self.option {
             Opt::UTF8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),

@@ -1,11 +1,11 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
-use super::controlchan::command::Command;
-use super::session::SharedSession;
-use crate::auth::UserDetail;
-use crate::server::controlchan::ReplyCode;
-use crate::storage;
-use crate::storage::Error;
+use super::{controlchan::command::Command, session::SharedSession};
+use crate::{
+    auth::UserDetail,
+    server::controlchan::ReplyCode,
+    storage::{Error, StorageBackend},
+};
 use futures::channel::mpsc::{Receiver, Sender};
 
 // Commands that can be send to the data channel / data loop.
@@ -76,9 +76,10 @@ pub enum InternalMsg {
 
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
 // Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
+#[derive(Debug)]
 pub enum ProxyLoopMsg<S, U>
 where
-    S: storage::StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U>,
     U: UserDetail,
 {
     /// Command to assign a data port to a session

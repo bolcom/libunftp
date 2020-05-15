@@ -36,14 +36,15 @@ trait AsyncReadAsyncWriteSendUnpin: AsyncRead + AsyncWrite + Send + Unpin {}
 
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for T {}
 
+#[derive(Debug)]
 pub struct Config<S, U>
 where
-    S: StorageBackend<U> + Send + Sync,
+    S: StorageBackend<U>,
     U: UserDetail,
 {
     pub storage: S,
     pub greeting: &'static str,
-    pub authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
+    pub authenticator: Arc<dyn Authenticator<U>>,
     pub passive_ports: Range<u16>,
     pub ftps_config: FTPSConfig,
     pub collect_metrics: bool,
@@ -51,6 +52,7 @@ where
 }
 
 /// Does TCP processing when a FTP client connects
+#[tracing_attributes::instrument]
 pub async fn spawn<S, U>(
     config: Config<S, U>,
     tcp_stream: TcpStream,
@@ -59,7 +61,7 @@ pub async fn spawn<S, U>(
 ) -> Result<(), ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
@@ -212,7 +214,7 @@ where
 fn handle_with_auth<S, U, N>(session: SharedSession<S, U>, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
@@ -246,7 +248,7 @@ where
 fn handle_with_logging<S, U, N>(next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
@@ -260,7 +262,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn handle_event<S, U>(
     session: SharedSession<S, U>,
-    authenticator: Arc<dyn Authenticator<U> + Send + Sync>,
+    authenticator: Arc<dyn Authenticator<U>>,
     tls_configured: bool,
     passive_ports: Range<u16>,
     tx: Sender<InternalMsg>,
@@ -271,7 +273,7 @@ fn handle_event<S, U>(
 ) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
@@ -295,6 +297,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[tracing_attributes::instrument]
 async fn handle_command<S, U>(
     cmd: Command,
     session: SharedSession<S, U>,
@@ -309,7 +312,7 @@ async fn handle_command<S, U>(
 ) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
@@ -369,10 +372,11 @@ where
     handler.handle(args).await
 }
 
+#[tracing_attributes::instrument]
 async fn handle_internal_msg<S, U>(msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
@@ -440,7 +444,7 @@ where
 fn handle_control_channel_error<S, U>(error: ControlChanError, with_metrics: bool) -> Reply
 where
     U: UserDetail + 'static,
-    S: 'static + StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {

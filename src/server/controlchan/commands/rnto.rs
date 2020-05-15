@@ -1,16 +1,19 @@
 //! The RFC 959 Rename To (`RNTO`) command
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::storage;
+use crate::storage::{Metadata, StorageBackend};
+use crate::{
+    auth::UserDetail,
+    server::controlchan::{
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
+        Reply, ReplyCode,
+    },
+};
 use async_trait::async_trait;
 use log::warn;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
+#[derive(Debug)]
 pub struct Rnto {
     path: PathBuf,
 }
@@ -25,10 +28,11 @@ impl Rnto {
 impl<S, U> CommandHandler<S, U> for Rnto
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);

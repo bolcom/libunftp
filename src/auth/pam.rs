@@ -4,13 +4,13 @@
 //! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 
 use crate::auth::*;
-
 use async_trait::async_trait;
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
 /// [`Authenticator`]: ../trait.Authenticator.html
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
+#[derive(Debug)]
 pub struct PAMAuthenticator {
     service: String,
 }
@@ -25,6 +25,8 @@ impl PAMAuthenticator {
 
 #[async_trait]
 impl Authenticator<DefaultUser> for PAMAuthenticator {
+    #[allow(clippy::type_complexity)]
+    #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let service = self.service.clone();
         let username = username.to_string();

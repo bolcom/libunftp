@@ -6,33 +6,37 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
-use crate::auth::UserDetail;
-use crate::server::chancomms::{ProxyLoopMsg, ProxyLoopSender};
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::CommandContext;
-use crate::server::controlchan::handler::CommandHandler;
-use crate::server::controlchan::Command;
-use crate::server::controlchan::{Reply, ReplyCode};
-use crate::server::datachan;
-use crate::server::{session::SharedSession, ControlChanErrorKind};
-use crate::storage;
+use crate::{
+    auth::UserDetail,
+    server::{
+        chancomms::{ProxyLoopMsg, ProxyLoopSender},
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Command, Reply, ReplyCode,
+        },
+        datachan,
+        session::SharedSession,
+        ControlChanErrorKind,
+    },
+    storage::{Metadata, StorageBackend},
+};
 use async_trait::async_trait;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::prelude::*;
-use lazy_static::*;
-use rand::rngs::OsRng;
-use rand::RngCore;
-use std::io;
-use std::net::SocketAddr;
-use std::ops::Range;
-use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use futures::{
+    channel::mpsc::{channel, Receiver, Sender},
+    prelude::*,
+};
+use lazy_static::lazy_static;
+use rand::{rngs::OsRng, RngCore};
+use std::{io, net::SocketAddr, ops::Range};
+use tokio::{net::TcpListener, sync::Mutex};
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
     static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
 }
 
+#[derive(Debug)]
 pub struct Pasv {}
 
 impl Pasv {
@@ -40,6 +44,7 @@ impl Pasv {
         Pasv {}
     }
 
+    #[tracing_attributes::instrument]
     async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
         let rng_length = passive_ports.end - passive_ports.start;
 
@@ -59,12 +64,13 @@ impl Pasv {
 
     // modifies the session by adding channels that are used to communicate with the data connection
     // processing loop.
+    #[tracing_attributes::instrument]
     async fn setup_data_loop_comms<S, U>(&self, session: SharedSession<S, U>)
     where
         U: UserDetail + 'static,
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        S: StorageBackend<U> + 'static,
         S::File: tokio::io::AsyncRead + Send,
-        S::Metadata: storage::Metadata,
+        S::Metadata: Metadata,
     {
         let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
         let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
@@ -78,12 +84,13 @@ impl Pasv {
 
     // For non-proxy mode we choose a data port here and start listening on it while letting the control
     // channel know (via method return) what the address is that the client should connect to.
+    #[tracing_attributes::instrument]
     async fn handle_nonproxy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        S: StorageBackend<U> + 'static,
         S::File: tokio::io::AsyncRead + Send,
-        S::Metadata: storage::Metadata,
+        S::Metadata: Metadata,
     {
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
@@ -130,12 +137,13 @@ impl Pasv {
 
     // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
     // should choose a data port and check for connections on it.
+    #[tracing_attributes::instrument]
     async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, mut tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
-        S: 'static + storage::StorageBackend<U> + Sync + Send,
+        S: StorageBackend<U> + 'static,
         S::File: tokio::io::AsyncRead + Send,
-        S::Metadata: storage::Metadata,
+        S::Metadata: Metadata,
     {
         self.setup_data_loop_comms(args.session.clone()).await;
         tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
@@ -147,10 +155,11 @@ impl Pasv {
 impl<S, U> CommandHandler<S, U> for Pasv
 where
     U: UserDetail + 'static,
-    S: 'static + storage::StorageBackend<U> + Sync + Send,
+    S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
-    S::Metadata: storage::Metadata,
+    S::Metadata: Metadata,
 {
+    #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let sender: Option<ProxyLoopSender<S, U>> = args.proxyloop_msg_tx.clone();
         match sender {
