@@ -9,7 +9,7 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). Its a safe, fast and extensible FTP(S) server 
+The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's a safe, fast and extensible FTP(S) server 
 implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
 Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem, 
