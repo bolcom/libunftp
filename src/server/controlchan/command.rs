@@ -354,12 +354,6 @@ impl Command {
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
-                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
-                // 3659 actually defines "/" as the standard delimiter.
-                if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-
                 let file = file.into();
                 Command::Rnfr { file }
             }
@@ -370,12 +364,6 @@ impl Command {
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
-                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
-                // 3659 actually defines "/" as the standard delimiter.
-                if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-
                 let file = file.into();
                 Command::Rnto { file }
             }
