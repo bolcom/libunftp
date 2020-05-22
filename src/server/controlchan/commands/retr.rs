@@ -7,11 +7,14 @@
 
 use crate::{
     auth::UserDetail,
-    server::controlchan::{
-        command::Command,
-        error::{ControlChanError, ControlChanErrorKind},
-        handler::{CommandContext, CommandHandler},
-        Reply,
+    server::{
+        controlchan::{
+            command::Command,
+            error::{ControlChanError, ControlChanErrorKind},
+            handler::{CommandContext, CommandHandler},
+            Reply,
+        },
+        ReplyCode,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -41,7 +44,7 @@ where
                         warn!("{}", err);
                     }
                 });
-                Ok(Reply::none())
+                Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending data"))
             }
             None => Err(ControlChanErrorKind::InternalServerError.into()),
         }

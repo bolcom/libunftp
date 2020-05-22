@@ -19,8 +19,7 @@ cache: cargo
 
 script:
   - cargo fmt --all -- --check
-  # TODO remove the `-A clippy::suspicious_else_formatting`
-  - cargo clippy --all-features --all-targets -- -D warnings -A clippy::suspicious_else_formatting
+  - cargo clippy --all-features --all-targets
   - cargo test --verbose --all-features --all-targets
   - cargo build --verbose --all-features --all-targets
 
