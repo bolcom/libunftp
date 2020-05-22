@@ -354,12 +354,6 @@ impl Command {
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
-                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
-                // 3659 actually defines "/" as the standard delimiter.
-                if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-
                 let file = file.into();
                 Command::Rnfr { file }
             }
@@ -370,12 +364,6 @@ impl Command {
                 }
 
                 let file = String::from_utf8_lossy(&params).to_string();
-                // We really match on "/" and not some cross-OS-portable delimiter, because RFC
-                // 3659 actually defines "/" as the standard delimiter.
-                if file.contains('/') {
-                    return Err(ParseErrorKind::InvalidCommand.into());
-                }
-
                 let file = file.into();
                 Command::Rnto { file }
             }
@@ -888,7 +876,7 @@ mod tests {
         assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
 
         let input = "RNFR dir/file\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "dir/file".into() }));
 
         let input = "RNFR myfile\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "myfile".into() }));
@@ -903,7 +891,7 @@ mod tests {
         assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
 
         let input = "RNTO dir/file\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Ok(Command::Rnto { file: "dir/file".into() }));
 
         let input = "RNTO name with spaces\r\n";
         assert_eq!(
