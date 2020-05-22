@@ -1,5 +1,5 @@
 #![warn(clippy::all)]
-#![allow(clippy::suspicious_else_formatting)]
+#![allow(clippy::suspicious_else_formatting)] // TODO find the cause of this and remove it
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 //! A FTP server library for Rust
