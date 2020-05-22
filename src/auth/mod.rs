@@ -15,6 +15,7 @@
 //! use futures::Future;
 //! use async_trait::async_trait;
 //!
+//! #[derive(Debug)]
 //! struct RandomAuthenticator;
 //!
 //! #[async_trait]
