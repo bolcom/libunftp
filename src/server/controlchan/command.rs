@@ -876,7 +876,7 @@ mod tests {
         assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
 
         let input = "RNFR dir/file\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "dir/file".into() }));
 
         let input = "RNFR myfile\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "myfile".into() }));
@@ -891,7 +891,7 @@ mod tests {
         assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
 
         let input = "RNTO dir/file\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Ok(Command::Rnto { file: "dir/file".into() }));
 
         let input = "RNTO name with spaces\r\n";
         assert_eq!(
