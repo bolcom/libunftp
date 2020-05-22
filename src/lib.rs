@@ -1,4 +1,7 @@
+#![warn(clippy::all)]
+#![allow(clippy::suspicious_else_formatting)] // TODO find the cause of this and remove it
 #![deny(missing_docs)]
+#![forbid(unsafe_code)]
 //! A FTP server library for Rust
 //!
 //! The libunftp library is a safe, fast and extensible FTP(S) server implementation in Rust.

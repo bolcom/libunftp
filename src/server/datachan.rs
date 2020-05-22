@@ -66,23 +66,20 @@ where
         let mut tx_error: Sender<InternalMsg> = self.control_msg_tx.clone();
         tokio::spawn(async move {
             match self.storage.get(&self.user, path, self.start_pos).await {
-                Ok(mut f) => match tx_sending.send(InternalMsg::SendingData).await {
-                    Ok(_) => {
-                        let mut output = Self::writer(self.socket, self.ftps_mode);
-                        match tokio::io::copy(&mut f, &mut output).await {
-                            Ok(bytes_copied) => {
-                                if let Err(err) = output.shutdown().await {
-                                    warn!("Could not shutdown output stream after RETR: {}", err);
-                                }
-                                if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
-                                    error!("Could not notify control channel of successful RETR: {}", err);
-                                }
+                Ok(mut f) => {
+                    let mut output = Self::writer(self.socket, self.ftps_mode);
+                    match tokio::io::copy(&mut f, &mut output).await {
+                        Ok(bytes_copied) => {
+                            if let Err(err) = output.shutdown().await {
+                                warn!("Could not shutdown output stream after RETR: {}", err);
                             }
-                            Err(err) => warn!("Error copying streams during RETR: {}", err),
+                            if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
+                                error!("Could not notify control channel of successful RETR: {}", err);
+                            }
                         }
+                        Err(err) => warn!("Error copying streams during RETR: {}", err),
                     }
-                    Err(err) => warn!("Error notifying control channel of progress during RETR: {}", err),
-                },
+                }
                 Err(err) => {
                     if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
                         warn!("Could not notify control channel of error with RETR: {}", err);

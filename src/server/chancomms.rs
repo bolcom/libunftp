@@ -40,8 +40,6 @@ pub enum InternalMsg {
     DataConnectionClosedAfterStor,
     /// Failed to write data to disk
     WriteFailed,
-    /// Started sending data to the client
-    SendingData,
     /// Unknown Error retrieving file
     UnknownRetrieveError,
     /// Listed the directory successfully

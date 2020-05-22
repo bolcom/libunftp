@@ -386,7 +386,6 @@ where
     match msg {
         NotFound => Ok(Reply::new(ReplyCode::FileError, "File not found")),
         PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
-        SendingData => Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending Data")),
         SendData { .. } => {
             let mut session = session.lock().await;
             session.start_pos = 0;
