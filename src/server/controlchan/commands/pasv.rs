@@ -28,7 +28,11 @@ use futures::{
 };
 use lazy_static::lazy_static;
 use rand::{rngs::OsRng, RngCore};
-use std::{io, net::SocketAddr, ops::Range};
+use std::{
+    env, io,
+    net::{Ipv4Addr, SocketAddr},
+    ops::Range,
+};
 use tokio::{net::TcpListener, sync::Mutex};
 
 const BIND_RETRIES: u8 = 10;
@@ -108,7 +112,13 @@ impl Pasv {
             Ok(l) => l,
         };
 
-        let octets = conn_addr.ip().octets();
+        let octets = match env::var("LIBUNFTP_PASV_IP") {
+            Ok(v) => match v.parse::<Ipv4Addr>() {
+                Ok(ip) => ip.octets(),
+                Err(_) => conn_addr.ip().octets(),
+            },
+            Err(_) => conn_addr.ip().octets(),
+        };
         let port = listener.local_addr()?.port();
         let p1 = port >> 8;
         let p2 = port - (p1 * 256);
