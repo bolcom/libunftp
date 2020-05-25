@@ -113,7 +113,7 @@ impl RestAuthenticator {
 #[async_trait]
 impl Authenticator<DefaultUser> for RestAuthenticator {
     #[allow(clippy::type_complexity)]
-    #[tracing_attributes::instrument]
+// FIXME: fails compile for unknown reasons   #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
