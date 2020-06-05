@@ -47,7 +47,7 @@ impl JsonFileAuthenticator {
 #[async_trait]
 impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     #[allow(clippy::type_complexity)]
-// FIXME: fails compile for unknown reasons   #[tracing_attributes::instrument]
+    // FIXME: fails compile for unknown reasons   #[tracing_attributes::instrument]
     async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let username = _username.to_string();
         let password = _password.to_string();
