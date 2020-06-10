@@ -36,7 +36,7 @@ If you've got Rust and cargo installed, create your project with
 cargo new myftp
 ```
 
-Then add the libunftp, tokio & futures crates to your project's dependencies in `Cargo.toml`:
+Then add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -48,8 +48,6 @@ Now you're ready to develop your server!
 Add the following to `src/main.rs`:
 
 ```rust
-use tokio::prelude::*;
-
 #[tokio::main]
 pub async fn main() {
     let ftp_home = std::env::temp_dir();

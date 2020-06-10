@@ -82,25 +82,6 @@ where
     }
 }
 
-impl Server<Filesystem, DefaultUser> {
-    /// Create a new `Server` with the given filesystem root.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// let server = Server::new_with_fs_root("/srv/ftp");
-    /// ```
-    pub fn new_with_fs_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
-        let p = path.into();
-        Server::new(Box::new(move || {
-            let p = &p.clone();
-            Filesystem::new(p)
-        }))
-    }
-}
-
 impl<S, U> Server<S, U>
 where
     S: StorageBackend<U> + 'static,
@@ -450,6 +431,52 @@ where
                 .unwrap();
             }
         }
+    }
+}
+
+impl Server<Filesystem, DefaultUser> {
+    /// Create a new `Server` with the given filesystem root.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// ```
+    pub fn new_with_fs_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
+        let p = path.into();
+        Server::new(Box::new(move || {
+            let p = &p.clone();
+            Filesystem::new(p)
+        }))
+    }
+}
+
+impl<U> Server<Filesystem, U>
+where
+    U: UserDetail + 'static,
+{
+    /// Create a new `Server` using the filesystem backend and the specified authenticator
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use libunftp::auth::AnonymousAuthenticator;
+    /// use std::sync::Arc;
+    ///
+    /// let server = Server::new_with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
+    /// ```
+    pub fn new_with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+        let p = path.into();
+        Server::new_with_authenticator(
+            Box::new(move || {
+                let p = &p.clone();
+                Filesystem::new(p)
+            }),
+            authenticator,
+        )
     }
 }
 

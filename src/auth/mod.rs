@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+
 //! Contains the `Authenticator` and `UserDetails` traits that are used by various implementations
 //! and also the `Server` to authenticate users.
 //!
@@ -9,10 +10,16 @@
 //! authentication mechanism you need. For example, to define an `Authenticator` that will randomly
 //! decide:
 //!
-//! ```rust
-//! use rand::prelude::*;
+//! 1. Declare a dependency on the async-trait crate
+//!
+//! ```toml
+//! async-trait = "0.1.35"
+//! ```
+//!
+//! 2. Implement the `Authenticator` and `UserDetail` traits:
+//!
+//! ```no_run
 //! use libunftp::auth::{Authenticator, UserDetail};
-//! use futures::Future;
 //! use async_trait::async_trait;
 //!
 //! #[derive(Debug)]
@@ -36,8 +43,14 @@
 //!     }
 //! }
 //! ```
-//! [`Server`]: ../server/struct.Server.html
-
+//!
+//! 3. Initialize it with the server:
+//!
+//! ```
+//! let server = libunftp::Server::new_with_fs_and_auth(ftp_home, std::sync::Arc::new(auth::RandomAuthenticator));
+//! ```
+//!
+//! [`Server`]: ../struct.Server.html
 pub mod anonymous;
 pub use anonymous::AnonymousAuthenticator;
 
