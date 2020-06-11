@@ -1,4 +1,4 @@
-//! StorageBackend that uses a local filesystem, like a traditional FTP server.
+//! Defines the service provider interface for storage back-end implementors.
 
 use super::error::Error;
 use async_trait::async_trait;

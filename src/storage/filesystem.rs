@@ -1,4 +1,4 @@
-//! StorageBackend that uses a local filesystem, like a traditional FTP server.
+//! A StorageBackend that uses a local filesystem, like a traditional FTP server.
 
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use async_trait::async_trait;

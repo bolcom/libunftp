@@ -27,7 +27,7 @@ use std::{
 const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 
-/// An instance of a FTP server. It contains a reference to an [`Authenticator`] that will be used
+/// An instance of an FTP(S) server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
 ///
 /// The server can be started with the `listen` method.

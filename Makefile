@@ -41,8 +41,9 @@ pr-prep: # Runs checks to ensure you're ready for a pull request
 	cargo fmt --all -- --check
 	cargo clippy --all-features --all-targets
 	cargo test --all-features --all-targets
+	cargo test --doc
 	cargo build --all-features --all-targets
-	cargo doc --all-features --no-deps
+	cargo doc --crate-version --all-features --no-deps
 
 .PHONY: publish
 publish: # Publishes the lib to crates.io

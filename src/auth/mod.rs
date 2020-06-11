@@ -16,7 +16,7 @@
 //! async-trait = "0.1.35"
 //! ```
 //!
-//! 2. Implement the `Authenticator` and `UserDetail` traits:
+//! 2. Implement the [`Authenticator`] trait and optionally the [`UserDetail`] trait:
 //!
 //! ```no_run
 //! use libunftp::auth::{Authenticator, UserDetail};
@@ -47,10 +47,18 @@
 //! 3. Initialize it with the server:
 //!
 //! ```
-//! let server = libunftp::Server::new_with_fs_and_auth(ftp_home, std::sync::Arc::new(auth::RandomAuthenticator));
+//! # // Make it compile
+//! # type RandomAuthenticator = libunftp::auth::AnonymousAuthenticator;
+//! let server = libunftp::Server::new_with_fs_and_auth(
+//!   "/srv/ftp",
+//!   std::sync::Arc::new(RandomAuthenticator{})
+//! );
 //! ```
 //!
 //! [`Server`]: ../struct.Server.html
+//! [`Authenticator`]: trait.Authenticator.html
+//! [`UserDetail`]: trait.UserDetail.html
+//!
 pub mod anonymous;
 pub use anonymous::AnonymousAuthenticator;
 
