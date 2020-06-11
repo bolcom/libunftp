@@ -38,7 +38,7 @@ impl Fail for Error {
 
 /// The `ErrorKind` variants that can be produced by the [`StorageBackend`] implementations.
 ///
-/// [`StorageBackend`]: ../backend/trait.StorageBackend.html
+/// [`StorageBackend`]: trait.StorageBackend.html
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
     /// 450 Requested file action not taken.

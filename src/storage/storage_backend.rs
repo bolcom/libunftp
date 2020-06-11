@@ -109,8 +109,8 @@ where
 /// The `StorageBackend` trait defines a common interface to different storage backends for our FTP
 /// [`Server`], e.g. for a [`Filesystem`] or Google Cloud Storage.
 ///
-/// [`Server`]: ../server/struct.Server.html
-/// [`filesystem`]: ./struct.Filesystem.html
+/// [`Server`]: ../struct.Server.html
+/// [`filesystem`]: filesystem/struct.Filesystem.html
 #[async_trait]
 pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The concrete type of the _FTP File_ returned by this storage backend.
