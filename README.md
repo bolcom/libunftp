@@ -1,9 +1,9 @@
 # [libunftp](https://github.com/bolcom/libunftp)
 
-[![Crate Version](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
-[![Crate License](https://img.shields.io/crates/v/libunftp.svg)](https://crates.io/crates/libunftp)
-[![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
+[![Crate Version](https://img.shields.io/crates/v/libunftp.svg)](https://crates.io/crates/libunftp)
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
+[![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
+[![Crate License](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
 
 When you need to FTP, but don't want to.
 
@@ -21,8 +21,6 @@ possible.
 
 **libunftp is currently under heavy development and not yet recommended for production use.
 The API MAY BREAK**
-
-[API Documentation](https://docs.rs/libunftp)
 
 ## Prerequisites
 
