@@ -29,7 +29,8 @@ tokio-rustls = { version = "0.13.0" }
 rustls = "0.17.0"
 bytes = "0.5.4"
 lazy_static = "1.4.0"
-log = "0.4.8"
+slog = { version = "2.4.1", features = ["max_level_trace", "release_max_level_warn"] }
+slog-stdlog = "4.0.0"
 chrono = {version = "0.4.11", features = ["serde"]}
 failure = "0.1.7"
 failure_derive = "0.1.7"
@@ -62,6 +63,7 @@ pretty_assertions = "0.6.1"
 tokio = { version = "0.2.20", features = ["rt-threaded"]}
 clap = "2.33.0"
 tracing-subscriber = "0.2.5"
+log = "0.4.8"
 
 [features]
 pam_auth = ["pam-auth"]

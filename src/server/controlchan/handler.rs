@@ -44,4 +44,5 @@ where
     pub storage_features: u32,
     pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
     pub control_connection_info: Option<ConnectionTuple>,
+    pub logger: slog::Logger,
 }

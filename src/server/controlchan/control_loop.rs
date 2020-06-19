@@ -23,7 +23,6 @@ use futures::{
     executor::block_on,
     SinkExt, StreamExt,
 };
-use log::{info, warn};
 use std::{convert::TryInto, net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -49,6 +48,7 @@ where
     pub ftps_config: FTPSConfig,
     pub collect_metrics: bool,
     pub idle_session_timeout: Duration,
+    pub logger: slog::Logger,
 }
 
 /// Does TCP processing when a FTP client connects
@@ -72,6 +72,7 @@ where
         ftps_config,
         collect_metrics,
         idle_session_timeout,
+        logger,
         ..
     } = config;
 
@@ -84,10 +85,13 @@ where
         .control_msg_tx(control_msg_tx.clone())
         .control_connection_info(control_connection_info);
 
+    let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id)));
+
     let shared_session: SharedSession<S, U> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr().unwrap();
 
     let event_handler_chain = handle_event::<S, U>(
+        logger.clone(),
         shared_session.clone(),
         authenticator,
         tls_configured,
@@ -99,7 +103,7 @@ where
         control_connection_info,
     );
     let event_handler_chain = handle_with_auth::<S, U, _>(shared_session, event_handler_chain);
-    let event_handler_chain = handle_with_logging::<S, U, _>(event_handler_chain);
+    let event_handler_chain = handle_with_logging::<S, U, _>(logger.clone(), event_handler_chain);
 
     let codec = FTPCodec::new();
     let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FTPCodec> = codec.framed(Box::new(tcp_stream));
@@ -113,6 +117,7 @@ where
 
     tokio::spawn(async move {
         // The control channel event loop
+        slog::info!(logger, "Starting control loop");
         loop {
             #[allow(unused_assignments)]
             let mut incoming = None;
@@ -125,7 +130,7 @@ where
                     incoming = Some(Ok(Event::InternalMsg(msg)));
                 },
                 _ = &mut timeout_delay => {
-                    info!("Control connection timed out");
+                    slog::info!(logger, "Control connection timed out");
                     incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
                 }
             };
@@ -133,7 +138,7 @@ where
             match incoming {
                 None => {
                     // Should not happen.
-                    warn!("No event polled in control channel...");
+                    slog::warn!(logger, "No event polled in control channel...");
                     return;
                 }
                 Some(Ok(event)) => {
@@ -142,12 +147,12 @@ where
                     };
 
                     if let Event::InternalMsg(InternalMsg::Quit) = event {
-                        info!("Quit received");
+                        slog::info!(logger, "Quit received");
                         return;
                     }
 
                     if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
-                        info!("Upgrading to TLS");
+                        slog::info!(logger, "Upgrading to TLS");
 
                         // Get back the original TCP Stream
                         let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
@@ -170,7 +175,7 @@ where
 
                     match event_handler_chain(event) {
                         Err(e) => {
-                            warn!("Event handler chain error: {:?}", e);
+                            slog::warn!(logger, "Event handler chain error: {:?}", e);
                             return;
                         }
                         Ok(reply) => {
@@ -179,14 +184,14 @@ where
                             }
                             let result = reply_sink.send(reply).await;
                             if result.is_err() {
-                                warn!("Could not send reply to client");
+                                slog::warn!(logger, "Could not send reply to client");
                                 return;
                             }
                         }
                     }
                 }
                 Some(Err(e)) => {
-                    let reply = handle_control_channel_error::<S, U>(e, collect_metrics);
+                    let reply = handle_control_channel_error::<S, U>(logger.clone(), e, collect_metrics);
                     let mut close_connection = false;
                     if let Reply::CodeAndMsg {
                         code: ReplyCode::ClosingControlConnection,
@@ -197,7 +202,7 @@ where
                     }
                     let result = reply_sink.send(reply).await;
                     if result.is_err() {
-                        warn!("Could not send error reply to client");
+                        slog::warn!(logger, "Could not send error reply to client");
                         return;
                     }
                     if close_connection {
@@ -245,7 +250,7 @@ where
     }
 }
 
-fn handle_with_logging<S, U, N>(next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
+fn handle_with_logging<S, U, N>(logger: slog::Logger, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
@@ -254,13 +259,14 @@ where
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
     move |event| {
-        info!("Processing control channel event {:?}", event);
+        slog::info!(logger, "Processing control channel event {:?}", event);
         next(event)
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn handle_event<S, U>(
+    logger: slog::Logger,
     session: SharedSession<S, U>,
     authenticator: Arc<dyn Authenticator<U>>,
     tls_configured: bool,
@@ -280,6 +286,7 @@ where
     move |event| -> Result<Reply, ControlChanError> {
         match event {
             Event::Command(cmd) => block_on(handle_command(
+                logger.clone(),
                 cmd,
                 session.clone(),
                 authenticator.clone(),
@@ -291,7 +298,7 @@ where
                 proxyloop_msg_tx.clone(),
                 control_connection_info,
             )),
-            Event::InternalMsg(msg) => block_on(handle_internal_msg(msg, session.clone())),
+            Event::InternalMsg(msg) => block_on(handle_internal_msg(logger.clone(), msg, session.clone())),
         }
     }
 }
@@ -299,6 +306,7 @@ where
 #[allow(clippy::too_many_arguments)]
 #[tracing_attributes::instrument]
 async fn handle_command<S, U>(
+    logger: slog::Logger,
     cmd: Command,
     session: SharedSession<S, U>,
     authenticator: Arc<dyn Authenticator<U>>,
@@ -327,6 +335,7 @@ where
         storage_features,
         proxyloop_msg_tx,
         control_connection_info,
+        logger,
     };
 
     let handler: Box<dyn CommandHandler<S, U>> = match cmd {
@@ -373,7 +382,7 @@ where
 }
 
 #[tracing_attributes::instrument]
-async fn handle_internal_msg<S, U>(msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
+async fn handle_internal_msg<S, U>(logger: slog::Logger, msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
@@ -440,7 +449,7 @@ where
     }
 }
 
-fn handle_control_channel_error<S, U>(error: ControlChanError, with_metrics: bool) -> Reply
+fn handle_control_channel_error<S, U>(logger: slog::Logger, error: ControlChanError, with_metrics: bool) -> Reply
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
@@ -450,7 +459,7 @@ where
     if with_metrics {
         add_error_metric(&error.kind());
     };
-    warn!("Control channel error: {}", error);
+    slog::warn!(logger, "Control channel error: {}", error);
     match error.kind() {
         ControlChanErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
         ControlChanErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),

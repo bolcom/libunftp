@@ -32,7 +32,6 @@ use crate::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::warn;
 use std::{io::Read, sync::Arc};
 
 #[derive(Debug)]
@@ -72,6 +71,7 @@ where
 
                 let mut tx_success: Sender<InternalMsg> = args.tx.clone();
                 let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+                let logger = args.logger;
 
                 tokio::spawn(async move {
                     match storage.list_fmt(&user, path).await {
@@ -80,15 +80,15 @@ where
                             match cursor.read_to_string(&mut result) {
                                 Ok(_) => {
                                     if let Err(err) = tx_success.send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result)).await {
-                                        warn!("{}", err);
+                                        slog::warn!(logger, "{}", err);
                                     }
                                 }
-                                Err(err) => warn!("{}", err),
+                                Err(err) => slog::warn!(logger, "{}", err),
                             }
                         }
                         Err(_) => {
                             if let Err(err) = tx_fail.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
-                                warn!("{}", err);
+                                slog::warn!(logger, "{}", err);
                             }
                         }
                     }

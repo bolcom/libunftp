@@ -18,7 +18,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 
 // The parameter that can be given to the `AUTH` command.
 #[derive(Debug, PartialEq, Clone)]
@@ -49,11 +48,12 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut tx = args.tx.clone();
+        let logger = args.logger;
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(InternalMsg::SecureControlChannel).await {
-                        warn!("{}", err);
+                        slog::warn!(logger, "{}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))

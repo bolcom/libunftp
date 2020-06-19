@@ -128,7 +128,7 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
         let selector = self.selector.clone();
         let regex = self.regex.clone();
 
-        debug!("{} {}", url, body);
+        //slog::debug!("{} {}", url, body);
 
         let req = Request::builder()
             .method(method)
@@ -165,7 +165,7 @@ fn encode_string_json(string: &str) -> String {
             '"' => res.push_str("\\\""),
             ' '..='~' => res.push(i),
             _ => {
-                error!("special character {} is not supported", i);
+                //slog::error!("special character {} is not supported", i);
             }
         }
     }

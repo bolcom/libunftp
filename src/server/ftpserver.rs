@@ -14,7 +14,7 @@ use crate::{
     storage::{filesystem::Filesystem, Metadata, StorageBackend},
 };
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
-use log::{info, warn};
+use slog::*;
 use std::{
     fmt::Debug,
     net::{IpAddr, Shutdown, SocketAddr},
@@ -61,6 +61,7 @@ where
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
+    logger: slog::Logger,
 }
 
 impl<S, U> Debug for Server<S, U>
@@ -117,7 +118,14 @@ where
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: ProxyMode::Off,
             proxy_protocol_switchboard: Option::None,
+            logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
         }
+    }
+
+    /// Sets the slog structured logger to use
+    pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
+        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
+        self
     }
 
     /// Set the greeting that will be sent to the client after connecting.
@@ -261,7 +269,7 @@ where
     /// ```
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
-        self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.passive_ports.clone()));
+        self.proxy_protocol_switchboard = Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone()));
         self
     }
 
@@ -299,11 +307,11 @@ where
         let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
-            info!("Incoming control channel connection from {:?}", socket_addr);
+            slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
             let params: LoopConfig<S, U> = (&self).into();
             let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
             if result.is_err() {
-                warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
             }
         }
     }
@@ -331,11 +339,11 @@ where
                     let mut tcp_stream = tcp_stream.unwrap();
                     let socket_addr = tcp_stream.peer_addr();
 
-                    info!("Incoming proxy connection from {:?}", socket_addr);
+                    slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
                     let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
                         Ok(v) => v,
                         Err(e) => {
-                            warn!("proxy protocol decode error: {:?}", e);
+                            slog::warn!(self.logger, "proxy protocol decode error: {:?}", e);
                             continue;
                         }
                     };
@@ -345,17 +353,17 @@ where
                     // and connections for the data channel.
                     if connection.to_port == external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                        info!("Connection from {:?} is a control connection", socket_addr);
+                        slog::info!(self.logger, "Connection from {:?} is a control connection", socket_addr);
                         let params: LoopConfig<S,U> = (&self).into();
                         let result = spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
-                            warn!("Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                            slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
                     } else {
                         // handle incoming data connections
-                        info!("Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
+                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
                         if !self.passive_ports.contains(&connection.to_port) {
-                            warn!("Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
                             tcp_stream.shutdown(Shutdown::Both).unwrap();
                             continue;
                         }
@@ -384,13 +392,15 @@ where
                 Some(session) => {
                     let mut session = session.lock().await;
                     let tx_some = session.control_msg_tx.clone();
+                    let s = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
                     if let Some(tx) = tx_some {
-                        spawn_processing(&mut session, tcp_stream, tx);
+                        let logger = self.logger.new(slog::o!("username" => s));
+                        spawn_processing(logger, &mut session, tcp_stream, tx);
                         switchboard.unregister(&connection);
                     }
                 }
                 None => {
-                    warn!("Unexpected connection ({:?})", connection);
+                    slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
                     tcp_stream.shutdown(Shutdown::Both).unwrap();
                     return;
                 }
@@ -400,7 +410,7 @@ where
 
     #[tracing_attributes::instrument]
     async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
-        info!("Received internal message to allocate data port");
+        slog::info!(self.logger, "Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
         // 3. put expiry time in the LIFO list
@@ -410,7 +420,7 @@ where
         let mut p2 = 0;
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
-            info!("Reserving data port: {:?}", port);
+            slog::info!(self.logger, "Reserving data port: {:?}", port);
             p1 = port >> 8;
             p2 = port - (p1 * 256);
         }
@@ -496,6 +506,7 @@ where
             greeting: server.greeting,
             idle_session_timeout: server.idle_session_timeout,
             passive_ports: server.passive_ports.clone(),
+            logger: server.logger.new(slog::o!()),
         }
     }
 }

@@ -4,7 +4,6 @@ use super::error::Error;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use itertools::Itertools;
-use log::warn;
 use std::{
     fmt::{self, Debug, Formatter},
     path::Path,
@@ -79,7 +78,6 @@ where
         let path = match basename {
             Some(v) => v.as_os_str().to_string_lossy(),
             None => {
-                warn!("error parsing path components");
                 return Err(std::fmt::Error);
             }
         };

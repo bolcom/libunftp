@@ -4,7 +4,6 @@
 
 use crate::auth::*;
 use async_trait::async_trait;
-use log::{info, warn};
 use serde::Deserialize;
 use std::{fs, time::Duration};
 use tokio::time::delay_for;
@@ -56,18 +55,14 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
         for c in credentials_list.iter() {
             if username == c.username {
                 if password == c.password {
-                    info!("Successful login by user {}", username);
                     return Ok(DefaultUser {});
                 } else {
-                    warn!("Failed login for user {}: bad password", username);
                     // punish the failed login with a 1500ms delay before returning the error
                     delay_for(Duration::from_millis(1500)).await;
                     return Err(Box::new(BadPasswordError));
                 }
             }
         }
-        warn!("Failed login for user \"{}\": unknown user", username);
-
         // punish the failed login with a 1500ms delay before returning the error
         delay_for(Duration::from_millis(1500)).await;
         Err(Box::new(UnknownUsernameError))

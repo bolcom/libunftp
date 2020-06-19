@@ -12,7 +12,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -34,11 +33,12 @@ where
         let uuid: String = Uuid::new_v4().to_string();
         let filename: &Path = std::path::Path::new(&uuid);
         let path: String = session.cwd.join(&filename).to_string_lossy().to_string();
+        let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(Command::Stor { path }).await {
-                        warn!("sending command failed. {}", err);
+                        slog::warn!(logger, "sending command failed. {}", err);
                     }
                 });
                 Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))

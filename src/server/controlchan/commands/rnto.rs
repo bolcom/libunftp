@@ -10,7 +10,6 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use log::warn;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
@@ -36,13 +35,14 @@ where
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
+        let logger = args.logger;
         let reply = match session.rename_from.take() {
             Some(from) => {
                 let to = session.cwd.join(self.path.clone());
                 match storage.rename(&session.user, from, to).await {
                     Ok(_) => Reply::new(ReplyCode::FileActionOkay, "Renamed"),
                     Err(err) => {
-                        warn!("Error renaming: {:?}", err);
+                        slog::warn!(logger, "Error renaming: {:?}", err);
                         Reply::new(ReplyCode::FileError, "Storage error while renaming")
                     }
                 }

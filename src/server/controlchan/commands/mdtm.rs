@@ -13,7 +13,6 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{offset::Utc, DateTime};
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::warn;
 use std::{path::PathBuf, sync::Arc};
 
 const RFC3659_TIME: &str = "%Y%m%d%H%M%S";
@@ -45,6 +44,7 @@ where
         let path = session.cwd.join(self.path.clone());
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+        let logger = args.logger;
 
         tokio::spawn(async move {
             match storage.metadata(&user, &path).await {
@@ -53,7 +53,7 @@ where
                         Ok(v) => Some(v),
                         Err(err) => {
                             if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
-                                warn!("{}", err);
+                                slog::warn!(logger, "{}", err);
                             };
                             None
                         }
@@ -67,13 +67,13 @@ where
                             ))
                             .await
                         {
-                            warn!("{}", err);
+                            slog::warn!(logger, "{}", err);
                         }
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
-                        warn!("{}", err);
+                        slog::warn!(logger, "{}", err);
                     }
                 }
             }

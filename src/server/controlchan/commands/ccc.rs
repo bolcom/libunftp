@@ -14,7 +14,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::warn;
 
 #[derive(Debug)]
 pub struct Ccc;
@@ -31,10 +30,11 @@ where
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut tx: Sender<InternalMsg> = args.tx.clone();
         let session = args.session.lock().await;
+        let logger = args.logger;
         if session.cmd_tls {
             tokio::spawn(async move {
                 if let Err(err) = tx.send(InternalMsg::PlaintextControlChannel).await {
-                    warn!("{}", err);
+                    slog::warn!(logger, "{}", err);
                 }
             });
             Ok(Reply::new(ReplyCode::CommandOkay, "control channel in plaintext now"))

@@ -26,7 +26,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::warn;
 
 #[derive(Debug)]
 pub struct Quit;
@@ -42,9 +41,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut tx: Sender<InternalMsg> = args.tx.clone();
+        let logger = args.logger;
         //TODO does this make sense? The command is not sent and yet an Ok is replied
         if let Err(send_res) = tx.send(InternalMsg::Quit).await {
-            warn!("could not send internal message: QUIT. {}", send_res);
+            slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
     }

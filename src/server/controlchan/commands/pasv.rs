@@ -92,11 +92,12 @@ impl Pasv {
         S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
+        let logger = args.logger;
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,
             std::net::SocketAddr::V6(_) => {
-                log::error!("local address is ipv6! we only listen on ipv4, so this shouldn't happen");
+                slog::error!(logger, "local address is ipv6! we only listen on ipv4, so this shouldn't happen");
                 return Err(ControlChanErrorKind::InternalServerError.into());
             }
         };
@@ -125,7 +126,9 @@ impl Pasv {
                 let tx = tx.clone();
                 let session_arc = session.clone();
                 let mut session = session_arc.lock().await;
-                datachan::spawn_processing(&mut session, socket, tx);
+                let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
+                let logger = logger.new(slog::o!("username" => username));
+                datachan::spawn_processing(logger, &mut session, socket, tx);
             }
         });
 

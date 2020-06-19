@@ -20,7 +20,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 
 #[derive(Debug)]
 pub struct Abor;
@@ -36,11 +35,12 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
+        let logger = args.logger;
         match session.data_abort_tx.take() {
             Some(mut tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(()).await {
-                        warn!("abort failed: {}", err);
+                        slog::warn!(logger, "abort failed: {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel"))

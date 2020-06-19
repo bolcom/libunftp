@@ -2,7 +2,6 @@ use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use log::warn;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
 use rand::{rngs::OsRng, RngCore};
 use std::{collections::HashMap, net::IpAddr, ops::Range};
@@ -138,6 +137,7 @@ where
 {
     switchboard: HashMap<String, Option<SharedSession<S, U>>>,
     port_range: Range<u16>,
+    logger: slog::Logger,
 }
 
 #[derive(Debug)]
@@ -153,11 +153,12 @@ where
     S: StorageBackend<U>,
     U: UserDetail + 'static,
 {
-    pub fn new(passive_ports: Range<u16>) -> Self {
+    pub fn new(logger: slog::Logger, passive_ports: Range<u16>) -> Self {
         let board = HashMap::new();
         Self {
             switchboard: board,
             port_range: passive_ports,
+            logger,
         }
     }
 
@@ -166,7 +167,7 @@ where
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, Some(session_arc)) {
                 Some(_) => {
-                    warn!("This is a data race condition. This shouldn't happen");
+                    slog::warn!(self.logger, "This is a data race condition. This shouldn't happen");
                     // just return Ok anyway however
                     Ok(())
                 }
@@ -184,7 +185,7 @@ where
         match self.switchboard.remove(&hash) {
             Some(_) => (),
             None => {
-                warn!("Entry already removed?");
+                slog::warn!(self.logger, "Entry already removed?");
             }
         }
     }
@@ -221,7 +222,7 @@ where
             }
         }
         // out of tries
-        warn!("Out of tries!");
+        slog::warn!(self.logger, "Out of tries reserving next free port!");
         Err(ProxyProtocolError::MaxRetriesError)
     }
 }
