@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use itertools::Itertools;
 use std::{
-    fmt::{self, Debug, Formatter},
+    fmt::{self, Debug, Formatter, Write},
     path::Path,
     result,
     time::SystemTime,
@@ -46,6 +46,37 @@ pub trait Metadata {
 
     /// Returns the `uid` of the file.
     fn uid(&self) -> u32;
+
+    /// Returns the `permissions` of the file. The default implementation assumes unix permissions
+    /// and defaults to "rwxr-xr-x" (octal 7755)
+    fn permissions(&self) -> Permissions {
+        Permissions(0o7755)
+    }
+}
+
+/// Represents the permissions of a _FTP File_
+pub struct Permissions(u32);
+
+const PERM_READ: u32 = 0b100100100;
+const PERM_WRITE: u32 = 0b010010010;
+const PERM_EXEC: u32 = 0b001001001;
+const PERM_USER: u32 = 0b111000000;
+const PERM_GROUP: u32 = 0b000111000;
+const PERM_OTHERS: u32 = 0b000000111;
+
+impl std::fmt::Display for Permissions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_char(if self.0 & PERM_USER & PERM_READ > 0 { 'r' } else { '-' })?;
+        f.write_char(if self.0 & PERM_USER & PERM_WRITE > 0 { 'w' } else { '-' })?;
+        f.write_char(if self.0 & PERM_USER & PERM_EXEC > 0 { 'x' } else { '-' })?;
+        f.write_char(if self.0 & PERM_GROUP & PERM_READ > 0 { 'r' } else { '-' })?;
+        f.write_char(if self.0 & PERM_GROUP & PERM_WRITE > 0 { 'w' } else { '-' })?;
+        f.write_char(if self.0 & PERM_GROUP & PERM_EXEC > 0 { 'x' } else { '-' })?;
+        f.write_char(if self.0 & PERM_OTHERS & PERM_READ > 0 { 'r' } else { '-' })?;
+        f.write_char(if self.0 & PERM_OTHERS & PERM_WRITE > 0 { 'w' } else { '-' })?;
+        f.write_char(if self.0 & PERM_OTHERS & PERM_EXEC > 0 { 'x' } else { '-' })?;
+        Ok(())
+    }
 }
 
 /// Fileinfo contains the path and `Metadata` of a file.
@@ -81,6 +112,7 @@ where
                 return Err(std::fmt::Error);
             }
         };
+        let perms = format!("{}", self.metadata.permissions());
         #[allow(clippy::write_literal)]
         write!(
             f,
@@ -92,9 +124,7 @@ where
             } else {
                 "-"
             },
-            // TODO: Don't hardcode permissions ;)
-            permissions = "rwxr-xr-x",
-            // TODO: Consider showing canonical names here
+            permissions = perms,
             owner = self.metadata.uid(),
             group = self.metadata.gid(),
             size = self.metadata.len(),
