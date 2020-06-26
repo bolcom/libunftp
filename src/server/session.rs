@@ -6,8 +6,26 @@ use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
 };
+use failure::_core::fmt::Formatter;
 use futures::channel::mpsc::{Receiver, Sender};
 use std::{fmt::Debug, path::PathBuf, sync::Arc};
+
+// TraceId is an identifier used to correlate logs statements together.
+#[derive(PartialEq, Eq, Debug)]
+pub struct TraceId(u64);
+
+impl TraceId {
+    pub fn new() -> Self {
+        // For now keep it simple. Later we may need something more sophisticated
+        TraceId(rand::random())
+    }
+}
+
+impl std::fmt::Display for TraceId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#x}", self.0)
+    }
+}
 
 #[derive(PartialEq, Debug)]
 pub enum SessionState {
@@ -21,23 +39,39 @@ pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 
 // This is where we keep the state for a ftp session.
 #[derive(Debug)]
-pub struct Session<S, U: Send + Sync + Debug>
+pub struct Session<S, U>
 where
     S: StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
+    U: Send + Sync + Debug,
 {
+    // I guess this can be called session_id but for now we only use it to have traceability in our
+    // logs. Rename it if you use it for more than than but then also make sure the TraceId
+    // implementation makes sense.
+    pub trace_id: TraceId,
+    // This is extra information about a user like account details.
     pub user: Arc<Option<U>>,
+    // The username used to log in. None if not logged in.
     pub username: Option<String>,
     pub storage: Arc<S>,
+    // The control loop uses this to send commands to the data loop
     pub data_cmd_tx: Option<Sender<Command>>,
+    // The data loop uses this receive messages from the control loop
     pub data_cmd_rx: Option<Receiver<Command>>,
+    // The control loop uses this to ask the data loop to exit.
     pub data_abort_tx: Option<Sender<()>>,
+    // The data loop listens to this so it can know when to exit.
     pub data_abort_rx: Option<Receiver<()>>,
+    // This may not be needed here...
     pub control_msg_tx: Option<Sender<InternalMsg>>,
+    // If in proxy protocol mode then this holds the source and destination IP+port used to make
+    // the control connection.
     pub control_connection_info: Option<ConnectionTuple>,
     pub cwd: std::path::PathBuf,
+    // After a RNFR command this will hold the source path used by the RNTO command.
     pub rename_from: Option<PathBuf>,
+    // This may need some work...
     pub state: SessionState,
     // Tells if FTPS/TLS security is available to the session or not. The variables cmd_tls and
     // data_tls tells if the channels are actually encrypted or not.
@@ -61,6 +95,7 @@ where
 {
     pub(super) fn new(storage: Arc<S>) -> Self {
         Session {
+            trace_id: TraceId::new(),
             user: Arc::new(None),
             username: None,
             storage,
@@ -105,11 +140,12 @@ where
     }
 }
 
-impl<S, U: Send + Sync + Debug> Drop for Session<S, U>
+impl<S, U> Drop for Session<S, U>
 where
     S: StorageBackend<U>,
     S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
+    U: Send + Sync + Debug,
 {
     fn drop(&mut self) {
         if self.collect_metrics {

@@ -19,7 +19,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 use std::{string::String, sync::Arc};
 
 #[derive(Debug)]
@@ -48,16 +47,17 @@ where
         let path = session.cwd.join(self.path.clone());
         let mut tx_success = args.tx.clone();
         let mut tx_fail = args.tx.clone();
+        let logger = args.logger;
         if let Err(err) = storage.rmd(&session.user, path).await {
-            warn!("Failed to delete directory: {}", err);
+            slog::warn!(logger, "Failed to delete directory: {}", err);
             let r = tx_fail.send(InternalMsg::StorageError(err)).await;
             if let Err(e) = r {
-                warn!("Could not send internal message to notify of RMD error: {}", e);
+                slog::warn!(logger, "Could not send internal message to notify of RMD error: {}", e);
             }
         } else {
             let r = tx_success.send(InternalMsg::DelSuccess).await;
             if let Err(e) = r {
-                warn!("Could not send internal message to notify of RMD success: {}", e);
+                slog::warn!(logger, "Could not send internal message to notify of RMD success: {}", e);
             }
         }
         Ok(Reply::none())

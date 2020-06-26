@@ -11,7 +11,6 @@ use crate::{
     storage::{Error, ErrorKind, Metadata, StorageBackend},
 };
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::{debug, error, info, warn};
 use std::{path::PathBuf, sync::Arc};
 use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
@@ -31,6 +30,7 @@ where
     pub cwd: PathBuf,
     pub start_pos: u64,
     pub ftps_mode: FTPSConfig,
+    pub logger: slog::Logger,
 }
 
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
@@ -71,18 +71,18 @@ where
                     match tokio::io::copy(&mut f, &mut output).await {
                         Ok(bytes_copied) => {
                             if let Err(err) = output.shutdown().await {
-                                warn!("Could not shutdown output stream after RETR: {}", err);
+                                slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
                             }
                             if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
-                                error!("Could not notify control channel of successful RETR: {}", err);
+                                slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
                             }
                         }
-                        Err(err) => warn!("Error copying streams during RETR: {}", err),
+                        Err(err) => slog::warn!(self.logger, "Error copying streams during RETR: {}", err),
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                        warn!("Could not notify control channel of error with RETR: {}", err);
+                        slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
                     }
                 }
             }
@@ -102,12 +102,12 @@ where
             {
                 Ok(bytes) => {
                     if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                        error!("Could not notify control channel of successful STOR: {}", err);
+                        slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                        error!("Could not notify control channel of error with STOR: {}", err);
+                        slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
                     }
                 }
             }
@@ -125,7 +125,7 @@ where
             let mut output = Self::writer(self.socket, self.ftps_mode);
             let result = match self.storage.list_fmt(&self.user, path).await {
                 Ok(cursor) => {
-                    debug!("Copying future for List");
+                    slog::debug!(self.logger, "Copying future for List");
                     let mut input = cursor;
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => Ok(InternalMsg::DirectorySuccessfullyListed),
@@ -133,7 +133,7 @@ where
                     }
                 }
                 Err(err) => {
-                    warn!("Failed to send directory list: {:?}", err);
+                    slog::warn!(self.logger, "Failed to send directory list: {:?}", err);
                     match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
                         Ok(_) => Ok(InternalMsg::DirectoryListFailure),
                         Err(e) => Err(e),
@@ -143,13 +143,13 @@ where
             match result {
                 Ok(msg) => {
                     if let Err(err) = output.shutdown().await {
-                        warn!("Could not shutdown output stream during LIST: {}", err);
+                        slog::warn!(self.logger, "Could not shutdown output stream during LIST: {}", err);
                     }
                     if let Err(err) = tx_ok.send(msg).await {
-                        error!("Could not notify control channel of LIST result: {}", err);
+                        slog::error!(self.logger, "Could not notify control channel of LIST result: {}", err);
                     }
                 }
-                Err(err) => warn!("Failed to send reply to LIST: {}", err),
+                Err(err) => slog::warn!(self.logger, "Failed to send reply to LIST: {}", err),
             }
         });
     }
@@ -169,18 +169,18 @@ where
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => {
                             if let Err(err) = output.shutdown().await {
-                                warn!("Could not shutdown output stream during NLIST: {}", err);
+                                slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
                             }
                             if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                error!("Could not notify control channel of successful NLIST: {}", err);
+                                slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
                             }
                         }
-                        Err(err) => warn!("Could not copy from storage implementation during NLST: {}", err),
+                        Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
                     }
                 }
                 Err(_) => {
                     if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
-                        warn!("Could not notify control channel of error with NLIST: {}", err);
+                        slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
                     }
                 }
             }
@@ -224,7 +224,7 @@ where
 /// tls: tells if this should be a TLS connection
 /// tx: channel to send the result of our operation to the control process
 #[tracing_attributes::instrument]
-pub fn spawn_processing<S, U>(session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
+pub fn spawn_processing<S, U>(logger: slog::Logger, session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
 where
     S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
@@ -242,6 +242,7 @@ where
         cwd: session.cwd.clone(),
         start_pos: session.start_pos,
         ftps_mode,
+        logger,
     };
 
     tokio::spawn(async move {
@@ -249,13 +250,13 @@ where
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.next() => {
-                handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
+                handle_incoming(command_executor.logger.clone(), DataCommand::ExternalCommand(command), command_executor).await;
             },
             Some(_) = data_abort_rx.next() => {
-                handle_incoming(DataCommand::Abort, command_executor).await;
+                handle_incoming(command_executor.logger.clone(), DataCommand::Abort, command_executor).await;
             },
             _ = &mut timeout_delay => {
-                warn!("Data channel connection timed out");
+                slog::warn!(command_executor.logger, "Data channel connection timed out");
                 return;
             }
         };
@@ -263,7 +264,7 @@ where
 }
 
 #[tracing_attributes::instrument]
-async fn handle_incoming<S, U>(incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
+async fn handle_incoming<S, U>(logger: slog::Logger, incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
 where
     S: StorageBackend<U> + 'static,
     S::File: tokio::io::AsyncRead + Send,
@@ -272,10 +273,10 @@ where
 {
     match incoming {
         DataCommand::Abort => {
-            info!("Data channel abort received");
+            slog::info!(logger, "Data channel abort received");
         }
         DataCommand::ExternalCommand(command) => {
-            info!("Data command received: {:?}", command);
+            slog::info!(logger, "Data command received: {:?}", command);
             command_executor.execute(command).await;
         }
     }

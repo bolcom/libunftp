@@ -19,7 +19,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::warn;
 use std::{string::String, sync::Arc};
 
 #[derive(Debug)]
@@ -49,16 +48,17 @@ where
         let path = session.cwd.join(self.path.clone());
         let mut tx_success: Sender<InternalMsg> = args.tx.clone();
         let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+        let logger = args.logger;
         tokio::spawn(async move {
             match storage.del(&user, path).await {
                 Ok(_) => {
                     if let Err(err) = tx_success.send(InternalMsg::DelSuccess).await {
-                        warn!("{}", err);
+                        slog::warn!(logger, "{}", err);
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
-                        warn!("{}", err);
+                        slog::warn!(logger, "{}", err);
                     }
                 }
             }

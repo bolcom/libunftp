@@ -26,7 +26,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
-use log::{error, info, warn};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -51,6 +50,7 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
+        let logger = args.logger;
         match &session.state {
             SessionState::WaitPass => {
                 let pass: &str = std::str::from_utf8(&self.password.as_ref())?;
@@ -58,7 +58,7 @@ where
                 let user: String = match session.username.clone() {
                     Some(v) => v,
                     None => {
-                        error!("NoneError for username. This shouldn't happen.");
+                        slog::error!(logger, "NoneError for username. This shouldn't happen.");
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
                     }
                 };
@@ -74,11 +74,11 @@ where
                         Ok(user) => {
                             if user.account_enabled() {
                                 let mut session = session2clone.lock().await;
-                                info!("User {} logged in", user);
+                                slog::info!(logger, "User {} logged in", user);
                                 session.user = Arc::new(Some(user));
                                 InternalMsg::AuthSuccess
                             } else {
-                                warn!("User {} authenticated but account is disabled", user);
+                                slog::warn!(logger, "User {} authenticated but account is disabled", user);
                                 InternalMsg::AuthFailed
                             }
                         }
@@ -86,7 +86,7 @@ where
                     };
                     tokio::spawn(async move {
                         if let Err(err) = tx.send(msg).await {
-                            warn!("{}", err);
+                            slog::warn!(logger, "{}", err);
                         }
                     });
                 });

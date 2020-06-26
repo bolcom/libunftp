@@ -3,7 +3,6 @@
 use crate::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -212,8 +211,8 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
                     let r = tokio::fs::rename(from_rename, to).await;
                     match r {
                         Ok(_) => Ok(()),
-                        Err(e) => {
-                            warn!("could not rename file: {:?}", e);
+                        Err(_e) => {
+                            // TODO: Propagate actual error.
                             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                         }
                     }
@@ -221,8 +220,8 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
                     Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                 }
             }
-            Err(e) => {
-                warn!("could not get file metadata: {:?}", e);
+            Err(_e) => {
+                // TODO: Propagate actual error.
                 Err(Error::from(ErrorKind::PermanentFileNotAvailable))
             }
         }

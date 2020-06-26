@@ -47,7 +47,3 @@ pub(crate) mod server;
 pub mod storage;
 
 pub use crate::server::ftpserver::Server;
-
-#[cfg(feature = "rest_auth")]
-#[macro_use]
-extern crate log;

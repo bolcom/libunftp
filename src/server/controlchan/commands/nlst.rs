@@ -25,7 +25,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::prelude::*;
-use log::warn;
 
 #[derive(Debug)]
 pub struct Nlst;
@@ -42,11 +41,12 @@ where
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let cmd: Command = args.cmd.clone();
+        let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        warn!("{}", err);
+                        slog::warn!(logger, "{}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
