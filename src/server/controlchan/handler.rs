@@ -4,6 +4,7 @@ use crate::{
     server::{
         chancomms::ProxyLoopSender,
         controlchan::{Command, Reply},
+        ftpserver::options::PassiveHost,
         proxy_protocol::ConnectionTuple,
         session::SharedSession,
         InternalMsg,
@@ -39,6 +40,7 @@ where
     pub authenticator: Arc<dyn Authenticator<U>>,
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
+    pub passive_host: PassiveHost,
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,

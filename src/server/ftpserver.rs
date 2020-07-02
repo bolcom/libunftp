@@ -1,10 +1,5 @@
-use super::{
-    chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
-    controlchan::{spawn_loop, LoopConfig},
-    datachan::spawn_processing,
-    tls::FTPSConfig,
-    ReplyCode,
-};
+pub mod options;
+
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
     server::{
@@ -12,6 +7,15 @@ use crate::{
         session::SharedSession,
     },
     storage::{filesystem::Filesystem, Metadata, StorageBackend},
+};
+use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
+
+use super::{
+    chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
+    controlchan::{spawn_loop, LoopConfig},
+    datachan::spawn_processing,
+    tls::FTPSConfig,
+    ReplyCode,
 };
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
 use slog::*;
@@ -23,9 +27,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-
-const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
-const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 
 /// An instance of an FTP(S) server. It contains a reference to an [`Authenticator`] that will be used
 /// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
@@ -56,6 +57,7 @@ where
     greeting: &'static str,
     authenticator: Arc<dyn Authenticator<U>>,
     passive_ports: Range<u16>,
+    passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FTPSConfig,
     idle_session_timeout: std::time::Duration,
@@ -112,7 +114,8 @@ where
             storage: s,
             greeting: DEFAULT_GREETING,
             authenticator,
-            passive_ports: 49152..65535,
+            passive_ports: options::DEFAULT_PASSIVE_PORTS,
+            passive_host: options::DEFAULT_PASSIVE_HOST,
             ftps_mode: FTPSConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
@@ -122,7 +125,7 @@ where
         }
     }
 
-    /// Sets the slog structured logger to use
+    /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
     pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
         self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
         self
@@ -174,8 +177,8 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").passive_ports(49152..65535);
-    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .passive_ports(49152..65535);
     ///
     /// // Or instead if you prefer:
     /// let mut server = Server::new_with_fs_root("/tmp");
@@ -183,6 +186,42 @@ where
     /// ```
     pub fn passive_ports(mut self, range: Range<u16>) -> Self {
         self.passive_ports = range;
+        self
+    }
+
+    /// Specifies how the IP address that libunftp will advertise in response to the PASV command is
+    /// determined.
+    ///
+    /// # Examples
+    ///
+    /// Using a fixed IP specified as a numeric array:
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .passive_host([127,0,0,1]);
+    /// ```
+    /// Or the same but more explicitly:
+    ///
+    /// ```rust
+    /// use libunftp::{Server,options};
+    /// use std::net::Ipv4Addr;
+    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .passive_host(options::PassiveHost::IP(Ipv4Addr::new(127, 0, 0, 1)));
+    /// ```
+    ///
+    /// To determine the passive IP from the incoming control connection:
+    ///
+    /// ```rust
+    /// use libunftp::{Server,options};
+    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .passive_host(options::PassiveHost::FromConnection);
+    /// ```
+    pub fn passive_host<H: Into<PassiveHost>>(mut self, host_option: H) -> Self {
+        self.passive_host = host_option.into();
         self
     }
 
@@ -194,7 +233,8 @@ where
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let mut server = Server::new_with_fs_root("/tmp").ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
         self.ftps_mode = FTPSConfig::On {
@@ -426,9 +466,12 @@ where
         }
         let session = session_arc.lock().await;
         if let Some(conn) = session.control_connection_info {
-            let octets = match conn.to_ip {
-                IpAddr::V4(ip) => ip.octets(),
-                IpAddr::V6(_) => panic!("Won't happen."),
+            let octets = match self.passive_host {
+                PassiveHost::IP(ip) => ip.octets(),
+                PassiveHost::FromConnection => match conn.to_ip {
+                    IpAddr::V4(ip) => ip.octets(),
+                    IpAddr::V6(_) => panic!("Won't happen."),
+                },
             };
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
@@ -506,6 +549,7 @@ where
             greeting: server.greeting,
             idle_session_timeout: server.idle_session_timeout,
             passive_ports: server.passive_ports.clone(),
+            passive_host: server.passive_host.clone(),
             logger: server.logger.new(slog::o!()),
         }
     }
