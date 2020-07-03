@@ -46,4 +46,4 @@ pub(crate) mod metrics;
 pub(crate) mod server;
 pub mod storage;
 
-pub use crate::server::ftpserver::Server;
+pub use crate::server::ftpserver::{options, Server};
