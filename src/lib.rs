@@ -1,4 +1,4 @@
-#![warn(clippy::all)]
+#![deny(clippy::all)]
 #![allow(unused_braces)] // TODO find the cause of this and remove it
 #![allow(clippy::suspicious_else_formatting)] // TODO find the cause of this and remove it
 #![deny(missing_docs)]
