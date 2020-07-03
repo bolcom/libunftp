@@ -16,6 +16,7 @@ use crate::{
             Command, Reply, ReplyCode,
         },
         datachan,
+        ftpserver::options::PassiveHost,
         session::SharedSession,
         ControlChanErrorKind,
     },
@@ -92,7 +93,8 @@ impl Pasv {
         S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
-        let logger = args.logger;
+        let CommandContext { logger, passive_host, .. } = args;
+
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,
@@ -109,7 +111,10 @@ impl Pasv {
             Ok(l) => l,
         };
 
-        let octets = conn_addr.ip().octets();
+        let octets = match passive_host {
+            PassiveHost::IP(ip) => ip.octets(),
+            PassiveHost::FromConnection => conn_addr.ip().octets(),
+        };
         let port = listener.local_addr()?.port();
         let p1 = port >> 8;
         let p2 = port - (p1 * 256);
