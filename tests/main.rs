@@ -316,7 +316,7 @@ async fn size() {
     let root = std::env::temp_dir();
     tokio::spawn(libunftp::Server::new_with_fs_root(root.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
-    
+
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let file_in_root = tempfile::NamedTempFile::new_in(root).unwrap();
     let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
