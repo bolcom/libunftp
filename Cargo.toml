@@ -29,7 +29,7 @@ tokio-rustls = { version = "0.13.1" }
 rustls = "0.17.0"
 bytes = "0.5.5"
 lazy_static = "1.4.0"
-slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_warn"] }
+slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.0.0"
 chrono = {version = "0.4.12", features = ["serde"]}
 failure = "0.1.8"
