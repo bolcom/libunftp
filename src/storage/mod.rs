@@ -6,7 +6,7 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.35"
+//! async-trait = "0.1.36"
 //! ```
 //!
 //! 2. Implement the `StorageBackend` trait and optionally the `Metadata` trait:

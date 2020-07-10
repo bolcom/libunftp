@@ -472,6 +472,23 @@ where
                     IpAddr::V4(ip) => ip.octets(),
                     IpAddr::V6(_) => panic!("Won't happen."),
                 },
+                PassiveHost::DNS(ref dns_name) => {
+                    let iterRes = tokio::net::lookup_host("localhost:3000").await;
+                    if iterRes.is_err() {
+                        panic!("Cannot resolve address: {}", dns_name);
+                    }
+                    let mut iter = iterRes.unwrap();
+                    loop {
+                        let a = iter.next();
+                        if a.is_none() {
+                            panic!("Cannot resolve address: {}", dns_name);
+                        }
+                        match a.unwrap() {
+                            SocketAddr::V4(ip) => break ip.ip().octets(),
+                            SocketAddr::V6(ip) => continue,
+                        }
+                    }
+                }
             };
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
