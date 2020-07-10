@@ -22,6 +22,9 @@ pub enum PassiveHost {
     // - DNS() to have the server resolve a DNS name on startup and use that IP as the passive IP.
     // - PerUser(Box<dyn (Fn(Box<dyn UserDetail>) -> Ipv4Addr) + Send + Sync>) or something like
     //   that to allow a per user decision
+
+    /// sdsds
+    DNS(String)
 }
 
 impl Eq for PassiveHost {}

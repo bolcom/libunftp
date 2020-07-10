@@ -31,6 +31,7 @@ use lazy_static::lazy_static;
 use rand::{rngs::OsRng, RngCore};
 use std::{io, net::SocketAddr, ops::Range};
 use tokio::{net::TcpListener, sync::Mutex};
+use std::net::{ToSocketAddrs, IpAddr};
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
@@ -114,6 +115,30 @@ impl Pasv {
         let octets = match passive_host {
             PassiveHost::IP(ip) => ip.octets(),
             PassiveHost::FromConnection => conn_addr.ip().octets(),
+            PassiveHost::DNS(ref dns_name) => {
+                let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
+                let res_iter = tokio::net::lookup_host(x).await;
+                if res_iter.is_err() {
+                    return Ok(Reply::new_with_string(
+                        ReplyCode::ServiceNotAvailable,
+                        format!("Could not resolve DNS address '{}'", dns_name),
+                    ))
+                }
+                let mut iter = res_iter.unwrap();
+                loop {
+                    match iter.next() {
+                        None => return Ok(Reply::new_with_string(
+                            ReplyCode::ServiceNotAvailable,
+                            format!("Could not resolve DNS address '{}'", dns_name),
+                        )),
+                        Some(SocketAddr::V4((ip))) => {
+                            slog::info!(logger, "{} resolved to {}", dns_name, ip.ip());
+                            break ip.ip().octets()
+                        }
+                        Some(SocketAddr::V6(ip)) => continue
+                    }
+                }
+            }
         };
         let port = listener.local_addr()?.port();
         let p1 = port >> 8;
