@@ -453,7 +453,7 @@ where
             ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
             ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
         },
-        CommandChannelReply(reply_code, message) => Ok(Reply::new(reply_code, &message)),
+        CommandChannelReply(reply) => Ok(reply),
     }
 }
 

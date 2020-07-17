@@ -15,8 +15,8 @@ use super::{
     controlchan::{spawn_loop, LoopConfig},
     datachan::spawn_processing,
     tls::FTPSConfig,
-    ReplyCode,
 };
+use crate::server::Reply;
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
 use slog::*;
 use std::{
@@ -456,49 +456,25 @@ where
         // 3. put expiry time in the LIFO list
         // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})"
 
-        let mut p1 = 0;
-        let mut p2 = 0;
+        let mut reserved_port: u16 = 0;
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
             slog::info!(self.logger, "Reserving data port: {:?}", port);
-            p1 = port >> 8;
-            p2 = port - (p1 * 256);
+            reserved_port = port
         }
         let session = session_arc.lock().await;
         if let Some(conn) = session.control_connection_info {
-            let octets = match self.passive_host {
-                PassiveHost::IP(ip) => ip.octets(),
-                PassiveHost::FromConnection => match conn.to_ip {
-                    IpAddr::V4(ip) => ip.octets(),
-                    IpAddr::V6(_) => panic!("Won't happen."),
-                },
-                PassiveHost::DNS(ref dns_name) => {
-                    let iterRes = tokio::net::lookup_host("localhost:3000").await;
-                    if iterRes.is_err() {
-                        panic!("Cannot resolve address: {}", dns_name);
-                    }
-                    let mut iter = iterRes.unwrap();
-                    loop {
-                        let a = iter.next();
-                        if a.is_none() {
-                            panic!("Cannot resolve address: {}", dns_name);
-                        }
-                        match a.unwrap() {
-                            SocketAddr::V4(ip) => break ip.ip().octets(),
-                            SocketAddr::V6(ip) => continue,
-                        }
-                    }
-                }
+            let conn_ip = match conn.to_ip {
+                IpAddr::V4(ref ip) => ip,
+                IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
+
+            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.passive_host.clone(), conn_ip, reserved_port).await;
+
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
                 let mut tx = tx.clone();
-                tx.send(InternalMsg::CommandChannelReply(
-                    ReplyCode::EnteringPassiveMode,
-                    format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
-                ))
-                .await
-                .unwrap();
+                tx.send(InternalMsg::CommandChannelReply(reply)).await.unwrap();
             }
         }
     }

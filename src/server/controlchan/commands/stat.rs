@@ -79,7 +79,10 @@ where
                             let mut result: String = String::new();
                             match cursor.read_to_string(&mut result) {
                                 Ok(_) => {
-                                    if let Err(err) = tx_success.send(InternalMsg::CommandChannelReply(ReplyCode::CommandOkay, result)).await {
+                                    if let Err(err) = tx_success
+                                        .send(InternalMsg::CommandChannelReply(Reply::new_with_string(ReplyCode::CommandOkay, result)))
+                                        .await
+                                    {
                                         slog::warn!(logger, "{}", err);
                                     }
                                 }

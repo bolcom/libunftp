@@ -1,7 +1,10 @@
 //! Contains code pertaining to the setup options that can be given to the `Server`
 
 use std::ops::Range;
-use std::{fmt::Debug, net::Ipv4Addr};
+use std::{
+    fmt::Debug,
+    net::{IpAddr, Ipv4Addr},
+};
 
 // Once we're sure about the types of these I think its good to expose it to the API user so that
 // he/she can see what our server defaults are.
@@ -18,13 +21,11 @@ pub enum PassiveHost {
     FromConnection,
     /// Advertise this specific IP address
     IP(Ipv4Addr),
+    /// Resolve this DNS name into an IPv4 address.
+    DNS(String),
     // We also be nice to have:
-    // - DNS() to have the server resolve a DNS name on startup and use that IP as the passive IP.
     // - PerUser(Box<dyn (Fn(Box<dyn UserDetail>) -> Ipv4Addr) + Send + Sync>) or something like
     //   that to allow a per user decision
-
-    /// sdsds
-    DNS(String)
 }
 
 impl Eq for PassiveHost {}
@@ -38,5 +39,14 @@ impl From<Ipv4Addr> for PassiveHost {
 impl From<[u8; 4]> for PassiveHost {
     fn from(ip: [u8; 4]) -> Self {
         PassiveHost::IP(ip.into())
+    }
+}
+
+impl From<&str> for PassiveHost {
+    fn from(dns_or_ip: &str) -> Self {
+        match dns_or_ip.parse() {
+            Ok(IpAddr::V4(ip)) => PassiveHost::IP(ip),
+            _ => PassiveHost::DNS(dns_or_ip.to_string()),
+        }
     }
 }

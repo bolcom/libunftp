@@ -48,10 +48,10 @@ where
             match storage.metadata(&user, &path).await {
                 Ok(metadata) => {
                     if let Err(err) = tx_success
-                        .send(InternalMsg::CommandChannelReply(
+                        .send(InternalMsg::CommandChannelReply(Reply::new_with_string(
                             ReplyCode::FileStatus,
                             (metadata.len() - start_pos).to_string(),
-                        ))
+                        )))
                         .await
                     {
                         slog::warn!(logger, "{}", err);

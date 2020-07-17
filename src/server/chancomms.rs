@@ -3,7 +3,7 @@
 use super::{controlchan::command::Command, session::SharedSession};
 use crate::{
     auth::UserDetail,
-    server::controlchan::ReplyCode,
+    server::controlchan::Reply,
     storage::{Error, StorageBackend},
 };
 use futures::channel::mpsc::{Receiver, Sender};
@@ -69,7 +69,7 @@ pub enum InternalMsg {
     /// Errors comming from the storage
     StorageError(Error),
     /// Reply on the command channel
-    CommandChannelReply(ReplyCode, String),
+    CommandChannelReply(Reply),
 }
 
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the

@@ -37,7 +37,7 @@ pub enum Reply {
 // - 421 if the server is about to close the connection;
 // - 500, 501, 502, or 504 for unacceptable syntax; or
 // - 530 if permission is denied.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u32)]
 #[allow(dead_code)]
 pub enum ReplyCode {
