@@ -29,9 +29,9 @@ use futures::{
 };
 use lazy_static::lazy_static;
 use rand::{rngs::OsRng, RngCore};
+use std::net::Ipv4Addr;
 use std::{io, net::SocketAddr, ops::Range};
 use tokio::{net::TcpListener, sync::Mutex};
-use std::net::{ToSocketAddrs, IpAddr};
 
 const BIND_RETRIES: u8 = 10;
 lazy_static! {
@@ -94,7 +94,13 @@ impl Pasv {
         S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
-        let CommandContext { logger, passive_host, .. } = args;
+        let CommandContext {
+            logger,
+            passive_host,
+            tx,
+            session,
+            ..
+        } = args;
 
         // obtain the ip address the client is connected to
         let conn_addr = match args.local_addr {
@@ -112,60 +118,28 @@ impl Pasv {
             Ok(l) => l,
         };
 
-        let octets = match passive_host {
-            PassiveHost::IP(ip) => ip.octets(),
-            PassiveHost::FromConnection => conn_addr.ip().octets(),
-            PassiveHost::DNS(ref dns_name) => {
-                let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
-                let res_iter = tokio::net::lookup_host(x).await;
-                if res_iter.is_err() {
-                    return Ok(Reply::new_with_string(
-                        ReplyCode::ServiceNotAvailable,
-                        format!("Could not resolve DNS address '{}'", dns_name),
-                    ))
-                }
-                let mut iter = res_iter.unwrap();
-                loop {
-                    match iter.next() {
-                        None => return Ok(Reply::new_with_string(
-                            ReplyCode::ServiceNotAvailable,
-                            format!("Could not resolve DNS address '{}'", dns_name),
-                        )),
-                        Some(SocketAddr::V4((ip))) => {
-                            slog::info!(logger, "{} resolved to {}", dns_name, ip.ip());
-                            break ip.ip().octets()
-                        }
-                        Some(SocketAddr::V6(ip)) => continue
-                    }
-                }
-            }
-        };
         let port = listener.local_addr()?.port();
-        let p1 = port >> 8;
-        let p2 = port - (p1 * 256);
-        let tx = args.tx.clone();
 
-        self.setup_data_loop_comms(args.session.clone()).await;
+        let reply = make_pasv_reply(passive_host, conn_addr.ip(), port).await;
+        if let Reply::CodeAndMsg {
+            code: ReplyCode::EnteringPassiveMode,
+            ..
+        } = reply
+        {
+            self.setup_data_loop_comms(session.clone()).await;
+            // Open the data connection in a new task and process it.
+            // We cannot await this since we first need to let the client know where to connect :-)
+            tokio::spawn(async move {
+                if let Ok((socket, _socket_addr)) = listener.accept().await {
+                    let mut session = session.lock().await;
+                    let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
+                    let logger = logger.new(slog::o!("username" => username));
+                    datachan::spawn_processing(logger, &mut session, socket, tx);
+                }
+            });
+        }
 
-        let session = args.session.clone();
-
-        // Open the data connection in a new task and process it.
-        // We cannot await this since we first need to let the client know where to connect :-)
-        tokio::spawn(async move {
-            if let Ok((socket, _socket_addr)) = listener.accept().await {
-                let tx = tx.clone();
-                let session_arc = session.clone();
-                let mut session = session_arc.lock().await;
-                let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
-                let logger = logger.new(slog::o!("username" => username));
-                datachan::spawn_processing(logger, &mut session, socket, tx);
-            }
-        });
-
-        Ok(Reply::new_with_string(
-            ReplyCode::EnteringPassiveMode,
-            format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
-        ))
+        Ok(reply)
     }
 
     // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
@@ -196,8 +170,34 @@ where
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let sender: Option<ProxyLoopSender<S, U>> = args.proxyloop_msg_tx.clone();
         match sender {
-            Some(tx) => self.handle_proxy_mode(args, tx.clone()).await,
+            Some(tx) => self.handle_proxy_mode(args, tx).await,
             None => self.handle_nonproxy_mode(args).await,
         }
     }
+}
+
+pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port: u16) -> Reply {
+    let p1 = port >> 8;
+    let p2 = port - (p1 * 256);
+    let octets = match passive_host {
+        PassiveHost::IP(ip) => ip.octets(),
+        PassiveHost::FromConnection => conn_ip.octets(),
+        PassiveHost::DNS(ref dns_name) => {
+            let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
+            match tokio::net::lookup_host(x).await {
+                Err(_) => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                Ok(mut ip_iter) => loop {
+                    match ip_iter.next() {
+                        None => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                        Some(SocketAddr::V4(ip)) => break ip.ip().octets(),
+                        Some(SocketAddr::V6(_)) => continue,
+                    }
+                },
+            }
+        }
+    };
+    Reply::new_with_string(
+        ReplyCode::EnteringPassiveMode,
+        format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
+    )
 }

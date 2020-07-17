@@ -61,10 +61,10 @@ where
 
                     if let Some(mtime) = modification_time {
                         if let Err(err) = tx_success
-                            .send(InternalMsg::CommandChannelReply(
+                            .send(InternalMsg::CommandChannelReply(Reply::new_with_string(
                                 ReplyCode::FileStatus,
                                 DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
-                            ))
+                            )))
                             .await
                         {
                             slog::warn!(logger, "{}", err);
