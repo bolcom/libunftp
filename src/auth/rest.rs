@@ -113,8 +113,8 @@ impl RestAuthenticator {
 #[async_trait]
 impl Authenticator<DefaultUser> for RestAuthenticator {
     #[allow(clippy::type_complexity)]
-    // FIXME: fails compile for unknown reasons   #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
+    #[tracing_attributes::instrument]
+    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
@@ -150,7 +150,7 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
         if regex.is_match(&parsed) {
             Ok(DefaultUser {})
         } else {
-            Err(Box::new(BadPasswordError))
+            Err(AuthenticationError {})
         }
     }
 }
@@ -199,5 +199,23 @@ impl From<hyper::error::Error> for RestError {
 impl From<serde_json::error::Error> for RestError {
     fn from(e: serde_json::error::Error) -> Self {
         Self::JSONDeserializationError(e)
+    }
+}
+
+impl std::convert::From<hyper::error::Error> for AuthenticationError {
+    fn from(_: hyper::error::Error) -> Self {
+        AuthenticationError
+    }
+}
+
+impl std::convert::From<serde_json::Error> for AuthenticationError {
+    fn from(_: serde_json::Error) -> Self {
+        AuthenticationError
+    }
+}
+
+impl std::convert::From<hyper::http::Error> for AuthenticationError {
+    fn from(_: hyper::http::Error) -> Self {
+        AuthenticationError
     }
 }
