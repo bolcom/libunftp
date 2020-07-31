@@ -14,27 +14,23 @@ where
     U: UserDetail,
 {
     /// Authenticate the given user with the given password.
-    async fn authenticate(&self, username: &str, password: &str) -> Result<U, Box<dyn std::error::Error + Send + Sync>>;
+    async fn authenticate(&self, username: &str, password: &str) -> Result<U, AuthenticationError>;
 }
 
+/// The error type for authentication errors
 #[derive(Debug)]
-pub(crate) struct BadPasswordError;
+pub struct AuthenticationError;
 
-impl fmt::Display for BadPasswordError {
+impl fmt::Display for AuthenticationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "bad password")
+        write!(f, "Authentication error")
     }
 }
 
-impl Error for BadPasswordError {}
+impl Error for AuthenticationError {}
 
-#[derive(Debug)]
-pub(crate) struct UnknownUsernameError;
-
-impl fmt::Display for UnknownUsernameError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "unknown user")
+impl std::convert::From<std::io::Error> for AuthenticationError {
+    fn from(_: std::io::Error) -> Self {
+        AuthenticationError
     }
 }
-
-impl Error for UnknownUsernameError {}
