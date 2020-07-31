@@ -25,7 +25,7 @@ pub struct AnonymousAuthenticator;
 impl Authenticator<DefaultUser> for AnonymousAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
+    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, AuthenticationError> {
         Ok(DefaultUser {})
     }
 }
