@@ -44,9 +44,6 @@ async fn noop() {
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
 
-    ensure_login_required(ftp_stream.noop().await);
-
-    ftp_stream.login("hoi", "jij").await.unwrap();
     ftp_stream.noop().await.unwrap();
 }
 
