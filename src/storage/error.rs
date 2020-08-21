@@ -1,6 +1,5 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
-use hyper::http::uri::InvalidUriParts;
 
 /// The Failure that describes what went wrong in the storage backend
 #[derive(Debug)]

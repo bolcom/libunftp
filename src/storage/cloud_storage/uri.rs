@@ -1,5 +1,4 @@
 use crate::storage::{Error, ErrorKind};
-use hyper::http::uri::{Parts, InvalidUriParts, PathAndQuery};
 use hyper::Uri;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::Path;
