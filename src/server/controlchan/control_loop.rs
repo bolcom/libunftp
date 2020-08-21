@@ -236,6 +236,7 @@ where
         | Event::Command(Command::Pass { .. })
         | Event::Command(Command::Auth { .. })
         | Event::Command(Command::Feat)
+        | Event::Command(Command::Noop)
         | Event::Command(Command::Quit) => next(event),
         _ => {
             let r = block_on(async {
