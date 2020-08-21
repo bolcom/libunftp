@@ -41,7 +41,7 @@ impl Pasv {
     }
 
     async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
-        let rng_length = passive_ports.end - passive_ports.start;
+        let rng_length = passive_ports.end - passive_ports.start + 1;
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
