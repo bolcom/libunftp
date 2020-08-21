@@ -65,7 +65,7 @@ impl Filesystem {
 
 #[async_trait]
 impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
-    type File = tokio::fs::File;
+    type File = tokio::io::BufReader<tokio::fs::File>;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -117,7 +117,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(file)
+            Ok(tokio::io::BufReader::new(file))
         }
         .map_err(|error: std::io::Error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
