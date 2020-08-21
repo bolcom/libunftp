@@ -43,12 +43,12 @@ impl CloudStorage {
     /// Create a new CloudStorage backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
-    pub fn new<B: Into<String>>(bucket: B, service_account_key: ServiceAccountKey) -> Self {
+    pub fn new<STR: Into<String>>(base_url: STR, bucket: STR, service_account_key: ServiceAccountKey) -> Self {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::new());
         CloudStorage {
             client,
             service_account_key,
-            uris: GcsUri::new(bucket.into()),
+            uris: GcsUri::new(base_url.into(), bucket.into()),
         }
     }
 
