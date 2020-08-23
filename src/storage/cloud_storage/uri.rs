@@ -19,7 +19,12 @@ impl GcsUri {
     }
 
     pub fn list<P: AsRef<Path>>(&self, path: &P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o?delimiter=/&prefix={}", self.base_url, self.bucket, path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o?delimiter=/&prefix={}",
+            self.base_url,
+            self.bucket,
+            path_str(path)?
+        ))
     }
 
     pub fn get<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -30,7 +35,10 @@ impl GcsUri {
         let path = path_str(path)?;
         let path = path.trim_end_matches('/');
 
-        make_uri(format!("{}/upload/storage/v1/b/{}/o?uploadType=media&name={}", self.base_url, self.bucket, path))
+        make_uri(format!(
+            "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+            self.base_url, self.bucket, path
+        ))
     }
 
     pub fn delete<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -41,14 +49,15 @@ impl GcsUri {
         let path = path_str(path)?;
         let path = path.trim_end_matches('/');
 
-        make_uri(format!("{}/upload/storage/v1/b/{}/o?uploadType=media&name={}/", self.base_url, self.bucket, path))
+        make_uri(format!(
+            "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}/",
+            self.base_url, self.bucket, path
+        ))
     }
-
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
-    Uri::from_maybe_shared(path_and_query)
-        .map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
+    Uri::from_maybe_shared(path_and_query).map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
 }
 
 fn path_str<P: AsRef<Path>>(path: P) -> Result<String, Error> {
@@ -58,4 +67,3 @@ fn path_str<P: AsRef<Path>>(path: P) -> Result<String, Error> {
         Err(Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 }
-
