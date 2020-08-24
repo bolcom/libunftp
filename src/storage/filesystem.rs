@@ -117,7 +117,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(tokio::io::BufReader::new(file))
+            Ok(tokio::io::BufReader::with_capacity(4096, file))
         }
         .map_err(|error: std::io::Error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
@@ -130,7 +130,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
         &self,
         _user: &Option<U>,
-        mut bytes: R,
+        bytes: R,
         path: P,
         start_pos: u64,
     ) -> Result<u64> {
@@ -146,7 +146,10 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         file.set_len(start_pos).await?;
         file.seek(std::io::SeekFrom::Start(start_pos)).await?;
 
-        let bytes_copied = tokio::io::copy(&mut bytes, &mut file).await?;
+        let mut reader = tokio::io::BufReader::with_capacity(4096, bytes);
+        let mut writer = tokio::io::BufWriter::with_capacity(4096, file);
+
+        let bytes_copied = tokio::io::copy(&mut reader, &mut writer).await?;
         Ok(bytes_copied)
     }
 
