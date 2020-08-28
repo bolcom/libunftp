@@ -117,7 +117,13 @@ where
     #[tracing_attributes::instrument]
     async fn exec_list(self, path: Option<String>) {
         let path = match path {
-            Some(path) => self.cwd.join(path),
+            Some(path) => {
+                if path == "." {
+                    self.cwd.clone()
+                } else {
+                    self.cwd.join(path)
+                }
+            }
             None => self.cwd.clone(),
         };
         let mut tx_ok = self.control_msg_tx.clone();
