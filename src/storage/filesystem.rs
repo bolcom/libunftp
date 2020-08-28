@@ -107,17 +107,17 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         Ok(fis)
     }
 
-    #[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File> {
+    //#[tracing_attributes::instrument]
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let full_path = self.full_path(path)?;
 
-        // TODO: Remove async block
+        // // TODO: Remove async block
         async move {
             let mut file = tokio::fs::File::open(full_path).await?;
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(tokio::io::BufReader::with_capacity(4096, file))
+            Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
         }
         .map_err(|error: std::io::Error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
