@@ -105,7 +105,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     where
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let uri: Uri = self.uris.list(&path)?;
+        let uri: Uri = self.uris.list(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 

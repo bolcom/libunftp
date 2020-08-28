@@ -18,12 +18,17 @@ impl GcsUri {
         make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, path_str(path)?))
     }
 
-    pub fn list<P: AsRef<Path>>(&self, path: &P) -> Result<Uri, Error> {
+    pub fn list<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
+        let mut prefix = format!("{}", path.as_ref().display());
+        if !prefix.ends_with('/') {
+            prefix.push('/');
+        }
         make_uri(format!(
-            "{}/storage/v1/b/{}/o?delimiter=/&prefix={}",
+            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&prefix={}",
             self.base_url,
             self.bucket,
-            path_str(path)?
+            "kind,prefixes,items(id,name,size,updated)", // limit the fields
+            path_str(prefix.as_str())?
         ))
     }
 
