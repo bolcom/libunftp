@@ -22,7 +22,6 @@ use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
 use object::Object;
 use object_metadata::ObjectMetadata;
-use std::convert::TryFrom;
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -30,6 +29,7 @@ use std::{
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
+use futures::TryStreamExt;
 
 /// StorageBackend that uses Cloud storage from Google
 #[derive(Clone, Debug)]
@@ -123,8 +123,8 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         response.list()
     }
 
-    #[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File, Error> {
+    //#[tracing_attributes::instrument]
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -135,13 +135,20 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
-        let body = unpack_response(response).await?;
-        let start_pos: usize = usize::try_from(start_pos).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-        if body.bytes().len() < start_pos {
-            return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
-        }
-        Ok(Object::new(body.bytes()[start_pos..].into()))
+
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+            .await?;
+
+        let futures_io_async_read = response
+            .into_body()
+            //.map_ok(|b| b.bytes().to_vec())
+            // TODO: Error is squashed here, we might want to log it.
+            .map_err(|_e| std::io::Error::new(std::io::ErrorKind::Other, "Error reading from bucket!"))
+            .into_async_read();
+
+        Ok(Box::new(to_tokio_async_read(futures_io_async_read)))
     }
 
     async fn put<P: AsRef<Path> + Send + Debug, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
@@ -234,4 +241,8 @@ async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     } else {
         Err(Error::from(ErrorKind::PermanentFileNotAvailable))
     }
+}
+
+fn to_tokio_async_read(r: impl futures::io::AsyncRead) -> impl tokio::io::AsyncRead {
+    tokio_util::compat::FuturesAsyncReadCompatExt::compat(r)
 }
