@@ -64,7 +64,6 @@ pub async fn spawn<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
     let Config {
@@ -224,7 +223,6 @@ fn handle_with_auth<S, U, N>(session: SharedSession<S, U>, next: N) -> impl Fn(E
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
@@ -259,7 +257,6 @@ fn handle_with_logging<S, U, N>(logger: slog::Logger, next: N) -> impl Fn(Event)
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
@@ -286,7 +283,7 @@ fn handle_event<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     move |event| -> Result<Reply, ControlChanError> {
@@ -329,7 +326,7 @@ async fn handle_command<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     let args = CommandContext {
@@ -395,7 +392,6 @@ async fn handle_internal_msg<S, U>(logger: slog::Logger, msg: InternalMsg, sessi
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
     use self::InternalMsg::*;
@@ -462,7 +458,7 @@ fn handle_control_channel_error<S, U>(logger: slog::Logger, error: ControlChanEr
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     if with_metrics {

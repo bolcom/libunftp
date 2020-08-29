@@ -28,7 +28,6 @@ pub struct Abor;
 impl<S, U> CommandHandler<S, U> for Abor
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {

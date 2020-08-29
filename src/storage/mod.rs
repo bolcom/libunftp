@@ -27,7 +27,6 @@
 //!
 //! #[async_trait]
 //! impl libunftp::storage::StorageBackend<DefaultUser> for Vfs {
-//!     type File = tokio::fs::File;
 //!     type Metadata = std::fs::Metadata;
 //!
 //!     async fn metadata<P: AsRef<Path> + Send + Debug>(
@@ -54,7 +53,7 @@
 //!         user: &Option<DefaultUser>,
 //!         path: P,
 //!         start_pos: u64,
-//!     ) -> Result<Self::File> {
+//!     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
 //!         unimplemented!()
 //!     }
 //!

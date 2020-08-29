@@ -19,7 +19,6 @@ use std::{ops::Range, result::Result, sync::Arc};
 pub(crate) trait CommandHandler<S, U>: Send + Sync + std::fmt::Debug
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail,
 {
@@ -31,7 +30,6 @@ where
 pub(crate) struct CommandContext<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send + Sync,
     S::Metadata: Metadata + Sync,
     U: UserDetail + 'static,
 {

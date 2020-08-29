@@ -28,7 +28,6 @@ impl<S, U> CommandHandler<S, U> for Rnto
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]

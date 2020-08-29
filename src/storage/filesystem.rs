@@ -65,7 +65,6 @@ impl Filesystem {
 
 #[async_trait]
 impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
-    type File = tokio::io::BufReader<tokio::fs::File>;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -108,7 +107,12 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     }
 
     //#[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
+    async fn get<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+        start_pos: u64,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let full_path = self.full_path(path)?;
 
         // // TODO: Remove async block

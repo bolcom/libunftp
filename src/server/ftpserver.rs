@@ -88,7 +88,6 @@ where
 impl<S, U> Server<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
@@ -530,7 +529,6 @@ impl<S, U> From<&Server<S, U>> for LoopConfig<S, U>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
 {
     fn from(server: &Server<S, U>) -> Self {
