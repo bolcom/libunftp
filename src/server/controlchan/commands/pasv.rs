@@ -71,7 +71,6 @@ impl Pasv {
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
-        S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
         let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
@@ -91,7 +90,6 @@ impl Pasv {
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
-        S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
         let CommandContext {
@@ -149,7 +147,6 @@ impl Pasv {
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
-        S::File: tokio::io::AsyncRead + Send,
         S::Metadata: Metadata,
     {
         self.setup_data_loop_comms(args.session.clone()).await;
@@ -163,7 +160,6 @@ impl<S, U> CommandHandler<S, U> for Pasv
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]

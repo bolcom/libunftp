@@ -19,7 +19,6 @@ use tokio_rustls::TlsAcceptor;
 pub struct DataCommandExecutor<S, U>
 where
     S: StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail,
 {
@@ -36,7 +35,6 @@ where
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail,
 {
@@ -233,7 +231,6 @@ where
 pub fn spawn_processing<S, U>(logger: slog::Logger, session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
@@ -273,7 +270,6 @@ where
 async fn handle_incoming<S, U>(logger: slog::Logger, incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {

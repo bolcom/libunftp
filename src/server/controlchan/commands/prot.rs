@@ -40,7 +40,6 @@ impl<S, U> CommandHandler<S, U> for Prot
 where
     U: UserDetail,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]

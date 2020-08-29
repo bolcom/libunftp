@@ -1,6 +1,5 @@
 //! StorageBackend that uses Cloud Storage from Google
 
-pub mod object;
 pub mod object_metadata;
 mod response_body;
 mod uri;
@@ -12,6 +11,7 @@ use crate::storage::{
 use async_trait::async_trait;
 use bytes::{buf::BufExt, Buf};
 use futures::prelude::*;
+use futures::TryStreamExt;
 use hyper::{
     body::aggregate,
     client::connect::{dns::GaiResolver, HttpConnector},
@@ -20,7 +20,6 @@ use hyper::{
 };
 use hyper_rustls::HttpsConnector;
 use mime::APPLICATION_OCTET_STREAM;
-use object::Object;
 use object_metadata::ObjectMetadata;
 use std::{
     fmt::Debug,
@@ -29,7 +28,6 @@ use std::{
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
-use futures::TryStreamExt;
 
 /// StorageBackend that uses Cloud storage from Google
 #[derive(Clone, Debug)]
@@ -67,11 +65,12 @@ impl CloudStorage {
 
 #[async_trait]
 impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
-    type File = Object;
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        crate::storage::FEATURE_RESTART
+        // crate::storage::FEATURE_RESTART
+        // TODO: Re-implement this
+        0
     }
 
     #[tracing_attributes::instrument]
@@ -124,7 +123,12 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     //#[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
+    async fn get<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+        _start_pos: u64,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -136,10 +140,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
 
-        let response: Response<Body> = client
-            .request(request)
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
-            .await?;
+        let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
 
         let futures_io_async_read = response
             .into_body()
