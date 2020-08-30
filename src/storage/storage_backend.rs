@@ -103,7 +103,7 @@ where
             .metadata
             .modified()
             .map(|x| DateTime::<Utc>::from(x).format("%b %d %H:%M").to_string())
-            .unwrap_or_else(|_| "-".to_string());
+            .unwrap_or_else(|_| "--- -- --:--".to_string());
         let basename = self.path.as_ref().components().last();
         let path = match basename {
             Some(v) => v.as_os_str().to_string_lossy(),
