@@ -163,13 +163,15 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
+        let reader = tokio::io::BufReader::with_capacity(4096, bytes);
+
         let token: AccessToken = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
-            .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map_ok(|b| b.freeze())))
+            .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
         let response: Response<Body> = client.request(request).map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable)).await?;
         let body = unpack_response(response).await?;
