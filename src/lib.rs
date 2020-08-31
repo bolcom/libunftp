@@ -17,7 +17,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.11.2"
+//! libunftp = "0.12.0"
 //! tokio = { version = "0.2", features = ["full"] }
 //! ```
 //! Now you're ready to develop your server! Add the following to src/main.rs:
