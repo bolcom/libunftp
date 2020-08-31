@@ -29,7 +29,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
 
-/// StorageBackend that uses Cloud storage from Google
+/// A StorageBackend that uses Cloud storage from Google.
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,
@@ -38,9 +38,7 @@ pub struct CloudStorage {
 }
 
 impl CloudStorage {
-    /// Create a new CloudStorage backend, with the given root. No operations can take place outside
-    /// of the root. For example, when the `CloudStorage` root is set to `/srv/ftp`, and a client
-    /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
+    /// Creates a new CloudStorage backend connected to the specified GCS bucket.
     pub fn new<STR: Into<String>>(base_url: STR, bucket: STR, service_account_key: ServiceAccountKey) -> Self {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::new());
         CloudStorage {
