@@ -27,7 +27,7 @@ impl PAMAuthenticator {
 impl Authenticator<DefaultUser> for PAMAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, Box<dyn std::error::Error + Send + Sync>> {
         let service = self.service.clone();
         let username = username.to_string();
         let password = password.to_string();
@@ -37,11 +37,5 @@ impl Authenticator<DefaultUser> for PAMAuthenticator {
         auth.get_handler().set_credentials(&username, &password);
         auth.authenticate()?;
         Ok(DefaultUser {})
-    }
-}
-
-impl std::convert::From<pam_auth::PamError> for AuthenticationError {
-    fn from(_: pam_auth::PamError) -> Self {
-        AuthenticationError
     }
 }

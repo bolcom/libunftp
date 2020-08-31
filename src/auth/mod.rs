@@ -19,7 +19,7 @@
 //! 2. Implement the [`Authenticator`] trait and optionally the [`UserDetail`] trait:
 //!
 //! ```no_run
-//! use libunftp::auth::{Authenticator, AuthenticationError, UserDetail};
+//! use libunftp::auth::{Authenticator, UserDetail};
 //! use async_trait::async_trait;
 //!
 //! #[derive(Debug)]
@@ -27,7 +27,7 @@
 //!
 //! #[async_trait]
 //! impl Authenticator<RandomUser> for RandomAuthenticator {
-//!     async fn authenticate(&self, _username: &str, _password: &str) -> Result<RandomUser, AuthenticationError> {
+//!     async fn authenticate(&self, _username: &str, _password: &str) -> Result<RandomUser, Box<dyn std::error::Error + Send + Sync>> {
 //!         Ok(RandomUser{})
 //!     }
 //! }
@@ -63,9 +63,9 @@ pub mod anonymous;
 pub use anonymous::AnonymousAuthenticator;
 
 pub(crate) mod authenticator;
-#[allow(unused_imports)]
-pub use authenticator::AuthenticationError;
 pub use authenticator::Authenticator;
+#[allow(unused_imports)]
+pub(crate) use authenticator::{BadPasswordError, UnknownUsernameError};
 
 mod user;
 pub use user::{DefaultUser, UserDetail};
