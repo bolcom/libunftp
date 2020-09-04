@@ -87,6 +87,7 @@ pub enum ReplyCode {
     CommandNotImplementedForParameter = 504,
     NotLoggedIn = 530,
     NeedAccountToStore = 532,
+    FtpsRequired = 534, // Could Not Connect to Server - Policy Requires SSL
     FileError = 550,
     PageTypeUnknown = 551,
     ExceededStorageAllocation = 552,

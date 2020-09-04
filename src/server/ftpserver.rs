@@ -16,6 +16,7 @@ use super::{
     datachan::spawn_processing,
     tls::FTPSConfig,
 };
+use crate::server::ftpserver::options::FtpsRequired;
 use crate::server::Reply;
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
 use slog::*;
@@ -60,6 +61,7 @@ where
     passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FTPSConfig,
+    ftps_required: FtpsRequired,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
@@ -91,16 +93,16 @@ where
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
-    /// Construct a new [`Server`] with the given [`StorageBackend`] and an [`AnonymousAuthenticator`]
+    /// Construct a new [`Server`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
-    pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
+    pub fn new(sbe_generator: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
         AnonymousAuthenticator: Authenticator<U>,
     {
-        Self::new_with_authenticator(s, Arc::new(AnonymousAuthenticator {}))
+        Self::new_with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
     }
 
     /// Construct a new [`Server`] with the given [`StorageBackend`] and [`Authenticator`]. The other parameters will be set to defaults.
@@ -121,6 +123,7 @@ where
             proxy_protocol_mode: ProxyMode::Off,
             proxy_protocol_switchboard: Option::None,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
+            ftps_required: options::DEFAULT_FTPS_REQUIRE,
         }
     }
 
@@ -159,6 +162,12 @@ where
             certs_file: certs_file.into(),
             key_file: key_file.into(),
         };
+        self
+    }
+
+    /// Configures whether client connections may use plaintext mode or not.
+    pub fn ftps_required(mut self, option: impl Into<FtpsRequired>) -> Self {
+        self.ftps_required = option.into();
         self
     }
 
@@ -551,6 +560,7 @@ where
             passive_ports: server.passive_ports.clone(),
             passive_host: server.passive_host.clone(),
             logger: server.logger.new(slog::o!()),
+            ftps_required: server.ftps_required,
         }
     }
 }
