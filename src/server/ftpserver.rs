@@ -28,8 +28,8 @@ use std::{
     time::Duration,
 };
 
-/// An instance of an FTP(S) server. It contains a reference to an [`Authenticator`] that will be used
-/// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
+/// An instance of an FTP(S) server. It aggregates an [`Authenticator`] that will be used
+/// for authentication, and a [`StorageBackend`] that will be used as the virtual file system.
 ///
 /// The server can be started with the `listen` method.
 ///
@@ -91,11 +91,11 @@ where
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
-    /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
-    /// set to defaults.
+    /// Construct a new [`Server`] with the given [`StorageBackend`] and an [`AnonymousAuthenticator`]
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
+    /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
     pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
         AnonymousAuthenticator: Authenticator<U>,
@@ -124,9 +124,41 @@ where
         }
     }
 
-    /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
-    pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
-        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
+    /// Set the [`Authenticator`] that will be used for authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
+    /// use std::sync::Arc;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::new_with_fs_root("/tmp")
+    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
+    /// ```
+    ///
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+        self.authenticator = authenticator;
+        self
+    }
+
+    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
+    /// associated password for the archive in order to configure FTPS.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
+    /// ```
+    pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
+        self.ftps_mode = FTPSConfig::On {
+            certs_file: certs_file.into(),
+            key_file: key_file.into(),
+        };
         self
     }
 
@@ -149,26 +181,7 @@ where
         self
     }
 
-    /// Set the [`Authenticator`] that will be used for authentication.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
-    /// use std::sync::Arc;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp")
-    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
-    /// ```
-    ///
-    /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
-        self.authenticator = authenticator;
-        self
-    }
-
-    /// Set the range of passive ports that we'll use for passive connections.
+    /// Set the idle session timeout in seconds. The default is 600 seconds.
     ///
     /// # Example
     ///
@@ -176,15 +189,39 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::new_with_fs_root("/tmp")
-    ///              .passive_ports(49152..65535);
+    /// let mut server = Server::new_with_fs_root("/tmp").idle_session_timeout(600);
     ///
     /// // Or instead if you prefer:
     /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.passive_ports(49152..65535);
+    /// server.idle_session_timeout(600);
     /// ```
-    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
-        self.passive_ports = range;
+    pub fn idle_session_timeout(mut self, secs: u64) -> Self {
+        self.idle_session_timeout = Duration::from_secs(secs);
+        self
+    }
+
+    /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
+    pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
+        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
+        self
+    }
+
+    /// Enables the collection of prometheus metrics.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::new_with_fs_root("/tmp").metrics();
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// server.metrics();
+    /// ```
+    pub fn metrics(mut self) -> Self {
+        self.collect_metrics = true;
         self
     }
 
@@ -219,69 +256,41 @@ where
     /// let server = Server::new_with_fs_root("/tmp")
     ///              .passive_host(options::PassiveHost::FromConnection);
     /// ```
+    ///
+    /// Get the IP by resolving a DNS name:
+    ///
+    /// ```rust
+    /// use libunftp::{Server,options};
+    ///
+    /// let server = Server::new_with_fs_root("/tmp")
+    ///              .passive_host("ftp.myserver.org");
+    /// ```
     pub fn passive_host<H: Into<PassiveHost>>(mut self, host_option: H) -> Self {
         self.passive_host = host_option.into();
         self
     }
 
-    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
-    /// associated password for the archive in order to configure FTPS.
+    /// Sets the range of passive ports that we'll use for passive connections.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
     ///
+    /// // Use it in a builder-like pattern:
     /// let server = Server::new_with_fs_root("/tmp")
-    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
-    /// ```
-    pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.ftps_mode = FTPSConfig::On {
-            certs_file: certs_file.into(),
-            key_file: key_file.into(),
-        };
-        self
-    }
-
-    /// Enable the collection of prometheus metrics.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").metrics();
+    ///              .passive_ports(49152..65535);
     ///
     /// // Or instead if you prefer:
     /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.metrics();
+    /// server.passive_ports(49152..65535);
     /// ```
-    pub fn metrics(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
+        self.passive_ports = range;
         self
     }
 
-    /// Set the idle session timeout in seconds. The default is 600 seconds.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").idle_session_timeout(600);
-    ///
-    /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.idle_session_timeout(600);
-    /// ```
-    pub fn idle_session_timeout(mut self, secs: u64) -> Self {
-        self.idle_session_timeout = Duration::from_secs(secs);
-        self
-    }
-
-    /// Enable PROXY protocol mode.
+    /// Enables PROXY protocol mode.
     ///
     /// If you use a proxy such as haproxy or nginx, you can enable
     /// the PROXY protocol
