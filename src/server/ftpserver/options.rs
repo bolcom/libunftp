@@ -59,8 +59,8 @@ impl From<&str> for PassiveHost {
 pub enum FtpsRequired {
     /// All users, including anonymous must use FTPS
     All,
-    /// All non-anynymous users requires FTPS.
-    Logins,
+    /// All non-anonymous users requires FTPS.
+    Accounts,
     /// FTPS not enforced.
     None, // would be nice to have a per-user setting also.
 }
@@ -83,7 +83,7 @@ impl Display for FtpsRequired {
             "{}",
             match self {
                 FtpsRequired::All => "All users, including anonymous, requires FTPS",
-                FtpsRequired::Logins => "All non-anonymous users requires FTPS",
+                FtpsRequired::Accounts => "All non-anonymous users requires FTPS",
                 FtpsRequired::None => "FTPS not enforced",
             }
         )

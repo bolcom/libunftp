@@ -26,7 +26,7 @@
 //! #[tokio::main]
 //! pub async fn main() {
 //!     let ftp_home = std::env::temp_dir();
-//!     let server = libunftp::Server::new_with_fs_root(ftp_home)
+//!     let server = libunftp::Server::with_fs(ftp_home)
 //!         .greeting("Welcome to my FTP server")
 //!         .passive_ports(50000..65535);
 //!

@@ -41,7 +41,7 @@ use std::{
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
-/// let server = Server::new_with_fs_root("/srv/ftp");
+/// let server = Server::with_fs("/srv/ftp");
 /// rt.spawn(server.listen("127.0.0.1:2121"));
 /// // ...
 /// drop(rt);
@@ -75,11 +75,15 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Server")
-            .field("greeting", &self.greeting)
             .field("authenticator", &self.authenticator)
-            .field("passive_ports", &self.passive_ports)
             .field("collect_metrics", &self.collect_metrics)
+            .field("greeting", &self.greeting)
+            .field("logger", &self.logger)
+            .field("metrics", &self.collect_metrics)
+            .field("passive_ports", &self.passive_ports)
+            .field("passive_host", &self.passive_host)
             .field("ftps_mode", &self.ftps_mode)
+            .field("ftps_required", &self.ftps_required)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -102,7 +106,7 @@ where
     where
         AnonymousAuthenticator: Authenticator<U>,
     {
-        Self::new_with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
+        Self::with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
     }
 
     /// Construct a new [`Server`] with the given [`StorageBackend`] and [`Authenticator`]. The other parameters will be set to defaults.
@@ -110,7 +114,7 @@ where
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn new_with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
         Server {
             storage: s,
             greeting: DEFAULT_GREETING,
@@ -136,7 +140,7 @@ where
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp")
+    /// let mut server = Server::with_fs("/tmp")
     ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
     /// ```
     ///
@@ -146,15 +150,15 @@ where
         self
     }
 
-    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
-    /// associated password for the archive in order to configure FTPS.
+    /// Enables FTPS by configuring the path to the certificates file and the private key file. Both
+    /// should be in PEM format.
     ///
     /// # Example
     ///
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
@@ -179,10 +183,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").greeting("Welcome to my FTP Server");
+    /// let mut server = Server::with_fs("/tmp").greeting("Welcome to my FTP Server");
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// let mut server = Server::with_fs("/tmp");
     /// server.greeting("Welcome to my FTP Server");
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
@@ -198,10 +202,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").idle_session_timeout(600);
+    /// let mut server = Server::with_fs("/tmp").idle_session_timeout(600);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// let mut server = Server::with_fs("/tmp");
     /// server.idle_session_timeout(600);
     /// ```
     pub fn idle_session_timeout(mut self, secs: u64) -> Self {
@@ -223,10 +227,10 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").metrics();
+    /// let mut server = Server::with_fs("/tmp").metrics();
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// let mut server = Server::with_fs("/tmp");
     /// server.metrics();
     /// ```
     pub fn metrics(mut self) -> Self {
@@ -244,7 +248,7 @@ where
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host([127,0,0,1]);
     /// ```
     /// Or the same but more explicitly:
@@ -253,7 +257,7 @@ where
     /// use libunftp::{Server,options};
     /// use std::net::Ipv4Addr;
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host(options::PassiveHost::IP(Ipv4Addr::new(127, 0, 0, 1)));
     /// ```
     ///
@@ -262,7 +266,7 @@ where
     /// ```rust
     /// use libunftp::{Server,options};
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host(options::PassiveHost::FromConnection);
     /// ```
     ///
@@ -271,7 +275,7 @@ where
     /// ```rust
     /// use libunftp::{Server,options};
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host("ftp.myserver.org");
     /// ```
     pub fn passive_host<H: Into<PassiveHost>>(mut self, host_option: H) -> Self {
@@ -287,11 +291,11 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_ports(49152..65535);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
+    /// let mut server = Server::with_fs("/tmp");
     /// server.passive_ports(49152..65535);
     /// ```
     pub fn passive_ports(mut self, range: Range<u16>) -> Self {
@@ -322,7 +326,7 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode(2121);
+    /// let mut server = Server::with_fs("/tmp").proxy_protocol_mode(2121);
     /// ```
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
@@ -339,7 +343,7 @@ where
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
-    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// let server = Server::with_fs("/srv/ftp");
     /// rt.spawn(server.listen("127.0.0.1:2121"));
     /// // ...
     /// drop(rt);
@@ -505,9 +509,9 @@ impl Server<Filesystem, DefaultUser> {
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// let server = Server::with_fs("/srv/ftp");
     /// ```
-    pub fn new_with_fs_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
+    pub fn with_fs<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
         Server::new(Box::new(move || {
             let p = &p.clone();
@@ -529,11 +533,11 @@ where
     /// use libunftp::auth::AnonymousAuthenticator;
     /// use std::sync::Arc;
     ///
-    /// let server = Server::new_with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
+    /// let server = Server::with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
     /// ```
-    pub fn new_with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
         let p = path.into();
-        Server::new_with_authenticator(
+        Server::with_authenticator(
             Box::new(move || {
                 let p = &p.clone();
                 Filesystem::new(p)

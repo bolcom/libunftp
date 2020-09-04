@@ -249,7 +249,7 @@ where
             }
             _ => next(event),
         },
-        (FtpsRequired::Logins, event) => {
+        (FtpsRequired::Accounts, event) => {
             let (is_tls, username) = block_on(async {
                 let session = session.lock().await;
                 (session.cmd_tls, session.username.clone())
