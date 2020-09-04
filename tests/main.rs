@@ -1,4 +1,5 @@
 use async_ftp::{types::Result, FtpStream};
+use libunftp::options::FtpsRequired;
 use pretty_assertions::assert_eq;
 use std::fmt::Debug;
 use std::fs;
@@ -10,6 +11,13 @@ fn ensure_login_required<T: Debug>(r: Result<T>) {
     let err = r.unwrap_err().to_string();
     if !err.contains("530 Please authenticate") {
         panic!("Could execute command without logging in!");
+    }
+}
+
+fn ensure_ftps_required<T: Debug>(r: Result<T>) {
+    let err = r.unwrap_err().to_string();
+    if !err.contains("534") {
+        panic!("FTPS enforcement is broken!");
     }
 }
 
@@ -33,6 +41,75 @@ async fn login() {
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
     ftp_stream.login(username, password).await.unwrap();
+}
+
+#[tokio::test]
+async fn ftps_require_works() {
+    struct Test {
+        username: &'static str,
+        mode: FtpsRequired,
+        give534: bool,
+        port: u16,
+    }
+
+    let tests = [
+        Test {
+            username: "anonymous",
+            mode: FtpsRequired::None,
+            give534: false,
+            port: 1250,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::None,
+            give534: false,
+            port: 1251,
+        },
+        Test {
+            username: "anonymous",
+            mode: FtpsRequired::All,
+            give534: true,
+            port: 1252,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::All,
+            give534: true,
+            port: 1253,
+        },
+        Test {
+            username: "AnonyMous",
+            mode: FtpsRequired::Logins,
+            give534: false,
+            port: 1254,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::Logins,
+            give534: true,
+            port: 1255,
+        },
+    ];
+
+    for test in tests.iter() {
+        // TODO: if we can gracefully shutdown libunftp then we don't need to listen on a new port
+        // every time. Alternatively don't listen at all but have a way to talk to unFTP via byte
+        // stream or something.
+        let addr = format!("127.0.0.1:{}", test.port);
+
+        tokio::spawn(
+            libunftp::Server::new_with_fs_root(std::env::temp_dir())
+                .ftps_required(test.mode)
+                .listen(addr.clone()),
+        );
+        tokio::time::delay_for(Duration::new(1, 0)).await;
+
+        let mut ftp_stream = async_ftp::FtpStream::connect(addr.as_str()).await.unwrap();
+        let result = ftp_stream.login(test.username, "blah").await;
+        if test.give534 {
+            ensure_ftps_required(result);
+        }
+    }
 }
 
 #[tokio::test]

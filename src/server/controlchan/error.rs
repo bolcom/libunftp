@@ -48,6 +48,9 @@ pub enum ControlChanErrorKind {
     /// The timer on the Control Channel elapsed.
     #[fail(display = "Encountered read timeout on the control channel")]
     ControlChannelTimeout,
+    /// The control channel is out of sync e.g. expecting username in session after USER command but found none.
+    #[fail(display = "Control channel in illegal state")]
+    IllegalState,
 }
 
 impl ControlChanError {
