@@ -24,6 +24,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting ftp server on {}", addr);
     let mut runtime = Builder::new().build()?;
-    runtime.block_on(server.listen(addr));
+    runtime.block_on(server.listen(addr))?;
     Ok(())
 }
