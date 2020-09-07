@@ -12,7 +12,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting ftp server on {}", addr);
     let mut runtime = tokio::runtime::Builder::new().build().unwrap();
-    runtime.block_on(server.listen(addr));
+    runtime.block_on(server.listen(addr))?;
 
     Ok(())
 }

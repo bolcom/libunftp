@@ -1,24 +1,25 @@
+pub mod error;
 pub mod options;
-
-use crate::{
-    auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
-    server::{
-        proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
-        session::SharedSession,
-    },
-    storage::{filesystem::Filesystem, Metadata, StorageBackend},
-};
-use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 
 use super::{
     chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
     controlchan::{spawn_loop, LoopConfig},
     datachan::spawn_processing,
+    ftpserver::{error::ServerError, options::FtpsRequired},
     tls::FTPSConfig,
 };
-use crate::server::ftpserver::options::FtpsRequired;
-use crate::server::Reply;
+use crate::{
+    auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
+    server::{
+        proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
+        session::SharedSession,
+        Reply,
+    },
+    storage::{filesystem::Filesystem, Metadata, StorageBackend},
+};
+
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
+use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{
     fmt::Debug,
@@ -354,7 +355,7 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) {
+    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
         match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
             ProxyMode::Off => self.listen_normal_mode(bind_address).await,
@@ -362,26 +363,35 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) {
-        // TODO: Propagate errors to caller instead of doing unwraps.
-        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
-        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
+        let addr: std::net::SocketAddr = bind_address.into().parse()?;
+        let mut listener = tokio::net::TcpListener::bind(addr).await?;
         loop {
-            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
-            slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
-            let params: LoopConfig<S, U> = (&self).into();
-            let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
-            if result.is_err() {
-                slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+            match listener.accept().await {
+                Ok(stream) => {
+                    let (tcp_stream, socket_addr) = stream;
+                    slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
+                    let params: LoopConfig<S, U> = (&self).into();
+                    let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
+                    if let Err(controlchan_err) = result {
+                        slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", controlchan_err)
+                    }
+                }
+                Err(e) => {
+                    slog::error!(self.logger, "Error accepting incoming connection {:?}", e);
+                }
             }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_proxy_protocol_mode<T: Into<String> + Debug>(mut self, bind_address: T, external_control_port: u16) {
-        // TODO: Propagate errors to caller instead of doing unwraps.
-        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
-        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    async fn listen_proxy_protocol_mode<T: Into<String> + Debug>(
+        mut self,
+        bind_address: T,
+        external_control_port: u16,
+    ) -> std::result::Result<(), ServerError> {
+        let addr: std::net::SocketAddr = bind_address.into().parse()?;
+        let mut listener = tokio::net::TcpListener::bind(addr).await?;
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.

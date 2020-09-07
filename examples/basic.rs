@@ -8,5 +8,5 @@ pub async fn main() {
     let server = libunftp::Server::with_fs(std::env::temp_dir());
 
     info!("Starting ftp server on {}", addr);
-    server.listen(addr).await;
+    server.listen(addr).await.unwrap();
 }
