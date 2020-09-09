@@ -10,7 +10,7 @@ authors = [
     "Steven Meunier <smeunier@bol.com>",
     "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
    ]
-description = "Safe, fast and extensible FTP(S) server library for Rust."
+description = "Extensible, async, cloud orientated FTP(S) server library."
 documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
 license = "Apache-2.0"

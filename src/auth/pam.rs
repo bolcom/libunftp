@@ -41,7 +41,7 @@ impl Authenticator<DefaultUser> for PAMAuthenticator {
 }
 
 impl std::convert::From<pam_auth::PamError> for AuthenticationError {
-    fn from(_: pam_auth::PamError) -> Self {
-        AuthenticationError
+    fn from(e: pam_auth::PamError) -> Self {
+        AuthenticationError::with_source("pam error", e)
     }
 }

@@ -64,8 +64,7 @@ pub use anonymous::AnonymousAuthenticator;
 
 pub(crate) mod authenticator;
 #[allow(unused_imports)]
-pub use authenticator::AuthenticationError;
-pub use authenticator::Authenticator;
+pub use authenticator::{AuthenticationError, Authenticator};
 
 mod user;
 pub use user::{DefaultUser, UserDetail};
