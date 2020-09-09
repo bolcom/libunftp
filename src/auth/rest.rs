@@ -150,7 +150,7 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
         if regex.is_match(&parsed) {
             Ok(DefaultUser {})
         } else {
-            Err(AuthenticationError {})
+            Err(AuthenticationError::BadPassword)
         }
     }
 }
@@ -203,19 +203,19 @@ impl From<serde_json::error::Error> for RestError {
 }
 
 impl std::convert::From<hyper::error::Error> for AuthenticationError {
-    fn from(_: hyper::error::Error) -> Self {
-        AuthenticationError
+    fn from(e: hyper::error::Error) -> Self {
+        AuthenticationError::with_source("rest authenticator http client error", e)
     }
 }
 
 impl std::convert::From<serde_json::Error> for AuthenticationError {
-    fn from(_: serde_json::Error) -> Self {
-        AuthenticationError
+    fn from(e: serde_json::Error) -> Self {
+        AuthenticationError::with_source("rest authenticator unmarshalling error", e)
     }
 }
 
 impl std::convert::From<hyper::http::Error> for AuthenticationError {
-    fn from(_: hyper::http::Error) -> Self {
-        AuthenticationError
+    fn from(e: hyper::http::Error) -> Self {
+        AuthenticationError::with_source("rest authenticator http error", e)
     }
 }

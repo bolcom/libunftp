@@ -1,11 +1,11 @@
 //! The service provider interface (SPI) for auth
 
 use super::UserDetail;
+use crate::BoxError;
+
 use async_trait::async_trait;
-use std::{
-    error::Error,
-    fmt::{self, Debug},
-};
+use std::fmt::Debug;
+use thiserror::Error;
 
 /// Defines the requirements for Authentication implementations
 #[async_trait]
@@ -17,20 +17,33 @@ where
     async fn authenticate(&self, username: &str, password: &str) -> Result<U, AuthenticationError>;
 }
 
-/// The error type for authentication errors
-#[derive(Debug)]
-pub struct AuthenticationError;
+/// The error type returned by `Authenticator.authenticate`
+#[derive(Error, Debug)]
+pub enum AuthenticationError {
+    /// A bad password was provided
+    #[error("bad password")]
+    BadPassword,
 
-impl fmt::Display for AuthenticationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Authentication error")
-    }
+    /// A bad username was provided
+    #[error("bad username")]
+    BadUser,
+
+    /// Another issue occurred during the authentication process.
+    #[error("authentication error: {0}: {1:?}")]
+    ImplPropagated(String, #[source] Option<BoxError>),
 }
 
-impl Error for AuthenticationError {}
+impl AuthenticationError {
+    /// Creates a new domain specific error
+    pub fn new(s: impl Into<String>) -> AuthenticationError {
+        AuthenticationError::ImplPropagated(s.into(), None)
+    }
 
-impl std::convert::From<std::io::Error> for AuthenticationError {
-    fn from(_: std::io::Error) -> Self {
-        AuthenticationError
+    /// Creates a new domain specific error with the given source error.
+    pub fn with_source<E>(s: impl Into<String>, source: E) -> AuthenticationError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        AuthenticationError::ImplPropagated(s.into(), Some(Box::new(source)))
     }
 }
