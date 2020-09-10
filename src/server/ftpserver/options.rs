@@ -1,6 +1,6 @@
 //! Contains code pertaining to the setup options that can be given to the `Server`
 
-use failure::_core::fmt::Formatter;
+use std::fmt::Formatter;
 use std::ops::Range;
 use std::{
     fmt::{self, Debug, Display},
@@ -77,7 +77,7 @@ impl From<bool> for FtpsRequired {
 }
 
 impl Display for FtpsRequired {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
             "{}",

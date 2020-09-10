@@ -182,8 +182,8 @@ where
                         Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
                     }
                 }
-                Err(_) => {
-                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                Err(e) => {
+                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
                         slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
                     }
                 }
