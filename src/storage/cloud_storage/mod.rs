@@ -139,6 +139,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
         let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        result_based_on_http_status(response.status(), ())?;
 
         let futures_io_async_read = response
             .into_body()
@@ -237,13 +238,23 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     let status: StatusCode = response.status();
     let body = aggregate(response).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
-    if status.is_success() {
-        Ok(body)
-    } else {
-        Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-    }
+    result_based_on_http_status(status, body)
 }
 
 fn to_tokio_async_read(r: impl futures::io::AsyncRead) -> impl tokio::io::AsyncRead {
     tokio_util::compat::FuturesAsyncReadCompatExt::compat(r)
+}
+
+fn result_based_on_http_status<T>(status: StatusCode, ok_val: T) -> Result<T, Error> {
+    if !status.is_success() {
+        let err_kind = match status.as_u16() {
+            404 => ErrorKind::PermanentFileNotAvailable,
+            401 | 403 => ErrorKind::PermissionDenied,
+            429 => ErrorKind::TransientFileNotAvailable,
+            _ => ErrorKind::LocalError,
+        };
+        // TODO: Consume error message in body and add as error source somehow.
+        return Err(Error::from(err_kind));
+    }
+    Ok(ok_val)
 }
