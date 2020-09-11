@@ -83,3 +83,8 @@ required-features = ["rest_auth"]
 [[example]]
 name = "jsonfile_auth"
 required-features = ["jsonfile_auth"]
+
+[[test]]
+name = "gcs"
+path = "tests/gcs.rs"
+required-features = ["cloud_storage"]

@@ -29,7 +29,7 @@ use std::{
 };
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
-use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
+use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
 
 /// StorageBackend that uses Cloud storage from Google
 #[derive(Clone, Debug)]
@@ -53,13 +53,17 @@ impl CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn get_token(&self) -> Result<AccessToken, Error> {
+    async fn get_token(&self) -> Result<String, Error> {
+        if self.service_account_key.key_type.as_deref() == Some("test") {
+            return Ok("test".to_string());
+        }
         let auth = ServiceAccountAuthenticator::builder(self.service_account_key.clone())
             .hyper_client(self.client.clone())
             .build()
             .await?;
 
         auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
+            .map_ok(|t| t.as_str().to_string())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
             .await
     }
@@ -80,10 +84,10 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
@@ -109,11 +113,11 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
 
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
@@ -128,10 +132,10 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
@@ -155,10 +159,10 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
             .body(Body::wrap_stream(FramedRead::new(bytes, BytesCodec::new()).map_ok(|b| b.freeze())))
@@ -175,10 +179,10 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         let uri: Uri = self.uris.delete(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::DELETE)
             .body(Body::empty())
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
@@ -193,10 +197,10 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         let uri: Uri = self.uris.mkd(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token: AccessToken = self.get_token().await?;
+        let token = self.get_token().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .header(header::CONTENT_LENGTH, "0")
             .method(Method::POST)
