@@ -17,7 +17,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.11.2"
+//! libunftp = "0.12.0"
 //! tokio = { version = "0.2", features = ["full"] }
 //! ```
 //! Now you're ready to develop your server! Add the following to src/main.rs:
@@ -26,7 +26,7 @@
 //! #[tokio::main]
 //! pub async fn main() {
 //!     let ftp_home = std::env::temp_dir();
-//!     let server = libunftp::Server::new_with_fs_root(ftp_home)
+//!     let server = libunftp::Server::with_fs(ftp_home)
 //!         .greeting("Welcome to my FTP server")
 //!         .passive_ports(50000..65535);
 //!
@@ -44,4 +44,6 @@ pub(crate) mod metrics;
 pub(crate) mod server;
 pub mod storage;
 
-pub use crate::server::ftpserver::{options, Server};
+pub use crate::server::ftpserver::{error::ServerError, options, Server};
+
+type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;

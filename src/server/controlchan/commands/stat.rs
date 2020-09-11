@@ -50,7 +50,6 @@ impl<S, U> CommandHandler<S, U> for Stat
 where
     U: UserDetail,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
@@ -89,8 +88,8 @@ where
                                 Err(err) => slog::warn!(logger, "{}", err),
                             }
                         }
-                        Err(_) => {
-                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                        Err(e) => {
+                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
                                 slog::warn!(logger, "{}", err);
                             }
                         }

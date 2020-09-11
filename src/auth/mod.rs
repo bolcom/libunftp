@@ -13,7 +13,7 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.36"
+//! async-trait = "0.1.40"
 //! ```
 //!
 //! 2. Implement the [`Authenticator`] trait and optionally the [`UserDetail`] trait:
@@ -49,7 +49,7 @@
 //! ```
 //! # // Make it compile
 //! # type RandomAuthenticator = libunftp::auth::AnonymousAuthenticator;
-//! let server = libunftp::Server::new_with_fs_and_auth(
+//! let server = libunftp::Server::with_fs_and_auth(
 //!   "/srv/ftp",
 //!   std::sync::Arc::new(RandomAuthenticator{})
 //! );
@@ -64,8 +64,7 @@ pub use anonymous::AnonymousAuthenticator;
 
 pub(crate) mod authenticator;
 #[allow(unused_imports)]
-pub use authenticator::AuthenticationError;
-pub use authenticator::Authenticator;
+pub use authenticator::{AuthenticationError, Authenticator};
 
 mod user;
 pub use user::{DefaultUser, UserDetail};

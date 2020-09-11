@@ -30,7 +30,6 @@ impl<S, U> CommandHandler<S, U> for Size
 where
     U: UserDetail,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]

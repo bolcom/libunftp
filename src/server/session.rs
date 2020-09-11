@@ -6,8 +6,8 @@ use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
 };
-use failure::_core::fmt::Formatter;
 use futures::channel::mpsc::{Receiver, Sender};
+use std::fmt::Formatter;
 use std::{fmt::Debug, path::PathBuf, sync::Arc};
 
 // TraceId is an identifier used to correlate logs statements together.
@@ -22,12 +22,12 @@ impl TraceId {
 }
 
 impl std::fmt::Display for TraceId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum SessionState {
     New,
     WaitPass,
@@ -42,7 +42,6 @@ pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 pub struct Session<S, U>
 where
     S: StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: Send + Sync + Debug,
 {
@@ -90,7 +89,6 @@ where
 impl<S, U: Send + Sync + Debug + 'static> Session<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
 {
     pub(super) fn new(storage: Arc<S>) -> Self {
@@ -143,7 +141,6 @@ where
 impl<S, U> Drop for Session<S, U>
 where
     S: StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: Send + Sync + Debug,
 {

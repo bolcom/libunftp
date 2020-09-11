@@ -49,11 +49,7 @@ impl Filesystem {
             self.root.join(path)
         };
 
-        // TODO: Use `?` operator here, when we can use `impl Future`
-        let real_full_path = match canonicalize(full_path) {
-            Ok(path) => path,
-            Err(e) => return Err(e),
-        };
+        let real_full_path = canonicalize(full_path)?;
 
         if real_full_path.starts_with(&self.root) {
             Ok(real_full_path)
@@ -65,7 +61,6 @@ impl Filesystem {
 
 #[async_trait]
 impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
-    type File = tokio::io::BufReader<tokio::fs::File>;
     type Metadata = std::fs::Metadata;
 
     fn supported_features(&self) -> u32 {
@@ -107,23 +102,24 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         Ok(fis)
     }
 
-    #[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File> {
+    //#[tracing_attributes::instrument]
+    async fn get<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &Option<U>,
+        path: P,
+        start_pos: u64,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let full_path = self.full_path(path)?;
 
-        // TODO: Remove async block
+        // // TODO: Remove async block
         async move {
             let mut file = tokio::fs::File::open(full_path).await?;
             if start_pos > 0 {
                 file.seek(std::io::SeekFrom::Start(start_pos)).await?;
             }
-            Ok(tokio::io::BufReader::with_capacity(4096, file))
+            Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
         }
-        .map_err(|error: std::io::Error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
-        })
+        .map_err(|error: std::io::Error| error.into())
         .await
     }
 
@@ -155,55 +151,25 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(_) => return Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
-        };
-        if let Err(error) = tokio::fs::remove_file(full_path).await {
-            return Err(match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            });
-        }
-        Ok(())
+        let full_path = self.full_path(path)?;
+        tokio::fs::remove_file(full_path).await.map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Err(e),
-        };
-
-        if let Err(error) = tokio::fs::remove_dir(full_path).await {
-            return Err(match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            });
-        }
-
-        Ok(())
+        let full_path = self.full_path(path)?;
+        tokio::fs::remove_dir(full_path).await.map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        tokio::fs::create_dir(self.full_path(path)?).await?;
-
-        Ok(())
+        tokio::fs::create_dir(self.full_path(path)?).await.map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
-        let from = match self.full_path(from) {
-            Ok(path) => path,
-            Err(e) => return Err(e),
-        };
-        let to = match self.full_path(to) {
-            Ok(path) => path,
-            Err(e) => return Err(e),
-        };
+        let from = self.full_path(from)?;
+        let to = self.full_path(to)?;
 
         let from_rename = from.clone();
 
@@ -214,38 +180,20 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
                     let r = tokio::fs::rename(from_rename, to).await;
                     match r {
                         Ok(_) => Ok(()),
-                        Err(_e) => {
-                            // TODO: Propagate actual error.
-                            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-                        }
+                        Err(e) => Err(Error::new(ErrorKind::PermanentFileNotAvailable, e)),
                     }
                 } else {
                     Err(Error::from(ErrorKind::PermanentFileNotAvailable))
                 }
             }
-            Err(_e) => {
-                // TODO: Propagate actual error.
-                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-            }
+            Err(e) => Err(Error::new(ErrorKind::PermanentFileNotAvailable, e)),
         }
     }
 
     #[tracing_attributes::instrument]
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = match self.full_path(path) {
-            Ok(path) => path,
-            Err(e) => return Err(e),
-        };
-
-        if let Err(error) = tokio::fs::read_dir(full_path).await {
-            return Err(match error.kind() {
-                std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-                std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-                _ => Error::from(ErrorKind::LocalError),
-            });
-        }
-
-        Ok(())
+        let full_path = self.full_path(path)?;
+        tokio::fs::read_dir(full_path).await.map_err(|error: std::io::Error| error.into()).map(|_| ())
     }
 }
 
@@ -267,7 +215,7 @@ impl Metadata for std::fs::Metadata {
     }
 
     fn modified(&self) -> Result<SystemTime> {
-        self.modified().map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))
+        self.modified().map_err(|e| e.into())
     }
 
     fn gid(&self) -> u32 {
@@ -503,7 +451,7 @@ impl From<std::io::Error> for Error {
         match err.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
             std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::from(ErrorKind::LocalError),
+            _ => Error::new(ErrorKind::LocalError, err),
         }
     }
 }

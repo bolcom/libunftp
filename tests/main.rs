@@ -1,4 +1,5 @@
 use async_ftp::{types::Result, FtpStream};
+use libunftp::options::FtpsRequired;
 use pretty_assertions::assert_eq;
 use std::fmt::Debug;
 use std::fs;
@@ -13,11 +14,18 @@ fn ensure_login_required<T: Debug>(r: Result<T>) {
     }
 }
 
+fn ensure_ftps_required<T: Debug>(r: Result<T>) {
+    let err = r.unwrap_err().to_string();
+    if !err.contains("534") {
+        panic!("FTPS enforcement is broken!");
+    }
+}
+
 #[tokio::test]
 async fn connect() {
     let addr: &str = "127.0.0.1:1234";
     let path: PathBuf = std::env::temp_dir();
-    tokio::spawn(libunftp::Server::new_with_fs_root(path).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     async_ftp::FtpStream::connect(addr).await.unwrap();
 }
@@ -29,10 +37,75 @@ async fn login() {
     let username = "koen";
     let password = "hoi";
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
     ftp_stream.login(username, password).await.unwrap();
+}
+
+#[tokio::test]
+async fn ftps_require_works() {
+    struct Test {
+        username: &'static str,
+        mode: FtpsRequired,
+        give534: bool,
+        port: u16,
+    }
+
+    let tests = [
+        Test {
+            username: "anonymous",
+            mode: FtpsRequired::None,
+            give534: false,
+            port: 1250,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::None,
+            give534: false,
+            port: 1251,
+        },
+        Test {
+            username: "anonymous",
+            mode: FtpsRequired::All,
+            give534: true,
+            port: 1252,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::All,
+            give534: true,
+            port: 1253,
+        },
+        Test {
+            username: "AnonyMous",
+            mode: FtpsRequired::Accounts,
+            give534: false,
+            port: 1254,
+        },
+        Test {
+            username: "the-user",
+            mode: FtpsRequired::Accounts,
+            give534: true,
+            port: 1255,
+        },
+    ];
+
+    for test in tests.iter() {
+        // TODO: if we can gracefully shutdown libunftp then we don't need to listen on a new port
+        // every time. Alternatively don't listen at all but have a way to talk to unFTP via byte
+        // stream or something.
+        let addr = format!("127.0.0.1:{}", test.port);
+
+        tokio::spawn(libunftp::Server::with_fs(std::env::temp_dir()).ftps_required(test.mode).listen(addr.clone()));
+        tokio::time::delay_for(Duration::new(1, 0)).await;
+
+        let mut ftp_stream = async_ftp::FtpStream::connect(addr.as_str()).await.unwrap();
+        let result = ftp_stream.login(test.username, "blah").await;
+        if test.give534 {
+            ensure_ftps_required(result);
+        }
+    }
 }
 
 #[tokio::test]
@@ -40,7 +113,7 @@ async fn noop() {
     let addr = "127.0.0.1:1236";
     let path = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
 
@@ -55,7 +128,7 @@ async fn get() {
     let path = std::env::temp_dir();
     let mut filename = path.clone();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     // Create a temporary file in the FTP root that we'll retrieve
     filename.push("bla.txt");
@@ -87,7 +160,7 @@ async fn put() {
     let addr = "127.0.0.1:1238";
     let path = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
 
     let content = b"Hello from this test!\n";
@@ -110,7 +183,7 @@ async fn list() {
     let addr = "127.0.0.1:1239";
     let root = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     // Create a filename in the ftp root that we will look for in the `LIST` output
     let path = root.join("test.txt");
@@ -139,7 +212,7 @@ async fn pwd() {
     let addr = "127.0.0.1:1240";
     let root = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
 
@@ -157,7 +230,7 @@ async fn cwd() {
     let root = std::env::temp_dir();
     let path = root.clone();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
@@ -177,7 +250,7 @@ async fn cdup() {
     let root = std::env::temp_dir();
     let path = root.clone();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
@@ -200,7 +273,7 @@ async fn dele() {
     let addr = "127.0.0.1:1243";
     let root = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let file_in_root = tempfile::NamedTempFile::new().unwrap();
@@ -218,7 +291,7 @@ async fn quit() {
     let addr = "127.0.0.1:1244";
     let root = std::env::temp_dir();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     ftp_stream.quit().await.unwrap();
@@ -234,7 +307,7 @@ async fn nlst() {
     let root = tempfile::TempDir::new().unwrap().into_path();
     let path = root.clone();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(path.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(path.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     // Create a filename that we wanna see in the `NLST` output
     let path = path.join("test.txt");
@@ -256,7 +329,7 @@ async fn mkdir() {
     let addr = "127.0.0.1:1246";
     let root = tempfile::TempDir::new().unwrap().into_path();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let new_dir_name = "hallo";
@@ -276,7 +349,7 @@ async fn rename() {
     let addr = "127.0.0.1:1247";
     let root = tempfile::TempDir::new().unwrap().into_path();
 
-    tokio::spawn(libunftp::Server::new_with_fs_root(root.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
     // Create a file that we will rename
     let full_from = root.join("ikbenhier.txt");
@@ -311,7 +384,7 @@ async fn rename() {
 async fn size() {
     let addr = "127.0.0.1:1248";
     let root = std::env::temp_dir();
-    tokio::spawn(libunftp::Server::new_with_fs_root(root.clone()).listen(addr));
+    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::delay_for(Duration::new(1, 0)).await;
 
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();

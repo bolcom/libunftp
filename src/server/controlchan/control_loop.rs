@@ -11,7 +11,7 @@ use crate::{
             handler::{CommandContext, CommandHandler},
             Reply, ReplyCode,
         },
-        ftpserver::options::PassiveHost,
+        ftpserver::options::{FtpsRequired, PassiveHost},
         proxy_protocol::ConnectionTuple,
         session::SharedSession,
         tls::FTPSConfig,
@@ -51,6 +51,7 @@ where
     pub collect_metrics: bool,
     pub idle_session_timeout: Duration,
     pub logger: slog::Logger,
+    pub ftps_required: FtpsRequired,
 }
 
 /// Does TCP processing when a FTP client connects
@@ -64,7 +65,6 @@ pub async fn spawn<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
     let Config {
@@ -73,6 +73,7 @@ where
         passive_ports,
         passive_host,
         ftps_config,
+        ftps_required,
         collect_metrics,
         idle_session_timeout,
         logger,
@@ -106,7 +107,8 @@ where
         proxyloop_msg_tx,
         control_connection_info,
     );
-    let event_handler_chain = handle_with_auth::<S, U, _>(shared_session, event_handler_chain);
+    let event_handler_chain = handle_with_auth::<S, U, _>(shared_session.clone(), event_handler_chain);
+    let event_handler_chain = handle_checking_ftps_requirement::<S, U, _>(event_handler_chain, shared_session, ftps_required);
     let event_handler_chain = handle_with_logging::<S, U, _>(logger.clone(), event_handler_chain);
 
     let codec = FTPCodec::new();
@@ -220,11 +222,77 @@ where
     Ok(())
 }
 
+fn handle_checking_ftps_requirement<S, U, N>(
+    next: N,
+    session: SharedSession<S, U>,
+    ftps_requirement: FtpsRequired,
+) -> impl Fn(Event) -> Result<Reply, ControlChanError>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: Fn(Event) -> Result<Reply, ControlChanError>,
+{
+    move |event| match (ftps_requirement, event) {
+        (FtpsRequired::None, event) => next(event),
+        (FtpsRequired::All, event) => match event {
+            Event::Command(Command::CCC) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
+            Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
+                let is_tls = block_on(async {
+                    let session = session.lock().await;
+                    session.cmd_tls
+                });
+                match is_tls {
+                    true => next(event),
+                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required")),
+                }
+            }
+            _ => next(event),
+        },
+        (FtpsRequired::Accounts, event) => {
+            let (is_tls, username) = block_on(async {
+                let session = session.lock().await;
+                (session.cmd_tls, session.username.clone())
+            });
+            match (is_tls, event) {
+                (true, event) => next(event),
+                (false, Event::Command(Command::User { username })) => {
+                    if is_anonymous_user(&username[..])? {
+                        next(Event::Command(Command::User { username }))
+                    } else {
+                        Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required"))
+                    }
+                }
+                (false, Event::Command(Command::Pass { password })) => {
+                    match username {
+                        None => {
+                            // Should not happen, username should have already been provided.
+                            Err(ControlChanError::new(ControlChanErrorKind::IllegalState))
+                        }
+                        Some(username) => {
+                            if is_anonymous_user(username)? {
+                                next(Event::Command(Command::Pass { password }))
+                            } else {
+                                Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required"))
+                            }
+                        }
+                    }
+                }
+                (false, event) => next(event),
+            }
+        }
+    }
+}
+
+fn is_anonymous_user(username: impl AsRef<[u8]>) -> Result<bool, std::str::Utf8Error> {
+    let username_str = std::str::from_utf8(username.as_ref())?;
+    Ok(username_str == "anonymous")
+}
+
 fn handle_with_auth<S, U, N>(session: SharedSession<S, U>, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
@@ -239,18 +307,15 @@ where
         | Event::Command(Command::Noop)
         | Event::Command(Command::Quit) => next(event),
         _ => {
-            let r = block_on(async {
+            let session_state = block_on(async {
                 let session = session.lock().await;
-                if session.state != SessionState::WaitCmd {
-                    Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
-                } else {
-                    Err(())
-                }
+                session.state
             });
-            if let Ok(r) = r {
-                return Ok(r);
+            if session_state != SessionState::WaitCmd {
+                Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
+            } else {
+                next(event)
             }
-            next(event)
         }
     }
 }
@@ -259,7 +324,6 @@ fn handle_with_logging<S, U, N>(logger: slog::Logger, next: N) -> impl Fn(Event)
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
     N: Fn(Event) -> Result<Reply, ControlChanError>,
 {
@@ -286,7 +350,7 @@ fn handle_event<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     move |event| -> Result<Reply, ControlChanError> {
@@ -329,7 +393,7 @@ async fn handle_command<S, U>(
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     let args = CommandContext {
@@ -395,7 +459,6 @@ async fn handle_internal_msg<S, U>(logger: slog::Logger, msg: InternalMsg, sessi
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
     S::Metadata: Metadata,
 {
     use self::InternalMsg::*;
@@ -462,7 +525,7 @@ fn handle_control_channel_error<S, U>(logger: slog::Logger, error: ControlChanEr
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: AsyncRead + Send,
+
     S::Metadata: Metadata,
 {
     if with_metrics {

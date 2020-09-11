@@ -6,7 +6,7 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.36"
+//! async-trait = "0.1.40"
 //! ```
 //!
 //! 2. Implement the `StorageBackend` trait and optionally the `Metadata` trait:
@@ -27,7 +27,6 @@
 //!
 //! #[async_trait]
 //! impl libunftp::storage::StorageBackend<DefaultUser> for Vfs {
-//!     type File = tokio::fs::File;
 //!     type Metadata = std::fs::Metadata;
 //!
 //!     async fn metadata<P: AsRef<Path> + Send + Debug>(
@@ -54,7 +53,7 @@
 //!         user: &Option<DefaultUser>,
 //!         path: P,
 //!         start_pos: u64,
-//!     ) -> Result<Self::File> {
+//!     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
 //!         unimplemented!()
 //!     }
 //!

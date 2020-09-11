@@ -1,23 +1,25 @@
+pub mod error;
 pub mod options;
-
-use crate::{
-    auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
-    server::{
-        proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
-        session::SharedSession,
-    },
-    storage::{filesystem::Filesystem, Metadata, StorageBackend},
-};
-use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 
 use super::{
     chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
     controlchan::{spawn_loop, LoopConfig},
     datachan::spawn_processing,
+    ftpserver::{error::ServerError, options::FtpsRequired},
     tls::FTPSConfig,
 };
-use crate::server::Reply;
+use crate::{
+    auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
+    server::{
+        proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
+        session::SharedSession,
+        Reply,
+    },
+    storage::{filesystem::Filesystem, Metadata, StorageBackend},
+};
+
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
+use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{
     fmt::Debug,
@@ -28,8 +30,8 @@ use std::{
     time::Duration,
 };
 
-/// An instance of an FTP(S) server. It contains a reference to an [`Authenticator`] that will be used
-/// for authentication, and a [`StorageBackend`] that will be used as the storage backend.
+/// An instance of an FTP(S) server. It aggregates an [`Authenticator`] that will be used
+/// for authentication, and a [`StorageBackend`] that will be used as the virtual file system.
 ///
 /// The server can be started with the `listen` method.
 ///
@@ -40,7 +42,7 @@ use std::{
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
-/// let server = Server::new_with_fs_root("/srv/ftp");
+/// let server = Server::with_fs("/srv/ftp");
 /// rt.spawn(server.listen("127.0.0.1:2121"));
 /// // ...
 /// drop(rt);
@@ -60,6 +62,7 @@ where
     passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FTPSConfig,
+    ftps_required: FtpsRequired,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
@@ -73,11 +76,15 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Server")
-            .field("greeting", &self.greeting)
             .field("authenticator", &self.authenticator)
-            .field("passive_ports", &self.passive_ports)
             .field("collect_metrics", &self.collect_metrics)
+            .field("greeting", &self.greeting)
+            .field("logger", &self.logger)
+            .field("metrics", &self.collect_metrics)
+            .field("passive_ports", &self.passive_ports)
+            .field("passive_host", &self.passive_host)
             .field("ftps_mode", &self.ftps_mode)
+            .field("ftps_required", &self.ftps_required)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -88,20 +95,19 @@ where
 impl<S, U> Server<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
-    /// Construct a new [`Server`] with the given [`StorageBackend`]. The other parameters will be
-    /// set to defaults.
+    /// Construct a new [`Server`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
-    pub fn new(s: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
+    /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
+    pub fn new(sbe_generator: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
     where
         AnonymousAuthenticator: Authenticator<U>,
     {
-        Self::new_with_authenticator(s, Arc::new(AnonymousAuthenticator {}))
+        Self::with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
     }
 
     /// Construct a new [`Server`] with the given [`StorageBackend`] and [`Authenticator`]. The other parameters will be set to defaults.
@@ -109,7 +115,7 @@ where
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn new_with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
         Server {
             storage: s,
             greeting: DEFAULT_GREETING,
@@ -122,32 +128,8 @@ where
             proxy_protocol_mode: ProxyMode::Off,
             proxy_protocol_switchboard: Option::None,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
+            ftps_required: options::DEFAULT_FTPS_REQUIRE,
         }
-    }
-
-    /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
-    pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
-        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
-        self
-    }
-
-    /// Set the greeting that will be sent to the client after connecting.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").greeting("Welcome to my FTP Server");
-    ///
-    /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.greeting("Welcome to my FTP Server");
-    /// ```
-    pub fn greeting(mut self, greeting: &'static str) -> Self {
-        self.greeting = greeting;
-        self
     }
 
     /// Set the [`Authenticator`] that will be used for authentication.
@@ -159,7 +141,7 @@ where
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp")
+    /// let mut server = Server::with_fs("/tmp")
     ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
     /// ```
     ///
@@ -169,7 +151,32 @@ where
         self
     }
 
-    /// Set the range of passive ports that we'll use for passive connections.
+    /// Enables FTPS by configuring the path to the certificates file and the private key file. Both
+    /// should be in PEM format.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
+    /// ```
+    pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
+        self.ftps_mode = FTPSConfig::On {
+            certs_file: certs_file.into(),
+            key_file: key_file.into(),
+        };
+        self
+    }
+
+    /// Configures whether client connections may use plaintext mode or not.
+    pub fn ftps_required(mut self, option: impl Into<FtpsRequired>) -> Self {
+        self.ftps_required = option.into();
+        self
+    }
+
+    /// Set the greeting that will be sent to the client after connecting.
     ///
     /// # Example
     ///
@@ -177,15 +184,58 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::new_with_fs_root("/tmp")
-    ///              .passive_ports(49152..65535);
+    /// let mut server = Server::with_fs("/tmp").greeting("Welcome to my FTP Server");
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.passive_ports(49152..65535);
+    /// let mut server = Server::with_fs("/tmp");
+    /// server.greeting("Welcome to my FTP Server");
     /// ```
-    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
-        self.passive_ports = range;
+    pub fn greeting(mut self, greeting: &'static str) -> Self {
+        self.greeting = greeting;
+        self
+    }
+
+    /// Set the idle session timeout in seconds. The default is 600 seconds.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp").idle_session_timeout(600);
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_fs("/tmp");
+    /// server.idle_session_timeout(600);
+    /// ```
+    pub fn idle_session_timeout(mut self, secs: u64) -> Self {
+        self.idle_session_timeout = Duration::from_secs(secs);
+        self
+    }
+
+    /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
+    pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
+        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
+        self
+    }
+
+    /// Enables the collection of prometheus metrics.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp").metrics();
+    ///
+    /// // Or instead if you prefer:
+    /// let mut server = Server::with_fs("/tmp");
+    /// server.metrics();
+    /// ```
+    pub fn metrics(mut self) -> Self {
+        self.collect_metrics = true;
         self
     }
 
@@ -199,7 +249,7 @@ where
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host([127,0,0,1]);
     /// ```
     /// Or the same but more explicitly:
@@ -208,7 +258,7 @@ where
     /// use libunftp::{Server,options};
     /// use std::net::Ipv4Addr;
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host(options::PassiveHost::IP(Ipv4Addr::new(127, 0, 0, 1)));
     /// ```
     ///
@@ -217,34 +267,24 @@ where
     /// ```rust
     /// use libunftp::{Server,options};
     ///
-    /// let server = Server::new_with_fs_root("/tmp")
+    /// let server = Server::with_fs("/tmp")
     ///              .passive_host(options::PassiveHost::FromConnection);
+    /// ```
+    ///
+    /// Get the IP by resolving a DNS name:
+    ///
+    /// ```rust
+    /// use libunftp::{Server,options};
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .passive_host("ftp.myserver.org");
     /// ```
     pub fn passive_host<H: Into<PassiveHost>>(mut self, host_option: H) -> Self {
         self.passive_host = host_option.into();
         self
     }
 
-    /// Configures the path to the certificates file (DER-formatted PKCS #12 archive) and the
-    /// associated password for the archive in order to configure FTPS.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// let server = Server::new_with_fs_root("/tmp")
-    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
-    /// ```
-    pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.ftps_mode = FTPSConfig::On {
-            certs_file: certs_file.into(),
-            key_file: key_file.into(),
-        };
-        self
-    }
-
-    /// Enable the collection of prometheus metrics.
+    /// Sets the range of passive ports that we'll use for passive connections.
     ///
     /// # Example
     ///
@@ -252,37 +292,19 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").metrics();
+    /// let server = Server::with_fs("/tmp")
+    ///              .passive_ports(49152..65535);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.metrics();
+    /// let mut server = Server::with_fs("/tmp");
+    /// server.passive_ports(49152..65535);
     /// ```
-    pub fn metrics(mut self) -> Self {
-        self.collect_metrics = true;
+    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
+        self.passive_ports = range;
         self
     }
 
-    /// Set the idle session timeout in seconds. The default is 600 seconds.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").idle_session_timeout(600);
-    ///
-    /// // Or instead if you prefer:
-    /// let mut server = Server::new_with_fs_root("/tmp");
-    /// server.idle_session_timeout(600);
-    /// ```
-    pub fn idle_session_timeout(mut self, secs: u64) -> Self {
-        self.idle_session_timeout = Duration::from_secs(secs);
-        self
-    }
-
-    /// Enable PROXY protocol mode.
+    /// Enables PROXY protocol mode.
     ///
     /// If you use a proxy such as haproxy or nginx, you can enable
     /// the PROXY protocol
@@ -305,7 +327,7 @@ where
     /// use libunftp::Server;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::new_with_fs_root("/tmp").proxy_protocol_mode(2121);
+    /// let mut server = Server::with_fs("/tmp").proxy_protocol_mode(2121);
     /// ```
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
@@ -322,7 +344,7 @@ where
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
-    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// let server = Server::with_fs("/srv/ftp");
     /// rt.spawn(server.listen("127.0.0.1:2121"));
     /// // ...
     /// drop(rt);
@@ -333,7 +355,7 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) {
+    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
         match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
             ProxyMode::Off => self.listen_normal_mode(bind_address).await,
@@ -341,26 +363,35 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) {
-        // TODO: Propagate errors to caller instead of doing unwraps.
-        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
-        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
+        let addr: std::net::SocketAddr = bind_address.into().parse()?;
+        let mut listener = tokio::net::TcpListener::bind(addr).await?;
         loop {
-            let (tcp_stream, socket_addr) = listener.accept().await.unwrap();
-            slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
-            let params: LoopConfig<S, U> = (&self).into();
-            let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
-            if result.is_err() {
-                slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+            match listener.accept().await {
+                Ok(stream) => {
+                    let (tcp_stream, socket_addr) = stream;
+                    slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
+                    let params: LoopConfig<S, U> = (&self).into();
+                    let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
+                    if let Err(controlchan_err) = result {
+                        slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", controlchan_err)
+                    }
+                }
+                Err(e) => {
+                    slog::error!(self.logger, "Error accepting incoming connection {:?}", e);
+                }
             }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_proxy_protocol_mode<T: Into<String> + Debug>(mut self, bind_address: T, external_control_port: u16) {
-        // TODO: Propagate errors to caller instead of doing unwraps.
-        let addr: std::net::SocketAddr = bind_address.into().parse().unwrap();
-        let mut listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    async fn listen_proxy_protocol_mode<T: Into<String> + Debug>(
+        mut self,
+        bind_address: T,
+        external_control_port: u16,
+    ) -> std::result::Result<(), ServerError> {
+        let addr: std::net::SocketAddr = bind_address.into().parse()?;
+        let mut listener = tokio::net::TcpListener::bind(addr).await?;
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
@@ -488,9 +519,9 @@ impl Server<Filesystem, DefaultUser> {
     /// ```rust
     /// use libunftp::Server;
     ///
-    /// let server = Server::new_with_fs_root("/srv/ftp");
+    /// let server = Server::with_fs("/srv/ftp");
     /// ```
-    pub fn new_with_fs_root<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
+    pub fn with_fs<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
         let p = path.into();
         Server::new(Box::new(move || {
             let p = &p.clone();
@@ -512,11 +543,11 @@ where
     /// use libunftp::auth::AnonymousAuthenticator;
     /// use std::sync::Arc;
     ///
-    /// let server = Server::new_with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
+    /// let server = Server::with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
     /// ```
-    pub fn new_with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
         let p = path.into();
-        Server::new_with_authenticator(
+        Server::with_authenticator(
             Box::new(move || {
                 let p = &p.clone();
                 Filesystem::new(p)
@@ -530,7 +561,6 @@ impl<S, U> From<&Server<S, U>> for LoopConfig<S, U>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
 {
     fn from(server: &Server<S, U>) -> Self {
@@ -544,6 +574,7 @@ where
             passive_ports: server.passive_ports.clone(),
             passive_host: server.passive_host.clone(),
             logger: server.logger.new(slog::o!()),
+            ftps_required: server.ftps_required,
         }
     }
 }

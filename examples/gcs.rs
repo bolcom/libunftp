@@ -71,13 +71,13 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         }))
         .ftps(ftps_certs_file, ftps_key_file)
         .listen(BIND_ADDRESS)
-        .await;
+        .await?;
     } else {
         libunftp::Server::new(Box::new(move || {
             libunftp::storage::cloud_storage::CloudStorage::new("https://www.googleapis.com", &bucket_name, service_account_key.clone())
         }))
         .listen(BIND_ADDRESS)
-        .await;
+        .await?;
     }
 
     Ok(())

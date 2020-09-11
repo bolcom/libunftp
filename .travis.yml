@@ -26,5 +26,6 @@ script:
 matrix:
   allow_failures:
     - rust: nightly
+    - rust: beta
     - os: windows
   fast_finish: true

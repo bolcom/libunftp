@@ -47,24 +47,22 @@ impl JsonFileAuthenticator {
 impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, AuthenticationError> {
-        let username = _username.to_string();
-        let password = _password.to_string();
+    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {
         let credentials_list = self.credentials_list.clone();
 
         for c in credentials_list.iter() {
-            if username == c.username {
-                if password == c.password {
+            if username == &*c.username {
+                if password == &*c.password {
                     return Ok(DefaultUser {});
                 } else {
                     // punish the failed login with a 1500ms delay before returning the error
                     delay_for(Duration::from_millis(1500)).await;
-                    return Err(AuthenticationError {});
+                    return Err(AuthenticationError::BadPassword);
                 }
             }
         }
         // punish the failed login with a 1500ms delay before returning the error
         delay_for(Duration::from_millis(1500)).await;
-        Err(AuthenticationError {})
+        Err(AuthenticationError::BadUser)
     }
 }

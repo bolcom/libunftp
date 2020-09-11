@@ -19,7 +19,6 @@ use tokio_rustls::TlsAcceptor;
 pub struct DataCommandExecutor<S, U>
 where
     S: StorageBackend<U>,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail,
 {
@@ -36,7 +35,6 @@ where
 impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail,
 {
@@ -117,7 +115,13 @@ where
     #[tracing_attributes::instrument]
     async fn exec_list(self, path: Option<String>) {
         let path = match path {
-            Some(path) => self.cwd.join(path),
+            Some(path) => {
+                if path == "." {
+                    self.cwd.clone()
+                } else {
+                    self.cwd.join(path)
+                }
+            }
             None => self.cwd.clone(),
         };
         let mut tx_ok = self.control_msg_tx.clone();
@@ -178,8 +182,8 @@ where
                         Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
                     }
                 }
-                Err(_) => {
-                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::from(ErrorKind::LocalError))).await {
+                Err(e) => {
+                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
                         slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
                     }
                 }
@@ -227,7 +231,6 @@ where
 pub fn spawn_processing<S, U>(logger: slog::Logger, session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {
@@ -267,7 +270,6 @@ where
 async fn handle_incoming<S, U>(logger: slog::Logger, incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
 where
     S: StorageBackend<U> + 'static,
-    S::File: tokio::io::AsyncRead + Send,
     S::Metadata: Metadata,
     U: UserDetail + 'static,
 {

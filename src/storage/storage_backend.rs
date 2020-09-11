@@ -10,7 +10,6 @@ use std::{
     result,
     time::SystemTime,
 };
-use tokio::io::AsyncRead;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
@@ -104,7 +103,7 @@ where
             .metadata
             .modified()
             .map(|x| DateTime::<Utc>::from(x).format("%b %d %H:%M").to_string())
-            .unwrap_or_else(|_| "-".to_string());
+            .unwrap_or_else(|_| "--- -- --:--".to_string());
         let basename = self.path.as_ref().components().last();
         let path = match basename {
             Some(v) => v.as_os_str().to_string_lossy(),
@@ -141,8 +140,6 @@ where
 /// [`filesystem`]: filesystem/struct.Filesystem.html
 #[async_trait]
 pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
-    /// The concrete type of the _FTP File_ returned by this storage backend.
-    type File: AsyncRead + Sync + Send + Unpin;
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
 
@@ -202,7 +199,12 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The starting position can only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P, start_pos: u64) -> Result<Self::File>;
+    async fn get<P: AsRef<Path> + Send + Debug>(
+        &self,
+        user: &Option<U>,
+        path: P,
+        start_pos: u64,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>>;
 
     /// Writes bytes from the given reader to the specified path starting at offset start_pos in the file
     async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
