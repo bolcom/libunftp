@@ -50,7 +50,7 @@ impl CloudStorage {
 
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
-        if self.service_account_key.key_type.as_deref() == Some("test") {
+        if self.service_account_key.key_type.as_deref() == Some("unftp_test") {
             return Ok("test".to_string());
         }
         let auth = ServiceAccountAuthenticator::builder(self.service_account_key.clone())
