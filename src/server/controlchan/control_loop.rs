@@ -51,7 +51,8 @@ where
     pub collect_metrics: bool,
     pub idle_session_timeout: Duration,
     pub logger: slog::Logger,
-    pub ftps_required: FtpsRequired,
+    pub ftps_required_control_chan: FtpsRequired,
+    pub ftps_required_data_chan: FtpsRequired,
 }
 
 /// Does TCP processing when a FTP client connects
@@ -73,7 +74,8 @@ where
         passive_ports,
         passive_host,
         ftps_config,
-        ftps_required,
+        ftps_required_control_chan,
+        ftps_required_data_chan,
         collect_metrics,
         idle_session_timeout,
         logger,
@@ -108,7 +110,8 @@ where
         control_connection_info,
     );
     let event_handler_chain = handle_with_auth::<S, U, _>(shared_session.clone(), event_handler_chain);
-    let event_handler_chain = handle_checking_ftps_requirement::<S, U, _>(event_handler_chain, shared_session, ftps_required);
+    let event_handler_chain = handle_checking_ftps_control_chan_requirement::<S, U, _>(event_handler_chain, shared_session.clone(), ftps_required_control_chan);
+    let event_handler_chain = handle_checking_ftps_data_chan_requirement::<S, U, _>(event_handler_chain, shared_session, ftps_required_data_chan);
     let event_handler_chain = handle_with_logging::<S, U, _>(logger.clone(), event_handler_chain);
 
     let codec = FTPCodec::new();
@@ -222,7 +225,7 @@ where
     Ok(())
 }
 
-fn handle_checking_ftps_requirement<S, U, N>(
+fn handle_checking_ftps_control_chan_requirement<S, U, N>(
     next: N,
     session: SharedSession<S, U>,
     ftps_requirement: FtpsRequired,
@@ -244,7 +247,7 @@ where
                 });
                 match is_tls {
                     true => next(event),
-                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required")),
+                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel")),
                 }
             }
             _ => next(event),
@@ -260,7 +263,7 @@ where
                     if is_anonymous_user(&username[..])? {
                         next(Event::Command(Command::User { username }))
                     } else {
-                        Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required"))
+                        Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
                     }
                 }
                 (false, Event::Command(Command::Pass { password })) => {
@@ -273,7 +276,7 @@ where
                             if is_anonymous_user(username)? {
                                 next(Event::Command(Command::Pass { password }))
                             } else {
-                                Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required"))
+                                Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
                             }
                         }
                     }
@@ -281,6 +284,51 @@ where
                 (false, event) => next(event),
             }
         }
+    }
+}
+
+fn handle_checking_ftps_data_chan_requirement<S, U, N>(
+    next: N,
+    session: SharedSession<S, U>,
+    ftps_requirement: FtpsRequired,
+) -> impl Fn(Event) -> Result<Reply, ControlChanError>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: Fn(Event) -> Result<Reply, ControlChanError>,
+{
+    move |event| match (ftps_requirement, event) {
+        (FtpsRequired::None, event) => next(event),
+        (FtpsRequired::All, event) => match event {
+            Event::Command(Command::Pasv) => {
+                let is_tls = block_on(async {
+                    let session = session.lock().await;
+                    session.data_tls
+                });
+                match is_tls {
+                    true => next(event),
+                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                }
+            }
+            _ => next(event),
+        },
+        (FtpsRequired::Accounts, event) => match event {
+            Event::Command(Command::Pasv) => {
+                let (is_tls, username_opt) = block_on(async {
+                    let session = session.lock().await;
+                    (session.cmd_tls, session.username.clone())
+                });
+
+                let username: String = username_opt.ok_or_else(|| ControlChanError::new(ControlChanErrorKind::IllegalState))?;
+                let is_anonymous = is_anonymous_user(username)?;
+                match (is_tls, is_anonymous) {
+                    (true, _) | (false, true) => next(event),
+                    _ => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                }
+            }
+            _ => next(event),
+        },
     }
 }
 

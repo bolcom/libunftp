@@ -47,47 +47,111 @@ async fn login() {
 async fn ftps_require_works() {
     struct Test {
         username: &'static str,
-        mode: FtpsRequired,
+        mode_control_chan: FtpsRequired,
+        mode_data_chan: FtpsRequired,
         give534: bool,
+        give534_data: bool,
         port: u16,
     }
 
     let tests = [
+        // control channel tests
         Test {
             username: "anonymous",
-            mode: FtpsRequired::None,
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::None,
             give534: false,
+            give534_data: false,
             port: 1250,
         },
         Test {
             username: "the-user",
-            mode: FtpsRequired::None,
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::None,
             give534: false,
+            give534_data: false,
             port: 1251,
         },
         Test {
             username: "anonymous",
-            mode: FtpsRequired::All,
+            mode_control_chan: FtpsRequired::All,
+            mode_data_chan: FtpsRequired::None,
             give534: true,
+            give534_data: false,
             port: 1252,
         },
         Test {
             username: "the-user",
-            mode: FtpsRequired::All,
+            mode_control_chan: FtpsRequired::All,
+            mode_data_chan: FtpsRequired::None,
             give534: true,
+            give534_data: false,
             port: 1253,
         },
         Test {
             username: "AnonyMous",
-            mode: FtpsRequired::Accounts,
+            mode_control_chan: FtpsRequired::Accounts,
+            mode_data_chan: FtpsRequired::None,
             give534: false,
+            give534_data: false,
             port: 1254,
         },
         Test {
             username: "the-user",
-            mode: FtpsRequired::Accounts,
+            mode_control_chan: FtpsRequired::Accounts,
+            mode_data_chan: FtpsRequired::None,
             give534: true,
+            give534_data: false,
             port: 1255,
+        },
+        // Data channel tests
+        Test {
+            username: "anonymous",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::None,
+            give534: false,
+            give534_data: false,
+            port: 1256,
+        },
+        Test {
+            username: "the-user",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::None,
+            give534: false,
+            give534_data: false,
+            port: 1257,
+        },
+        Test {
+            username: "anonymous",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::All,
+            give534: false,
+            give534_data: true,
+            port: 1258,
+        },
+        Test {
+            username: "the-user",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::All,
+            give534: false,
+            give534_data: true,
+            port: 1259,
+        },
+        Test {
+            username: "AnonyMous",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::Accounts,
+            give534: false,
+            give534_data: false,
+            port: 1260,
+        },
+        Test {
+            username: "the-user",
+            mode_control_chan: FtpsRequired::None,
+            mode_data_chan: FtpsRequired::Accounts,
+            give534: false,
+            give534_data: true,
+            port: 1261,
         },
     ];
 
@@ -97,12 +161,20 @@ async fn ftps_require_works() {
         // stream or something.
         let addr = format!("127.0.0.1:{}", test.port);
 
-        tokio::spawn(libunftp::Server::with_fs(std::env::temp_dir()).ftps_required(test.mode).listen(addr.clone()));
+        tokio::spawn(
+            libunftp::Server::with_fs(std::env::temp_dir())
+                .ftps_required(test.mode_control_chan, test.mode_data_chan)
+                .listen(addr.clone()),
+        );
         tokio::time::delay_for(Duration::new(1, 0)).await;
 
         let mut ftp_stream = async_ftp::FtpStream::connect(addr.as_str()).await.unwrap();
         let result = ftp_stream.login(test.username, "blah").await;
         if test.give534 {
+            ensure_ftps_required(result);
+        }
+        if test.give534_data {
+            let result = ftp_stream.list(None).await;
             ensure_ftps_required(result);
         }
     }
