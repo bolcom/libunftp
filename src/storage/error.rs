@@ -71,4 +71,7 @@ pub enum ErrorKind {
     ///     File name not allowed.
     #[display(fmt = "553 File name not allowed error")]
     FileNameNotAllowedError,
+    /// 502 The command is not implemented for the storage back-end
+    #[display(fmt = "502 Command not implemented")]
+    CommandNotImplemented,
 }
