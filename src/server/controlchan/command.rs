@@ -3,7 +3,6 @@ use crate::server::controlchan::commands::{AuthParam, ModeParam, Opt, ProtParam,
 use crate::server::password::Password;
 
 use bytes::Bytes;
-use failure::*;
 use std::{fmt, str};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -372,12 +371,7 @@ impl Command {
                 if params.len() > 3 {
                     return Err(ParseErrorKind::InvalidCommand.into());
                 }
-                match str::from_utf8(&params)
-                    .context(ParseErrorKind::InvalidUTF8)?
-                    .to_string()
-                    .to_uppercase()
-                    .as_str()
-                {
+                match str::from_utf8(&params)?.to_string().to_uppercase().as_str() {
                     "TLS" => Command::Auth { protocol: AuthParam::Tls },
                     "SSL" => Command::Auth { protocol: AuthParam::Ssl },
                     _ => return Err(ParseErrorKind::InvalidCommand.into()),
@@ -537,14 +531,14 @@ mod tests {
     // Although we accept requests ending in only '\n', we won't accept requests ending only in '\r'
     fn parse_user_cmd_cr() {
         let input = "USER Dolores\r";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidEOL))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidEOL)));
     }
 
     #[test]
     // We should fail if the request does not end in '\n' or '\r'
     fn parse_user_cmd_no_eol() {
         let input = "USER Dolores";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidEOL))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidEOL)));
     }
 
     #[test]
@@ -591,7 +585,7 @@ mod tests {
     #[test]
     fn parse_stru_no_params() {
         let input = "STRU\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -615,13 +609,13 @@ mod tests {
     #[test]
     fn parse_stru_garbage() {
         let input = "STRU FSK\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "STRU F lskdjf\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "STRU\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -645,13 +639,13 @@ mod tests {
     #[test]
     fn parse_mode_garbage() {
         let input = "MODE SKDJF\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "MODE\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "MODE S D\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -669,7 +663,7 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Noop);
 
         let input = "NOOP bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -678,13 +672,13 @@ mod tests {
         assert_eq!(Command::parse(input).unwrap(), Command::Pasv);
 
         let input = "PASV bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
     fn parse_port() {
         let input = "PORT\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
         assert_eq!(Command::parse(input).unwrap(), Command::Port);
@@ -741,7 +735,7 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Feat));
 
         let input = "FEAT bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -750,13 +744,13 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Pwd));
 
         let input = "PWD bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
     fn parse_cwd() {
         let input = "CWD\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "CWD /tmp\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Cwd { path: "/tmp".into() }));
@@ -771,19 +765,19 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Cdup));
 
         let input = "CDUP bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
     fn parse_opts() {
         let input = "OPTS\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "OPTS bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "OPTS UTF8\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "OPTS UTF8 ON\r\n";
         assert_eq!(
@@ -805,7 +799,7 @@ mod tests {
     #[test]
     fn parse_dele() {
         let input = "DELE\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "DELE some_file\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Dele { path: "some_file".into() }));
@@ -814,7 +808,7 @@ mod tests {
     #[test]
     fn parse_rmd() {
         let input = "RMD\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "RMD some_directory\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Rmd { path: "some_directory".into() }));
@@ -826,13 +820,13 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Quit));
 
         let input = "QUIT NOW\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
     fn parse_mkd() {
         let input = "MKD\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "MKD bla\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Mkd { path: "bla".into() }));
@@ -858,7 +852,7 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Abor));
 
         let input = "ABOR bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
@@ -867,13 +861,13 @@ mod tests {
         assert_eq!(Command::parse(input), Ok(Command::Stou));
 
         let input = "STOU bla\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
     }
 
     #[test]
     fn parse_rnfr() {
         let input = "RNFR\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "RNFR dir/file\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Rnfr { file: "dir/file".into() }));
@@ -888,7 +882,7 @@ mod tests {
     #[test]
     fn parse_rnto() {
         let input = "RNTO\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "RNTO dir/file\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Rnto { file: "dir/file".into() }));
@@ -908,7 +902,7 @@ mod tests {
     #[test]
     fn parse_auth() {
         let input = "AUTH xx\r\n";
-        assert_eq!(Command::parse(input), Err(ParseError::from(Context::new(ParseErrorKind::InvalidCommand))));
+        assert_eq!(Command::parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
         let input = "AUTH tls\r\n";
         assert_eq!(Command::parse(input), Ok(Command::Auth { protocol: AuthParam::Tls }));
