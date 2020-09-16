@@ -32,8 +32,6 @@ lazy_static = "1.4.0"
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.0.0"
 chrono = {version = "0.4.15", features = ["serde"]}
-failure = "0.1.8"
-failure_derive = "0.1.8"
 derive_more = { version = "0.99.9", features = ["display"] }
 thiserror = "1.0.20"
 hyper = { version = "0.13.7", optional = true, features= ["runtime", "stream"]}
