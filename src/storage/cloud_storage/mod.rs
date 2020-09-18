@@ -50,6 +50,7 @@ impl CloudStorage {
 
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
+        // FIXME: this is ugly, make a trait for get_token (with a one test and one yup_oauth implementation)
         if self.service_account_key.key_type.as_deref() == Some("unftp_test") {
             return Ok("test".to_string());
         }
