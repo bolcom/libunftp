@@ -5,7 +5,6 @@ use libunftp::storage::cloud_storage::CloudStorage;
 use libunftp::Server;
 use std::sync::Once;
 use std::process::Command;
-use tokio::time::delay_for;
 
 static INIT: Once = Once::new();
 
@@ -42,7 +41,7 @@ pub fn initialize() {
 }
 
 #[tokio::test]
-async fn mkdir() {
+async fn newly_created_dir_is_empty() {
     initialize();
     let addr: &str = "127.0.0.1:1234";
 
