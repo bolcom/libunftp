@@ -59,7 +59,6 @@ impl GcsUri {
             self.base_url, self.bucket, path
         ))
     }
-
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
@@ -73,4 +72,3 @@ fn path_str<P: AsRef<Path>>(path: P) -> Result<String, Error> {
         Err(Error::from(ErrorKind::PermanentFileNotAvailable))
     }
 }
-

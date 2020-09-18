@@ -1,10 +1,10 @@
 use async_ftp::FtpStream;
-use pretty_assertions::assert_eq;
-use std::{str, time::Duration};
 use libunftp::storage::cloud_storage::CloudStorage;
 use libunftp::Server;
-use std::sync::Once;
+use pretty_assertions::assert_eq;
 use std::process::Command;
+use std::sync::Once;
+use std::{str, time::Duration};
 
 static INIT: Once = Once::new();
 
@@ -13,11 +13,7 @@ pub fn initialize() {
         let buf = std::env::current_dir().unwrap();
         let current_dir = buf.display();
 
-        Command::new("docker")
-            .arg("stop")
-            .arg("fake-gcs")
-            .status()
-            .expect("docker failed");
+        Command::new("docker").arg("stop").arg("fake-gcs").status().expect("docker failed");
 
         Command::new("docker")
             .arg("run")
@@ -46,9 +42,12 @@ async fn newly_created_dir_is_empty() {
     let addr: &str = "127.0.0.1:1234";
 
     let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").await.unwrap();
-    tokio::spawn(Server::new(Box::new(move || {
-        CloudStorage::new("http://localhost:9081", "test-bucket", service_account_key.clone())
-    })).listen(addr));
+    tokio::spawn(
+        Server::new(Box::new(move || {
+            CloudStorage::new("http://localhost:9081", "test-bucket", service_account_key.clone())
+        }))
+        .listen(addr),
+    );
     tokio::time::delay_for(Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     ftp_stream.login("anonymous", "").await.unwrap();
