@@ -57,4 +57,3 @@ async fn newly_created_dir_is_empty() {
     let list = ftp_stream.list(None).await.unwrap();
     assert_eq!(list.len(), 0)
 }
-
