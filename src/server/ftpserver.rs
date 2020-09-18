@@ -62,7 +62,8 @@ where
     passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FTPSConfig,
-    ftps_required: FtpsRequired,
+    ftps_required_control_chan: FtpsRequired,
+    ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
@@ -84,7 +85,8 @@ where
             .field("passive_ports", &self.passive_ports)
             .field("passive_host", &self.passive_host)
             .field("ftps_mode", &self.ftps_mode)
-            .field("ftps_required", &self.ftps_required)
+            .field("ftps_required_control_chan", &self.ftps_required_control_chan)
+            .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -128,7 +130,8 @@ where
             proxy_protocol_mode: ProxyMode::Off,
             proxy_protocol_switchboard: Option::None,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
-            ftps_required: options::DEFAULT_FTPS_REQUIRE,
+            ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
+            ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
         }
     }
 
@@ -171,8 +174,12 @@ where
     }
 
     /// Configures whether client connections may use plaintext mode or not.
-    pub fn ftps_required(mut self, option: impl Into<FtpsRequired>) -> Self {
-        self.ftps_required = option.into();
+    pub fn ftps_required<R>(mut self, for_control_chan: R, for_data_chan: R) -> Self
+    where
+        R: Into<FtpsRequired>,
+    {
+        self.ftps_required_control_chan = for_control_chan.into();
+        self.ftps_required_data_chan = for_data_chan.into();
         self
     }
 
@@ -574,7 +581,8 @@ where
             passive_ports: server.passive_ports.clone(),
             passive_host: server.passive_host.clone(),
             logger: server.logger.new(slog::o!()),
-            ftps_required: server.ftps_required,
+            ftps_required_control_chan: server.ftps_required_control_chan,
+            ftps_required_data_chan: server.ftps_required_data_chan,
         }
     }
 }

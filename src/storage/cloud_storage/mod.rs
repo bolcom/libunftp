@@ -222,18 +222,19 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
     #[tracing_attributes::instrument]
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _from: P, _to: P) -> Result<(), Error> {
-        //TODO: implement this
-        unimplemented!();
+        // TODO: implement this
+        Err(Error::from(ErrorKind::CommandNotImplemented))
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
-        //TODO: implement this
-        unimplemented!();
+        // TODO: implement this
+        Err(Error::from(ErrorKind::CommandNotImplemented))
     }
 
     #[tracing_attributes::instrument]
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
+        // TODO: Do we want to check here if the path is a directory?
         Ok(())
     }
 }
