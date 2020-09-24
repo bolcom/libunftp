@@ -138,7 +138,6 @@ impl Command {
         let cmd_token = normalize(iter.next().unwrap())?;
         let cmd_params = String::from(str::from_utf8(iter.next().unwrap_or(&[]))?);
 
-        // TODO: Make command parsing case insensitive (consider using "nom")
         let cmd = match &*cmd_token {
             "USER" => {
                 let username = parse_to_eol(cmd_params)?;
