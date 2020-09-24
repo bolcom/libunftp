@@ -90,11 +90,11 @@ where
         let mut tx_ok = self.control_msg_tx.clone();
         let mut tx_error = self.control_msg_tx.clone();
         tokio::spawn(async move {
-            match self
+            let put_result = self
                 .storage
                 .put(&self.user, Self::reader(self.socket, self.ftps_mode), path, self.start_pos)
-                .await
-            {
+                .await;
+            match put_result {
                 Ok(bytes) => {
                     if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
                         slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);

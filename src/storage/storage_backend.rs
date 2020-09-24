@@ -196,7 +196,6 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     }
 
     /// Gets the content of the given FTP file from offset start_pos file by copying it to the output writer.
-    ///
     /// The starting position will only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.

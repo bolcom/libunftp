@@ -25,6 +25,7 @@ use std::{
     fmt::Debug,
     path::{Path, PathBuf},
 };
+use tokio::io::{self, AsyncReadExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
@@ -66,9 +67,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        // crate::storage::FEATURE_RESTART
-        // TODO: Re-implement this
-        0
+        crate::storage::FEATURE_RESTART
     }
 
     #[tracing_attributes::instrument]
@@ -120,6 +119,20 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         response.list()
     }
 
+    // #[tracing_attributes::instrument]
+    async fn get_into<'a, P, W: ?Sized>(&self, user: &Option<U>, path: P, start_pos: u64, output: &'a mut W) -> Result<u64, Error>
+    where
+        W: tokio::io::AsyncWrite + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug,
+    {
+        let reader = self.get(user, path, 0).await?;
+        let mut reader = reader.take(start_pos);
+        tokio::io::copy(&mut reader, &mut io::sink()).await?;
+        let mut reader = reader.into_inner();
+
+        Ok(tokio::io::copy(&mut reader, output).await?)
+    }
+
     //#[tracing_attributes::instrument]
     async fn get<P: AsRef<Path> + Send + Debug>(
         &self,
@@ -147,7 +160,6 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .into_async_read();
 
         let async_read = to_tokio_async_read(futures_io_async_read);
-        // TODO: Support REST by skipping _start_pos bytes
         Ok(Box::new(async_read))
     }
 
