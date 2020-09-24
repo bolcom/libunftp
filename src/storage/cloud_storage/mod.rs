@@ -28,8 +28,6 @@ use std::{
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{AccessToken, ServiceAccountAuthenticator, ServiceAccountKey};
-use futures::task::{Context, Poll};
-use tokio::macros::support::Pin;
 
 /// A StorageBackend that uses Cloud storage from Google.
 #[derive(Clone, Debug)]
