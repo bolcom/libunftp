@@ -32,11 +32,11 @@ lazy_static = "1.4.0"
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.0.0"
 chrono = {version = "0.4.15", features = ["serde"]}
-derive_more = { version = "0.99.9", features = ["display"] }
+derive_more = { version = "0.99.10", features = ["display"] }
 thiserror = "1.0.20"
-hyper = { version = "0.13.7", optional = true, features= ["runtime", "stream"]}
+hyper = { version = "0.13.8", optional = true, features= ["runtime", "stream"]}
 percent-encoding = { version = "2.1.0", optional = true }
-serde = { version = "1.0.115", optional = true, features = ["derive"] }
+serde = { version = "1.0.116", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.56", optional = true }
 path_abs = "0.5.0"
 prometheus = "0.10.0"
@@ -45,7 +45,6 @@ rand = "0.7.3"
 tracing-futures = { version = "0.2.4", features = ["std", "std-future", "futures-03"]}
 tracing-attributes = "0.1.11"
 tracing = "0.1.19"
-
 hyper-rustls = {version = "0.21.0", optional = true}
 yup-oauth2 = {version = "4.1.2", optional = true}
 mime = {version = "0.3.16", optional = true}
@@ -62,7 +61,7 @@ pretty_env_logger = "0.4.0"
 pretty_assertions = "0.6.1"
 tokio = { version = "0.2.22", features = ["rt-threaded"]}
 clap = "2.33.3"
-tracing-subscriber = "0.2.11"
+tracing-subscriber = "0.2.12"
 log = "0.4.11"
 
 [features]
