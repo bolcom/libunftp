@@ -1,0 +1,6 @@
+{
+  "type": "unftp_test",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nIt's private, all right\n-----END PRIVATE KEY-----\n",
+  "client_email": "unftp-dev@iam.gserviceaccount.com",
+  "token_uri": "https://oauth2.googleapis.com/token"
+}
