@@ -195,8 +195,21 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
         Ok(std::io::Cursor::new(bytes))
     }
 
+    /// Gets the content of the given FTP file from offset start_pos file by copying it to the output writer.
+    /// The starting position will only be greater than zero if the storage back-end implementation
+    /// advertises to support partial reads through the supported_features method i.e. the result
+    /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
+    async fn get_into<'a, P, W: ?Sized>(&self, user: &Option<U>, path: P, start_pos: u64, output: &'a mut W) -> Result<u64>
+    where
+        W: tokio::io::AsyncWrite + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug,
+    {
+        let mut reader = self.get(user, path, start_pos).await?;
+        Ok(tokio::io::copy(&mut reader, output).await?)
+    }
+
     /// Returns the content of the given file from offset start_pos.
-    /// The starting position can only be greater than zero if the storage back-end implementation
+    /// The starting position will only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
     async fn get<P: AsRef<Path> + Send + Debug>(
