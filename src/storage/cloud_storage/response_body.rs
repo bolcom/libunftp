@@ -42,7 +42,7 @@ impl ResponseBody {
 
 impl Item {
     pub(crate) fn to_metadata(&self) -> Result<ObjectMetadata, Error> {
-        let size: u64 = self.size.parse().map_err(|_| Error::from(ErrorKind::TransientFileNotAvailable))?;
+        let size: u64 = self.size.parse().map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?;
 
         Ok(ObjectMetadata {
             size,

@@ -113,7 +113,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::GET)
             .body(Body::empty())
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
         let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
         let body = unpack_response(response).await?;
         let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
@@ -143,12 +143,12 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
         let futures_io_async_read = response
             .into_body()
-            //.map_ok(|b| b.bytes().to_vec())
-            // TODO: Error is squashed here, we might want to log it.
-            .map_err(|_e| std::io::Error::new(std::io::ErrorKind::Other, "Error reading from bucket!"))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
             .into_async_read();
 
-        Ok(Box::new(to_tokio_async_read(futures_io_async_read)))
+        let async_read = to_tokio_async_read(futures_io_async_read);
+        // TODO: Support REST by skipping _start_pos bytes
+        Ok(Box::new(async_read))
     }
 
     async fn put<P: AsRef<Path> + Send + Debug, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
@@ -171,7 +171,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
             .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
         let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
         let body = unpack_response(response).await?;
         let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
@@ -190,7 +190,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token.as_str()))
             .method(Method::DELETE)
             .body(Body::empty())
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
         let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
         unpack_response(response).await?;
 
@@ -210,7 +210,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .header(header::CONTENT_LENGTH, "0")
             .method(Method::POST)
             .body(Body::empty())
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
         let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
         unpack_response(response).await?;
         Ok(())
