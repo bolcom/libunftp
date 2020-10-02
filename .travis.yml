@@ -15,7 +15,6 @@ os:
 
 before_script:
   - if [[ $TRAVIS_OS_NAME == "osx" ]]; then
-#    travis on macos has no docker support that is required for gcs tests
       export TEST_FEATURES="--features rest_auth,jsonfile_auth"
     else
       export TEST_FEATURES="--all-features"
@@ -33,6 +32,13 @@ script:
   - cargo build --verbose --all-features --all-targets
 
 matrix:
+  include:
+    - os: linux
+      env: TEST_FEATURES="--all-features"
+    - os: osx
+      env: TEST_FEATURES="--features rest_auth,jsonfile_auth"
+    - os: windows
+      env: TEST_FEATURES="--all-features"
   allow_failures:
     - rust: nightly
     - rust: beta
