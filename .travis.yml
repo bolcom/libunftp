@@ -32,13 +32,6 @@ script:
   - cargo build --verbose --all-features --all-targets
 
 matrix:
-  include:
-    - os: linux
-      env: TEST_FEATURES="--all-features"
-    - os: osx
-      env: TEST_FEATURES="--features rest_auth,jsonfile_auth"
-    - os: windows
-      env: TEST_FEATURES="--all-features"
   allow_failures:
     - rust: nightly
     - rust: beta
