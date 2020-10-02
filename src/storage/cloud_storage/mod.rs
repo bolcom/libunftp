@@ -72,7 +72,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        crate::storage::FEATURE_RESTART
+        0
     }
 
     #[tracing_attributes::instrument]

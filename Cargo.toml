@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.12.0"
+version = "0.13.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -14,6 +14,7 @@ description = "Extensible, async, cloud orientated FTP(S) server library."
 documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
 license = "Apache-2.0"
+license-file = "LICENSE"
 readme = "README.md"
 keywords = ["ftp", "ftps"]
 categories = ["network-programming"]
@@ -87,3 +88,11 @@ required-features = ["jsonfile_auth"]
 name = "gcs"
 path = "tests/gcs.rs"
 required-features = ["cloud_storage"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+[package.metadata.docs.rs]
+all-features = true
+

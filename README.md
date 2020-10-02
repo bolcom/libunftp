@@ -9,8 +9,8 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's a safe, fast and extensible FTP(S) server 
-implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
+The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's extensible, async, cloud orientated FTP(S) 
+server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
 Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem, 
 [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a 
@@ -18,9 +18,6 @@ perfect match for the cloud.
 
 It runs on top of the [Tokio](https://tokio.rs) asynchronous run-time and tries to make use of Async IO as much as 
 possible.
-
-**libunftp is currently under heavy development and not yet recommended for production use.
-The API MAY BREAK**
 
 ## Prerequisites
 
@@ -38,7 +35,7 @@ Then add the libunftp and tokio crates to your project's dependencies in `Cargo.
 
 ```toml
 [dependencies]
-libunftp = "0.12.0"
+libunftp = "0.13.0"
 tokio = { version = "0.2", features = ["full"] }
 ```
 
