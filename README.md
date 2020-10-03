@@ -9,7 +9,7 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's extensible, async, cloud orientated FTP(S) 
+The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's an extensible, async, cloud orientated FTP(S) 
 server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
 Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem, 
@@ -46,7 +46,7 @@ Add the following to `src/main.rs`:
 #[tokio::main]
 pub async fn main() {
     let ftp_home = std::env::temp_dir();
-    let server = libunftp::Server::new_with_fs_root(ftp_home)
+    let server = libunftp::Server::with_fs(ftp_home)
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..65535);
     
