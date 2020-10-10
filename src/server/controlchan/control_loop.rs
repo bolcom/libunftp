@@ -82,7 +82,7 @@ where
         ..
     } = config;
 
-    let tls_configured = if let FTPSConfig::On { .. } = ftps_config { true } else { false };
+    let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
     let session: Session<S, U> = Session::new(Arc::new(storage))
