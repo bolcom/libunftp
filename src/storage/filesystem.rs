@@ -39,7 +39,7 @@ impl Filesystem {
 
     /// Returns the full, absolute and canonical path corresponding to the (relative to FTP root)
     /// input path, resolving symlinks and sequences like '../'.
-    fn full_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
+    async fn full_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
         // `path.join(other_path)` replaces `path` with `other_path` if `other_path` is absolute,
         // so we have to check for it.
         let path = path.as_ref();
@@ -49,7 +49,9 @@ impl Filesystem {
             self.root.join(path)
         };
 
-        let real_full_path = canonicalize(full_path)?;
+        let real_full_path = tokio::task::spawn_blocking(move || canonicalize(full_path))
+            .await
+            .map_err(|e| Error::new(ErrorKind::LocalError, e))??;
 
         if real_full_path.starts_with(&self.root) {
             Ok(real_full_path)
@@ -69,7 +71,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata> {
-        let full_path = self.full_path(path)?;
+        let full_path = self.full_path(path).await?;
 
         tokio::fs::symlink_metadata(full_path)
             .await
@@ -83,7 +85,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         P: AsRef<Path> + Send + Debug,
         <Self as StorageBackend<U>>::Metadata: Metadata,
     {
-        let full_path: PathBuf = self.full_path(path)?;
+        let full_path: PathBuf = self.full_path(path).await?;
 
         let prefix: PathBuf = self.root.clone();
 
@@ -109,7 +111,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         path: P,
         start_pos: u64,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
-        let full_path = self.full_path(path)?;
+        let full_path = self.full_path(path).await?;
 
         // // TODO: Remove async block
         async move {
@@ -151,25 +153,27 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = self.full_path(path)?;
+        let full_path = self.full_path(path).await?;
         tokio::fs::remove_file(full_path).await.map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = self.full_path(path)?;
+        let full_path = self.full_path(path).await?;
         tokio::fs::remove_dir(full_path).await.map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        tokio::fs::create_dir(self.full_path(path)?).await.map_err(|error: std::io::Error| error.into())
+        tokio::fs::create_dir(self.full_path(path).await?)
+            .await
+            .map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, from: P, to: P) -> Result<()> {
-        let from = self.full_path(from)?;
-        let to = self.full_path(to)?;
+        let from = self.full_path(from).await?;
+        let to = self.full_path(to).await?;
 
         let from_rename = from.clone();
 
@@ -192,7 +196,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
-        let full_path = self.full_path(path)?;
+        let full_path = self.full_path(path).await?;
         tokio::fs::read_dir(full_path).await.map_err(|error: std::io::Error| error.into()).map(|_| ())
     }
 }
