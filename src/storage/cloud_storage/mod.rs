@@ -168,32 +168,33 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         Ok(Box::new(async_read))
     }
 
-    async fn put<P: AsRef<Path> + Send + Debug, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
-        &self,
-        _user: &Option<U>,
-        bytes: B,
-        path: P,
-        _start_pos: u64,
-    ) -> Result<u64, Error> {
-        let uri: Uri = self.uris.put(path)?;
-
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
-
-        let reader = tokio::io::BufReader::with_capacity(4096, bytes);
-
-        let token = self.get_token().await?;
-        let request: Request<Body> = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token))
-            .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
-            .method(Method::POST)
-            .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
-        let body = unpack_response(response).await?;
-        let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        Ok(response.to_metadata()?.len())
+    async fn put<'a, P, R: ?Sized>(&self, _user: &Option<U>, bytes: &'a mut R, path: P, _start_pos: u64) -> Result<u64, Error>
+    where
+        R: tokio::io::AsyncRead + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug,
+    {
+        // let uri: Uri = self.uris.put(path) ?;
+        //
+        // let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        //
+        // let reader = tokio::io::BufReader::with_capacity(4096, bytes);
+        //
+        // let token = self.get_token().await?;
+        // let stream = FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze());
+        // let body = Body::wrap_stream(stream);
+        // let request: Request<Body> = Request::builder()
+        //     .uri(uri)
+        //     .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        //     .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
+        //     .method(Method::POST)
+        //     .body(body)
+        //     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        // let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        // let body = unpack_response(response).await?;
+        // let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        //
+        // Ok(response.to_metadata()?.len())
+        unimplemented!()
     }
 
     #[tracing_attributes::instrument]

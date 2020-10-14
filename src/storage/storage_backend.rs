@@ -220,13 +220,10 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>>;
 
     /// Writes bytes from the given reader to the specified path starting at offset start_pos in the file
-    async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
-        &self,
-        user: &Option<U>,
-        input: R,
-        path: P,
-        start_pos: u64,
-    ) -> Result<u64>;
+    async fn put<'a, P, R: ?Sized>(&self, user: &Option<U>, input: &'a mut R, path: P, start_pos: u64) -> Result<u64>
+    where
+        R: tokio::io::AsyncRead + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug;
 
     /// Deletes the file at the given path.
     async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;

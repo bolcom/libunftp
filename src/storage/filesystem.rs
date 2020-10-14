@@ -125,13 +125,11 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         .await
     }
 
-    async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
-        &self,
-        _user: &Option<U>,
-        bytes: R,
-        path: P,
-        start_pos: u64,
-    ) -> Result<u64> {
+    async fn put<'a, P, R: ?Sized>(&self, _user: &Option<U>, bytes: &'a mut R, path: P, start_pos: u64) -> Result<u64>
+    where
+        R: tokio::io::AsyncRead + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug,
+    {
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
