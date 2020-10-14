@@ -14,7 +14,6 @@ description = "Extensible, async, cloud orientated FTP(S) server library."
 documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
 license = "Apache-2.0"
-license-file = "LICENSE"
 readme = "README.md"
 keywords = ["ftp", "ftps"]
 categories = ["network-programming"]
@@ -43,7 +42,7 @@ serde_json = { version = "1.0.58", optional = true }
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.0.0"
 thiserror = "1.0.21"
-tokio = { version = "0.2.22", features = ["rt-core", "net", "sync", "io-util", "macros", "time", "fs"]}
+tokio = { version = "0.2.22", features = ["rt-core", "net", "sync", "io-util", "macros", "time", "fs", "blocking"]}
 tokio-rustls = { version = "0.14.1" }
 tokio-util = { version = "0.3.1", features=["codec", "compat"] }
 tracing = "0.1.21"
