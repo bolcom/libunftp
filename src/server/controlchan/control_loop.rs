@@ -38,7 +38,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for 
 
 #[async_trait]
 trait EventHandler: Send + Sync {
-    async fn handle(&self, e: Event) -> Result<Reply, ControlChanError>;
+    async fn handle(&mut self, e: Event) -> Result<Reply, ControlChanError>;
 }
 
 #[derive(Debug)]
@@ -132,8 +132,9 @@ where
         next: event_chain,
     };
 
-    let event_chain = HandleWithLogging {
+    let mut event_chain = HandleWithLogging {
         logger: logger.clone(),
+        sequence_nr: 0,
         next: event_chain,
     };
 
@@ -169,8 +170,7 @@ where
 
             match incoming {
                 None => {
-                    // Should not happen.
-                    slog::warn!(logger, "No event polled in control channel...");
+                    slog::warn!(logger, "No event polled in control channel! This should not happen and its probably a bug.");
                     return;
                 }
                 Some(Ok(event)) => {
@@ -184,7 +184,7 @@ where
                     }
 
                     if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
-                        slog::info!(logger, "Upgrading to TLS");
+                        slog::info!(logger, "Upgrading control channel to TLS");
 
                         // Get back the original TCP Stream
                         let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
@@ -447,7 +447,7 @@ where
     S: StorageBackend<U> + 'static,
     S::Metadata: Metadata,
 {
-    async fn handle(&self, event: Event) -> Result<Reply, ControlChanError> {
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         match event {
             Event::Command(cmd) => {
                 handle_command(
@@ -490,7 +490,7 @@ where
     S::Metadata: Metadata,
     N: EventHandler,
 {
-    async fn handle(&self, event: Event) -> Result<Reply, ControlChanError> {
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         match event {
             // internal messages and the below commands are exempt from auth checks.
             Event::InternalMsg(_)
@@ -522,6 +522,7 @@ where
     N: EventHandler,
 {
     logger: slog::Logger,
+    sequence_nr: u64,
     next: N,
 }
 
@@ -530,9 +531,12 @@ impl<N> EventHandler for HandleWithLogging<N>
 where
     N: EventHandler,
 {
-    async fn handle(&self, event: Event) -> Result<Reply, ControlChanError> {
-        slog::info!(self.logger, "Processing control channel event {:?}", event);
-        self.next.handle(event).await
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        self.sequence_nr += 1;
+        slog::info!(self.logger, "Processing control channel event {:?}", event; "seq" => self.sequence_nr);
+        let result = self.next.handle(event).await;
+        slog::info!(self.logger, "Result of processing control channel event {:?}", result; "seq" => self.sequence_nr);
+        result
     }
 }
 
@@ -556,7 +560,7 @@ where
     S::Metadata: Metadata,
     N: EventHandler,
 {
-    async fn handle(&self, event: Event) -> Result<Reply, ControlChanError> {
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
@@ -631,7 +635,7 @@ where
     S::Metadata: Metadata,
     N: EventHandler,
 {
-    async fn handle(&self, event: Event) -> Result<Reply, ControlChanError> {
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
