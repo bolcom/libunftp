@@ -63,7 +63,7 @@ where
         let mut tx_sending: Sender<InternalMsg> = self.control_msg_tx.clone();
         let mut tx_error: Sender<InternalMsg> = self.control_msg_tx.clone();
         tokio::spawn(async move {
-            let mut output = Self::writer(self.socket, self.ftps_mode);
+            let mut output = Self::writer(self.socket, self.ftps_mode).await;
             let get_result = self.storage.get_into(&self.user, path, self.start_pos, &mut output).await;
             match get_result {
                 Ok(bytes_copied) => {
@@ -92,7 +92,7 @@ where
         tokio::spawn(async move {
             let put_result = self
                 .storage
-                .put(&self.user, Self::reader(self.socket, self.ftps_mode), path, self.start_pos)
+                .put(&self.user, Self::reader(self.socket, self.ftps_mode).await, path, self.start_pos)
                 .await;
             match put_result {
                 Ok(bytes) => {
@@ -123,7 +123,7 @@ where
         };
         let mut tx_ok = self.control_msg_tx.clone();
         tokio::spawn(async move {
-            let mut output = Self::writer(self.socket, self.ftps_mode);
+            let mut output = Self::writer(self.socket, self.ftps_mode).await;
             let result = match self.storage.list_fmt(&self.user, path).await {
                 Ok(cursor) => {
                     slog::debug!(self.logger, "Copying future for List");
@@ -166,7 +166,7 @@ where
         tokio::spawn(async move {
             match self.storage.nlst(&self.user, path).await {
                 Ok(mut input) => {
-                    let mut output = Self::writer(self.socket, self.ftps_mode);
+                    let mut output = Self::writer(self.socket, self.ftps_mode).await;
                     match tokio::io::copy(&mut input, &mut output).await {
                         Ok(_) => {
                             if let Err(err) = output.shutdown().await {
@@ -190,30 +190,32 @@ where
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     #[tracing_attributes::instrument]
-    fn writer(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
+    async fn writer(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         match ftps_mode {
-            FTPSConfig::Off => Box::new(socket),
+            FTPSConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
             FTPSConfig::On { certs_file, key_file } => {
-                let io = futures::executor::block_on(async move {
+                let io = async move {
                     let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
                     acceptor.accept(socket).await.unwrap()
-                });
-                Box::new(io)
+                }
+                .await;
+                Box::new(io) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>
             }
         }
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     #[tracing_attributes::instrument]
-    fn reader(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
+    async fn reader(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         match ftps_mode {
-            FTPSConfig::Off => Box::new(socket),
+            FTPSConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
             FTPSConfig::On { certs_file, key_file } => {
-                let io = futures::executor::block_on(async move {
+                let io = async move {
                     let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
                     acceptor.accept(socket).await.unwrap()
-                });
-                Box::new(io)
+                }
+                .await;
+                Box::new(io) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>
             }
         }
     }

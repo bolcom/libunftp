@@ -36,7 +36,7 @@ where
         }
 
         // Show them in alphabetical order.
-        feat_text.sort();
+        feat_text.sort_unstable();
         feat_text.insert(0, "Extensions supported:");
         feat_text.push("END");
 

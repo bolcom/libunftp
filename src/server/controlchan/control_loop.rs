@@ -19,9 +19,9 @@ use crate::{
     },
     storage::{ErrorKind, Metadata, StorageBackend},
 };
+use async_trait::async_trait;
 use futures::{
     channel::mpsc::{channel, Receiver, Sender},
-    executor::block_on,
     SinkExt, StreamExt,
 };
 use std::{convert::TryInto, net::SocketAddr, ops::Range, sync::Arc, time::Duration};
@@ -35,6 +35,11 @@ use tokio_util::codec::{Decoder, Framed};
 trait AsyncReadAsyncWriteSendUnpin: AsyncRead + AsyncWrite + Send + Unpin {}
 
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for T {}
+
+#[async_trait]
+trait EventHandler: Send + Sync {
+    async fn handle(&mut self, e: Event) -> Result<Reply, ControlChanError>;
+}
 
 #[derive(Debug)]
 pub struct Config<S, U>
@@ -82,7 +87,7 @@ where
         ..
     } = config;
 
-    let tls_configured = if let FTPSConfig::On { .. } = ftps_config { true } else { false };
+    let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
     let session: Session<S, U> = Session::new(Arc::new(storage))
@@ -96,23 +101,42 @@ where
     let shared_session: SharedSession<S, U> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr().unwrap();
 
-    let event_handler_chain = handle_event::<S, U>(
-        logger.clone(),
-        shared_session.clone(),
+    let event_chain = HandleEvent {
+        logger: logger.clone(),
+        session: shared_session.clone(),
         authenticator,
         tls_configured,
         passive_ports,
         passive_host,
-        control_msg_tx,
+        tx: control_msg_tx,
         local_addr,
         storage_features,
         proxyloop_msg_tx,
         control_connection_info,
-    );
-    let event_handler_chain = handle_with_auth::<S, U, _>(shared_session.clone(), event_handler_chain);
-    let event_handler_chain = handle_checking_ftps_control_chan_requirement::<S, U, _>(event_handler_chain, shared_session.clone(), ftps_required_control_chan);
-    let event_handler_chain = handle_checking_ftps_data_chan_requirement::<S, U, _>(event_handler_chain, shared_session, ftps_required_data_chan);
-    let event_handler_chain = handle_with_logging::<S, U, _>(logger.clone(), event_handler_chain);
+    };
+
+    let event_chain = HandleWithAuth {
+        session: shared_session.clone(),
+        next: event_chain,
+    };
+
+    let event_chain = HandleCheckingFtpsControlChanRequirement {
+        session: shared_session.clone(),
+        ftps_requirement: ftps_required_control_chan,
+        next: event_chain,
+    };
+
+    let event_chain = HandleCheckingFtpsDataChanRequirement {
+        session: shared_session.clone(),
+        ftps_requirement: ftps_required_data_chan,
+        next: event_chain,
+    };
+
+    let mut event_chain = HandleWithLogging {
+        logger: logger.clone(),
+        sequence_nr: 0,
+        next: event_chain,
+    };
 
     let codec = FTPCodec::new();
     let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FTPCodec> = codec.framed(Box::new(tcp_stream));
@@ -146,8 +170,7 @@ where
 
             match incoming {
                 None => {
-                    // Should not happen.
-                    slog::warn!(logger, "No event polled in control channel...");
+                    slog::warn!(logger, "No event polled in control channel! This should not happen and its probably a bug.");
                     return;
                 }
                 Some(Ok(event)) => {
@@ -161,7 +184,7 @@ where
                     }
 
                     if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
-                        slog::info!(logger, "Upgrading to TLS");
+                        slog::info!(logger, "Upgrading control channel to TLS");
 
                         // Get back the original TCP Stream
                         let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
@@ -182,7 +205,7 @@ where
 
                     // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
 
-                    match event_handler_chain(event) {
+                    match event_chain.handle(event).await {
                         Err(e) => {
                             slog::warn!(logger, "Event handler chain error: {:?}", e);
                             return;
@@ -225,201 +248,9 @@ where
     Ok(())
 }
 
-fn handle_checking_ftps_control_chan_requirement<S, U, N>(
-    next: N,
-    session: SharedSession<S, U>,
-    ftps_requirement: FtpsRequired,
-) -> impl Fn(Event) -> Result<Reply, ControlChanError>
-where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    N: Fn(Event) -> Result<Reply, ControlChanError>,
-{
-    move |event| match (ftps_requirement, event) {
-        (FtpsRequired::None, event) => next(event),
-        (FtpsRequired::All, event) => match event {
-            Event::Command(Command::CCC) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
-            Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
-                let is_tls = block_on(async {
-                    let session = session.lock().await;
-                    session.cmd_tls
-                });
-                match is_tls {
-                    true => next(event),
-                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel")),
-                }
-            }
-            _ => next(event),
-        },
-        (FtpsRequired::Accounts, event) => {
-            let (is_tls, username) = block_on(async {
-                let session = session.lock().await;
-                (session.cmd_tls, session.username.clone())
-            });
-            match (is_tls, event) {
-                (true, event) => next(event),
-                (false, Event::Command(Command::User { username })) => {
-                    if is_anonymous_user(&username[..])? {
-                        next(Event::Command(Command::User { username }))
-                    } else {
-                        Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
-                    }
-                }
-                (false, Event::Command(Command::Pass { password })) => {
-                    match username {
-                        None => {
-                            // Should not happen, username should have already been provided.
-                            Err(ControlChanError::new(ControlChanErrorKind::IllegalState))
-                        }
-                        Some(username) => {
-                            if is_anonymous_user(username)? {
-                                next(Event::Command(Command::Pass { password }))
-                            } else {
-                                Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
-                            }
-                        }
-                    }
-                }
-                (false, event) => next(event),
-            }
-        }
-    }
-}
-
-fn handle_checking_ftps_data_chan_requirement<S, U, N>(
-    next: N,
-    session: SharedSession<S, U>,
-    ftps_requirement: FtpsRequired,
-) -> impl Fn(Event) -> Result<Reply, ControlChanError>
-where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    N: Fn(Event) -> Result<Reply, ControlChanError>,
-{
-    move |event| match (ftps_requirement, event) {
-        (FtpsRequired::None, event) => next(event),
-        (FtpsRequired::All, event) => match event {
-            Event::Command(Command::Pasv) => {
-                let is_tls = block_on(async {
-                    let session = session.lock().await;
-                    session.data_tls
-                });
-                match is_tls {
-                    true => next(event),
-                    false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
-                }
-            }
-            _ => next(event),
-        },
-        (FtpsRequired::Accounts, event) => match event {
-            Event::Command(Command::Pasv) => {
-                let (is_tls, username_opt) = block_on(async {
-                    let session = session.lock().await;
-                    (session.cmd_tls, session.username.clone())
-                });
-
-                let username: String = username_opt.ok_or_else(|| ControlChanError::new(ControlChanErrorKind::IllegalState))?;
-                let is_anonymous = is_anonymous_user(username)?;
-                match (is_tls, is_anonymous) {
-                    (true, _) | (false, true) => next(event),
-                    _ => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
-                }
-            }
-            _ => next(event),
-        },
-    }
-}
-
 fn is_anonymous_user(username: impl AsRef<[u8]>) -> Result<bool, std::str::Utf8Error> {
     let username_str = std::str::from_utf8(username.as_ref())?;
     Ok(username_str == "anonymous")
-}
-
-fn handle_with_auth<S, U, N>(session: SharedSession<S, U>, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
-where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    N: Fn(Event) -> Result<Reply, ControlChanError>,
-{
-    move |event| match event {
-        // internal messages and the below commands are exempt from auth checks.
-        Event::InternalMsg(_)
-        | Event::Command(Command::Help)
-        | Event::Command(Command::User { .. })
-        | Event::Command(Command::Pass { .. })
-        | Event::Command(Command::Auth { .. })
-        | Event::Command(Command::Feat)
-        | Event::Command(Command::Noop)
-        | Event::Command(Command::Quit) => next(event),
-        _ => {
-            let session_state = block_on(async {
-                let session = session.lock().await;
-                session.state
-            });
-            if session_state != SessionState::WaitCmd {
-                Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
-            } else {
-                next(event)
-            }
-        }
-    }
-}
-
-fn handle_with_logging<S, U, N>(logger: slog::Logger, next: N) -> impl Fn(Event) -> Result<Reply, ControlChanError>
-where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    N: Fn(Event) -> Result<Reply, ControlChanError>,
-{
-    move |event| {
-        slog::info!(logger, "Processing control channel event {:?}", event);
-        next(event)
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn handle_event<S, U>(
-    logger: slog::Logger,
-    session: SharedSession<S, U>,
-    authenticator: Arc<dyn Authenticator<U>>,
-    tls_configured: bool,
-    passive_ports: Range<u16>,
-    passive_host: PassiveHost,
-    tx: Sender<InternalMsg>,
-    local_addr: SocketAddr,
-    storage_features: u32,
-    proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    control_connection_info: Option<ConnectionTuple>,
-) -> impl Fn(Event) -> Result<Reply, ControlChanError>
-where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-
-    S::Metadata: Metadata,
-{
-    move |event| -> Result<Reply, ControlChanError> {
-        match event {
-            Event::Command(cmd) => block_on(handle_command(
-                logger.clone(),
-                cmd,
-                session.clone(),
-                authenticator.clone(),
-                tls_configured,
-                passive_ports.clone(),
-                passive_host.clone(),
-                tx.clone(),
-                local_addr,
-                storage_features,
-                proxyloop_msg_tx.clone(),
-                control_connection_info,
-            )),
-            Event::InternalMsg(msg) => block_on(handle_internal_msg(logger.clone(), msg, session.clone())),
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -587,5 +418,257 @@ where
         ControlChanErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
         ControlChanErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
         _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
+    }
+}
+
+struct HandleEvent<S, U>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+{
+    logger: slog::Logger,
+    session: SharedSession<S, U>,
+    authenticator: Arc<dyn Authenticator<U>>,
+    tls_configured: bool,
+    passive_ports: Range<u16>,
+    passive_host: PassiveHost,
+    tx: Sender<InternalMsg>,
+    local_addr: SocketAddr,
+    storage_features: u32,
+    proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+    control_connection_info: Option<ConnectionTuple>,
+}
+
+#[async_trait]
+impl<S, U> EventHandler for HandleEvent<S, U>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        match event {
+            Event::Command(cmd) => {
+                handle_command(
+                    self.logger.clone(),
+                    cmd,
+                    self.session.clone(),
+                    self.authenticator.clone(),
+                    self.tls_configured,
+                    self.passive_ports.clone(),
+                    self.passive_host.clone(),
+                    self.tx.clone(),
+                    self.local_addr,
+                    self.storage_features,
+                    self.proxyloop_msg_tx.clone(),
+                    self.control_connection_info,
+                )
+                .await
+            }
+            Event::InternalMsg(msg) => handle_internal_msg(self.logger.clone(), msg, self.session.clone()).await,
+        }
+    }
+}
+
+struct HandleWithAuth<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    session: SharedSession<S, U>,
+    next: N,
+}
+
+#[async_trait]
+impl<S, U, N> EventHandler for HandleWithAuth<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        match event {
+            // internal messages and the below commands are exempt from auth checks.
+            Event::InternalMsg(_)
+            | Event::Command(Command::Help)
+            | Event::Command(Command::User { .. })
+            | Event::Command(Command::Pass { .. })
+            | Event::Command(Command::Auth { .. })
+            | Event::Command(Command::Feat)
+            | Event::Command(Command::Noop)
+            | Event::Command(Command::Quit) => self.next.handle(event).await,
+            _ => {
+                let session_state = async {
+                    let session = self.session.lock().await;
+                    session.state
+                }
+                .await;
+                if session_state != SessionState::WaitCmd {
+                    Ok(Reply::new(ReplyCode::NotLoggedIn, "Please authenticate"))
+                } else {
+                    self.next.handle(event).await
+                }
+            }
+        }
+    }
+}
+
+struct HandleWithLogging<N>
+where
+    N: EventHandler,
+{
+    logger: slog::Logger,
+    sequence_nr: u64,
+    next: N,
+}
+
+#[async_trait]
+impl<N> EventHandler for HandleWithLogging<N>
+where
+    N: EventHandler,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        self.sequence_nr += 1;
+        slog::info!(self.logger, "Processing control channel event {:?}", event; "seq" => self.sequence_nr);
+        let result = self.next.handle(event).await;
+        slog::info!(self.logger, "Result of processing control channel event {:?}", result; "seq" => self.sequence_nr);
+        result
+    }
+}
+
+struct HandleCheckingFtpsControlChanRequirement<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    session: SharedSession<S, U>,
+    ftps_requirement: FtpsRequired,
+    next: N,
+}
+
+#[async_trait]
+impl<S, U, N> EventHandler for HandleCheckingFtpsControlChanRequirement<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        match (self.ftps_requirement, event) {
+            (FtpsRequired::None, event) => self.next.handle(event).await,
+            (FtpsRequired::All, event) => match event {
+                Event::Command(Command::CCC) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
+                Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
+                    let is_tls = async {
+                        let session = self.session.lock().await;
+                        session.cmd_tls
+                    }
+                    .await;
+                    match is_tls {
+                        true => self.next.handle(event).await,
+                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel")),
+                    }
+                }
+                _ => self.next.handle(event).await,
+            },
+            (FtpsRequired::Accounts, event) => {
+                let (is_tls, username) = async {
+                    let session = self.session.lock().await;
+                    (session.cmd_tls, session.username.clone())
+                }
+                .await;
+                match (is_tls, event) {
+                    (true, event) => self.next.handle(event).await,
+                    (false, Event::Command(Command::User { username })) => {
+                        if is_anonymous_user(&username[..])? {
+                            self.next.handle(Event::Command(Command::User { username })).await
+                        } else {
+                            Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                        }
+                    }
+                    (false, Event::Command(Command::Pass { password })) => {
+                        match username {
+                            None => {
+                                // Should not happen, username should have already been provided.
+                                Err(ControlChanError::new(ControlChanErrorKind::IllegalState))
+                            }
+                            Some(username) => {
+                                if is_anonymous_user(username)? {
+                                    self.next.handle(Event::Command(Command::Pass { password })).await
+                                } else {
+                                    Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                                }
+                            }
+                        }
+                    }
+                    (false, event) => self.next.handle(event).await,
+                }
+            }
+        }
+    }
+}
+
+struct HandleCheckingFtpsDataChanRequirement<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    session: SharedSession<S, U>,
+    ftps_requirement: FtpsRequired,
+    next: N,
+}
+
+#[async_trait]
+impl<S, U, N> EventHandler for HandleCheckingFtpsDataChanRequirement<S, U, N>
+where
+    U: UserDetail + 'static,
+    S: StorageBackend<U> + 'static,
+    S::Metadata: Metadata,
+    N: EventHandler,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        match (self.ftps_requirement, event) {
+            (FtpsRequired::None, event) => self.next.handle(event).await,
+            (FtpsRequired::All, event) => match event {
+                Event::Command(Command::Pasv) => {
+                    let is_tls = async {
+                        let session = self.session.lock().await;
+                        session.data_tls
+                    }
+                    .await;
+                    match is_tls {
+                        true => self.next.handle(event).await,
+                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                    }
+                }
+                _ => self.next.handle(event).await,
+            },
+            (FtpsRequired::Accounts, event) => match event {
+                Event::Command(Command::Pasv) => {
+                    let (is_tls, username_opt) = async {
+                        let session = self.session.lock().await;
+                        (session.cmd_tls, session.username.clone())
+                    }
+                    .await;
+
+                    let username: String = username_opt.ok_or_else(|| ControlChanError::new(ControlChanErrorKind::IllegalState))?;
+                    let is_anonymous = is_anonymous_user(username)?;
+                    match (is_tls, is_anonymous) {
+                        (true, _) | (false, true) => self.next.handle(event).await,
+                        _ => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                    }
+                }
+                _ => self.next.handle(event).await,
+            },
+        }
     }
 }

@@ -13,7 +13,8 @@ os:
   - osx
   - windows
 
-before_script: 
+before_script:
+  - if [[ $TRAVIS_OS_NAME == "osx" ]]; then export TEST_FEATURES="--features rest_auth,jsonfile_auth"; else export TEST_FEATURES="--all-features"; fi
   - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
   - rustup component add rustfmt
   - if [ $TRAVIS_RUST_VERSION != 'nightly' ]; then rustup component add clippy; else rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy; fi
@@ -23,7 +24,7 @@ cache: cargo
 script:
   - cargo fmt --all -- --check
   - cargo clippy --all-features --all-targets
-  - cargo test --verbose --all-features --all-targets
+  - cargo test --verbose $TEST_FEATURES --all-targets
   - cargo build --verbose --all-features --all-targets
 
 matrix:

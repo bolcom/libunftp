@@ -1,7 +1,8 @@
 #![deny(clippy::all)]
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
-//! A FTP(S) server implementation with a couple of twists.
+
+//! libunftp is an extensible, async, cloud orientated FTP(S) server library.
 //!
 //! Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem,
 //! [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a
@@ -9,15 +10,13 @@
 //!
 //! It runs on top of the Tokio asynchronous run-time and tries to make use of Async IO as much as possible.
 //!
-//! It is currently under heavy development and not yet recommended for production use.
-//!
 //! # Quick Start
 //!
 //! Add the libunftp and tokio crates to your project's dependencies in Cargo.toml
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.12.0"
+//! libunftp = "0.13.0"
 //! tokio = { version = "0.2", features = ["full"] }
 //! ```
 //! Now you're ready to develop your server! Add the following to src/main.rs:
@@ -38,7 +37,6 @@
 //! ```sh
 //! lftp -p 2121 localhost
 //! ```
-
 pub mod auth;
 pub(crate) mod metrics;
 pub(crate) mod server;
