@@ -154,7 +154,7 @@ where
         loop {
             #[allow(unused_assignments)]
             let mut incoming = None;
-            let mut timeout_delay = tokio::time::delay_for(idle_session_timeout);
+            let mut timeout_delay = tokio::time::sleep(idle_session_timeout);
             tokio::select! {
                 Some(cmd_result) = command_source.next() => {
                     incoming = Some(cmd_result.map(Event::Command));

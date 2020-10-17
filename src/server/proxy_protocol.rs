@@ -236,9 +236,9 @@ mod tests {
     use std::net::{IpAddr::V4, Ipv4Addr};
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;
-    use tokio::time::delay_for;
+    use tokio::time::sleep;
 
-    async fn listen_server(mut listener: tokio::net::TcpListener) -> tokio::net::TcpStream {
+    async fn listen_server(listener: tokio::net::TcpListener) -> tokio::net::TcpStream {
         listener.accept().await.unwrap().0
     }
 
@@ -303,7 +303,7 @@ mod tests {
         let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
         let client = tokio::spawn(async move {
             c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535".as_ref()).await.unwrap();
-            delay_for(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
             c.write_all("\r\n".as_ref()).await.unwrap();
             c.shutdown(Shutdown::Both).unwrap();
         });

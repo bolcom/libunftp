@@ -111,6 +111,8 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         path: P,
         start_pos: u64,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
+        use tokio::io::AsyncSeekExt;
+
         let full_path = self.full_path(path).await?;
 
         // // TODO: Remove async block
@@ -132,6 +134,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         path: P,
         start_pos: u64,
     ) -> Result<u64> {
+        use tokio::io::AsyncSeekExt;
         // TODO: Add permission checks
         let path = path.as_ref();
         let full_path = if path.starts_with("/") {
@@ -255,7 +258,7 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = tokio::runtime::Builder::new().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
         let filename = path.file_name().unwrap();
         let my_meta = rt.block_on(fs.metadata(&Some(DefaultUser {}), filename)).unwrap();
 
@@ -280,7 +283,7 @@ mod tests {
         let fs = Filesystem::new(&root.path());
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = tokio::runtime::Builder::new().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
         let my_list = rt.block_on(fs.list(&Some(DefaultUser {}), "/")).unwrap();
 
         assert_eq!(my_list.len(), 1);
@@ -305,7 +308,7 @@ mod tests {
         // Create a filesystem StorageBackend with our root dir
         let fs = Filesystem::new(&root.path());
 
-        let mut rt = tokio::runtime::Builder::new().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
         let my_list = rt.block_on(fs.list_fmt(&Some(DefaultUser {}), "/")).unwrap();
 
         let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
@@ -328,7 +331,7 @@ mod tests {
         let fs = Filesystem::new(&root);
 
         // Since the filesystem backend is based on futures, we need a runtime to run it
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
         let mut my_file = rt.block_on(fs.get(&Some(DefaultUser {}), filename, 0)).unwrap();
         let mut my_content = Vec::new();
         rt.block_on(async move {
@@ -356,7 +359,7 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
 
         rt.block_on(fs.put(&Some(DefaultUser {}), orig_content.as_ref(), "greeting.txt", 0))
             .expect("Failed to `put` file");
@@ -418,7 +421,7 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
 
         rt.block_on(fs.mkd(&Some(DefaultUser {}), new_dir_name)).expect("Failed to mkd");
 
@@ -436,7 +439,7 @@ mod tests {
 
         // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
         // to completion
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
 
         let fs = Filesystem::new(&root);
         let r = rt.block_on(fs.rename(&Some(DefaultUser {}), &old_filename, &new_filename));

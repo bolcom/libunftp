@@ -36,7 +36,7 @@ Then add the libunftp and tokio crates to your project's dependencies in `Cargo.
 ```toml
 [dependencies]
 libunftp = "0.13.1"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "0.3", features = ["full"] }
 ```
 
 Now you're ready to develop your server!

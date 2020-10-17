@@ -6,7 +6,7 @@ use crate::auth::*;
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::{fs, time::Duration};
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 #[derive(Deserialize, Clone, Debug)]
 struct Credentials {
@@ -56,13 +56,13 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
                     return Ok(DefaultUser {});
                 } else {
                     // punish the failed login with a 1500ms delay before returning the error
-                    delay_for(Duration::from_millis(1500)).await;
+                    sleep(Duration::from_millis(1500)).await;
                     return Err(AuthenticationError::BadPassword);
                 }
             }
         }
         // punish the failed login with a 1500ms delay before returning the error
-        delay_for(Duration::from_millis(1500)).await;
+        sleep(Duration::from_millis(1500)).await;
         Err(AuthenticationError::BadUser)
     }
 }

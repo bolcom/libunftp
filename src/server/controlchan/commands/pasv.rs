@@ -111,7 +111,7 @@ impl Pasv {
 
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
 
-        let mut listener = match listener {
+        let listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
             Ok(l) => l,
         };
