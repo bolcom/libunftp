@@ -11,13 +11,17 @@ use crate::{
     server::tls::new_config,
     storage::{Error, ErrorKind, Metadata, StorageBackend},
 };
-use futures::{channel::mpsc::Sender, prelude::*};
+
+use futures::{
+    channel::mpsc::{Receiver, Sender},
+    prelude::*,
+};
 use std::{path::PathBuf, sync::Arc};
 use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
 
 #[derive(Debug)]
-pub struct DataCommandExecutor<Storage, User>
+struct DataCommandExecutor<Storage, User>
 where
     Storage: StorageBackend<User>,
     Storage::Metadata: Metadata,
@@ -31,6 +35,8 @@ where
     pub start_pos: u64,
     pub ftps_mode: FTPSConfig,
     pub logger: slog::Logger,
+    pub data_cmd_rx: Option<Receiver<Command>>,
+    pub data_abort_rx: Option<Receiver<()>>,
 }
 
 impl<Storage, User> DataCommandExecutor<Storage, User>
@@ -39,8 +45,41 @@ where
     Storage::Metadata: Metadata,
     User: UserDetail + 'static,
 {
+    pub async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
+        let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
+        let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
+        let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
+        // TODO: Use configured timeout
+        tokio::select! {
+            Some(command) = data_cmd_rx.next() => {
+                self.handle_incoming(DataCommand::ExternalCommand(command)).await;
+            },
+            Some(_) = data_abort_rx.next() => {
+                self.handle_incoming(DataCommand::Abort).await;
+            },
+            _ = &mut timeout_delay => {
+                slog::warn!(self.logger, "Data channel connection timed out");
+            }
+        };
+        let mut session = session_arc.lock().await;
+        session.data_busy = false;
+    }
+
     #[tracing_attributes::instrument]
-    pub async fn execute(self, cmd: Command) {
+    async fn handle_incoming(self, incoming: DataCommand) {
+        match incoming {
+            DataCommand::Abort => {
+                slog::info!(self.logger, "Data channel abort received");
+            }
+            DataCommand::ExternalCommand(command) => {
+                slog::info!(self.logger, "Data channel command received: {:?}", command);
+                self.execute_command(command).await;
+            }
+        }
+    }
+
+    #[tracing_attributes::instrument]
+    async fn execute_command(self, cmd: Command) {
         match cmd {
             Command::Retr { path } => {
                 self.exec_retr(path).await;
@@ -181,7 +220,6 @@ where
         }
     }
 
-    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     #[tracing_attributes::instrument]
     async fn writer(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         match ftps_mode {
@@ -197,7 +235,6 @@ where
         }
     }
 
-    // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
     #[tracing_attributes::instrument]
     async fn reader(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         match ftps_mode {
@@ -214,11 +251,13 @@ where
     }
 }
 
-/// Processing for the data connection. This will spawn a new async task with the actual processing.
+/// Starts processing for the data connection. This will spawn a new async task that will wait for
+/// a command from the control channel after which it will start to process the specified socket
+/// that is connected to the client.
 ///
-/// socket: the data socket we'll be working with
-/// tls: tells if this should be a TLS connection
-/// tx: channel to send the result of our operation to the control process
+/// logger: logger set up with needed context for use by the data channel.
+/// session_arc: the user session that is also shared with the control channel.
+/// socket: the data socket we'll be working with.
 #[tracing_attributes::instrument]
 pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, socket: tokio::net::TcpStream)
 where
@@ -228,7 +267,7 @@ where
 {
     // We introduce a block scope here to keep the lock on the session minimal. We basically copy the needed info
     // out and then unlock.
-    let (command_executor, data_cmd_rx, data_abort_rx) = {
+    let command_executor = {
         let mut session = session_arc.lock().await;
         let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
         let logger = logger.new(slog::o!("username" => username));
@@ -263,51 +302,16 @@ where
             start_pos: session.start_pos,
             ftps_mode,
             logger,
+            data_abort_rx: Some(data_abort_rx),
+            data_cmd_rx: Some(data_cmd_rx),
         };
 
         // The control channel need to know if the data channel is busy so that it doesn't time out
         // while the session is still in progress.
         session.data_busy = true;
 
-        (command_executor, data_cmd_rx, data_abort_rx)
+        command_executor
     };
 
-    tokio::spawn(async move {
-        let mut data_cmd_rx = data_cmd_rx.fuse();
-        let mut data_abort_rx = data_abort_rx.fuse();
-        let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
-        // TODO: Use configured timeout
-        tokio::select! {
-            Some(command) = data_cmd_rx.next() => {
-                handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
-            },
-            Some(_) = data_abort_rx.next() => {
-                handle_incoming(DataCommand::Abort, command_executor).await;
-            },
-            _ = &mut timeout_delay => {
-                slog::warn!(command_executor.logger, "Data channel connection timed out");
-            }
-        };
-        let mut session = session_arc.lock().await;
-        session.data_busy = false;
-    });
-}
-
-#[tracing_attributes::instrument]
-async fn handle_incoming<Storage, User>(incoming: DataCommand, command_executor: DataCommandExecutor<Storage, User>)
-where
-    Storage: StorageBackend<User> + 'static,
-    Storage::Metadata: Metadata,
-    User: UserDetail + 'static,
-{
-    let logger = command_executor.logger.clone();
-    match incoming {
-        DataCommand::Abort => {
-            slog::info!(logger, "Data channel abort received");
-        }
-        DataCommand::ExternalCommand(command) => {
-            slog::info!(logger, "Data channel command received: {:?}", command);
-            command_executor.execute(command).await;
-        }
-    }
+    tokio::spawn(command_executor.execute(session_arc));
 }
