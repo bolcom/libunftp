@@ -152,33 +152,27 @@ where
         // The control channel event loop
         slog::info!(logger, "Starting control loop");
         loop {
-            #[allow(unused_assignments)]
-            let mut incoming = None;
-            let mut timeout_delay = tokio::time::sleep(idle_session_timeout);
-            tokio::select! {
-                Some(cmd_result) = command_source.next() => {
-                    incoming = Some(cmd_result.map(Event::Command));
-                },
-                Some(msg) = control_msg_rx.next() => {
-                    incoming = Some(Ok(Event::InternalMsg(msg)));
-                },
-                _ = &mut timeout_delay => {
-                    let session = shared_session.lock().await;
-                    match session.data_busy {
-                        true => incoming = {
-                            slog::info!(logger, "Control channel timer expired but the data channel is still busy");
-                            None
-                        },
-                        false => {
-                            slog::info!(logger, "Control connection timed out");
-                            incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
-                        }
-                    };
-                }
+            let incoming = {
+                #[allow(unused_assignments)]
+                let mut incoming = None;
+                let mut timeout_delay = tokio::time::sleep(idle_session_timeout);
+                tokio::select! {
+                    Some(cmd_result) = command_source.next() => {
+                        incoming = Some(cmd_result.map(Event::Command));
+                    },
+                    Some(msg) = control_msg_rx.next() => {
+                        incoming = Some(Ok(Event::InternalMsg(msg)));
+                    },
+                    _ = &mut timeout_delay => {
+                        let session = shared_session.lock().await;
+                        match session.data_busy {
+                            true => incoming = None,
+                            false => incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)))
+                        };
+                    }
+                };
+                incoming
             };
-            // reset the timeout when we received something
-            timeout_delay = tokio::time::sleep(idle_session_timeout);
-
             match incoming {
                 None => {}
                 Some(Ok(event)) => {
