@@ -9,6 +9,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::string::String;
+use tokio_compat_02::FutureExt;
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -138,8 +139,8 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
 
         let client = Client::new();
 
-        let resp = client.request(req).await?;
-        let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+        let resp = client.request(req).compat().await?;
+        let body_bytes = hyper::body::to_bytes(resp.into_body()).compat().await?;
 
         let body: Value = serde_json::from_slice(&body_bytes)?;
         let parsed = match body.pointer(&selector) {

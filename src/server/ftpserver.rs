@@ -372,7 +372,7 @@ where
     #[tracing_attributes::instrument]
     async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
         let addr: std::net::SocketAddr = bind_address.into().parse()?;
-        let mut listener = tokio::net::TcpListener::bind(addr).await?;
+        let listener = tokio::net::TcpListener::bind(addr).await?;
         loop {
             match listener.accept().await {
                 Ok(stream) => {
@@ -404,8 +404,6 @@ where
         // request for a passive listening port.
         let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<S, U>, ProxyLoopReceiver<S, U>) = channel(1);
 
-        let mut incoming = listener.incoming();
-
         loop {
             // The 'proxy loop' handles two kinds of events:
             // - incoming tcp connections originating from the proxy
@@ -413,7 +411,7 @@ where
 
             tokio::select! {
 
-                Some(tcp_stream) = incoming.next() => {
+                Some(tcp_stream) = listener.next() => {
                     let mut tcp_stream = tcp_stream.unwrap();
                     let socket_addr = tcp_stream.peer_addr();
 

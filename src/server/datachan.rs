@@ -248,7 +248,7 @@ where
     };
 
     tokio::spawn(async move {
-        let mut timeout_delay = tokio::time::delay_for(std::time::Duration::from_secs(5 * 60));
+        let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.next() => {
