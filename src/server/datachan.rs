@@ -62,26 +62,24 @@ where
         let path = self.cwd.join(path);
         let mut tx_sending: Sender<InternalMsg> = self.control_msg_tx.clone();
         let mut tx_error: Sender<InternalMsg> = self.control_msg_tx.clone();
-        tokio::spawn(async move {
-            let mut output = Self::writer(self.socket, self.ftps_mode).await;
-            let get_result = self.storage.get_into(&self.user, path, self.start_pos, &mut output).await;
-            match get_result {
-                Ok(bytes_copied) => {
-                    if let Err(err) = output.shutdown().await {
-                        slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
-                    }
-                    if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
-                        slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
-                    }
+        let mut output = Self::writer(self.socket, self.ftps_mode).await;
+        let get_result = self.storage.get_into(&self.user, path, self.start_pos, &mut output).await;
+        match get_result {
+            Ok(bytes_copied) => {
+                if let Err(err) = output.shutdown().await {
+                    slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
                 }
-                Err(err) => {
-                    slog::warn!(self.logger, "Error copying streams during RETR: {}", err);
-                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                        slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
-                    }
+                if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
+                    slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
                 }
             }
-        });
+            Err(err) => {
+                slog::warn!(self.logger, "Error copying streams during RETR: {}", err);
+                if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                    slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
+                }
+            }
+        }
     }
 
     #[tracing_attributes::instrument]
@@ -89,24 +87,22 @@ where
         let path = self.cwd.join(path);
         let mut tx_ok = self.control_msg_tx.clone();
         let mut tx_error = self.control_msg_tx.clone();
-        tokio::spawn(async move {
-            let put_result = self
-                .storage
-                .put(&self.user, Self::reader(self.socket, self.ftps_mode).await, path, self.start_pos)
-                .await;
-            match put_result {
-                Ok(bytes) => {
-                    if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
-                        slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
-                    }
-                }
-                Err(err) => {
-                    if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
-                        slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
-                    }
+        let put_result = self
+            .storage
+            .put(&self.user, Self::reader(self.socket, self.ftps_mode).await, path, self.start_pos)
+            .await;
+        match put_result {
+            Ok(bytes) => {
+                if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
+                    slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
                 }
             }
-        });
+            Err(err) => {
+                if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                    slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
+                }
+            }
+        }
     }
 
     #[tracing_attributes::instrument]
@@ -122,37 +118,35 @@ where
             None => self.cwd.clone(),
         };
         let mut tx_ok = self.control_msg_tx.clone();
-        tokio::spawn(async move {
-            let mut output = Self::writer(self.socket, self.ftps_mode).await;
-            let result = match self.storage.list_fmt(&self.user, path).await {
-                Ok(cursor) => {
-                    slog::debug!(self.logger, "Copying future for List");
-                    let mut input = cursor;
-                    match tokio::io::copy(&mut input, &mut output).await {
-                        Ok(_) => Ok(InternalMsg::DirectorySuccessfullyListed),
-                        Err(e) => Err(e),
-                    }
+        let mut output = Self::writer(self.socket, self.ftps_mode).await;
+        let result = match self.storage.list_fmt(&self.user, path).await {
+            Ok(cursor) => {
+                slog::debug!(self.logger, "Copying future for List");
+                let mut input = cursor;
+                match tokio::io::copy(&mut input, &mut output).await {
+                    Ok(_) => Ok(InternalMsg::DirectorySuccessfullyListed),
+                    Err(e) => Err(e),
                 }
-                Err(err) => {
-                    slog::warn!(self.logger, "Failed to send directory list: {:?}", err);
-                    match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
-                        Ok(_) => Ok(InternalMsg::DirectoryListFailure),
-                        Err(e) => Err(e),
-                    }
-                }
-            };
-            match result {
-                Ok(msg) => {
-                    if let Err(err) = output.shutdown().await {
-                        slog::warn!(self.logger, "Could not shutdown output stream during LIST: {}", err);
-                    }
-                    if let Err(err) = tx_ok.send(msg).await {
-                        slog::error!(self.logger, "Could not notify control channel of LIST result: {}", err);
-                    }
-                }
-                Err(err) => slog::warn!(self.logger, "Failed to send reply to LIST: {}", err),
             }
-        });
+            Err(err) => {
+                slog::warn!(self.logger, "Failed to send directory list: {:?}", err);
+                match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
+                    Ok(_) => Ok(InternalMsg::DirectoryListFailure),
+                    Err(e) => Err(e),
+                }
+            }
+        };
+        match result {
+            Ok(msg) => {
+                if let Err(err) = output.shutdown().await {
+                    slog::warn!(self.logger, "Could not shutdown output stream during LIST: {}", err);
+                }
+                if let Err(err) = tx_ok.send(msg).await {
+                    slog::error!(self.logger, "Could not notify control channel of LIST result: {}", err);
+                }
+            }
+            Err(err) => slog::warn!(self.logger, "Failed to send reply to LIST: {}", err),
+        }
     }
 
     #[tracing_attributes::instrument]
@@ -163,29 +157,27 @@ where
         };
         let mut tx_ok = self.control_msg_tx.clone();
         let mut tx_error = self.control_msg_tx.clone();
-        tokio::spawn(async move {
-            match self.storage.nlst(&self.user, path).await {
-                Ok(mut input) => {
-                    let mut output = Self::writer(self.socket, self.ftps_mode).await;
-                    match tokio::io::copy(&mut input, &mut output).await {
-                        Ok(_) => {
-                            if let Err(err) = output.shutdown().await {
-                                slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
-                            }
-                            if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
-                                slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
-                            }
+        match self.storage.nlst(&self.user, path).await {
+            Ok(mut input) => {
+                let mut output = Self::writer(self.socket, self.ftps_mode).await;
+                match tokio::io::copy(&mut input, &mut output).await {
+                    Ok(_) => {
+                        if let Err(err) = output.shutdown().await {
+                            slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
                         }
-                        Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
+                        if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                            slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
+                        }
                     }
-                }
-                Err(e) => {
-                    if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
-                        slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
-                    }
+                    Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
                 }
             }
-        });
+            Err(e) => {
+                if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                    slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
+                }
+            }
+        }
     }
 
     // Lots of code duplication here. Should disappear completely when the storage backends are rewritten in async/.await style
