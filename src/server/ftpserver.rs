@@ -50,14 +50,14 @@ use std::{
 ///
 /// [`Authenticator`]: auth/trait.Authenticator.html
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
-pub struct Server<S, U>
+pub struct Server<Storage, User>
 where
-    S: StorageBackend<U>,
-    U: UserDetail,
+    Storage: StorageBackend<User>,
+    User: UserDetail,
 {
-    storage: Box<dyn (Fn() -> S) + Send + Sync>,
+    storage: Box<dyn (Fn() -> Storage) + Send + Sync>,
     greeting: &'static str,
-    authenticator: Arc<dyn Authenticator<U>>,
+    authenticator: Arc<dyn Authenticator<User>>,
     passive_ports: Range<u16>,
     passive_host: PassiveHost,
     collect_metrics: bool,
@@ -66,14 +66,14 @@ where
     ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
-    proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<S, U>>,
+    proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
     logger: slog::Logger,
 }
 
-impl<S, U> Debug for Server<S, U>
+impl<Storage, User> Debug for Server<Storage, User>
 where
-    S: StorageBackend<U>,
-    U: UserDetail,
+    Storage: StorageBackend<User>,
+    User: UserDetail,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Server")
@@ -94,20 +94,20 @@ where
     }
 }
 
-impl<S, U> Server<S, U>
+impl<Storage, User> Server<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
     /// Construct a new [`Server`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
     ///
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
-    pub fn new(sbe_generator: Box<dyn (Fn() -> S) + Send + Sync>) -> Self
+    pub fn new(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>) -> Self
     where
-        AnonymousAuthenticator: Authenticator<U>,
+        AnonymousAuthenticator: Authenticator<User>,
     {
         Self::with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
     }
@@ -117,7 +117,7 @@ where
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn with_authenticator(s: Box<dyn (Fn() -> S) + Send + Sync>, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_authenticator(s: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         Server {
             storage: s,
             greeting: DEFAULT_GREETING,
@@ -149,7 +149,7 @@ where
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         self.authenticator = authenticator;
         self
     }
@@ -378,8 +378,8 @@ where
                 Ok(stream) => {
                     let (tcp_stream, socket_addr) = stream;
                     slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
-                    let params: LoopConfig<S, U> = (&self).into();
-                    let result = spawn_loop::<S, U>(params, tcp_stream, None, None).await;
+                    let params: LoopConfig<Storage, User> = (&self).into();
+                    let result = spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
                     if let Err(controlchan_err) = result {
                         slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", controlchan_err)
                     }
@@ -402,7 +402,7 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<S, U>, ProxyLoopReceiver<S, U>) = channel(1);
+        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<Storage, User>, ProxyLoopReceiver<Storage, User>) = channel(1);
 
         loop {
             // The 'proxy loop' handles two kinds of events:
@@ -430,8 +430,8 @@ where
                     if connection.to_port == external_control_port {
                         let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
                         slog::info!(self.logger, "Connection from {:?} is a control connection", socket_addr);
-                        let params: LoopConfig<S,U> = (&self).into();
-                        let result = spawn_loop::<S,U>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                        let params: LoopConfig<Storage,User> = (&self).into();
+                        let result = spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
@@ -466,14 +466,8 @@ where
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
-                    let mut session = session.lock().await;
-                    let tx_some = session.control_msg_tx.clone();
-                    let s = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
-                    if let Some(tx) = tx_some {
-                        let logger = self.logger.new(slog::o!("username" => s));
-                        spawn_processing(logger, &mut session, tcp_stream, tx);
-                        switchboard.unregister(&connection);
-                    }
+                    spawn_processing(self.logger.clone(), session, tcp_stream).await;
+                    switchboard.unregister(&connection);
                 }
                 None => {
                     slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
@@ -485,7 +479,7 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<S, U>) {
+    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<Storage, User>) {
         slog::info!(self.logger, "Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
@@ -535,9 +529,9 @@ impl Server<Filesystem, DefaultUser> {
     }
 }
 
-impl<U> Server<Filesystem, U>
+impl<User> Server<Filesystem, User>
 where
-    U: UserDetail + 'static,
+    User: UserDetail + 'static,
 {
     /// Create a new `Server` using the filesystem backend and the specified authenticator
     ///
@@ -550,7 +544,7 @@ where
     ///
     /// let server = Server::with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
     /// ```
-    pub fn with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<U> + Send + Sync>) -> Self {
+    pub fn with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         let p = path.into();
         Server::with_authenticator(
             Box::new(move || {
@@ -562,13 +556,13 @@ where
     }
 }
 
-impl<S, U> From<&Server<S, U>> for LoopConfig<S, U>
+impl<Storage, User> From<&Server<Storage, User>> for LoopConfig<Storage, User>
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
-    fn from(server: &Server<S, U>) -> Self {
+    fn from(server: &Server<Storage, User>) -> Self {
         LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),

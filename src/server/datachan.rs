@@ -5,9 +5,10 @@ use super::{
     controlchan::command::Command,
     tls::FTPSConfig,
 };
+use crate::server::session::SharedSession;
 use crate::{
     auth::UserDetail,
-    server::{tls::new_config, Session},
+    server::tls::new_config,
     storage::{Error, ErrorKind, Metadata, StorageBackend},
 };
 use futures::{channel::mpsc::Sender, prelude::*};
@@ -16,27 +17,27 @@ use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
 
 #[derive(Debug)]
-pub struct DataCommandExecutor<S, U>
+pub struct DataCommandExecutor<Storage, User>
 where
-    S: StorageBackend<U>,
-    S::Metadata: Metadata,
-    U: UserDetail,
+    Storage: StorageBackend<User>,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
-    pub user: Arc<Option<U>>,
+    pub user: Arc<Option<User>>,
     pub socket: tokio::net::TcpStream,
     pub control_msg_tx: Sender<InternalMsg>,
-    pub storage: Arc<S>,
+    pub storage: Arc<Storage>,
     pub cwd: PathBuf,
     pub start_pos: u64,
     pub ftps_mode: FTPSConfig,
     pub logger: slog::Logger,
 }
 
-impl<S, U: Send + Sync + 'static> DataCommandExecutor<S, U>
+impl<Storage, User> DataCommandExecutor<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
     #[tracing_attributes::instrument]
     pub async fn execute(self, cmd: Command) {
@@ -219,57 +220,93 @@ where
 /// tls: tells if this should be a TLS connection
 /// tx: channel to send the result of our operation to the control process
 #[tracing_attributes::instrument]
-pub fn spawn_processing<S, U>(logger: slog::Logger, session: &mut Session<S, U>, socket: tokio::net::TcpStream, tx: Sender<InternalMsg>)
+pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, socket: tokio::net::TcpStream)
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
-    let mut data_cmd_rx = session.data_cmd_rx.take().unwrap().fuse();
-    let mut data_abort_rx = session.data_abort_rx.take().unwrap().fuse();
-    let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FTPSConfig::Off };
-    let command_executor = DataCommandExecutor {
-        user: session.user.clone(),
-        socket,
-        control_msg_tx: tx,
-        storage: Arc::clone(&session.storage),
-        cwd: session.cwd.clone(),
-        start_pos: session.start_pos,
-        ftps_mode,
-        logger,
+    // We introduce a block scope here to keep the lock on the session minimal. We basically copy the needed info
+    // out and then unlock.
+    let (command_executor, data_cmd_rx, data_abort_rx) = {
+        let mut session = session_arc.lock().await;
+        let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
+        let logger = logger.new(slog::o!("username" => username));
+        let control_msg_tx: Sender<InternalMsg> = match session.control_msg_tx {
+            Some(ref tx) => tx.clone(),
+            None => {
+                slog::error!(logger, "Control loop message sender expected to be set up. Aborting data loop.");
+                return;
+            }
+        };
+        let data_cmd_rx = match session.data_cmd_rx.take() {
+            Some(rx) => rx,
+            None => {
+                slog::error!(logger, "Data loop command receiver expected to be set up. Aborting data loop.");
+                return;
+            }
+        };
+        let data_abort_rx = match session.data_abort_rx.take() {
+            Some(rx) => rx,
+            None => {
+                slog::error!(logger, "Data loop abort receiver expected to be set up. Aborting data loop.");
+                return;
+            }
+        };
+        let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FTPSConfig::Off };
+        let command_executor = DataCommandExecutor {
+            user: session.user.clone(),
+            socket,
+            control_msg_tx,
+            storage: Arc::clone(&session.storage),
+            cwd: session.cwd.clone(),
+            start_pos: session.start_pos,
+            ftps_mode,
+            logger,
+        };
+
+        // The control channel need to know if the data channel is busy so that it doesn't time out
+        // while the session is still in progress.
+        session.data_busy = true;
+
+        (command_executor, data_cmd_rx, data_abort_rx)
     };
 
     tokio::spawn(async move {
+        let mut data_cmd_rx = data_cmd_rx.fuse();
+        let mut data_abort_rx = data_abort_rx.fuse();
         let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.next() => {
-                handle_incoming(command_executor.logger.clone(), DataCommand::ExternalCommand(command), command_executor).await;
+                handle_incoming(DataCommand::ExternalCommand(command), command_executor).await;
             },
             Some(_) = data_abort_rx.next() => {
-                handle_incoming(command_executor.logger.clone(), DataCommand::Abort, command_executor).await;
+                handle_incoming(DataCommand::Abort, command_executor).await;
             },
             _ = &mut timeout_delay => {
                 slog::warn!(command_executor.logger, "Data channel connection timed out");
-                return;
             }
         };
+        let mut session = session_arc.lock().await;
+        session.data_busy = false;
     });
 }
 
 #[tracing_attributes::instrument]
-async fn handle_incoming<S, U>(logger: slog::Logger, incoming: DataCommand, command_executor: DataCommandExecutor<S, U>)
+async fn handle_incoming<Storage, User>(incoming: DataCommand, command_executor: DataCommandExecutor<Storage, User>)
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
+    let logger = command_executor.logger.clone();
     match incoming {
         DataCommand::Abort => {
             slog::info!(logger, "Data channel abort received");
         }
         DataCommand::ExternalCommand(command) => {
-            slog::info!(logger, "Data command received: {:?}", command);
+            slog::info!(logger, "Data channel command received: {:?}", command);
             command_executor.execute(command).await;
         }
     }

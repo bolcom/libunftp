@@ -84,6 +84,9 @@ where
     // The starting byte for a STOR or RETR command. Set by the _Restart of Interrupted Transfer (REST)_
     // command to support resume functionality.
     pub start_pos: u64,
+    // Tells if the data loop is running. The control channel need to know if the data channel is
+    // busy so that it doesn't time out while the session is still in progress.
+    pub data_busy: bool,
 }
 
 impl<S, U: Send + Sync + Debug + 'static> Session<S, U>
@@ -111,6 +114,7 @@ where
             data_tls: false,
             collect_metrics: false,
             start_pos: 0,
+            data_busy: false,
         }
     }
 
