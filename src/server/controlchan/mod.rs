@@ -22,3 +22,8 @@ pub(crate) use error::ControlChanErrorKind;
 
 mod control_loop;
 pub(crate) use control_loop::{spawn as spawn_loop, Config as LoopConfig};
+
+mod auth;
+mod ftps;
+mod log;
+mod middleware;
