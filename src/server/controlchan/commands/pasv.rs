@@ -6,6 +6,7 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
+use crate::server::InternalMsg;
 use crate::{
     auth::UserDetail,
     server::{
@@ -67,7 +68,7 @@ impl Pasv {
     // modifies the session by adding channels that are used to communicate with the data connection
     // processing loop.
     #[tracing_attributes::instrument]
-    async fn setup_data_loop_comms<S, U>(&self, session: SharedSession<S, U>)
+    async fn setup_inter_loop_comms<S, U>(&self, session: SharedSession<S, U>, control_loop_tx: Sender<InternalMsg>)
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
@@ -81,6 +82,7 @@ impl Pasv {
         session.data_cmd_rx = Some(cmd_rx);
         session.data_abort_tx = Some(data_abort_tx);
         session.data_abort_rx = Some(data_abort_rx);
+        session.control_msg_tx = Some(control_loop_tx);
     }
 
     // For non-proxy mode we choose a data port here and start listening on it while letting the control
@@ -124,15 +126,12 @@ impl Pasv {
             ..
         } = reply
         {
-            self.setup_data_loop_comms(session.clone()).await;
+            self.setup_inter_loop_comms(session.clone(), tx).await;
             // Open the data connection in a new task and process it.
             // We cannot await this since we first need to let the client know where to connect :-)
             tokio::spawn(async move {
                 if let Ok((socket, _socket_addr)) = listener.accept().await {
-                    let mut session = session.lock().await;
-                    let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
-                    let logger = logger.new(slog::o!("username" => username));
-                    datachan::spawn_processing(logger, &mut session, socket, tx);
+                    datachan::spawn_processing(logger, session, socket).await;
                 }
             });
         }
@@ -149,7 +148,7 @@ impl Pasv {
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
-        self.setup_data_loop_comms(args.session.clone()).await;
+        self.setup_inter_loop_comms(args.session.clone(), args.tx).await;
         tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
         Ok(Reply::None)
     }

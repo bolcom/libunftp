@@ -163,16 +163,24 @@ where
                     incoming = Some(Ok(Event::InternalMsg(msg)));
                 },
                 _ = &mut timeout_delay => {
-                    slog::info!(logger, "Control connection timed out");
-                    incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
+                    let session = shared_session.lock().await;
+                    match session.data_busy {
+                        true => incoming = {
+                            slog::info!(logger, "Control channel timer expired but the data channel is still busy");
+                            None
+                        },
+                        false => {
+                            slog::info!(logger, "Control connection timed out");
+                            incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)));
+                        }
+                    };
                 }
             };
+            // reset the timeout when we received something
+            timeout_delay = tokio::time::sleep(idle_session_timeout);
 
             match incoming {
-                None => {
-                    slog::warn!(logger, "No event polled in control channel! This should not happen and its probably a bug.");
-                    return;
-                }
+                None => {}
                 Some(Ok(event)) => {
                     if collect_metrics {
                         add_event_metric(&event);
@@ -207,7 +215,7 @@ where
 
                     match event_chain.handle(event).await {
                         Err(e) => {
-                            slog::warn!(logger, "Event handler chain error: {:?}", e);
+                            slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", e);
                             return;
                         }
                         Ok(reply) => {
