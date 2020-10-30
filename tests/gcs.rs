@@ -5,6 +5,11 @@ use pretty_assertions::assert_eq;
 use std::process::{Command, Child};
 use std::{str, time::Duration};
 use lazy_static::*;
+use slog::*;
+use std::io::Cursor;
+
+use slog::Drain;
+use path_abs::PathInfo;
 
 lazy_static! {
     static ref DOCKER: Child = initialize();
@@ -42,8 +47,8 @@ async fn newly_created_dir_is_empty() {
 
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     ftp_stream.login("anonymous", "").await.unwrap();
-    ftp_stream.mkdir("mkdir_test").await.unwrap();
-    ftp_stream.cwd("mkdir_test").await.unwrap();
+    ftp_stream.mkdir("newly_created_dir_is_empty").await.unwrap();
+    ftp_stream.cwd("newly_created_dir_is_empty").await.unwrap();
     let list = ftp_stream.list(None).await.unwrap();
     assert_eq!(list.len(), 0)
 }
@@ -54,10 +59,22 @@ async fn deleting_directory_deletes_file() {
 
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     ftp_stream.login("anonymous", "").await.unwrap();
-    ftp_stream.mkdir("mkdir_test").await.unwrap();
-    ftp_stream.cwd("mkdir_test").await.unwrap();
+    ftp_stream.mkdir("deleting_directory_deletes_file").await.unwrap();
+    ftp_stream.cwd("deleting_directory_deletes_file").await.unwrap();
+
+    let content = b"Hello from this test!\n";
+    let mut reader = Cursor::new(content);
+
+    ftp_stream.put("greeting.txt", &mut reader).await.unwrap();
     let list = ftp_stream.list(None).await.unwrap();
-    assert_eq!(list.len(), 0)
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0], "greeting.txt");
+
+    ftp_stream.cwd("..").await.unwrap();
+    ftp_stream.rmdir("deleting_directory_deletes_file").await.unwrap();
+
+    let list = ftp_stream.list(None).await.unwrap();
+    assert!(!list.iter().any(|t| t.starts_with("deleting_directory_deletes_file")));
 }
 
 async fn test_init() -> &'static str {
@@ -65,10 +82,15 @@ async fn test_init() -> &'static str {
     let addr: &str = "127.0.0.1:1234";
 
     let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").await.unwrap();
+    let decorator = slog_term::TermDecorator::new().stderr().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+
     tokio::spawn(
         Server::new(Box::new(move || {
             CloudStorage::new("http://localhost:9081", "test-bucket", service_account_key.clone())
         }))
+            .logger(Some(Logger::root(drain, o!())))
             .listen(addr)
     );
 
