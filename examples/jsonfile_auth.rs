@@ -11,7 +11,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     info!("Starting ftp server on {}", addr);
-    let mut runtime = tokio::runtime::Builder::new().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
     runtime.block_on(server.listen(addr))?;
 
     Ok(())

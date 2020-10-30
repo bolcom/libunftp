@@ -7,6 +7,7 @@ use std::{str, time::Duration};
 use lazy_static::*;
 use slog::*;
 use std::io::Cursor;
+use tokio_compat_02::FutureExt;
 
 use slog::Drain;
 use path_abs::PathInfo;
@@ -81,7 +82,7 @@ async fn test_init() -> &'static str {
     DOCKER.id();
     let addr: &str = "127.0.0.1:1234";
 
-    let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").await.unwrap();
+    let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").compat().await.unwrap();
     let decorator = slog_term::TermDecorator::new().stderr().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();

@@ -15,8 +15,7 @@ pub enum DataCommand {
     Abort,
 }
 
-/// InternalMsg represents a status message from the data channel handler to our main (per connection)
-/// control loop.
+/// Messages that can be sent to the control channel loop.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum InternalMsg {

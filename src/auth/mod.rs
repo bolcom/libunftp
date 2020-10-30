@@ -13,7 +13,7 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.40"
+//! async-trait = "0.1.41"
 //! ```
 //!
 //! 2. Implement the [`Authenticator`] trait and optionally the [`UserDetail`] trait:
