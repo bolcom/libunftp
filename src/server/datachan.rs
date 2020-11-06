@@ -295,7 +295,7 @@ where
                 }
             }
             Err(err) => {
-                slog::info!(logger, "Couldn't determine data channel address.\n{:?}", err);
+                slog::error!(logger, "Couldn't determine data channel address.\n{:?}", err);
                 return;
             }
         }
