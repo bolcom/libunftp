@@ -280,6 +280,13 @@ where
                         controlcahn_ip,
                         err
                     )
+                } else {
+                    slog::info!(
+                        logger,
+                        "Closing datachannel for ip ({}) that does not match the ip({}) of the control channel.",
+                        datachan_addr.ip(),
+                        controlcahn_ip
+                    )
                 }
                 return;
             }
