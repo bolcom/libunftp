@@ -276,7 +276,7 @@ where
                 let controlcahn_ip = session.source.ip();
                 if controlcahn_ip != datachan_addr.ip() {
                     if let Err(err) = socket.shutdown(std::net::Shutdown::Both) {
-                        slog::info!(
+                        slog::error!(
                             logger,
                             "Couldn't close datachannel for ip ({}) that does not match the ip({}) of the control channel.\n{:?}",
                             datachan_addr.ip(),
