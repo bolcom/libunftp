@@ -5,7 +5,6 @@ use crate::{
         chancomms::ProxyLoopSender,
         controlchan::{Command, Reply},
         ftpserver::options::PassiveHost,
-        proxy_protocol::ConnectionTuple,
         session::SharedSession,
         InternalMsg,
     },
@@ -43,6 +42,5 @@ where
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
     pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    pub control_connection_info: Option<ConnectionTuple>,
     pub logger: slog::Logger,
 }

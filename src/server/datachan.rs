@@ -45,7 +45,7 @@ where
     Storage::Metadata: Metadata,
     User: UserDetail + 'static,
 {
-    pub async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
+    async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
         let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
         let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
         let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
@@ -267,6 +267,29 @@ where
 {
     // We introduce a block scope here to keep the lock on the session minimal. We basically copy the needed info
     // out and then unlock.
+
+    match socket.peer_addr() {
+        Ok(datachan_addr) => {
+            let controlcahn_ip = session_arc.lock().await.source.ip();
+            if controlcahn_ip != datachan_addr.ip() {
+                if let Err(err) = socket.shutdown(std::net::Shutdown::Both) {
+                    slog::info!(
+                        logger,
+                        "Couldn't close datachannel for ip ({}) that does not match the ip({}) of the control channel.\n{:?}",
+                        datachan_addr.ip(),
+                        controlcahn_ip,
+                        err
+                    )
+                }
+                return;
+            }
+        }
+        Err(err) => {
+            slog::info!(logger, "Couldn't determine data channel address.\n{:?}", err);
+            return;
+        }
+    }
+
     let command_executor = {
         let mut session = session_arc.lock().await;
         let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
