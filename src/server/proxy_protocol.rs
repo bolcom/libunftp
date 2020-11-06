@@ -41,7 +41,7 @@ pub struct ConnectionTuple {
 }
 
 impl ConnectionTuple {
-    pub fn hash(&self) -> String {
+    pub fn key(&self) -> String {
         format!("{}.{}", self.source.ip(), self.destination.port())
     }
 }
@@ -174,7 +174,7 @@ where
     }
 
     pub fn unregister(&mut self, connection: &ConnectionTuple) {
-        let hash = connection.hash();
+        let hash = connection.key();
         match self.switchboard.remove(&hash) {
             Some(_) => (),
             None => {
@@ -185,7 +185,7 @@ where
 
     #[tracing_attributes::instrument]
     pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
-        let hash = connection.hash();
+        let hash = connection.key();
 
         match self.switchboard.get(&hash) {
             Some(session) => session.clone(),
