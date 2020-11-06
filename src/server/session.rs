@@ -1,14 +1,18 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::{chancomms::InternalMsg, controlchan::command::Command, proxy_protocol::ConnectionTuple, tls::FTPSConfig};
+use super::{chancomms::InternalMsg, controlchan::command::Command, tls::FTPSConfig};
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
 };
 use futures::channel::mpsc::{Receiver, Sender};
-use std::fmt::Formatter;
-use std::{fmt::Debug, path::PathBuf, sync::Arc};
+use std::{
+    fmt::{Debug, Formatter},
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+};
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Debug)]
@@ -64,9 +68,10 @@ where
     pub data_abort_rx: Option<Receiver<()>>,
     // This may not be needed here...
     pub control_msg_tx: Option<Sender<InternalMsg>>,
-    // If in proxy protocol mode then this holds the source and destination IP+port used to make
-    // the control connection.
-    pub control_connection_info: Option<ConnectionTuple>,
+    // The socket address of the client on the control channel
+    pub source: SocketAddr,
+    // The socket address of the proxy protocol destination
+    pub destination: Option<SocketAddr>,
     pub cwd: std::path::PathBuf,
     // After a RNFR command this will hold the source path used by the RNTO command.
     pub rename_from: Option<PathBuf>,
@@ -94,7 +99,7 @@ where
     S: StorageBackend<U> + 'static,
     S::Metadata: Metadata,
 {
-    pub(super) fn new(storage: Arc<S>) -> Self {
+    pub(super) fn new(storage: Arc<S>, source: SocketAddr) -> Self {
         Session {
             trace_id: TraceId::new(),
             user: Arc::new(None),
@@ -105,7 +110,8 @@ where
             data_abort_tx: None,
             data_abort_rx: None,
             control_msg_tx: None,
-            control_connection_info: None,
+            source,
+            destination: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
@@ -136,8 +142,8 @@ where
         self
     }
 
-    pub fn control_connection_info(mut self, info: Option<ConnectionTuple>) -> Self {
-        self.control_connection_info = info;
+    pub fn destination(mut self, destination: Option<SocketAddr>) -> Self {
+        self.destination = destination;
         self
     }
 }

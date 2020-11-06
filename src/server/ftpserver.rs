@@ -23,7 +23,7 @@ use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{
     fmt::Debug,
-    net::{IpAddr, Shutdown, SocketAddr},
+    net::{IpAddr, Shutdown},
     ops::Range,
     path::PathBuf,
     sync::Arc,
@@ -427,19 +427,20 @@ where
                     // Based on the proxy protocol header, and the configured control port number,
                     // we differentiate between connections for the control channel,
                     // and connections for the data channel.
-                    if connection.to_port == external_control_port {
-                        let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                        slog::info!(self.logger, "Connection from {:?} is a control connection", socket_addr);
+                    let destination_port = connection.destination.port();
+                    if destination_port == external_control_port {
+                        let source = connection.source;
+                        slog::info!(self.logger, "Connection from {:?} is a control connection", source);
                         let params: LoopConfig<Storage,User> = (&self).into();
-                        let result = spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                        let result = spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
                     } else {
                         // handle incoming data connections
-                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
-                        if !self.passive_ports.contains(&connection.to_port) {
-                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, destination_port);
+                        if !self.passive_ports.contains(&destination_port) {
+                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.passive_ports);
                             tcp_stream.shutdown(Shutdown::Both).unwrap();
                             continue;
                         }
@@ -493,13 +494,13 @@ where
             reserved_port = port
         }
         let session = session_arc.lock().await;
-        if let Some(conn) = session.control_connection_info {
-            let conn_ip = match conn.to_ip {
-                IpAddr::V4(ref ip) => ip,
+        if let Some(destination) = session.destination {
+            let destination_ip = match destination.ip() {
+                IpAddr::V4(ip) => ip,
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.passive_host.clone(), conn_ip, reserved_port).await;
+            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.passive_host.clone(), &destination_ip, reserved_port).await;
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {

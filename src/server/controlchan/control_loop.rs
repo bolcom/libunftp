@@ -12,7 +12,6 @@ use crate::{
             Reply, ReplyCode,
         },
         ftpserver::options::{FtpsRequired, PassiveHost},
-        proxy_protocol::ConnectionTuple,
         session::SharedSession,
         tls::FTPSConfig,
         Event, Session, SessionState,
@@ -65,7 +64,7 @@ where
 pub async fn spawn<S, U>(
     config: Config<S, U>,
     tcp_stream: TcpStream,
-    control_connection_info: Option<ConnectionTuple>,
+    destination: Option<SocketAddr>,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
 ) -> Result<(), ControlChanError>
 where
@@ -90,16 +89,16 @@ where
     let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-    let session: Session<S, U> = Session::new(Arc::new(storage))
+    let session: Session<S, U> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(config.collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
-        .control_connection_info(control_connection_info);
+        .destination(destination);
 
     let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id)));
 
     let shared_session: SharedSession<S, U> = Arc::new(Mutex::new(session));
-    let local_addr = tcp_stream.local_addr().unwrap();
+    let local_addr = tcp_stream.local_addr()?;
 
     let event_chain = HandleEvent {
         logger: logger.clone(),
@@ -112,7 +111,6 @@ where
         local_addr,
         storage_features,
         proxyloop_msg_tx,
-        control_connection_info,
     };
 
     let event_chain = HandleWithAuth {
@@ -269,7 +267,6 @@ async fn handle_command<S, U>(
     local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    control_connection_info: Option<ConnectionTuple>,
 ) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
@@ -288,7 +285,6 @@ where
         local_addr,
         storage_features,
         proxyloop_msg_tx,
-        control_connection_info,
         logger,
     };
 
@@ -439,7 +435,6 @@ where
     local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    control_connection_info: Option<ConnectionTuple>,
 }
 
 #[async_trait]
@@ -464,7 +459,6 @@ where
                     self.local_addr,
                     self.storage_features,
                     self.proxyloop_msg_tx.clone(),
-                    self.control_connection_info,
                 )
                 .await
             }
