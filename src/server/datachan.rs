@@ -284,7 +284,7 @@ where
                             err
                         )
                     } else {
-                        slog::info!(
+                        slog::warn!(
                             logger,
                             "Closing datachannel for ip ({}) that does not match the ip({}) of the control channel.",
                             datachan_addr.ip(),
