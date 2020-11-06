@@ -95,7 +95,7 @@ async fn test_init() -> &'static str {
             .listen(addr)
     );
 
-    tokio::time::delay_for(Duration::new(1, 0)).await;
+    tokio::time::sleep(Duration::new(1, 0)).await;
 
     return addr;
 }
