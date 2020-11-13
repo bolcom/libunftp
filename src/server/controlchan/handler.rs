@@ -15,32 +15,32 @@ use futures::channel::mpsc::Sender;
 use std::{ops::Range, result::Result, sync::Arc};
 
 #[async_trait]
-pub(crate) trait CommandHandler<S, U>: Send + Sync + std::fmt::Debug
+pub(crate) trait CommandHandler<Storage, User>: Send + Sync + std::fmt::Debug
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>;
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
 }
 
 /// Convenience struct to group command args
 #[derive(Debug)]
-pub(crate) struct CommandContext<S, U>
+pub(crate) struct CommandContext<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata + Sync,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata + Sync,
+    User: UserDetail + 'static,
 {
     pub cmd: Command,
-    pub session: SharedSession<S, U>,
-    pub authenticator: Arc<dyn Authenticator<U>>,
+    pub session: SharedSession<Storage, User>,
+    pub authenticator: Arc<dyn Authenticator<User>>,
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
     pub tx: Sender<InternalMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+    pub proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
     pub logger: slog::Logger,
 }

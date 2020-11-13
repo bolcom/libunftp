@@ -41,14 +41,14 @@ trait EventHandler: Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct Config<S, U>
+pub struct Config<Storage, User>
 where
-    S: StorageBackend<U>,
-    U: UserDetail,
+    Storage: StorageBackend<User>,
+    User: UserDetail,
 {
-    pub storage: S,
+    pub storage: Storage,
     pub greeting: &'static str,
-    pub authenticator: Arc<dyn Authenticator<U>>,
+    pub authenticator: Arc<dyn Authenticator<User>>,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FTPSConfig,
@@ -61,16 +61,16 @@ where
 
 /// Does TCP processing when a FTP client connects
 #[tracing_attributes::instrument]
-pub async fn spawn<S, U>(
-    config: Config<S, U>,
+pub async fn spawn<Storage, User>(
+    config: Config<Storage, User>,
     tcp_stream: TcpStream,
     destination: Option<SocketAddr>,
-    proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
+    proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
 ) -> Result<(), ControlChanError>
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     let Config {
         storage,
@@ -89,7 +89,7 @@ where
     let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
-    let session: Session<S, U> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
+    let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(config.collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
@@ -97,7 +97,7 @@ where
 
     let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id)));
 
-    let shared_session: SharedSession<S, U> = Arc::new(Mutex::new(session));
+    let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr()?;
 
     let event_chain = HandleEvent {
@@ -223,7 +223,7 @@ where
                     }
                 }
                 Some(Err(e)) => {
-                    let reply = handle_control_channel_error::<S, U>(logger.clone(), e, collect_metrics);
+                    let reply = handle_control_channel_error::<Storage, User>(logger.clone(), e, collect_metrics);
                     let mut close_connection = false;
                     if let Reply::CodeAndMsg {
                         code: ReplyCode::ClosingControlConnection,

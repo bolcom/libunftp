@@ -1,19 +1,12 @@
 //! The RFC 2228 Clear Command Channel (`CCC`) command
 
-use crate::{
-    auth::UserDetail,
-    server::{
-        chancomms::InternalMsg,
-        controlchan::{
-            error::ControlChanError,
-            handler::{CommandContext, CommandHandler},
-            Reply, ReplyCode,
-        },
-    },
-    storage::{Metadata, StorageBackend},
-};
+use crate::auth::UserDetail;
+use crate::server::controlchan::error::ControlChanError;
+use crate::server::controlchan::handler::{CommandContext, CommandHandler};
+use crate::server::{Reply, ReplyCode};
+use crate::storage::{Metadata, StorageBackend};
+
 use async_trait::async_trait;
-use futures::{channel::mpsc::Sender, prelude::*};
 
 #[derive(Debug)]
 pub struct Ccc;
