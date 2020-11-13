@@ -204,6 +204,8 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .method(Method::POST)
             .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        XXXX size hol hogyan???
         let response: Response<Body> = client
             .request(request)
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))

@@ -2,7 +2,7 @@ use async_ftp::FtpStream;
 use libunftp::storage::cloud_storage::CloudStorage;
 use libunftp::Server;
 use pretty_assertions::assert_eq;
-use std::process::{Command, Child};
+use std::process::Command;
 use std::{str, time::Duration};
 use lazy_static::*;
 use slog::*;
@@ -13,10 +13,10 @@ use slog::Drain;
 use path_abs::PathInfo;
 
 lazy_static! {
-    static ref DOCKER: Child = initialize();
+    static ref DOCKER: () = initialize();
 }
 
-pub fn initialize() -> Child {
+pub fn initialize() {
     let buf = std::env::current_dir().unwrap();
     let current_dir = buf.display();
 
@@ -25,6 +25,7 @@ pub fn initialize() -> Child {
     let mut command = Command::new("docker");
     command
         .arg("run")
+        .arg("-d")
         .arg("--name")
         .arg("fake-gcs")
         .arg("-v")
@@ -37,49 +38,48 @@ pub fn initialize() -> Child {
         .arg("-port")
         .arg("9081");
 
-    eprintln!("{:?}", command);
-    return command.spawn()
-        .expect("docker failed");
+    println!("{:?}", command);
+    command.status().expect("docker failed");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn newly_created_dir_is_empty() {
     let addr = test_init().await;
 
-    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
-    ftp_stream.login("anonymous", "").await.unwrap();
-    ftp_stream.mkdir("newly_created_dir_is_empty").await.unwrap();
-    ftp_stream.cwd("newly_created_dir_is_empty").await.unwrap();
-    let list = ftp_stream.list(None).await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    ftp_stream.login("anonymous", "").compat().await.unwrap();
+    ftp_stream.mkdir("newly_created_dir_is_empty").compat().await.unwrap();
+    ftp_stream.cwd("newly_created_dir_is_empty").compat().await.unwrap();
+    let list = ftp_stream.list(None).compat().await.unwrap();
     assert_eq!(list.len(), 0)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn deleting_directory_deletes_file() {
     let addr = test_init().await;
 
-    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
-    ftp_stream.login("anonymous", "").await.unwrap();
-    ftp_stream.mkdir("deleting_directory_deletes_file").await.unwrap();
-    ftp_stream.cwd("deleting_directory_deletes_file").await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    ftp_stream.login("anonymous", "").compat().await.unwrap();
+    ftp_stream.mkdir("deleting_directory_deletes_file").compat().await.unwrap();
+    ftp_stream.cwd("deleting_directory_deletes_file").compat().await.unwrap();
 
     let content = b"Hello from this test!\n";
     let mut reader = Cursor::new(content);
 
-    ftp_stream.put("greeting.txt", &mut reader).await.unwrap();
-    let list = ftp_stream.list(None).await.unwrap();
+    ftp_stream.put("greeting.txt", &mut reader).compat().await.unwrap();
+    let list = ftp_stream.list(None).compat().await.unwrap();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0], "greeting.txt");
 
-    ftp_stream.cwd("..").await.unwrap();
-    ftp_stream.rmdir("deleting_directory_deletes_file").await.unwrap();
+    ftp_stream.cwd("..").compat().await.unwrap();
+    ftp_stream.rmdir("deleting_directory_deletes_file").compat().await.unwrap();
 
-    let list = ftp_stream.list(None).await.unwrap();
+    let list = ftp_stream.list(None).compat().await.unwrap();
     assert!(!list.iter().any(|t| t.starts_with("deleting_directory_deletes_file")));
 }
 
 async fn test_init() -> &'static str {
-    DOCKER.id();
+    lazy_static::initialize(&DOCKER);
     let addr: &str = "127.0.0.1:1234";
 
     let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").compat().await.unwrap();
