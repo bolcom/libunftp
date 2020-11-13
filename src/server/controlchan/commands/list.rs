@@ -13,6 +13,7 @@
 // to system, this information may be hard to use automatically
 // in a program, but may be quite useful to a human user.
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -38,7 +39,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.cmd.clone() {
+            Command::List { path, options } => DataChanCmd::List { path, options },
+            _ => panic!("Programmer error, expected command to be LIST"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

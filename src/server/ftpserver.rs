@@ -2,7 +2,7 @@ pub mod error;
 pub mod options;
 
 use super::{
-    chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
+    chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
     controlchan::{spawn_loop, LoopConfig},
     datachan::spawn_processing,
     ftpserver::{error::ServerError, options::FtpsRequired},
@@ -505,7 +505,7 @@ where
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
                 let mut tx = tx.clone();
-                tx.send(InternalMsg::CommandChannelReply(reply)).await.unwrap();
+                tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
             }
         }
     }

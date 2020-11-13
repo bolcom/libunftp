@@ -9,7 +9,7 @@ mod proxy_protocol;
 mod session;
 mod tls;
 
-pub(crate) use chancomms::InternalMsg;
+pub(crate) use chancomms::ControlChanMsg;
 pub(crate) use controlchan::command::Command;
 pub(crate) use controlchan::reply::{Reply, ReplyCode};
 pub(crate) use controlchan::ControlChanErrorKind;

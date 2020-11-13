@@ -20,7 +20,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -68,8 +68,8 @@ where
                 let user = session.user.clone();
                 let storage = Arc::clone(&session.storage);
 
-                let mut tx_success: Sender<InternalMsg> = args.tx.clone();
-                let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+                let mut tx_success: Sender<ControlChanMsg> = args.tx.clone();
+                let mut tx_fail: Sender<ControlChanMsg> = args.tx.clone();
                 let logger = args.logger;
 
                 tokio::spawn(async move {
@@ -79,7 +79,7 @@ where
                             match cursor.read_to_string(&mut result) {
                                 Ok(_) => {
                                     if let Err(err) = tx_success
-                                        .send(InternalMsg::CommandChannelReply(Reply::new_with_string(ReplyCode::CommandOkay, result)))
+                                        .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(ReplyCode::CommandOkay, result)))
                                         .await
                                     {
                                         slog::warn!(logger, "{}", err);
@@ -89,7 +89,7 @@ where
                             }
                         }
                         Err(e) => {
-                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
                                 slog::warn!(logger, "{}", err);
                             }
                         }

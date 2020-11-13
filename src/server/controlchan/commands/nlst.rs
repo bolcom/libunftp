@@ -13,6 +13,7 @@
 // further process the files automatically.  For example, in
 // the implementation of a "multiple get" function.
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -39,7 +40,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.cmd.clone() {
+            Command::Nlst { path } => DataChanCmd::Nlst { path },
+            _ => panic!("Programmer error, expected command to be NLST"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

@@ -1,12 +1,11 @@
-use super::error::ControlChanError;
 use crate::{
     auth::{Authenticator, UserDetail},
     server::{
         chancomms::ProxyLoopSender,
-        controlchan::{Command, Reply},
+        controlchan::{error::ControlChanError, Command, Reply},
         ftpserver::options::PassiveHost,
         session::SharedSession,
-        InternalMsg,
+        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -38,7 +37,7 @@ where
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
-    pub tx: Sender<InternalMsg>,
+    pub tx: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
     pub proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,

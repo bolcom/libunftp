@@ -15,7 +15,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -39,10 +39,10 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        let mut tx: Sender<InternalMsg> = args.tx.clone();
+        let mut tx: Sender<ControlChanMsg> = args.tx.clone();
         let logger = args.logger;
         //TODO does this make sense? The command is not sent and yet an Ok is replied
-        if let Err(send_res) = tx.send(InternalMsg::Quit).await {
+        if let Err(send_res) = tx.send(ControlChanMsg::Quit).await {
             slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))

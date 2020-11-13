@@ -1,6 +1,6 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
 
-use crate::server::{Command, ControlChanErrorKind, Event, InternalMsg, Reply, ReplyCode};
+use crate::server::{Command, ControlChanErrorKind, ControlChanMsg, Event, Reply, ReplyCode};
 
 use lazy_static::*;
 use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
@@ -29,11 +29,11 @@ pub fn add_event_metric(event: &Event) {
             add_command_metric(&cmd);
         }
         Event::InternalMsg(msg) => match msg {
-            InternalMsg::SendData { bytes } => {
+            ControlChanMsg::SendData { bytes } => {
                 FTP_BACKEND_READ_BYTES.inc_by(*bytes);
                 FTP_BACKEND_READ_FILES.inc();
             }
-            InternalMsg::WrittenData { bytes } => {
+            ControlChanMsg::WrittenData { bytes } => {
                 FTP_BACKEND_WRITE_BYTES.inc_by(*bytes);
                 FTP_BACKEND_WRITE_FILES.inc();
             }

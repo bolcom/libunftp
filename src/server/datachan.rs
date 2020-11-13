@@ -1,8 +1,7 @@
 //! Contains code pertaining to the FTP *data* channel
 
 use super::{
-    chancomms::{DataCommand, InternalMsg},
-    controlchan::command::Command,
+    chancomms::{ControlChanMsg, DataChanMsg},
     tls::FTPSConfig,
 };
 use crate::server::session::SharedSession;
@@ -12,6 +11,7 @@ use crate::{
     storage::{Error, ErrorKind, Metadata, StorageBackend},
 };
 
+use crate::server::chancomms::DataChanCmd;
 use futures::{
     channel::mpsc::{Receiver, Sender},
     prelude::*,
@@ -29,13 +29,13 @@ where
 {
     pub user: Arc<Option<User>>,
     pub socket: tokio::net::TcpStream,
-    pub control_msg_tx: Sender<InternalMsg>,
+    pub control_msg_tx: Sender<ControlChanMsg>,
     pub storage: Arc<Storage>,
     pub cwd: PathBuf,
     pub start_pos: u64,
     pub ftps_mode: FTPSConfig,
     pub logger: slog::Logger,
-    pub data_cmd_rx: Option<Receiver<Command>>,
+    pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
     pub data_abort_rx: Option<Receiver<()>>,
 }
 
@@ -52,10 +52,10 @@ where
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.next() => {
-                self.handle_incoming(DataCommand::ExternalCommand(command)).await;
+                self.handle_incoming(DataChanMsg::ExternalCommand(command)).await;
             },
             Some(_) = data_abort_rx.next() => {
-                self.handle_incoming(DataCommand::Abort).await;
+                self.handle_incoming(DataChanMsg::Abort).await;
             },
             _ = &mut timeout_delay => {
                 slog::warn!(self.logger, "Data channel connection timed out");
@@ -66,12 +66,12 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn handle_incoming(self, incoming: DataCommand) {
+    async fn handle_incoming(self, incoming: DataChanMsg) {
         match incoming {
-            DataCommand::Abort => {
+            DataChanMsg::Abort => {
                 slog::info!(self.logger, "Data channel abort received");
             }
-            DataCommand::ExternalCommand(command) => {
+            DataChanMsg::ExternalCommand(command) => {
                 slog::info!(self.logger, "Data channel command received: {:?}", command);
                 self.execute_command(command).await;
             }
@@ -79,29 +79,28 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn execute_command(self, cmd: Command) {
+    async fn execute_command(self, cmd: DataChanCmd) {
         match cmd {
-            Command::Retr { path } => {
+            DataChanCmd::Retr { path } => {
                 self.exec_retr(path).await;
             }
-            Command::Stor { path } => {
+            DataChanCmd::Stor { path } => {
                 self.exec_stor(path).await;
             }
-            Command::List { path, .. } => {
+            DataChanCmd::List { path, .. } => {
                 self.exec_list(path).await;
             }
-            Command::Nlst { path } => {
+            DataChanCmd::Nlst { path } => {
                 self.exec_nlst(path).await;
             }
-            _ => unimplemented!(),
         }
     }
 
     #[tracing_attributes::instrument]
     async fn exec_retr(self, path: String) {
         let path = self.cwd.join(path);
-        let mut tx_sending: Sender<InternalMsg> = self.control_msg_tx.clone();
-        let mut tx_error: Sender<InternalMsg> = self.control_msg_tx.clone();
+        let mut tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
+        let mut tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
         let get_result = self.storage.get_into(&self.user, path, self.start_pos, &mut output).await;
         match get_result {
@@ -109,13 +108,13 @@ where
                 if let Err(err) = output.shutdown().await {
                     slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
                 }
-                if let Err(err) = tx_sending.send(InternalMsg::SendData { bytes: bytes_copied as i64 }).await {
+                if let Err(err) = tx_sending.send(ControlChanMsg::SendData { bytes: bytes_copied as i64 }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
                 }
             }
             Err(err) => {
                 slog::warn!(self.logger, "Error copying streams during RETR: {}", err);
-                if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
                     slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
                 }
             }
@@ -133,12 +132,12 @@ where
             .await;
         match put_result {
             Ok(bytes) => {
-                if let Err(err) = tx_ok.send(InternalMsg::WrittenData { bytes: bytes as i64 }).await {
+                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes: bytes as i64 }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
                 }
             }
             Err(err) => {
-                if let Err(err) = tx_error.send(InternalMsg::StorageError(err)).await {
+                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
                 }
             }
@@ -164,14 +163,14 @@ where
                 slog::debug!(self.logger, "Copying future for List");
                 let mut input = cursor;
                 match tokio::io::copy(&mut input, &mut output).await {
-                    Ok(_) => Ok(InternalMsg::DirectorySuccessfullyListed),
+                    Ok(_) => Ok(ControlChanMsg::DirectorySuccessfullyListed),
                     Err(e) => Err(e),
                 }
             }
             Err(err) => {
                 slog::warn!(self.logger, "Failed to send directory list: {:?}", err);
                 match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
-                    Ok(_) => Ok(InternalMsg::DirectoryListFailure),
+                    Ok(_) => Ok(ControlChanMsg::DirectoryListFailure),
                     Err(e) => Err(e),
                 }
             }
@@ -205,7 +204,7 @@ where
                         if let Err(err) = output.shutdown().await {
                             slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
                         }
-                        if let Err(err) = tx_ok.send(InternalMsg::DirectorySuccessfullyListed).await {
+                        if let Err(err) = tx_ok.send(ControlChanMsg::DirectorySuccessfullyListed).await {
                             slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
                         }
                     }
@@ -213,7 +212,7 @@ where
                 }
             }
             Err(e) => {
-                if let Err(err) = tx_error.send(InternalMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
                     slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
                 }
             }
@@ -302,7 +301,7 @@ where
 
         let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
         let logger = logger.new(slog::o!("username" => username));
-        let control_msg_tx: Sender<InternalMsg> = match session.control_msg_tx {
+        let control_msg_tx: Sender<ControlChanMsg> = match session.control_msg_tx {
             Some(ref tx) => tx.clone(),
             None => {
                 slog::error!(logger, "Control loop message sender expected to be set up. Aborting data loop.");

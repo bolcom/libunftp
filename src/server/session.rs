@@ -1,8 +1,9 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::{chancomms::InternalMsg, controlchan::command::Command, tls::FTPSConfig};
+use super::{chancomms::ControlChanMsg, tls::FTPSConfig};
 use crate::auth::UserDetail;
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
@@ -60,15 +61,15 @@ where
     pub username: Option<String>,
     pub storage: Arc<Storage>,
     // The control loop uses this to send commands to the data loop
-    pub data_cmd_tx: Option<Sender<Command>>,
+    pub data_cmd_tx: Option<Sender<DataChanCmd>>,
     // The data loop uses this receive messages from the control loop
-    pub data_cmd_rx: Option<Receiver<Command>>,
+    pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
     // The control loop uses this to ask the data loop to exit.
     pub data_abort_tx: Option<Sender<()>>,
     // The data loop listens to this so it can know when to exit.
     pub data_abort_rx: Option<Receiver<()>>,
     // This may not be needed here...
-    pub control_msg_tx: Option<Sender<InternalMsg>>,
+    pub control_msg_tx: Option<Sender<ControlChanMsg>>,
     // The socket address of the client on the control channel
     pub source: SocketAddr,
     // The socket address of the proxy protocol destination
@@ -138,7 +139,7 @@ where
         self
     }
 
-    pub fn control_msg_tx(mut self, sender: Sender<InternalMsg>) -> Self {
+    pub fn control_msg_tx(mut self, sender: Sender<ControlChanMsg>) -> Self {
         self.control_msg_tx = Some(sender);
         self
     }

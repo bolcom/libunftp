@@ -2,14 +2,16 @@ use crate::{
     auth::{Authenticator, UserDetail},
     metrics::{add_error_metric, add_event_metric, add_reply_metric},
     server::{
-        chancomms::{InternalMsg, ProxyLoopSender},
+        chancomms::{ControlChanMsg, ProxyLoopSender},
         controlchan::{
             auth::AuthMiddleware,
             codecs::FTPCodec,
             command::Command,
             commands,
             error::{ControlChanError, ControlChanErrorKind},
+            ftps::{FtpsControlChanEnforcerMiddleware, FtpsDataChanEnforcerMiddleware},
             handler::{CommandContext, CommandHandler},
+            log::LoggingMiddleware,
             middleware::ControlChanMiddleware,
             Reply, ReplyCode,
         },
@@ -21,8 +23,6 @@ use crate::{
     storage::{ErrorKind, Metadata, StorageBackend},
 };
 
-use crate::server::controlchan::ftps::{FtpsControlChanEnforcerMiddleware, FtpsDataChanEnforcerMiddleware};
-use crate::server::controlchan::log::LoggingMiddleware;
 use async_trait::async_trait;
 use futures::{
     channel::mpsc::{channel, Receiver, Sender},
@@ -88,7 +88,7 @@ where
 
     let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
     let storage_features = storage.supported_features();
-    let (control_msg_tx, control_msg_rx): (Sender<InternalMsg>, Receiver<InternalMsg>) = channel(1);
+    let (control_msg_tx, control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
     let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(config.collect_metrics)
@@ -178,12 +178,12 @@ where
                         add_event_metric(&event);
                     };
 
-                    if let Event::InternalMsg(InternalMsg::Quit) = event {
+                    if let Event::InternalMsg(ControlChanMsg::Quit) = event {
                         slog::info!(logger, "Quit received");
                         return;
                     }
 
-                    if let Event::InternalMsg(InternalMsg::SecureControlChannel) = event {
+                    if let Event::InternalMsg(ControlChanMsg::SecureControlChannel) = event {
                         slog::info!(logger, "Upgrading control channel to TLS");
 
                         // Get back the original TCP Stream
@@ -258,7 +258,7 @@ async fn handle_command<S, U>(
     tls_configured: bool,
     passive_ports: Range<u16>,
     passive_host: PassiveHost,
-    tx: Sender<InternalMsg>,
+    tx: Sender<ControlChanMsg>,
     local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
@@ -327,13 +327,13 @@ where
 }
 
 #[tracing_attributes::instrument]
-async fn handle_internal_msg<S, U>(logger: slog::Logger, msg: InternalMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
+async fn handle_internal_msg<S, U>(logger: slog::Logger, msg: ControlChanMsg, session: SharedSession<S, U>) -> Result<Reply, ControlChanError>
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
     S::Metadata: Metadata,
 {
-    use self::InternalMsg::*;
+    use self::ControlChanMsg::*;
     use SessionState::*;
 
     match msg {
@@ -426,7 +426,7 @@ where
     tls_configured: bool,
     passive_ports: Range<u16>,
     passive_host: PassiveHost,
-    tx: Sender<InternalMsg>,
+    tx: Sender<ControlChanMsg>,
     local_addr: SocketAddr,
     storage_features: u32,
     proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
