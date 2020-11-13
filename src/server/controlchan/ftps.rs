@@ -34,7 +34,7 @@ where
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
-                Event::Command(Command::CCC) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
+                Event::Command(Command::Ccc) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
                 Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
                     let is_tls = async {
                         let session = self.session.lock().await;
