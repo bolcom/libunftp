@@ -315,12 +315,12 @@ where
         Command::Rnfr { file } => Box::new(commands::Rnfr::new(file)),
         Command::Rnto { file } => Box::new(commands::Rnto::new(file)),
         Command::Auth { protocol } => Box::new(commands::Auth::new(protocol)),
-        Command::PBSZ {} => Box::new(commands::Pbsz),
-        Command::CCC {} => Box::new(commands::Ccc),
-        Command::PROT { param } => Box::new(commands::Prot::new(param)),
-        Command::SIZE { file } => Box::new(commands::Size::new(file)),
+        Command::Pbsz {} => Box::new(commands::Pbsz),
+        Command::Ccc {} => Box::new(commands::Ccc),
+        Command::Prot { param } => Box::new(commands::Prot::new(param)),
+        Command::Size { file } => Box::new(commands::Size::new(file)),
         Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
-        Command::MDTM { file } => Box::new(commands::Mdtm::new(file)),
+        Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
     };
 
     handler.handle(args).await

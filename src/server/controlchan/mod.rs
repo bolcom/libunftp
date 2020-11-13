@@ -7,7 +7,7 @@ pub(crate) mod handler;
 
 pub(super) mod commands;
 
-mod parse_error;
+mod line_parser;
 
 pub(crate) mod event;
 pub(crate) use event::Event;

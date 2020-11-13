@@ -1,6 +1,4 @@
-use super::command::Command;
-use super::error::ControlChanError;
-use super::Reply;
+use super::{command::Command, error::ControlChanError, line_parser, Reply};
 
 use bytes::BytesMut;
 use std::io::Write;
@@ -33,7 +31,7 @@ impl Decoder for FTPCodec {
             let newline_index = newline_offset + self.next_index;
             let line = buf.split_to(newline_index + 1);
             self.next_index = 0;
-            Ok(Some(Command::parse(line)?))
+            Ok(Some(line_parser::parse(line)?))
         } else {
             self.next_index = buf.len();
             Ok(None)

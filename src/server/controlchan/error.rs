@@ -1,6 +1,6 @@
 //! Contains the `ControlChanError` struct that that defines the control channel error type.
 
-use super::parse_error::{ParseError, ParseErrorKind};
+use super::line_parser::error::{ParseError, ParseErrorKind};
 use crate::BoxError;
 
 use derive_more::Display;
