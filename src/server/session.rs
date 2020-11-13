@@ -2,6 +2,7 @@
 //! implements the handling for the *data* channel.
 
 use super::{chancomms::InternalMsg, controlchan::command::Command, tls::FTPSConfig};
+use crate::auth::UserDetail;
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
@@ -43,21 +44,21 @@ pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 
 // This is where we keep the state for a ftp session.
 #[derive(Debug)]
-pub struct Session<S, U>
+pub struct Session<Storage, User>
 where
-    S: StorageBackend<U>,
-    S::Metadata: Metadata,
-    U: Send + Sync + Debug,
+    Storage: StorageBackend<User>,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
     // I guess this can be called session_id but for now we only use it to have traceability in our
     // logs. Rename it if you use it for more than than but then also make sure the TraceId
     // implementation makes sense.
     pub trace_id: TraceId,
     // This is extra information about a user like account details.
-    pub user: Arc<Option<U>>,
+    pub user: Arc<Option<User>>,
     // The username used to log in. None if not logged in.
     pub username: Option<String>,
-    pub storage: Arc<S>,
+    pub storage: Arc<Storage>,
     // The control loop uses this to send commands to the data loop
     pub data_cmd_tx: Option<Sender<Command>>,
     // The data loop uses this receive messages from the control loop
@@ -94,12 +95,12 @@ where
     pub data_busy: bool,
 }
 
-impl<S, U: Send + Sync + Debug + 'static> Session<S, U>
+impl<Storage, User: UserDetail + 'static> Session<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
-    pub(super) fn new(storage: Arc<S>, source: SocketAddr) -> Self {
+    pub(super) fn new(storage: Arc<Storage>, source: SocketAddr) -> Self {
         Session {
             trace_id: TraceId::new(),
             user: Arc::new(None),
@@ -148,11 +149,11 @@ where
     }
 }
 
-impl<S, U> Drop for Session<S, U>
+impl<Storage, User> Drop for Session<Storage, User>
 where
-    S: StorageBackend<U>,
-    S::Metadata: Metadata,
-    U: Send + Sync + Debug,
+    Storage: StorageBackend<User>,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
     fn drop(&mut self) {
         if self.collect_metrics {

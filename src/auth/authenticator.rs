@@ -9,12 +9,17 @@ use thiserror::Error;
 
 /// Defines the requirements for Authentication implementations
 #[async_trait]
-pub trait Authenticator<U>: Sync + Send + Debug
+pub trait Authenticator<User>: Sync + Send + Debug
 where
-    U: UserDetail,
+    User: UserDetail,
 {
     /// Authenticate the given user with the given password.
-    async fn authenticate(&self, username: &str, password: &str) -> Result<U, AuthenticationError>;
+    async fn authenticate(&self, username: &str, password: &str) -> Result<User, AuthenticationError>;
+
+    /// Implement to set the name of the authenticator. By default it returns the type signature.
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
 }
 
 /// The error type returned by `Authenticator.authenticate`
