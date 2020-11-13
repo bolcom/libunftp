@@ -10,7 +10,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -52,12 +52,12 @@ where
 
         if let Err(err) = storage.cwd(&session.user, path.clone()).await {
             slog::warn!(logger, "Failed to cwd directory: {}", err);
-            let r = tx_fail.send(InternalMsg::StorageError(err)).await;
+            let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {
                 slog::warn!(logger, "Could not send internal message to notify of CWD error: {}", e);
             }
         } else {
-            let r = tx_success.send(InternalMsg::CwdSuccess).await;
+            let r = tx_success.send(ControlChanMsg::CwdSuccess).await;
             session.cwd.push(path);
             if let Err(e) = r {
                 slog::warn!(logger, "Could not send internal message to notify of CWD success: {}", e);

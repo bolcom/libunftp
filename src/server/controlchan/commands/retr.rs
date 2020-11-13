@@ -8,6 +8,7 @@
 use crate::{
     auth::UserDetail,
     server::{
+        chancomms::DataChanCmd,
         controlchan::{
             command::Command,
             error::{ControlChanError, ControlChanErrorKind},
@@ -34,7 +35,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.cmd.clone() {
+            Command::Retr { path } => DataChanCmd::Retr { path },
+            _ => panic!("Programmer error, expected command to be RETR"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

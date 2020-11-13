@@ -6,20 +6,19 @@
 // transfer command.  The response to this command includes the
 // host and port address this server is listening on.
 
-use crate::server::InternalMsg;
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::{ProxyLoopMsg, ProxyLoopSender},
+        chancomms::{DataChanCmd, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Command, Reply, ReplyCode,
+            Reply, ReplyCode,
         },
         datachan,
         ftpserver::options::PassiveHost,
         session::SharedSession,
-        ControlChanErrorKind,
+        ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -68,13 +67,13 @@ impl Pasv {
     // modifies the session by adding channels that are used to communicate with the data connection
     // processing loop.
     #[tracing_attributes::instrument]
-    async fn setup_inter_loop_comms<S, U>(&self, session: SharedSession<S, U>, control_loop_tx: Sender<InternalMsg>)
+    async fn setup_inter_loop_comms<S, U>(&self, session: SharedSession<S, U>, control_loop_tx: Sender<ControlChanMsg>)
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
-        let (cmd_tx, cmd_rx): (Sender<Command>, Receiver<Command>) = channel(1);
+        let (cmd_tx, cmd_rx): (Sender<DataChanCmd>, Receiver<DataChanCmd>) = channel(1);
         let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
 
         let mut session = session.lock().await;

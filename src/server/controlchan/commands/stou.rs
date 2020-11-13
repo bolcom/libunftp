@@ -1,9 +1,9 @@
 //! The RFC 959 Store File Uniquely (`STOU`) command
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
-        command::Command,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
         Reply, ReplyCode,
@@ -36,7 +36,7 @@ where
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
                 tokio::spawn(async move {
-                    if let Err(err) = tx.send(Command::Stor { path }).await {
+                    if let Err(err) = tx.send(DataChanCmd::Stor { path }).await {
                         slog::warn!(logger, "sending command failed. {}", err);
                     }
                 });

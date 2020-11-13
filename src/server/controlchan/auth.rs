@@ -1,9 +1,13 @@
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::middleware::ControlChanMiddleware;
-use crate::server::session::SharedSession;
-use crate::server::{Command, Event, Reply, ReplyCode, SessionState};
-use crate::storage::{Metadata, StorageBackend};
+use crate::{
+    auth::UserDetail,
+    server::{
+        controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
+        session::SharedSession,
+        {Command, Event, Reply, ReplyCode, SessionState},
+    },
+    storage::{Metadata, StorageBackend},
+};
+
 use async_trait::async_trait;
 
 // AuthMiddleware ensures the user is authenticated before he can do much else.

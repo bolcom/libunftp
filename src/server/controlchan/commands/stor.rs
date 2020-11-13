@@ -8,6 +8,7 @@
 // created at the server site if the file specified in the
 // pathname does not already exist.
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -34,7 +35,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.cmd.clone() {
+            Command::Stor { path } => DataChanCmd::Stor { path },
+            _ => panic!("Programmer error, expected command to be STOR"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

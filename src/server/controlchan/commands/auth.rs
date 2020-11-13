@@ -7,7 +7,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -51,7 +51,7 @@ where
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {
                 tokio::spawn(async move {
-                    if let Err(err) = tx.send(InternalMsg::SecureControlChannel).await {
+                    if let Err(err) = tx.send(ControlChanMsg::SecureControlChannel).await {
                         slog::warn!(logger, "{}", err);
                     }
                 });
