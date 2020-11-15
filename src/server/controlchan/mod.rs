@@ -18,7 +18,7 @@ pub(crate) mod reply;
 pub(crate) use reply::{Reply, ReplyCode};
 
 mod error;
-pub(crate) use error::ControlChanErrorKind;
+pub(crate) use error::{ControlChanError, ControlChanErrorKind};
 
 mod control_loop;
 pub(crate) use control_loop::{spawn as spawn_loop, Config as LoopConfig};
@@ -27,3 +27,4 @@ mod auth;
 mod ftps;
 mod log;
 mod middleware;
+pub(crate) use middleware::ControlChanMiddleware;

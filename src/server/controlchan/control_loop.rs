@@ -1,6 +1,6 @@
 use crate::{
     auth::{Authenticator, UserDetail},
-    metrics::{add_error_metric, add_event_metric, add_reply_metric},
+    metrics::MetricsMiddleware,
     server::{
         chancomms::{ControlChanMsg, ProxyLoopSender},
         controlchan::{
@@ -91,7 +91,7 @@ where
     let (control_msg_tx, control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
     let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
-        .metrics(config.collect_metrics)
+        .metrics(collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
         .destination(destination);
 
@@ -130,9 +130,14 @@ where
         next: event_chain,
     };
 
-    let mut event_chain = LoggingMiddleware {
+    let event_chain = LoggingMiddleware {
         logger: logger.clone(),
         sequence_nr: 0,
+        next: event_chain,
+    };
+
+    let mut event_chain = MetricsMiddleware {
+        collect_metrics,
         next: event_chain,
     };
 
@@ -174,10 +179,6 @@ where
             match incoming {
                 None => {}
                 Some(Ok(event)) => {
-                    if collect_metrics {
-                        add_event_metric(&event);
-                    };
-
                     if let Event::InternalMsg(ControlChanMsg::Quit) = event {
                         slog::info!(logger, "Quit received");
                         return;
@@ -211,9 +212,6 @@ where
                             return;
                         }
                         Ok(reply) => {
-                            if collect_metrics {
-                                add_reply_metric(&reply);
-                            }
                             let result = reply_sink.send(reply).await;
                             if result.is_err() {
                                 slog::warn!(logger, "Could not send reply to client");
@@ -223,7 +221,7 @@ where
                     }
                 }
                 Some(Err(e)) => {
-                    let reply = handle_control_channel_error::<Storage, User>(logger.clone(), e, collect_metrics);
+                    let reply = handle_control_channel_error::<Storage, User>(logger.clone(), e);
                     let mut close_connection = false;
                     if let Reply::CodeAndMsg {
                         code: ReplyCode::ClosingControlConnection,
@@ -394,16 +392,13 @@ where
     }
 }
 
-fn handle_control_channel_error<S, U>(logger: slog::Logger, error: ControlChanError, with_metrics: bool) -> Reply
+fn handle_control_channel_error<S, U>(logger: slog::Logger, error: ControlChanError) -> Reply
 where
     U: UserDetail + 'static,
     S: StorageBackend<U> + 'static,
 
     S::Metadata: Metadata,
 {
-    if with_metrics {
-        add_error_metric(&error.kind());
-    };
     slog::warn!(logger, "Control channel error: {}", error);
     match error.kind() {
         ControlChanErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
