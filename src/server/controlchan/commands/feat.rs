@@ -15,14 +15,14 @@ use async_trait::async_trait;
 pub struct Feat;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Feat
+impl<Storage, User> CommandHandler<Storage, User> for Feat
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut feat_text = vec![" SIZE", " MDTM", "UTF8"];
         // Add the features. According to the spec each feature line must be
         // indented by a space.

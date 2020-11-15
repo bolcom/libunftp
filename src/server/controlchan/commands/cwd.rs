@@ -35,19 +35,19 @@ impl Cwd {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Cwd
+impl<Storage, User> CommandHandler<Storage, User> for Cwd
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let storage: Arc<S> = Arc::clone(&session.storage);
+        let storage: Arc<Storage> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success = args.tx.clone();
-        let mut tx_fail = args.tx.clone();
+        let mut tx_success = args.tx_control_chan.clone();
+        let mut tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
 
         if let Err(err) = storage.cwd(&session.user, path.clone()).await {

@@ -38,15 +38,15 @@ impl Auth {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Auth
+impl<Storage, User> CommandHandler<Storage, User> for Auth
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        let mut tx = args.tx.clone();
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let mut tx = args.tx_control_chan.clone();
         let logger = args.logger;
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {

@@ -36,14 +36,14 @@ impl Prot {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Prot
+impl<Storage, User> CommandHandler<Storage, User> for Prot
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: 'static + Metadata,
+    User: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match (args.tls_configured, self.param.clone()) {
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock().await;

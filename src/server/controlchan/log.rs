@@ -22,9 +22,12 @@ where
 {
     async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         self.sequence_nr += 1;
-        slog::info!(self.logger, "Processing control channel event {:?}", event; "seq" => self.sequence_nr);
+        slog::info!(self.logger, "Control channel event {:?}", event; "seq" => self.sequence_nr);
         let result = self.next.handle(event).await;
-        slog::info!(self.logger, "Result of processing control channel event {:?}", result; "seq" => self.sequence_nr);
+        match &result {
+            Ok(reply) => slog::info!(self.logger, "Control channel reply {:?}", reply; "seq" => self.sequence_nr),
+            Err(error) => slog::warn!(self.logger, "Control channel error {:?}", error; "seq" => self.sequence_nr),
+        };
         result
     }
 }

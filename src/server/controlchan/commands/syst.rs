@@ -24,14 +24,14 @@ use async_trait::async_trait;
 pub struct Syst;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Syst
+impl<Storage, User> CommandHandler<Storage, User> for Syst
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         Ok(Reply::new(ReplyCode::SystemType, "UNIX Type: L8")) // TODO change this for windows
     }
 }

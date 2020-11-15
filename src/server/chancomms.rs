@@ -96,14 +96,14 @@ pub enum ControlChanMsg {
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
 // Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
 #[derive(Debug)]
-pub enum ProxyLoopMsg<S, U>
+pub enum ProxyLoopMsg<Storage, User>
 where
-    S: StorageBackend<U>,
-    U: UserDetail,
+    Storage: StorageBackend<User>,
+    User: UserDetail,
 {
     /// Command to assign a data port to a session
-    AssignDataPortCommand(SharedSession<S, U>),
+    AssignDataPortCommand(SharedSession<Storage, User>),
 }
 
-pub type ProxyLoopSender<S, U> = Sender<ProxyLoopMsg<S, U>>;
-pub type ProxyLoopReceiver<S, U> = Receiver<ProxyLoopMsg<S, U>>;
+pub type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;
+pub type ProxyLoopReceiver<Storage, User> = Receiver<ProxyLoopMsg<Storage, User>>;

@@ -6,6 +6,35 @@ use async_trait::async_trait;
 use lazy_static::*;
 use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
 
+// Control channel middleware that adds metrics
+pub struct MetricsMiddleware<Next>
+where
+    Next: ControlChanMiddleware,
+{
+    pub collect_metrics: bool,
+    pub next: Next,
+}
+
+#[async_trait]
+impl<Next> ControlChanMiddleware for MetricsMiddleware<Next>
+where
+    Next: ControlChanMiddleware,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        if self.collect_metrics {
+            add_event_metric(&event);
+        }
+        let result: Result<Reply, ControlChanError> = self.next.handle(event).await;
+        if self.collect_metrics {
+            match &result {
+                Ok(reply) => add_reply_metric(reply),
+                Err(e) => add_error_metric(e.kind()),
+            }
+        }
+        result
+    }
+}
+
 lazy_static! {
     static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
     static ref FTP_SESSIONS: IntGauge = register_int_gauge!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
@@ -24,7 +53,7 @@ lazy_static! {
 }
 
 /// Add a metric for an event.
-pub fn add_event_metric(event: &Event) {
+fn add_event_metric(event: &Event) {
     match event {
         Event::Command(cmd) => {
             add_command_metric(&cmd);
@@ -54,7 +83,7 @@ pub fn dec_session() {
 }
 
 /// Add a metric for an FTP server error.
-pub fn add_error_metric(error: &ControlChanErrorKind) {
+fn add_error_metric(error: &ControlChanErrorKind) {
     let error_str = error.to_string();
     let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
     FTP_ERROR_TOTAL.with_label_values(&[&label]).inc();
@@ -67,7 +96,7 @@ fn add_command_metric(cmd: &Command) {
 }
 
 /// Add a metric for a reply.
-pub fn add_reply_metric(reply: &Reply) {
+fn add_reply_metric(reply: &Reply) {
     match *reply {
         Reply::None => {}
         Reply::CodeAndMsg { code, .. } => add_replycode_metric(code),
@@ -78,33 +107,4 @@ pub fn add_reply_metric(reply: &Reply) {
 fn add_replycode_metric(code: ReplyCode) {
     let range = format!("{}xx", code as u32 / 100 % 10);
     FTP_REPLY_TOTAL.with_label_values(&[&range]).inc();
-}
-
-// Control channel middleware that adds metrics
-pub struct MetricsMiddleware<Next>
-where
-    Next: ControlChanMiddleware,
-{
-    pub collect_metrics: bool,
-    pub next: Next,
-}
-
-#[async_trait]
-impl<Next> ControlChanMiddleware for MetricsMiddleware<Next>
-where
-    Next: ControlChanMiddleware,
-{
-    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
-        if self.collect_metrics {
-            add_event_metric(&event);
-        }
-        let result: Result<Reply, ControlChanError> = self.next.handle(event).await;
-        if self.collect_metrics {
-            match &result {
-                Ok(reply) => add_reply_metric(reply),
-                Err(e) => add_error_metric(e.kind()),
-            }
-        }
-        result
-    }
 }

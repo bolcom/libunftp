@@ -2,7 +2,7 @@ use crate::{
     auth::{Authenticator, UserDetail},
     server::{
         chancomms::ProxyLoopSender,
-        controlchan::{error::ControlChanError, Command, Reply},
+        controlchan::{command::Command, error::ControlChanError, Reply},
         ftpserver::options::PassiveHost,
         session::SharedSession,
         ControlChanMsg,
@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use std::{ops::Range, result::Result, sync::Arc};
 
+// Common interface for all handlers of `Commands`
 #[async_trait]
 pub(crate) trait CommandHandler<Storage, User>: Send + Sync + std::fmt::Debug
 where
@@ -21,9 +22,14 @@ where
     User: UserDetail,
 {
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
+
+    // Returns the name of the command handler
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
 }
 
-/// Convenience struct to group command args
+/// Represents arguments passed to a `CommandHandler`
 #[derive(Debug)]
 pub(crate) struct CommandContext<Storage, User>
 where
@@ -31,15 +37,15 @@ where
     Storage::Metadata: Metadata + Sync,
     User: UserDetail + 'static,
 {
-    pub cmd: Command,
+    pub parsed_command: Command,
     pub session: SharedSession<Storage, User>,
     pub authenticator: Arc<dyn Authenticator<User>>,
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
-    pub tx: Sender<ControlChanMsg>,
+    pub tx_control_chan: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
+    pub tx_proxyloop: Option<ProxyLoopSender<Storage, User>>,
     pub logger: slog::Logger,
 }

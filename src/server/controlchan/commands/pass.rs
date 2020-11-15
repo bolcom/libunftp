@@ -40,14 +40,14 @@ impl Pass {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Pass
+impl<Storage, User> CommandHandler<Storage, User> for Pass
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let logger = args.logger;
         match &session.state {
@@ -61,7 +61,7 @@ where
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
                     }
                 };
-                let mut tx: Sender<ControlChanMsg> = args.tx.clone();
+                let mut tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
 
                 let auther = args.authenticator.clone();
 
