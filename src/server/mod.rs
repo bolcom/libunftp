@@ -1,7 +1,7 @@
 //! Contains the `Server` struct that is used to configure and control a FTP server instance.
 
 mod chancomms;
-mod controlchan;
+pub(crate) mod controlchan;
 mod datachan;
 pub(crate) mod ftpserver;
 mod password;
@@ -12,6 +12,7 @@ mod tls;
 pub(crate) use chancomms::ControlChanMsg;
 pub(crate) use controlchan::command::Command;
 pub(crate) use controlchan::reply::{Reply, ReplyCode};
-pub(crate) use controlchan::ControlChanErrorKind;
+pub(crate) use controlchan::ControlChanMiddleware;
 pub(crate) use controlchan::Event;
+pub(crate) use controlchan::{ControlChanError, ControlChanErrorKind};
 pub(self) use session::{Session, SessionState};

@@ -1,7 +1,8 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
 
-use crate::server::{Command, ControlChanErrorKind, ControlChanMsg, Event, Reply, ReplyCode};
+use crate::server::{Command, ControlChanError, ControlChanErrorKind, ControlChanMiddleware, ControlChanMsg, Event, Reply, ReplyCode};
 
+use async_trait::async_trait;
 use lazy_static::*;
 use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
 
@@ -77,4 +78,33 @@ pub fn add_reply_metric(reply: &Reply) {
 fn add_replycode_metric(code: ReplyCode) {
     let range = format!("{}xx", code as u32 / 100 % 10);
     FTP_REPLY_TOTAL.with_label_values(&[&range]).inc();
+}
+
+// Control channel middleware that adds metrics
+pub struct MetricsMiddleware<Next>
+where
+    Next: ControlChanMiddleware,
+{
+    pub collect_metrics: bool,
+    pub next: Next,
+}
+
+#[async_trait]
+impl<Next> ControlChanMiddleware for MetricsMiddleware<Next>
+where
+    Next: ControlChanMiddleware,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        if self.collect_metrics {
+            add_event_metric(&event);
+        }
+        let result: Result<Reply, ControlChanError> = self.next.handle(event).await;
+        if self.collect_metrics {
+            match &result {
+                Ok(reply) => add_reply_metric(reply),
+                Err(e) => add_error_metric(e.kind()),
+            }
+        }
+        result
+    }
 }
