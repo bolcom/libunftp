@@ -12,14 +12,14 @@ use async_trait::async_trait;
 pub struct Ccc;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Ccc
+impl<Storage, User> CommandHandler<Storage, User> for Ccc
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         // let mut tx: Sender<InternalMsg> = args.tx.clone();
         // let session = args.session.lock().await;
         // let logger = args.logger;

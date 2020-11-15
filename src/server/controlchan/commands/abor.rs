@@ -25,14 +25,14 @@ use futures::prelude::*;
 pub struct Abor;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Abor
+impl<Storage, User> CommandHandler<Storage, User> for Abor
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let logger = args.logger;
         match session.data_abort_tx.take() {

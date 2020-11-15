@@ -33,20 +33,20 @@ impl Dele {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Dele
+impl<Storage, User> CommandHandler<Storage, User> for Dele
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let storage = Arc::clone(&session.storage);
         let user = session.user.clone();
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success: Sender<ControlChanMsg> = args.tx.clone();
-        let mut tx_fail: Sender<ControlChanMsg> = args.tx.clone();
+        let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
             match storage.del(&user, path).await {

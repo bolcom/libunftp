@@ -59,6 +59,7 @@ where
     pub user: Arc<Option<User>>,
     // The username used to log in. None if not logged in.
     pub username: Option<String>,
+    // The storage back-end instance.
     pub storage: Arc<Storage>,
     // The control loop uses this to send commands to the data loop
     pub data_cmd_tx: Option<Sender<DataChanCmd>>,
@@ -74,6 +75,7 @@ where
     pub source: SocketAddr,
     // The socket address of the proxy protocol destination
     pub destination: Option<SocketAddr>,
+    // Current working directory
     pub cwd: std::path::PathBuf,
     // After a RNFR command this will hold the source path used by the RNTO command.
     pub rename_from: Option<PathBuf>,
@@ -96,10 +98,11 @@ where
     pub data_busy: bool,
 }
 
-impl<Storage, User: UserDetail + 'static> Session<Storage, User>
+impl<Storage, User> Session<Storage, User>
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
     pub(super) fn new(storage: Arc<Storage>, source: SocketAddr) -> Self {
         Session {

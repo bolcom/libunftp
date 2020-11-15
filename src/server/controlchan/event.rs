@@ -8,6 +8,6 @@ use crate::server::ControlChanMsg;
 pub enum Event {
     /// A command from a client (e.g. `USER` or `PASV`)
     Command(Command),
-    /// A status message from within the library
+    /// A message originating from within the library
     InternalMsg(ControlChanMsg),
 }

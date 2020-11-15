@@ -31,16 +31,16 @@ use futures::prelude::*;
 pub struct Nlst;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Nlst
+impl<Storage, User> CommandHandler<Storage, User> for Nlst
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: DataChanCmd = match args.cmd.clone() {
+        let cmd: DataChanCmd = match args.parsed_command.clone() {
             Command::Nlst { path } => DataChanCmd::Nlst { path },
             _ => panic!("Programmer error, expected command to be NLST"),
         };

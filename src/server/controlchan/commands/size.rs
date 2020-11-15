@@ -26,21 +26,21 @@ impl Size {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Size
+impl<Storage, User> CommandHandler<Storage, User> for Size
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: 'static + Metadata,
+    User: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let user = session.user.clone();
         let start_pos: u64 = session.start_pos;
-        let storage: Arc<S> = Arc::clone(&session.storage);
+        let storage: Arc<Storage> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success: Sender<ControlChanMsg> = args.tx.clone();
-        let mut tx_fail: Sender<ControlChanMsg> = args.tx.clone();
+        let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
 
         tokio::spawn(async move {

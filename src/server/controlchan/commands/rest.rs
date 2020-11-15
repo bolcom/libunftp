@@ -29,14 +29,14 @@ impl Rest {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Rest
+impl<Storage, User> CommandHandler<Storage, User> for Rest
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: 'static + Metadata,
+    User: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         if args.storage_features & FEATURE_RESTART == 0 {
             return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
         }

@@ -3,7 +3,7 @@ pub mod options;
 
 use super::{
     chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
-    controlchan::{spawn_loop, LoopConfig},
+    controlchan,
     datachan::spawn_processing,
     ftpserver::{error::ServerError, options::FtpsRequired},
     tls::FTPSConfig,
@@ -375,17 +375,21 @@ where
         let listener = tokio::net::TcpListener::bind(addr).await?;
         loop {
             match listener.accept().await {
-                Ok(stream) => {
-                    let (tcp_stream, socket_addr) = stream;
-                    slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
-                    let params: LoopConfig<Storage, User> = (&self).into();
-                    let result = spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
-                    if let Err(controlchan_err) = result {
-                        slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", controlchan_err)
+                Ok((tcp_stream, socket_addr)) => {
+                    slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
+                    let params: controlchan::LoopConfig<Storage, User> = (&self).into();
+                    let result = controlchan::spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
+                    if let Err(err) = result {
+                        slog::error!(
+                            self.logger,
+                            "Could not spawn control channel loop for connection from {:?}: {:?}",
+                            socket_addr,
+                            err
+                        )
                     }
                 }
-                Err(e) => {
-                    slog::error!(self.logger, "Error accepting incoming connection {:?}", e);
+                Err(err) => {
+                    slog::error!(self.logger, "Error accepting incoming control connection {:?}", err);
                 }
             }
         }
@@ -431,8 +435,8 @@ where
                     if destination_port == external_control_port {
                         let source = connection.source;
                         slog::info!(self.logger, "Connection from {:?} is a control connection", source);
-                        let params: LoopConfig<Storage,User> = (&self).into();
-                        let result = spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone())).await;
+                        let params: controlchan::LoopConfig<Storage,User> = (&self).into();
+                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
@@ -557,14 +561,14 @@ where
     }
 }
 
-impl<Storage, User> From<&Server<Storage, User>> for LoopConfig<Storage, User>
+impl<Storage, User> From<&Server<Storage, User>> for controlchan::LoopConfig<Storage, User>
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     fn from(server: &Server<Storage, User>) -> Self {
-        LoopConfig {
+        controlchan::LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
             ftps_config: server.ftps_mode.clone(),

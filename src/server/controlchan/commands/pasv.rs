@@ -96,7 +96,7 @@ impl Pasv {
         let CommandContext {
             logger,
             passive_host,
-            tx,
+            tx_control_chan: tx,
             session,
             ..
         } = args;
@@ -147,22 +147,22 @@ impl Pasv {
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
-        self.setup_inter_loop_comms(args.session.clone(), args.tx).await;
+        self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan).await;
         tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
         Ok(Reply::None)
     }
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Pasv
+impl<Storage, User> CommandHandler<Storage, User> for Pasv
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        let sender: Option<ProxyLoopSender<S, U>> = args.proxyloop_msg_tx.clone();
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let sender: Option<ProxyLoopSender<Storage, User>> = args.tx_proxyloop.clone();
         match sender {
             Some(tx) => self.handle_proxy_mode(args, tx).await,
             None => self.handle_nonproxy_mode(args).await,

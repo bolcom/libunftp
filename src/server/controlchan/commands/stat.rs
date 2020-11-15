@@ -46,14 +46,14 @@ impl Stat {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Stat
+impl<Storage, User> CommandHandler<Storage, User> for Stat
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: 'static + Metadata,
+    User: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match self.path.clone() {
             None => {
                 let text: Vec<&str> = vec!["Status:", "Powered by libunftp"];
@@ -68,8 +68,8 @@ where
                 let user = session.user.clone();
                 let storage = Arc::clone(&session.storage);
 
-                let mut tx_success: Sender<ControlChanMsg> = args.tx.clone();
-                let mut tx_fail: Sender<ControlChanMsg> = args.tx.clone();
+                let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+                let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
                 let logger = args.logger;
 
                 tokio::spawn(async move {
