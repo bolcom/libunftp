@@ -115,6 +115,10 @@ pub enum Command {
     Mdtm {
         file: PathBuf,
     },
+    Other {
+        command_name: String,
+        arguments: String,
+    },
 }
 
 impl fmt::Display for Command {

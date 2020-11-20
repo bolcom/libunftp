@@ -17,12 +17,6 @@ pub struct ParseError {
 /// [ParseError]: ./struct.ParseError.html
 #[derive(Clone, Eq, PartialEq, Debug, Display)]
 pub enum ParseErrorKind {
-    /// The client issued a command that we don't know about.
-    #[display(fmt = "Unknown command: {}", command)]
-    UnknownCommand {
-        /// The command that we don't know about.
-        command: String,
-    },
     /// The client issued an invalid command (e.g. required parameters are missing).
     #[display(fmt = "Invalid command")]
     InvalidCommand,

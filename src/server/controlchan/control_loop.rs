@@ -220,15 +220,7 @@ where
                     }
                 }
                 Some(Err(e)) => {
-                    let reply = handle_control_channel_error::<Storage, User>(logger.clone(), e);
-                    let mut close_connection = false;
-                    if let Reply::CodeAndMsg {
-                        code: ReplyCode::ClosingControlConnection,
-                        ..
-                    } = reply
-                    {
-                        close_connection = true;
-                    }
+                    let (reply, close_connection) = handle_control_channel_error::<Storage, User>(logger.clone(), e);
                     let result = reply_sink.send(reply).await;
                     if result.is_err() {
                         slog::warn!(logger, "Could not send error reply to client");
@@ -245,20 +237,20 @@ where
     Ok(())
 }
 
-fn handle_control_channel_error<Storage, User>(logger: slog::Logger, error: ControlChanError) -> Reply
+// gets the reply to be sent to the client and tells if the connection should be closed.
+fn handle_control_channel_error<Storage, User>(logger: slog::Logger, error: ControlChanError) -> (Reply, bool)
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
-
     Storage::Metadata: Metadata,
 {
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
-        ControlChanErrorKind::UnknownCommand { .. } => Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
-        ControlChanErrorKind::UTF8Error => Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
-        ControlChanErrorKind::InvalidCommand => Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
-        ControlChanErrorKind::ControlChannelTimeout => Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
-        _ => Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"),
+        ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),
+        ControlChanErrorKind::UTF8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
+        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"), false),
+        ControlChanErrorKind::ControlChannelTimeout => (Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"), true),
+        _ => (Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"), true),
     }
 }
 
@@ -404,6 +396,7 @@ where
             Command::Size { file } => Box::new(commands::Size::new(file)),
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
+            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
         };
 
         handler.handle(args).await

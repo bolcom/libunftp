@@ -330,7 +330,11 @@ where
             Command::Mdtm { file }
         }
         _ => {
-            return Err(ParseErrorKind::UnknownCommand { command: cmd_token }.into());
+            let params = parse_to_eol(cmd_params)?;
+            Command::Other {
+                command_name: cmd_token,
+                arguments: String::from_utf8_lossy(&params).to_string(),
+            }
         }
     };
 
