@@ -249,7 +249,10 @@ where
         ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),
         ControlChanErrorKind::UTF8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
         ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"), false),
-        ControlChanErrorKind::ControlChannelTimeout => (Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"), true),
+        ControlChanErrorKind::ControlChannelTimeout => (
+            Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+            true,
+        ),
         _ => (Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"), true),
     }
 }
