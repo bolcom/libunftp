@@ -20,7 +20,12 @@ lazy_static! {
     static ref DOCKER: Mutex<Child> = initialize_docker();
 }
 
-static ADDR: &'static str = "127.0.0.1:1234";
+// FIXME: auto-allocate port
+const ADDR: &'static str = "127.0.0.1:1234";
+
+const GCS_SA_KEY: &'static str = "tests/resources/gcs_sa_key.json";
+const GCS_BASE_URL: &'static str = "http://localhost:9081";
+const GCS_BUCKET: &'static str = "test-bucket";
 
 pub fn initialize_docker() -> Mutex<Child> {
     let buf = std::env::current_dir().unwrap();
@@ -87,14 +92,14 @@ async fn deleting_directory_deletes_file() {
 async fn run_test(test: impl Future<Output=()>) {
     let mut child = DOCKER.lock().await;
 
-    let service_account_key = yup_oauth2::read_service_account_key("tests/resources/gcs_sa_key.json").compat().await.unwrap();
+    let service_account_key = yup_oauth2::read_service_account_key(GCS_SA_KEY).compat().await.unwrap();
     let decorator = slog_term::TermDecorator::new().stderr().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
 
     tokio::spawn(
         Server::new(Box::new(move || {
-            CloudStorage::new("http://localhost:9081", "test-bucket", service_account_key.clone())
+            CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, service_account_key.clone())
         }))
             .logger(Some(Logger::root(drain, o!())))
             .listen(ADDR)

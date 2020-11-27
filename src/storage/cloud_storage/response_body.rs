@@ -1,8 +1,10 @@
 use super::ObjectMetadata;
-use crate::storage::{Error, ErrorKind, Fileinfo};
+use crate::storage::{Error, Fileinfo};
 use chrono::prelude::*;
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use std::{iter::Extend, path::PathBuf};
+use std::str::FromStr;
+use std::fmt::Display;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct ResponseBody {
@@ -14,7 +16,20 @@ pub(crate) struct ResponseBody {
 pub(crate) struct Item {
     name: String,
     updated: DateTime<Utc>,
-    size: String,
+
+    // GCS API defines `size` as json string, doh
+    #[serde(default, deserialize_with = "item_size_deserializer")]
+    size: u64,
+}
+
+// TODO: this is a generic string->* deserializer, move to a util package
+fn item_size_deserializer<'de, T, D>(deserializer: D) -> Result<T, D::Error> where
+    T: FromStr,
+    T::Err: Display,
+    D: de::Deserializer<'de>
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(de::Error::custom)
 }
 
 impl ResponseBody {
@@ -42,10 +57,8 @@ impl ResponseBody {
 
 impl Item {
     pub(crate) fn to_metadata(&self) -> Result<ObjectMetadata, Error> {
-        let size: u64 = self.size.parse().map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?;
-
         Ok(ObjectMetadata {
-            size,
+            size: self.size,
             last_updated: Some(self.updated.into()),
             is_file: !self.name.ends_with('/'),
         })
@@ -69,6 +82,7 @@ pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, Obje
         },
     })
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
