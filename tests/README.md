@@ -7,10 +7,11 @@ Put the exported key file (in JSON format) in the root of the project.
 
 2. Change the constant at the begin of `gcs.rs` to point to GCP:
 
+```rust
 const GCS_SA_KEY: &'static str = "bolcom-dev-unftp-dev-738-09647c413689.json";
 const GCS_BASE_URL: &'static str = "https://www.googleapis.com";
 const GCS_BUCKET: &'static str = "bolcom-dev-unftp-dev-738-unftp-dev";
-
+```
 
 Make sure the `GCS_SA_KEY` points to the exported `.json` file. The path is
 relative to the root of the project.
