@@ -1,7 +1,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -29,20 +29,20 @@ impl Mdtm {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Mdtm
+impl<Storage, User> CommandHandler<Storage, User> for Mdtm
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: 'static + Metadata,
+    User: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success: Sender<InternalMsg> = args.tx.clone();
-        let mut tx_fail: Sender<InternalMsg> = args.tx.clone();
+        let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
 
         tokio::spawn(async move {
@@ -51,7 +51,7 @@ where
                     let modification_time = match metadata.modified() {
                         Ok(v) => Some(v),
                         Err(err) => {
-                            if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
                                 slog::warn!(logger, "{}", err);
                             };
                             None
@@ -60,7 +60,7 @@ where
 
                     if let Some(mtime) = modification_time {
                         if let Err(err) = tx_success
-                            .send(InternalMsg::CommandChannelReply(Reply::new_with_string(
+                            .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                                 ReplyCode::FileStatus,
                                 DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
                             )))
@@ -71,7 +71,7 @@ where
                     }
                 }
                 Err(err) => {
-                    if let Err(err) = tx_fail.send(InternalMsg::StorageError(err)).await {
+                    if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
                         slog::warn!(logger, "{}", err);
                     }
                 }

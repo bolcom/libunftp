@@ -25,14 +25,14 @@ impl User {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for User
+impl<Storage, Usr> CommandHandler<Storage, Usr> for User
 where
-    U: UserDetail,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    Usr: UserDetail,
+    Storage: StorageBackend<Usr> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, Usr>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         match session.state {
             SessionState::New | SessionState::WaitPass => {

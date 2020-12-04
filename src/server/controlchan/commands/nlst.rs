@@ -13,6 +13,7 @@
 // further process the files automatically.  For example, in
 // the implementation of a "multiple get" function.
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -30,16 +31,19 @@ use futures::prelude::*;
 pub struct Nlst;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Nlst
+impl<Storage, User> CommandHandler<Storage, User> for Nlst
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.parsed_command.clone() {
+            Command::Nlst { path } => DataChanCmd::Nlst { path },
+            _ => panic!("Programmer error, expected command to be NLST"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

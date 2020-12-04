@@ -18,14 +18,14 @@ use async_trait::async_trait;
 pub struct Pwd;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Pwd
+impl<Storage, User> CommandHandler<Storage, User> for Pwd
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         // TODO: properly escape double quotes in `cwd`
         Ok(Reply::new_with_string(

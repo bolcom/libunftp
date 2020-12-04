@@ -1,14 +1,20 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::{chancomms::InternalMsg, controlchan::command::Command, proxy_protocol::ConnectionTuple, tls::FTPSConfig};
+use super::{chancomms::ControlChanMsg, tls::FTPSConfig};
+use crate::auth::UserDetail;
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
 };
 use futures::channel::mpsc::{Receiver, Sender};
-use std::fmt::Formatter;
-use std::{fmt::Debug, path::PathBuf, sync::Arc};
+use std::{
+    fmt::{Debug, Formatter},
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+};
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Debug)]
@@ -39,34 +45,37 @@ pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 
 // This is where we keep the state for a ftp session.
 #[derive(Debug)]
-pub struct Session<S, U>
+pub struct Session<Storage, User>
 where
-    S: StorageBackend<U>,
-    S::Metadata: Metadata,
-    U: Send + Sync + Debug,
+    Storage: StorageBackend<User>,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
     // I guess this can be called session_id but for now we only use it to have traceability in our
     // logs. Rename it if you use it for more than than but then also make sure the TraceId
     // implementation makes sense.
     pub trace_id: TraceId,
     // This is extra information about a user like account details.
-    pub user: Arc<Option<U>>,
+    pub user: Arc<Option<User>>,
     // The username used to log in. None if not logged in.
     pub username: Option<String>,
-    pub storage: Arc<S>,
+    // The storage back-end instance.
+    pub storage: Arc<Storage>,
     // The control loop uses this to send commands to the data loop
-    pub data_cmd_tx: Option<Sender<Command>>,
+    pub data_cmd_tx: Option<Sender<DataChanCmd>>,
     // The data loop uses this receive messages from the control loop
-    pub data_cmd_rx: Option<Receiver<Command>>,
+    pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
     // The control loop uses this to ask the data loop to exit.
     pub data_abort_tx: Option<Sender<()>>,
     // The data loop listens to this so it can know when to exit.
     pub data_abort_rx: Option<Receiver<()>>,
     // This may not be needed here...
-    pub control_msg_tx: Option<Sender<InternalMsg>>,
-    // If in proxy protocol mode then this holds the source and destination IP+port used to make
-    // the control connection.
-    pub control_connection_info: Option<ConnectionTuple>,
+    pub control_msg_tx: Option<Sender<ControlChanMsg>>,
+    // The socket address of the client on the control channel
+    pub source: SocketAddr,
+    // The socket address of the proxy protocol destination
+    pub destination: Option<SocketAddr>,
+    // Current working directory
     pub cwd: std::path::PathBuf,
     // After a RNFR command this will hold the source path used by the RNTO command.
     pub rename_from: Option<PathBuf>,
@@ -89,12 +98,13 @@ where
     pub data_busy: bool,
 }
 
-impl<S, U: Send + Sync + Debug + 'static> Session<S, U>
+impl<Storage, User> Session<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
 {
-    pub(super) fn new(storage: Arc<S>) -> Self {
+    pub(super) fn new(storage: Arc<Storage>, source: SocketAddr) -> Self {
         Session {
             trace_id: TraceId::new(),
             user: Arc::new(None),
@@ -105,7 +115,8 @@ where
             data_abort_tx: None,
             data_abort_rx: None,
             control_msg_tx: None,
-            control_connection_info: None,
+            source,
+            destination: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
@@ -131,22 +142,22 @@ where
         self
     }
 
-    pub fn control_msg_tx(mut self, sender: Sender<InternalMsg>) -> Self {
+    pub fn control_msg_tx(mut self, sender: Sender<ControlChanMsg>) -> Self {
         self.control_msg_tx = Some(sender);
         self
     }
 
-    pub fn control_connection_info(mut self, info: Option<ConnectionTuple>) -> Self {
-        self.control_connection_info = info;
+    pub fn destination(mut self, destination: Option<SocketAddr>) -> Self {
+        self.destination = destination;
         self
     }
 }
 
-impl<S, U> Drop for Session<S, U>
+impl<Storage, User> Drop for Session<Storage, User>
 where
-    S: StorageBackend<U>,
-    S::Metadata: Metadata,
-    U: Send + Sync + Debug,
+    Storage: StorageBackend<User>,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
     fn drop(&mut self) {
         if self.collect_metrics {

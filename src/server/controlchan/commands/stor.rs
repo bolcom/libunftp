@@ -8,6 +8,7 @@
 // created at the server site if the file specified in the
 // pathname does not already exist.
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -25,16 +26,19 @@ use futures::prelude::*;
 pub struct Stor;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Stor
+impl<Storage, User> CommandHandler<Storage, User> for Stor
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: Command = args.cmd.clone();
+        let cmd: DataChanCmd = match args.parsed_command.clone() {
+            Command::Stor { path } => DataChanCmd::Stor { path },
+            _ => panic!("Programmer error, expected command to be STOR"),
+        };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(mut tx) => {

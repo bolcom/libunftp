@@ -1,13 +1,11 @@
-use super::error::ControlChanError;
 use crate::{
     auth::{Authenticator, UserDetail},
     server::{
         chancomms::ProxyLoopSender,
-        controlchan::{Command, Reply},
+        controlchan::{command::Command, error::ControlChanError, Reply},
         ftpserver::options::PassiveHost,
-        proxy_protocol::ConnectionTuple,
         session::SharedSession,
-        InternalMsg,
+        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -15,34 +13,39 @@ use async_trait::async_trait;
 use futures::channel::mpsc::Sender;
 use std::{ops::Range, result::Result, sync::Arc};
 
+// Common interface for all handlers of `Commands`
 #[async_trait]
-pub(crate) trait CommandHandler<S, U>: Send + Sync + std::fmt::Debug
+pub(crate) trait CommandHandler<Storage, User>: Send + Sync + std::fmt::Debug
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
-    U: UserDetail,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail,
 {
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>;
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
+
+    // Returns the name of the command handler
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
 }
 
-/// Convenience struct to group command args
+/// Represents arguments passed to a `CommandHandler`
 #[derive(Debug)]
-pub(crate) struct CommandContext<S, U>
+pub(crate) struct CommandContext<Storage, User>
 where
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata + Sync,
-    U: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata + Sync,
+    User: UserDetail + 'static,
 {
-    pub cmd: Command,
-    pub session: SharedSession<S, U>,
-    pub authenticator: Arc<dyn Authenticator<U>>,
+    pub parsed_command: Command,
+    pub session: SharedSession<Storage, User>,
+    pub authenticator: Arc<dyn Authenticator<User>>,
     pub tls_configured: bool,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
-    pub tx: Sender<InternalMsg>,
+    pub tx_control_chan: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub proxyloop_msg_tx: Option<ProxyLoopSender<S, U>>,
-    pub control_connection_info: Option<ConnectionTuple>,
+    pub tx_proxyloop: Option<ProxyLoopSender<Storage, User>>,
     pub logger: slog::Logger,
 }

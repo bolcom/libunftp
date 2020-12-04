@@ -13,7 +13,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -40,14 +40,14 @@ impl Pass {
 }
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Pass
+impl<Storage, User> CommandHandler<Storage, User> for Pass
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let logger = args.logger;
         match &session.state {
@@ -61,7 +61,7 @@ where
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
                     }
                 };
-                let mut tx: Sender<InternalMsg> = args.tx.clone();
+                let mut tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
 
                 let auther = args.authenticator.clone();
 
@@ -75,13 +75,13 @@ where
                                 let mut session = session2clone.lock().await;
                                 slog::info!(logger, "User {} logged in", user);
                                 session.user = Arc::new(Some(user));
-                                InternalMsg::AuthSuccess
+                                ControlChanMsg::AuthSuccess
                             } else {
                                 slog::warn!(logger, "User {} authenticated but account is disabled", user);
-                                InternalMsg::AuthFailed
+                                ControlChanMsg::AuthFailed
                             }
                         }
-                        Err(_) => InternalMsg::AuthFailed,
+                        Err(_) => ControlChanMsg::AuthFailed,
                     };
                     tokio::spawn(async move {
                         if let Err(err) = tx.send(msg).await {

@@ -1,6 +1,6 @@
 //! Contains the `ControlChanError` struct that that defines the control channel error type.
 
-use super::parse_error::{ParseError, ParseErrorKind};
+use super::line_parser::error::{ParseError, ParseErrorKind};
 use crate::BoxError;
 
 use derive_more::Display;
@@ -97,7 +97,6 @@ impl From<std::str::Utf8Error> for ControlChanError {
 impl From<ParseError> for ControlChanError {
     fn from(err: ParseError) -> ControlChanError {
         let kind: ControlChanErrorKind = match err.kind().clone() {
-            ParseErrorKind::UnknownCommand { command } => ControlChanErrorKind::UnknownCommand { command },
             ParseErrorKind::InvalidUTF8 => ControlChanErrorKind::UTF8Error,
             ParseErrorKind::InvalidCommand => ControlChanErrorKind::InvalidCommand,
             ParseErrorKind::InvalidToken { .. } => ControlChanErrorKind::UTF8Error,

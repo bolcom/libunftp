@@ -2,8 +2,8 @@ pub mod error;
 pub mod options;
 
 use super::{
-    chancomms::{InternalMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
-    controlchan::{spawn_loop, LoopConfig},
+    chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
+    controlchan,
     datachan::spawn_processing,
     ftpserver::{error::ServerError, options::FtpsRequired},
     tls::FTPSConfig,
@@ -23,7 +23,7 @@ use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{
     fmt::Debug,
-    net::{IpAddr, Shutdown, SocketAddr},
+    net::{IpAddr, Shutdown},
     ops::Range,
     path::PathBuf,
     sync::Arc,
@@ -375,17 +375,21 @@ where
         let listener = tokio::net::TcpListener::bind(addr).await?;
         loop {
             match listener.accept().await {
-                Ok(stream) => {
-                    let (tcp_stream, socket_addr) = stream;
-                    slog::info!(self.logger, "Incoming control channel connection from {:?}", socket_addr);
-                    let params: LoopConfig<Storage, User> = (&self).into();
-                    let result = spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
-                    if let Err(controlchan_err) = result {
-                        slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", controlchan_err)
+                Ok((tcp_stream, socket_addr)) => {
+                    slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
+                    let params: controlchan::LoopConfig<Storage, User> = (&self).into();
+                    let result = controlchan::spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
+                    if let Err(err) = result {
+                        slog::error!(
+                            self.logger,
+                            "Could not spawn control channel loop for connection from {:?}: {:?}",
+                            socket_addr,
+                            err
+                        )
                     }
                 }
-                Err(e) => {
-                    slog::error!(self.logger, "Error accepting incoming connection {:?}", e);
+                Err(err) => {
+                    slog::error!(self.logger, "Error accepting incoming control connection {:?}", err);
                 }
             }
         }
@@ -427,19 +431,20 @@ where
                     // Based on the proxy protocol header, and the configured control port number,
                     // we differentiate between connections for the control channel,
                     // and connections for the data channel.
-                    if connection.to_port == external_control_port {
-                        let socket_addr = SocketAddr::new(connection.from_ip, connection.from_port);
-                        slog::info!(self.logger, "Connection from {:?} is a control connection", socket_addr);
-                        let params: LoopConfig<Storage,User> = (&self).into();
-                        let result = spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone())).await;
+                    let destination_port = connection.destination.port();
+                    if destination_port == external_control_port {
+                        let source = connection.source;
+                        slog::info!(self.logger, "Connection from {:?} is a control connection", source);
+                        let params: controlchan::LoopConfig<Storage,User> = (&self).into();
+                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone())).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
                     } else {
                         // handle incoming data connections
-                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, connection.to_port);
-                        if !self.passive_ports.contains(&connection.to_port) {
-                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", connection.to_port, self.passive_ports);
+                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, destination_port);
+                        if !self.passive_ports.contains(&destination_port) {
+                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.passive_ports);
                             tcp_stream.shutdown(Shutdown::Both).unwrap();
                             continue;
                         }
@@ -493,18 +498,18 @@ where
             reserved_port = port
         }
         let session = session_arc.lock().await;
-        if let Some(conn) = session.control_connection_info {
-            let conn_ip = match conn.to_ip {
-                IpAddr::V4(ref ip) => ip,
+        if let Some(destination) = session.destination {
+            let destination_ip = match destination.ip() {
+                IpAddr::V4(ip) => ip,
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.passive_host.clone(), conn_ip, reserved_port).await;
+            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.passive_host.clone(), &destination_ip, reserved_port).await;
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
                 let mut tx = tx.clone();
-                tx.send(InternalMsg::CommandChannelReply(reply)).await.unwrap();
+                tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
             }
         }
     }
@@ -556,14 +561,14 @@ where
     }
 }
 
-impl<Storage, User> From<&Server<Storage, User>> for LoopConfig<Storage, User>
+impl<Storage, User> From<&Server<Storage, User>> for controlchan::LoopConfig<Storage, User>
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     fn from(server: &Server<Storage, User>) -> Self {
-        LoopConfig {
+        controlchan::LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
             ftps_config: server.ftps_mode.clone(),

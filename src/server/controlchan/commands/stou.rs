@@ -1,9 +1,9 @@
 //! The RFC 959 Store File Uniquely (`STOU`) command
 
+use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
-        command::Command,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
         Reply, ReplyCode,
@@ -20,14 +20,14 @@ use uuid::Uuid;
 pub struct Stou;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Stou
+impl<Storager, User> CommandHandler<Storager, User> for Stou
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storager: StorageBackend<User> + 'static,
+    Storager::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, args: CommandContext<Storager, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let uuid: String = Uuid::new_v4().to_string();
         let filename: &Path = std::path::Path::new(&uuid);
@@ -36,7 +36,7 @@ where
         match session.data_cmd_tx.take() {
             Some(mut tx) => {
                 tokio::spawn(async move {
-                    if let Err(err) = tx.send(Command::Stor { path }).await {
+                    if let Err(err) = tx.send(DataChanCmd::Stor { path }).await {
                         slog::warn!(logger, "sending command failed. {}", err);
                     }
                 });

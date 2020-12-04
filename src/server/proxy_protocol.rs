@@ -4,6 +4,7 @@ use bytes::Bytes;
 use lazy_static::lazy_static;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
 use rand::{rngs::OsRng, RngCore};
+use std::net::SocketAddr;
 use std::{collections::HashMap, net::IpAddr, ops::Range};
 use tokio::{io::AsyncReadExt, sync::Mutex};
 
@@ -35,20 +36,13 @@ pub enum ProxyError {
 
 #[derive(Debug, Copy, Clone)]
 pub struct ConnectionTuple {
-    pub from_ip: IpAddr,
-    pub from_port: u16,
-    pub to_ip: IpAddr,
-    pub to_port: u16,
+    pub source: SocketAddr,
+    pub destination: SocketAddr,
 }
 
 impl ConnectionTuple {
-    fn new(from_ip: IpAddr, from_port: u16, to_ip: IpAddr, to_port: u16) -> Self {
-        ConnectionTuple {
-            from_ip,
-            from_port,
-            to_ip,
-            to_port,
-        }
+    pub fn key(&self) -> String {
+        format!("{}.{}", self.source.ip(), self.destination.port())
     }
 }
 
@@ -113,7 +107,10 @@ pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) 
             ..
         } => {
             if family == ProxyAddressFamily::IPv4 {
-                Ok(ConnectionTuple::new(source, source_port, destination, destination_port))
+                Ok(ConnectionTuple {
+                    source: SocketAddr::new(source, source_port),
+                    destination: SocketAddr::new(destination, destination_port),
+                })
             } else {
                 Err(ProxyError::IPv4Required)
             }
@@ -124,8 +121,8 @@ pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) 
 
 /// Constructs a hash key based on the source ip and the destination port
 /// in a straightforward consistent way
-pub fn construct_proxy_hash_key(connection: &ConnectionTuple, port: u16) -> String {
-    format!("{}.{}", connection.from_ip, port)
+pub fn construct_proxy_hash_key(source: &IpAddr, port: u16) -> String {
+    format!("{}.{}", source, port)
 }
 
 /// Connect clients to the right data channel
@@ -176,12 +173,8 @@ where
         }
     }
 
-    fn get_hash_with_connection(connection: &ConnectionTuple) -> String {
-        format!("{}.{}", connection.from_ip, connection.to_port)
-    }
-
     pub fn unregister(&mut self, connection: &ConnectionTuple) {
-        let hash = Self::get_hash_with_connection(connection);
+        let hash = connection.key();
         match self.switchboard.remove(&hash) {
             Some(_) => (),
             None => {
@@ -192,7 +185,7 @@ where
 
     #[tracing_attributes::instrument]
     pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
-        let hash = Self::get_hash_with_connection(connection);
+        let hash = connection.key();
 
         match self.switchboard.get(&hash) {
             Some(session) => session.clone(),
@@ -212,8 +205,8 @@ where
         for _ in 1..10 {
             let port = rng.next_u32() % rng_length as u32 + self.port_range.start as u32;
             let session = session_arc.lock().await;
-            if let Some(conn) = session.control_connection_info {
-                let hash = construct_proxy_hash_key(&conn, port as u16);
+            if session.destination.is_some() {
+                let hash = construct_proxy_hash_key(&session.source.ip(), port as u16);
 
                 match &self.try_and_claim(hash.clone(), session_arc.clone()) {
                     Ok(_) => return Ok(port as u16),

@@ -15,7 +15,7 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::InternalMsg,
+        chancomms::ControlChanMsg,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
@@ -31,18 +31,18 @@ use futures::{channel::mpsc::Sender, prelude::*};
 pub struct Quit;
 
 #[async_trait]
-impl<S, U> CommandHandler<S, U> for Quit
+impl<Storage, User> CommandHandler<Storage, User> for Quit
 where
-    U: UserDetail + 'static,
-    S: StorageBackend<U> + 'static,
-    S::Metadata: Metadata,
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError> {
-        let mut tx: Sender<InternalMsg> = args.tx.clone();
+    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let mut tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
-        //TODO does this make sense? The command is not sent and yet an Ok is replied
-        if let Err(send_res) = tx.send(InternalMsg::Quit).await {
+        // Let the control loop know it can exit.
+        if let Err(send_res) = tx.send(ControlChanMsg::Quit).await {
             slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))

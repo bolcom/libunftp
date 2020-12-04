@@ -34,7 +34,10 @@ impl Filesystem {
     /// of the root. For example, when the `Filesystem` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {
-        Filesystem { root: root.into() }
+        let path = root.into();
+        Filesystem {
+            root: canonicalize(&path).unwrap_or(path),
+        }
     }
 
     /// Returns the full, absolute and canonical path corresponding to the (relative to FTP root)
