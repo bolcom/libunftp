@@ -89,11 +89,35 @@ async fn creating_directory_with_file_in_it() {
         assert_eq!(list_in.len(), 1);
         assert!(list_in[0].ends_with(" greeting.txt"));
 
+        // FIXME: `CWD ..` does nothing for some reason (security? should work anyway i think)
         // ftp_stream.cwd("..").compat().await.unwrap();
         ftp_stream.cdup().compat().await.unwrap();
         let list_out = ftp_stream.list(None).compat().await.unwrap();
         assert_ge!(list_out.len(), 1);
         assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
+    }).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn file_sizes() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).compat().await.unwrap();
+        ftp_stream.login("anonymous", "").compat().await.unwrap();
+        ftp_stream.mkdir("file_sizes").compat().await.unwrap();
+        ftp_stream.cwd("file_sizes").compat().await.unwrap();
+
+        ftp_stream.put("10 bytes", &mut Cursor::new(b"1234567890")).compat().await.unwrap();
+        ftp_stream.put("12 bytes", &mut Cursor::new(b"123456789012")).compat().await.unwrap();
+        ftp_stream.put("17 bytes", &mut Cursor::new(b"12345678901234567")).compat().await.unwrap();
+
+        let list = ftp_stream.list(None).compat().await.unwrap();
+        assert_eq!(list.len(), 3);
+        list.iter().for_each(|f| {
+            println!("{}", f);
+            let vec: Vec<&str> = f.split_whitespace().collect();
+            // "coincidentally", file name matches file size
+            assert_eq!(vec[3], vec[7]);
+        });
     }).await;
 }
 
