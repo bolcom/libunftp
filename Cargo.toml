@@ -65,6 +65,7 @@ pretty_env_logger = "0.4.0"
 tempfile = "3.1.0"
 tokio = { version = "0.3.2", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.14"
+more-asserts = "0.2.1"
 
 [features]
 pam_auth = ["pam-auth"]

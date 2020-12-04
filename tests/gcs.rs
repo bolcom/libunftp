@@ -16,6 +16,14 @@ use tokio_compat_02::FutureExt;
 use libunftp::Server;
 use libunftp::storage::cloud_storage::CloudStorage;
 
+use more_asserts::assert_ge;
+
+/*
+FIXME: this is just MVP tests. need to add:
+- deleting_directory_deletes_files_in_it() and/or deleting_directory_fails_if_contains_file()
+- ...
+ */
+
 lazy_static! {
     static ref DOCKER: Mutex<Child> = initialize_docker();
 }
@@ -66,29 +74,30 @@ async fn newly_created_dir_is_empty() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn deleting_directory_deletes_file() {
+async fn creating_directory_with_file_in_it() {
     run_test(async {
         let mut ftp_stream = FtpStream::connect(ADDR).compat().await.unwrap();
         ftp_stream.login("anonymous", "").compat().await.unwrap();
-        ftp_stream.mkdir("deleting_directory_deletes_file").compat().await.unwrap();
-        ftp_stream.cwd("deleting_directory_deletes_file").compat().await.unwrap();
+        ftp_stream.mkdir("creating_directory_with_file_in_it").compat().await.unwrap();
+        ftp_stream.cwd("creating_directory_with_file_in_it").compat().await.unwrap();
 
         let content = b"Hello from this test!\n";
         let mut reader = Cursor::new(content);
 
         ftp_stream.put("greeting.txt", &mut reader).compat().await.unwrap();
-        let list = ftp_stream.list(None).compat().await.unwrap();
-        assert_eq!(list.len(), 1);
-        assert!(list[0].ends_with(" greeting.txt"));
+        let list_in = ftp_stream.list(None).compat().await.unwrap();
+        assert_eq!(list_in.len(), 1);
+        assert!(list_in[0].ends_with(" greeting.txt"));
 
         // ftp_stream.cwd("..").compat().await.unwrap();
-        // ftp_stream.rmdir("deleting_directory_deletes_file").compat().await.unwrap();
-        //
-        // let list = ftp_stream.list(None).compat().await.unwrap();
-        // assert!(!list.iter().any(|t| t.starts_with("deleting_directory_deletes_file")));
+        ftp_stream.cdup().compat().await.unwrap();
+        let list_out = ftp_stream.list(None).compat().await.unwrap();
+        assert_ge!(list_out.len(), 1);
+        assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
     }).await;
 }
 
+// FIXME: `move async` is beta in rust 1.48, hence the `impl Future`
 async fn run_test(test: impl Future<Output=()>) {
     let mut child = DOCKER.lock().await;
 
