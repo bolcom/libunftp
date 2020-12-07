@@ -1,5 +1,4 @@
 use libunftp::auth::rest;
-use log::info;
 use std::env;
 use std::sync::Arc;
 use tokio::runtime::Builder;
@@ -22,7 +21,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
-    info!("Starting ftp server on {}", addr);
+    println!("Starting ftp server on {}", addr);
     let runtime = Builder::new_current_thread().build()?;
     runtime.block_on(server.listen(addr))?;
     Ok(())
