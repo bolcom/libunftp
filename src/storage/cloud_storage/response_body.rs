@@ -92,13 +92,13 @@ mod test {
 
     #[test]
     fn to_metadata() {
-        let sys_time: SystemTime = SystemTime::now();
-        let date_time: DateTime<Utc> = DateTime::from(sys_time);
+        let sys_time = SystemTime::now();
+        let date_time = DateTime::from(sys_time);
 
         let item: Item = Item {
             name: "".into(),
             updated: date_time,
-            size: "50".into(),
+            size: 50,
         };
 
         let metadata: ObjectMetadata = item.to_metadata().unwrap();
@@ -109,15 +109,7 @@ mod test {
 
     #[test]
     fn to_metadata_parse_error() {
-        use chrono::prelude::Utc;
-
-        let item: Item = Item {
-            name: "".into(),
-            updated: Utc::now(),
-            size: "unparseable".into(),
-        };
-
-        let metadata: Result<ObjectMetadata, Error> = item.to_metadata();
-        assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
+        let response: serde_json::error::Result<Item> = serde_json::from_str(r#"{"name":"", "updated":"2020-09-01T12:13:14Z", "size":8}"#);
+        assert_eq!(response.err().unwrap().is_data(), true);
     }
 }
