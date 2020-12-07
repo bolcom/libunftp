@@ -2,9 +2,9 @@ use super::ObjectMetadata;
 use crate::storage::{Error, Fileinfo};
 use chrono::prelude::*;
 use serde::{de, Deserialize};
-use std::{iter::Extend, path::PathBuf};
-use std::str::FromStr;
 use std::fmt::Display;
+use std::str::FromStr;
+use std::{iter::Extend, path::PathBuf};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct ResponseBody {
@@ -23,10 +23,11 @@ pub(crate) struct Item {
 }
 
 // TODO: this is a generic string->* deserializer, move to a util package
-fn item_size_deserializer<'de, T, D>(deserializer: D) -> Result<T, D::Error> where
+fn item_size_deserializer<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
     T: FromStr,
     T::Err: Display,
-    D: de::Deserializer<'de>
+    D: de::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
     s.parse().map_err(de::Error::custom)

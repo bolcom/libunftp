@@ -1,20 +1,20 @@
-use std::{str, time::Duration};
 use std::io::Cursor;
 use std::io::Read;
 use std::process::{Child, Command};
+use std::{str, time::Duration};
 
 use async_ftp::FtpStream;
 use lazy_static::*;
 use path_abs::PathInfo;
 use pretty_assertions::assert_eq;
-use slog::*;
 use slog::Drain;
+use slog::*;
 use tokio::macros::support::Future;
 use tokio::sync::Mutex;
 use tokio_compat_02::FutureExt;
 
-use libunftp::Server;
 use libunftp::storage::cloud_storage::CloudStorage;
+use libunftp::Server;
 
 use more_asserts::assert_ge;
 
@@ -70,7 +70,8 @@ async fn newly_created_dir_is_empty() {
         ftp_stream.cwd("newly_created_dir_is_empty").compat().await.unwrap();
         let list = ftp_stream.list(None).compat().await.unwrap();
         assert_eq!(list.len(), 0)
-    }).await;
+    })
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -89,13 +90,14 @@ async fn creating_directory_with_file_in_it() {
         assert_eq!(list_in.len(), 1);
         assert!(list_in[0].ends_with(" greeting.txt"));
 
-        // FIXME: `CWD ..` does nothing for some reason (security? should work anyway i think)
+        // FIXME: `CWD ..` does nothing in GCS ATM (TODO)
         // ftp_stream.cwd("..").compat().await.unwrap();
         ftp_stream.cdup().compat().await.unwrap();
         let list_out = ftp_stream.list(None).compat().await.unwrap();
         assert_ge!(list_out.len(), 1);
         assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
-    }).await;
+    })
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -118,11 +120,12 @@ async fn file_sizes() {
             // "coincidentally", file name matches file size
             assert_eq!(vec[3], vec[7]);
         });
-    }).await;
+    })
+    .await;
 }
 
 // FIXME: `move async` is beta in rust 1.48, hence the `impl Future`
-async fn run_test(test: impl Future<Output=()>) {
+async fn run_test(test: impl Future<Output = ()>) {
     let mut child = DOCKER.lock().await;
 
     let service_account_key = yup_oauth2::read_service_account_key(GCS_SA_KEY).compat().await.unwrap();
@@ -131,11 +134,9 @@ async fn run_test(test: impl Future<Output=()>) {
     let drain = slog_async::Async::new(drain).build().fuse();
 
     tokio::spawn(
-        Server::new(Box::new(move || {
-            CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, service_account_key.clone())
-        }))
+        Server::new(Box::new(move || CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, service_account_key.clone())))
             .logger(Some(Logger::root(drain, o!())))
-            .listen(ADDR)
+            .listen(ADDR),
     );
 
     tokio::time::sleep(Duration::new(1, 0)).await;
@@ -145,8 +146,8 @@ async fn run_test(test: impl Future<Output=()>) {
     let mut stdout = String::new();
     let mut stderr = String::new();
 
-    child.stdout.as_mut().map(|s| { s.read_to_string(&mut stdout) });
-    child.stderr.as_mut().map(|s| { s.read_to_string(&mut stderr) });
+    child.stdout.as_mut().map(|s| s.read_to_string(&mut stdout));
+    child.stderr.as_mut().map(|s| s.read_to_string(&mut stderr));
 
     println!("stdout: {}", stdout);
     println!("stderr: {}", stderr);
