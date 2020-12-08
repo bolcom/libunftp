@@ -20,12 +20,6 @@ pub enum ParseErrorKind {
     /// The client issued an invalid command (e.g. required parameters are missing).
     #[display(fmt = "Invalid command")]
     InvalidCommand,
-    /// An invalid token (e.g. not UTF-8) was encountered while parsing the command.
-    #[display(fmt = "Invalid token while parsing: {}", token)]
-    InvalidToken {
-        /// The Token that is not UTF-8 encoded.
-        token: u8,
-    },
     /// Non-UTF8 character encountered.
     #[display(fmt = "Non-UTF8 character while parsing")]
     InvalidUTF8,

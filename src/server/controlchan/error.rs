@@ -99,7 +99,6 @@ impl From<ParseError> for ControlChanError {
         let kind: ControlChanErrorKind = match err.kind().clone() {
             ParseErrorKind::InvalidUTF8 => ControlChanErrorKind::UTF8Error,
             ParseErrorKind::InvalidCommand => ControlChanErrorKind::InvalidCommand,
-            ParseErrorKind::InvalidToken { .. } => ControlChanErrorKind::UTF8Error,
             _ => ControlChanErrorKind::InvalidCommand,
         };
         ControlChanError {
