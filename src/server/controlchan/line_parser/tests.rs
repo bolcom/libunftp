@@ -339,6 +339,12 @@ fn parse_mkd() {
 }
 
 #[test]
+fn parse_mkd_non_ascii() {
+    let input = "MKD 目录\r\n";
+    assert_eq!(parse(input), Ok(Command::Mkd { path: "目录".into() }));
+}
+
+#[test]
 fn parse_allo() {
     let input = "ALLO\r\n";
     assert_eq!(parse(input), Ok(Command::Allo {}));
