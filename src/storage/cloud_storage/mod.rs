@@ -1,4 +1,5 @@
 //! StorageBackend that uses Cloud Storage from Google
+// FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
 pub mod object_metadata;
 mod response_body;

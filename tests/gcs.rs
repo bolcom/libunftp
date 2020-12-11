@@ -58,7 +58,9 @@ pub fn initialize_docker() -> Mutex<Child> {
         .arg("9081");
 
     println!("docker command: {:?}", command);
-    return Mutex::new(command.spawn().expect("docker failed"));
+    let result = Mutex::new(command.spawn().expect("docker failed"));
+    tokio::time::sleep(Duration::new(1, 0)).await;
+    return result;
 }
 
 #[tokio::test(flavor = "current_thread")]
