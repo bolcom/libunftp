@@ -139,7 +139,7 @@ async fn run_test(test: impl Future<Output = ()>) {
             .listen(ADDR),
     );
 
-    tokio::time::sleep(Duration::new(1, 0)).await;
+    tokio::time::sleep(Duration::new(2, 0)).await;
 
     test.await;
 
