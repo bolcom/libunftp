@@ -59,7 +59,7 @@ pub fn initialize_docker() -> Mutex<Child> {
 
     println!("docker command: {:?}", command);
     let result = Mutex::new(command.spawn().expect("docker failed"));
-    tokio::time::sleep(Duration::new(1, 0)).await;
+    std::thread::sleep(Duration::new(1, 0));
     return result;
 }
 
