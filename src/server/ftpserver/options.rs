@@ -1,4 +1,4 @@
-//! Contains code pertaining to the setup options that can be given to the `Server`
+//! Contains code pertaining to the setup options that can be given to the [`Server`](crate::Server)
 
 use std::fmt::Formatter;
 use std::ops::Range;

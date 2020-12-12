@@ -30,10 +30,11 @@ use std::{
     time::Duration,
 };
 
-/// An instance of an FTP(S) server. It aggregates an [`Authenticator`] that will be used
-/// for authentication, and a [`StorageBackend`] that will be used as the virtual file system.
+/// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
+/// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
+/// implementation that will be used as the virtual file system.
 ///
-/// The server can be started with the `listen` method.
+/// The server can be started with the [`listen`](crate::Server::listen()) method.
 ///
 /// # Example
 ///

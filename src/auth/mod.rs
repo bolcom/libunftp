@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 
-//! Contains the `Authenticator` and `UserDetails` traits that are used by various implementations
+//! Contains the [`Authenticator`](crate::auth::Authenticator) and [`UserDetail`](crate::auth::UserDetail) traits that are used by various implementations
 //! and also the `Server` to authenticate users.
 //!
 //! Defines the common interface that can be implemented for a multitude of authentication
@@ -13,7 +13,7 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.41"
+//! async-trait = "0.1.42"
 //! ```
 //!
 //! 2. Implement the [`Authenticator`] trait and optionally the [`UserDetail`] trait:

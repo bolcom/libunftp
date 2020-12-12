@@ -1,4 +1,4 @@
-//! StorageBackend that uses Cloud Storage from Google
+//! A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud Storage from Google
 
 pub mod object_metadata;
 mod response_body;
@@ -31,7 +31,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
 
-/// A StorageBackend that uses Cloud storage from Google.
+/// A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud storage from Google.
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,
