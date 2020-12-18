@@ -59,7 +59,8 @@ pub fn initialize_docker() -> Mutex<Child> {
 
     println!("docker command: {:?}", command);
     let result = Mutex::new(command.spawn().expect("docker failed"));
-    std::thread::sleep(Duration::new(1, 0));
+    // FIXME: on linux, `docker -d` returns extremely quickly, but container startup continues in background. Replace this stupid wait with checking container status (a sort of startup probe)
+    std::thread::sleep(Duration::new(10, 0));
     return result;
 }
 
