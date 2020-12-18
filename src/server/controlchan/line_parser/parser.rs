@@ -341,43 +341,27 @@ where
     Ok(cmd)
 }
 
-/// Try to parse a buffer of bytes, up to end of line into a `&str`.
-fn parse_to_eol<T: AsRef<[u8]> + Into<Bytes>>(bytes: T) -> Result<Bytes> {
-    let mut pos: usize = 0;
-    let mut bytes: Bytes = bytes.into();
-    let mut iter = bytes.as_ref().iter();
-
-    loop {
-        let b = match iter.next() {
-            Some(b) => b,
-            _ => return Err(ParseErrorKind::InvalidEOL.into()),
-        };
-
-        if *b == b'\r' {
-            match iter.next() {
-                Some(b'\n') => return Ok(bytes.split_to(pos)),
-                _ => return Err(ParseErrorKind::InvalidEOL.into()),
+/// Try to parse `text`, up to end of line.
+fn parse_to_eol(text: String) -> Result<Bytes> {
+    let mut last_ch = '\0';
+    for (pos, ch) in text.char_indices() {
+        match (last_ch, ch) {
+            ('\r', '\n') => {
+                return Ok(Bytes::copy_from_slice(&text.as_bytes()[..pos - 1]));
             }
+            ('\r', _) => {
+                return Err(ParseErrorKind::InvalidEOL.into());
+            }
+            (_, '\n') => {
+                return Ok(Bytes::copy_from_slice(&text.as_bytes()[..pos]));
+            }
+            _ => {}
         }
-
-        if *b == b'\n' {
-            return Ok(bytes.split_to(pos));
-        }
-
-        if !is_valid_token_char(*b) {
-            return Err(ParseErrorKind::InvalidToken { token: *b }.into());
-        }
-
-        // We don't have to be afraid of an overflow here, since a `Bytes` can never be bigger than
-        // `std::usize::MAX`
-        pos += 1;
+        last_ch = ch;
     }
+    Err(ParseErrorKind::InvalidEOL.into())
 }
 
 fn normalize(token: &[u8]) -> Result<String> {
     Ok(str::from_utf8(token).map(|t| t.to_uppercase())?)
-}
-
-fn is_valid_token_char(b: u8) -> bool {
-    b > 0x1F && b < 0x7F
 }

@@ -5,7 +5,7 @@ use crate::BoxError;
 use std::net::AddrParseError;
 use thiserror::Error;
 
-/// Error returned by the `Server.listen` method
+/// Error returned by the [`Server.listen`](crate::Server::listen()) method
 #[derive(Error, Debug)]
 #[error("server error: {msg}")]
 pub struct ServerError {

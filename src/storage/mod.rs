@@ -1,4 +1,4 @@
-//! Contains the `StorageBackend` trait and its bundled implementations that can used by the `Server`.
+//! Contains the [`StorageBackend`](crate::storage::StorageBackend) trait and its bundled implementations that can used by the `Server`.
 //!
 //! You can define your own implementation to integrate your FTP(S) server with whatever
 //! backend you need. To create a new storage back-end:
@@ -6,10 +6,10 @@
 //! 1. Declare a dependency on the async-trait crate
 //!
 //! ```toml
-//! async-trait = "0.1.41"
+//! async-trait = "0.1.42"
 //! ```
 //!
-//! 2. Implement the `StorageBackend` trait and optionally the `Metadata` trait:
+//! 2. Implement the [`StorageBackend`](crate::storage::StorageBackend) trait and optionally the [`Metadata`](crate::storage::Metadata) trait:
 //!
 //! ```no_run
 //! use async_trait::async_trait;
@@ -113,7 +113,7 @@
 //! }
 //! ```
 //!
-//! 3. Initialize it with the [`Server`]:
+//! 3. Initialize it with the [`Server`](crate::Server):
 //!
 //! ```no_run
 //! # use libunftp::storage::filesystem::Filesystem;
