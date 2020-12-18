@@ -2,11 +2,16 @@
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
 pub mod object_metadata;
+pub mod options;
 mod response_body;
 mod uri;
+mod workflow_identity;
 
 use crate::storage::{
-    cloud_storage::response_body::{Item, ResponseBody},
+    cloud_storage::{
+        options::AuthMethod,
+        response_body::{Item, ResponseBody},
+    },
     Error, ErrorKind, Fileinfo, Metadata, StorageBackend,
 };
 use async_trait::async_trait;
@@ -29,42 +34,50 @@ use std::{
 use tokio::io::{self, AsyncReadExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
-use yup_oauth2::{ServiceAccountAuthenticator, ServiceAccountKey};
+use yup_oauth2::ServiceAccountAuthenticator;
 
 /// A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud storage from Google.
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
-    service_account_key: ServiceAccountKey,
+    auth: AuthMethod,
 }
 
 impl CloudStorage {
     /// Creates a new CloudStorage backend connected to the specified GCS bucket.
-    pub fn new<STR: Into<String>>(base_url: STR, bucket: STR, service_account_key: ServiceAccountKey) -> Self {
+    pub fn new<Str, AuthHow>(base_url: Str, bucket: Str, auth: AuthHow) -> Self
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
+    {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::with_native_roots());
         CloudStorage {
             client,
-            service_account_key,
+            auth: auth.into(),
             uris: GcsUri::new(base_url.into(), bucket.into()),
         }
     }
 
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
-        // FIXME: this is ugly, make a trait for get_token (with a one test and one yup_oauth implementation)
-        if self.service_account_key.key_type.as_deref() == Some("unftp_test") {
-            return Ok("test".to_string());
-        }
-        let auth = ServiceAccountAuthenticator::builder(self.service_account_key.clone())
-            .hyper_client(self.client.clone())
-            .build()
-            .await?;
+        match &self.auth {
+            AuthMethod::ServiceAccountKey(k) => {
+                if b"unftp_test" == k.as_slice() {
+                    return Ok("test".to_string());
+                }
+                let key = self.auth.to_service_account_key()?;
+                let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client.clone()).build().await?;
 
-        auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
-            .map_ok(|t| t.as_str().to_string())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
-            .await
+                auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
+                    .map_ok(|t| t.as_str().to_string())
+                    .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+                    .await
+            }
+            AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
+                .await
+                .map(|t| t.access_token),
+        }
     }
 }
 

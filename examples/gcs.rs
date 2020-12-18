@@ -53,7 +53,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
-    let service_account_key = matches
+    let service_account_key_path = matches
         .value_of(SERVICE_ACCOUNT_KEY)
         .ok_or("Internal error: use of an undefined command line parameter")?;
     let bucket_name = matches
@@ -61,7 +61,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("Internal error: use of an undefined command line parameter")?
         .to_owned();
 
-    let service_account_key = yup_oauth2::read_service_account_key(service_account_key).await?;
+    let service_account_key: Vec<u8> = tokio::fs::read(service_account_key_path).await?;
     if let Some(ftps_certs_file) = matches.value_of(FTPS_CERTS_FILE) {
         let ftps_key_file = matches
             .value_of(FTPS_KEY_FILE)

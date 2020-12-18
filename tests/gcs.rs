@@ -1,22 +1,22 @@
-use std::io::Cursor;
-use std::io::Read;
-use std::process::{Child, Command};
-use std::{str, time::Duration};
-
 use async_ftp::FtpStream;
 use lazy_static::*;
+use libunftp::{
+    storage::cloud_storage::{options::AuthMethod, CloudStorage},
+    Server,
+};
+use more_asserts::assert_ge;
 use path_abs::PathInfo;
 use pretty_assertions::assert_eq;
 use slog::Drain;
 use slog::*;
-use tokio::macros::support::Future;
-use tokio::sync::Mutex;
+use std::{
+    io::{Cursor, Read},
+    process::{Child, Command},
+    str,
+    time::Duration,
+};
+use tokio::{macros::support::Future, sync::Mutex};
 use tokio_compat_02::FutureExt;
-
-use libunftp::storage::cloud_storage::CloudStorage;
-use libunftp::Server;
-
-use more_asserts::assert_ge;
 
 /*
 FIXME: this is just MVP tests. need to add:
@@ -30,8 +30,6 @@ lazy_static! {
 
 // FIXME: auto-allocate port
 const ADDR: &str = "127.0.0.1:1234";
-
-const GCS_SA_KEY: &str = "tests/resources/gcs_sa_key.json";
 const GCS_BASE_URL: &str = "http://localhost:9081";
 const GCS_BUCKET: &str = "test-bucket";
 
@@ -131,15 +129,16 @@ async fn file_sizes() {
 async fn run_test(test: impl Future<Output = ()>) {
     let mut child = DOCKER.lock().await;
 
-    let service_account_key = yup_oauth2::read_service_account_key(GCS_SA_KEY).compat().await.unwrap();
     let decorator = slog_term::TermDecorator::new().stderr().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
 
     tokio::spawn(
-        Server::new(Box::new(move || CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, service_account_key.clone())))
-            .logger(Some(Logger::root(drain, o!())))
-            .listen(ADDR),
+        Server::new(Box::new(move || {
+            CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, AuthMethod::ServiceAccountKey(b"unftp_test".to_vec()))
+        }))
+        .logger(Some(Logger::root(drain, o!())))
+        .listen(ADDR),
     );
 
     tokio::time::sleep(Duration::new(1, 0)).await;
