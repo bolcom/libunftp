@@ -345,6 +345,18 @@ fn parse_mkd_non_ascii() {
 }
 
 #[test]
+fn parse_mkd_spaces() {
+    let input = "MKD   12 3 \r\n";
+    assert_eq!(parse(input), Ok(Command::Mkd { path: "  12 3 ".into() }));
+}
+
+#[test]
+fn parse_mkd_cr() {
+    let input = "MKD foo\r\0\nboo.bar\r\n";
+    assert_eq!(parse(input), Ok(Command::Mkd { path: "foo\r\nboo.bar".into() }));
+}
+
+#[test]
 fn parse_allo() {
     let input = "ALLO\r\n";
     assert_eq!(parse(input), Ok(Command::Allo {}));

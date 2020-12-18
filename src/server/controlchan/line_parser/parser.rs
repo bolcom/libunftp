@@ -343,17 +343,35 @@ where
 
 /// Try to parse `text`, up to end of line.
 fn parse_to_eol(text: String) -> Result<Bytes> {
-    let mut last_ch = '\0';
-    for (pos, ch) in text.char_indices() {
+    match parse_to_eol_with_null(text) {
+        Err(e) => Err(e),
+        Ok((s, false, n)) => Ok(Bytes::copy_from_slice(&s.as_bytes()[..s.len() - n])),
+        Ok((mut s, true, n)) => {
+            s.retain(|c| c != '\0');
+            Ok(Bytes::copy_from_slice(&s.as_bytes()[..s.len() - n]))
+        }
+    }
+}
+
+fn parse_to_eol_with_null(text: String) -> Result<(String, bool, usize)> {
+    let mut last_ch = '\n';
+    let mut contains_null = false;
+    for (_, ch) in text.char_indices() {
         match (last_ch, ch) {
             ('\r', '\n') => {
-                return Ok(Bytes::copy_from_slice(&text.as_bytes()[..pos - 1]));
+                return Ok((text, contains_null, 2));
+            }
+            ('\r', '\0') => {
+                contains_null = true;
+            }
+            ('\0', '\n') => {
+                contains_null = true;
             }
             ('\r', _) => {
                 return Err(ParseErrorKind::InvalidEOL.into());
             }
             (_, '\n') => {
-                return Ok(Bytes::copy_from_slice(&text.as_bytes()[..pos]));
+                return Ok((text, contains_null, 1));
             }
             _ => {}
         }
