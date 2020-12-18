@@ -1,7 +1,9 @@
 use super::ObjectMetadata;
-use crate::storage::{Error, ErrorKind, Fileinfo};
+use crate::storage::{Error, Fileinfo};
 use chrono::prelude::*;
-use serde::Deserialize;
+use serde::{de, Deserialize};
+use std::fmt::Display;
+use std::str::FromStr;
 use std::{iter::Extend, path::PathBuf};
 
 #[derive(Deserialize, Debug)]
@@ -14,7 +16,21 @@ pub(crate) struct ResponseBody {
 pub(crate) struct Item {
     name: String,
     updated: DateTime<Utc>,
-    size: String,
+
+    // GCS API defines `size` as json string, doh
+    #[serde(default, deserialize_with = "item_size_deserializer")]
+    size: u64,
+}
+
+// TODO: this is a generic string->* deserializer, move to a util package
+fn item_size_deserializer<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: FromStr,
+    T::Err: Display,
+    D: de::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(de::Error::custom)
 }
 
 impl ResponseBody {
@@ -42,10 +58,8 @@ impl ResponseBody {
 
 impl Item {
     pub(crate) fn to_metadata(&self) -> Result<ObjectMetadata, Error> {
-        let size: u64 = self.size.parse().map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?;
-
         Ok(ObjectMetadata {
-            size,
+            size: self.size,
             last_updated: Some(self.updated.into()),
             is_file: !self.name.ends_with('/'),
         })
@@ -69,6 +83,7 @@ pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, Obje
         },
     })
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -77,13 +92,13 @@ mod test {
 
     #[test]
     fn to_metadata() {
-        let sys_time: SystemTime = SystemTime::now();
-        let date_time: DateTime<Utc> = DateTime::from(sys_time);
+        let sys_time = SystemTime::now();
+        let date_time = DateTime::from(sys_time);
 
         let item: Item = Item {
             name: "".into(),
             updated: date_time,
-            size: "50".into(),
+            size: 50,
         };
 
         let metadata: ObjectMetadata = item.to_metadata().unwrap();
@@ -94,15 +109,7 @@ mod test {
 
     #[test]
     fn to_metadata_parse_error() {
-        use chrono::prelude::Utc;
-
-        let item: Item = Item {
-            name: "".into(),
-            updated: Utc::now(),
-            size: "unparseable".into(),
-        };
-
-        let metadata: Result<ObjectMetadata, Error> = item.to_metadata();
-        assert_eq!(metadata.err().unwrap().kind(), ErrorKind::TransientFileNotAvailable);
+        let response: serde_json::error::Result<Item> = serde_json::from_str(r#"{"name":"", "updated":"2020-09-01T12:13:14Z", "size":8}"#);
+        assert_eq!(response.err().unwrap().is_data(), true);
     }
 }

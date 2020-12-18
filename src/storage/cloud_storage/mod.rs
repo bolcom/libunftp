@@ -1,4 +1,5 @@
 //! A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud Storage from Google
+// FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
 pub mod object_metadata;
 mod response_body;
@@ -204,6 +205,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
             .method(Method::POST)
             .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
         let response: Response<Body> = client
             .request(request)
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
