@@ -29,11 +29,11 @@ lazy_static! {
 }
 
 // FIXME: auto-allocate port
-const ADDR: &'static str = "127.0.0.1:1234";
+const ADDR: &str = "127.0.0.1:1234";
 
-const GCS_SA_KEY: &'static str = "tests/resources/gcs_sa_key.json";
-const GCS_BASE_URL: &'static str = "http://localhost:9081";
-const GCS_BUCKET: &'static str = "test-bucket";
+const GCS_SA_KEY: &str = "tests/resources/gcs_sa_key.json";
+const GCS_BASE_URL: &str = "http://localhost:9081";
+const GCS_BUCKET: &str = "test-bucket";
 
 pub fn initialize_docker() -> Mutex<Child> {
     let buf = std::env::current_dir().unwrap();
@@ -61,7 +61,7 @@ pub fn initialize_docker() -> Mutex<Child> {
     let result = Mutex::new(command.spawn().expect("docker failed"));
     // FIXME: on linux, `docker -d` returns extremely quickly, but container startup continues in background. Replace this stupid wait with checking container status (a sort of startup probe)
     std::thread::sleep(Duration::new(10, 0));
-    return result;
+    result
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -9,7 +9,6 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::string::String;
-use tokio_compat_02::FutureExt;
 
 /// [`Authenticator`] implementation that authenticates against a JSON REST API.
 ///
@@ -139,8 +138,8 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
 
         let client = Client::new();
 
-        let resp = client.request(req).compat().await?;
-        let body_bytes = hyper::body::to_bytes(resp.into_body()).compat().await?;
+        let resp = client.request(req).await?;
+        let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
 
         let body: Value = serde_json::from_slice(&body_bytes)?;
         let parsed = match body.pointer(&selector) {
@@ -182,7 +181,7 @@ pub enum RestError {
     ///
     HTTPStatusError(u16),
     ///
-    HyperError(hyper::error::Error),
+    HyperError(hyper::Error),
     ///
     HttpError(String),
     ///
@@ -191,8 +190,8 @@ pub enum RestError {
     JSONSerializationError(serde_json::Error),
 }
 
-impl From<hyper::error::Error> for RestError {
-    fn from(e: hyper::error::Error) -> Self {
+impl From<hyper::Error> for RestError {
+    fn from(e: hyper::Error) -> Self {
         Self::HttpError(e.to_string())
     }
 }
@@ -203,8 +202,8 @@ impl From<serde_json::error::Error> for RestError {
     }
 }
 
-impl std::convert::From<hyper::error::Error> for AuthenticationError {
-    fn from(e: hyper::error::Error) -> Self {
+impl std::convert::From<hyper::Error> for AuthenticationError {
+    fn from(e: hyper::Error) -> Self {
         AuthenticationError::with_source("rest authenticator http client error", e)
     }
 }

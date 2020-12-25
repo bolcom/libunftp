@@ -18,17 +18,12 @@ use crate::{
     storage::{filesystem::Filesystem, Metadata, StorageBackend},
 };
 
-use futures::{channel::mpsc::channel, SinkExt, StreamExt};
+use futures::{channel::mpsc::channel, SinkExt};
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::{
-    fmt::Debug,
-    net::{IpAddr, Shutdown},
-    ops::Range,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt::Debug, net::IpAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
+use tokio::io::AsyncWriteExt;
+use tokio_stream::StreamExt;
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -403,7 +398,7 @@ where
         external_control_port: u16,
     ) -> std::result::Result<(), ServerError> {
         let addr: std::net::SocketAddr = bind_address.into().parse()?;
-        let mut listener = tokio::net::TcpListener::bind(addr).await?;
+        let listener = tokio::net::TcpListener::bind(addr).await?;
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
@@ -416,9 +411,9 @@ where
 
             tokio::select! {
 
-                Some(tcp_stream) = listener.next() => {
-                    let mut tcp_stream = tcp_stream.unwrap();
+                Ok((tcp_stream, _socket_addr)) = listener.accept() => {
                     let socket_addr = tcp_stream.peer_addr();
+                    let mut tcp_stream = tcp_stream;
 
                     slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
                     let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
@@ -446,7 +441,7 @@ where
                         slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.passive_ports, destination_port);
                         if !self.passive_ports.contains(&destination_port) {
                             slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.passive_ports);
-                            tcp_stream.shutdown(Shutdown::Both).unwrap();
+                            tcp_stream.shutdown().await.unwrap();
                             continue;
                         }
                         self.dispatch_data_connection(tcp_stream, connection).await;
@@ -468,7 +463,7 @@ where
     // protocol switchboard hashmap, and then calls the
     // spawn_data_processing function with the tcp_stream
     #[tracing_attributes::instrument]
-    async fn dispatch_data_connection(&mut self, tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+    async fn dispatch_data_connection(&mut self, mut tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
@@ -477,7 +472,7 @@ where
                 }
                 None => {
                     slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
-                    tcp_stream.shutdown(Shutdown::Both).unwrap();
+                    tcp_stream.shutdown().await.unwrap();
                     return;
                 }
             }

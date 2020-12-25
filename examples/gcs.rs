@@ -1,6 +1,5 @@
 use clap::{App, Arg};
 use std::{error::Error, result::Result};
-use tokio_compat_02::FutureExt;
 use tracing::Level;
 
 const BUCKET_NAME: &str = "bucket-name";
@@ -62,7 +61,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("Internal error: use of an undefined command line parameter")?
         .to_owned();
 
-    let service_account_key = yup_oauth2::read_service_account_key(service_account_key).compat().await?;
+    let service_account_key = yup_oauth2::read_service_account_key(service_account_key).await?;
     if let Some(ftps_certs_file) = matches.value_of(FTPS_CERTS_FILE) {
         let ftps_key_file = matches
             .value_of(FTPS_KEY_FILE)

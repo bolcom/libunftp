@@ -1,6 +1,5 @@
 use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
-use bytes::Bytes;
 use lazy_static::lazy_static;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
 use rand::{rngs::OsRng, RngCore};
@@ -69,7 +68,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
                     return Err(ProxyError::CrlfError);
                 }
 
-                let mut phb = Bytes::copy_from_slice(&rbuf[..=i + pos]);
+                let mut phb = bytes05::Bytes::copy_from_slice(&rbuf[..=i + pos]);
                 let proxyhdr = match ProxyHeader::decode(&mut phb) {
                     Ok(h) => h,
                     Err(_) => return Err(ProxyError::DecodeError),
@@ -225,7 +224,6 @@ mod tests {
     use super::ProxyError;
     use proxy_protocol::version1::ProxyAddressFamily;
     use proxy_protocol::ProxyHeader;
-    use std::net::Shutdown;
     use std::net::{IpAddr::V4, Ipv4Addr};
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;
@@ -255,7 +253,7 @@ mod tests {
             c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\r\n".as_ref())
                 .await
                 .unwrap();
-            c.shutdown(Shutdown::Both).unwrap();
+            c.shutdown().await.unwrap();
         });
 
         let res = tokio::join!(server, client);
@@ -279,7 +277,7 @@ mod tests {
         let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
         let client = tokio::spawn(async move {
             c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\n".as_ref()).await.unwrap();
-            c.shutdown(Shutdown::Both).unwrap();
+            c.shutdown().await.unwrap();
         });
 
         let res = tokio::join!(server, client);
@@ -298,7 +296,7 @@ mod tests {
             c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535".as_ref()).await.unwrap();
             sleep(Duration::from_millis(100)).await;
             c.write_all("\r\n".as_ref()).await.unwrap();
-            c.shutdown(Shutdown::Both).unwrap();
+            c.shutdown().await.unwrap();
         });
 
         let res = tokio::join!(server, client);
