@@ -48,7 +48,7 @@ where
     async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
         let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
         let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
-        let mut timeout_delay = tokio::time::sleep(std::time::Duration::from_secs(5 * 60));
+        let mut timeout_delay = Box::pin(tokio::time::sleep(std::time::Duration::from_secs(5 * 60)));
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.next() => {
@@ -258,7 +258,7 @@ where
 /// session_arc: the user session that is also shared with the control channel.
 /// socket: the data socket we'll be working with.
 #[tracing_attributes::instrument]
-pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, socket: tokio::net::TcpStream)
+pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, mut socket: tokio::net::TcpStream)
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
@@ -274,7 +274,7 @@ where
             Ok(datachan_addr) => {
                 let controlcahn_ip = session.source.ip();
                 if controlcahn_ip != datachan_addr.ip() {
-                    if let Err(err) = socket.shutdown(std::net::Shutdown::Both) {
+                    if let Err(err) = socket.shutdown().await {
                         slog::error!(
                             logger,
                             "Couldn't close datachannel for ip ({}) that does not match the ip({}) of the control channel.\n{:?}",
