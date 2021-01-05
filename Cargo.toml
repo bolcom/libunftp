@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.14.1"
+version = "0.15.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -26,7 +26,7 @@ bytes05 = { package="bytes", version= "0.5" }
 chrono = {version = "0.4.19", features = ["serde"]}
 derive_more = { version = "0.99.11", features = ["display"] }
 futures = {version = "0.3.7", features = ["std"]}
-hyper = { version = "0.14.1", optional = true, features= ["client", "runtime", "stream", "http1"]}
+hyper = { version = "0.14.2", optional = true, features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1", optional = true }
 itertools = "0.10.0"
 lazy_static = "1.4.0"
@@ -35,16 +35,16 @@ path_abs = "0.5.0"
 percent-encoding = { version = "2.1.0", optional = true }
 prometheus = "0.10.0"
 proxy-protocol = {version = "0.1.1"}
-rand = "0.8.0"
+rand = "0.8.1"
 regex = "1.4.2"
 rustls = "0.19.0"
 serde = { version = "1.0.118", optional = true, features = ["derive"] }
-serde_json = { version = "1.0.60", optional = true }
+serde_json = { version = "1.0.61", optional = true }
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
 thiserror = "1.0.23"
 tokio = { version = "1.0.1", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
-tokio-stream = "0.1.0"
+tokio-stream = "0.1.1"
 tokio-rustls = { version = "0.22.0" }
 tokio-util = { version = "0.6.0", features=["codec", "compat"] }
 tracing = "0.1.22"
@@ -68,7 +68,7 @@ tempfile = "3.1.0"
 tokio = { version = "1.0.1", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
 more-asserts = "0.2.1"
-tokio-compat-02 = { version = "0.1.2"}
+tokio-compat-02 = { version = "0.2.0"}
 
 
 [features]
