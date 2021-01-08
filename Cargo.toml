@@ -33,14 +33,14 @@ lazy_static = "1.4.0"
 mime = {version = "0.3.16", optional = true}
 path_abs = "0.5.0"
 percent-encoding = { version = "2.1.0", optional = true }
-prometheus = "0.10.0"
+prometheus = "0.11.0"
 proxy-protocol = {version = "0.1.1"}
 rand = "0.8.1"
 regex = "1.4.2"
 rustls = "0.19.0"
 serde = { version = "1.0.118", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.61", optional = true }
-slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_info"] }
+slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
 thiserror = "1.0.23"
 tokio = { version = "1.0.1", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
@@ -58,17 +58,16 @@ yup-oauth2 = {version = "5.0.1", optional = true}
 pam-auth = { package = "pam", version = "0.7.0", optional = true }
 
 [dev-dependencies]
-async_ftp = "4.0.4"
+async_ftp = "5.0.0"
 clap = "2.33.3"
 slog-term = "2.6.0"
-slog-async = "2.3.0"
+slog-async = "2.5.0"
 pretty_assertions = "0.6.1"
 pretty_env_logger = "0.4.0"
 tempfile = "3.1.0"
 tokio = { version = "1.0.1", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
 more-asserts = "0.2.1"
-tokio-compat-02 = { version = "0.2.0"}
 
 
 [features]

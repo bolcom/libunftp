@@ -108,7 +108,7 @@ where
                 if let Err(err) = output.shutdown().await {
                     slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
                 }
-                if let Err(err) = tx_sending.send(ControlChanMsg::SendData { bytes: bytes_copied as i64 }).await {
+                if let Err(err) = tx_sending.send(ControlChanMsg::SendData { bytes: bytes_copied }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
                 }
             }
@@ -132,7 +132,7 @@ where
             .await;
         match put_result {
             Ok(bytes) => {
-                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes: bytes as i64 }).await {
+                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
                 }
             }

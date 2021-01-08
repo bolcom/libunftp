@@ -3,7 +3,7 @@
 //! partially transferred, both sides need some way to agree on where in
 //! the data stream to restart the data transfer.
 //!
-//! See also: https://cr.yp.to/ftp/retr.html
+//! See also: <https://cr.yp.to/ftp/retr.html>
 //!
 
 use crate::{

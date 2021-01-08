@@ -48,12 +48,12 @@ pub enum ControlChanMsg {
     /// Send the data to the client
     SendData {
         /// The number of bytes transferred
-        bytes: i64,
+        bytes: u64,
     },
     /// We've written the data from the client to the StorageBackend
     WrittenData {
         /// The number of bytes transferred
-        bytes: i64,
+        bytes: u64,
     },
     /// Data connection was unexpectedly closed
     ConnectionReset,
