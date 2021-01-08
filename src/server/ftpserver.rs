@@ -311,7 +311,7 @@ where
     ///
     /// If you use a proxy such as haproxy or nginx, you can enable
     /// the PROXY protocol
-    /// (https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt).
+    /// (<https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt>).
     ///
     /// Configure your proxy to enable PROXY protocol encoding for
     /// control and data external listening ports, forwarding these

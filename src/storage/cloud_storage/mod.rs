@@ -46,7 +46,7 @@ pub struct CloudStorage {
 
 impl CloudStorage {
     /// Creates a new CloudStorage backend connected to the specified GCS bucket.
-    pub fn new<Str, AuthHow>(base_url: Str, bucket: Str, auth: AuthHow) -> Self
+    pub fn new<Str, AuthHow>(base_url: Str, bucket: Str, root: PathBuf, auth: AuthHow) -> Self
     where
         Str: Into<String>,
         AuthHow: Into<AuthMethod>,
@@ -55,7 +55,7 @@ impl CloudStorage {
         CloudStorage {
             client,
             auth: auth.into(),
-            uris: GcsUri::new(base_url.into(), bucket.into()),
+            uris: GcsUri::new(base_url.into(), bucket.into(), root),
         }
     }
 

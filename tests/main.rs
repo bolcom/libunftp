@@ -6,7 +6,6 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::{str, time::Duration};
-use tokio_compat_02::FutureExt;
 
 fn ensure_login_required<T: Debug>(r: Result<T>) {
     let err = r.unwrap_err().to_string();
@@ -28,7 +27,7 @@ async fn connect() {
     let path: PathBuf = std::env::temp_dir();
     tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    async_ftp::FtpStream::connect(addr).compat().await.unwrap();
+    async_ftp::FtpStream::connect(addr).await.unwrap();
 }
 
 #[tokio::test]
@@ -40,8 +39,8 @@ async fn login() {
 
     tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = async_ftp::FtpStream::connect(addr).compat().await.unwrap();
-    ftp_stream.login(username, password).compat().await.unwrap();
+    let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
+    ftp_stream.login(username, password).await.unwrap();
 }
 
 #[tokio::test]
@@ -169,13 +168,13 @@ async fn ftps_require_works() {
         );
         tokio::time::sleep(Duration::new(1, 0)).await;
 
-        let mut ftp_stream = async_ftp::FtpStream::connect(addr.as_str()).compat().await.unwrap();
-        let result = ftp_stream.login(test.username, "blah").compat().await;
+        let mut ftp_stream = async_ftp::FtpStream::connect(addr.as_str()).await.unwrap();
+        let result = ftp_stream.login(test.username, "blah").await;
         if test.give534 {
             ensure_ftps_required(result);
         }
         if test.give534_data {
-            let result = ftp_stream.list(None).compat().await;
+            let result = ftp_stream.list(None).await;
             ensure_ftps_required(result);
         }
     }
@@ -188,9 +187,9 @@ async fn noop() {
 
     tokio::spawn(libunftp::Server::with_fs(path).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = async_ftp::FtpStream::connect(addr).compat().compat().await.unwrap();
+    let mut ftp_stream = async_ftp::FtpStream::connect(addr).await.unwrap();
 
-    ftp_stream.noop().compat().await.unwrap();
+    ftp_stream.noop().await.unwrap();
 }
 
 #[tokio::test]
@@ -215,12 +214,12 @@ async fn get() {
     f.write_all(&data).unwrap();
 
     // Retrieve the remote file
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
 
-    ensure_login_required(ftp_stream.simple_retr("bla.txt").compat().await);
+    ensure_login_required(ftp_stream.simple_retr("bla.txt").await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    let remote_file = ftp_stream.simple_retr("bla.txt").compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    let remote_file = ftp_stream.simple_retr("bla.txt").await.unwrap();
     let remote_data = remote_file.into_inner();
 
     assert_eq!(remote_data, data);
@@ -238,16 +237,16 @@ async fn put() {
 
     let content = b"Hello from this test!\n";
 
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let mut reader = Cursor::new(content);
 
-    ensure_login_required(ftp_stream.put("greeting.txt", &mut reader).compat().await);
+    ensure_login_required(ftp_stream.put("greeting.txt", &mut reader).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    ftp_stream.put("greeting.txt", &mut reader).compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.put("greeting.txt", &mut reader).await.unwrap();
 
     // retrieve file back again, and check if we got the same back.
-    let remote_data = ftp_stream.simple_retr("greeting.txt").compat().await.unwrap().into_inner();
+    let remote_data = ftp_stream.simple_retr("greeting.txt").await.unwrap().into_inner();
     assert_eq!(remote_data, content);
 }
 
@@ -264,12 +263,12 @@ async fn list() {
         let _f = std::fs::File::create(path);
     }
 
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
 
-    ensure_login_required(ftp_stream.list(None).compat().await);
+    ensure_login_required(ftp_stream.list(None).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    let list = ftp_stream.list(None).compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    let list = ftp_stream.list(None).await.unwrap();
     let mut found = false;
     for entry in list {
         if entry.contains("test.txt") {
@@ -287,13 +286,13 @@ async fn pwd() {
 
     tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
 
     // Make sure we fail if we're not logged in
-    ensure_login_required(ftp_stream.pwd().compat().await);
+    ensure_login_required(ftp_stream.pwd().await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    let pwd = ftp_stream.pwd().compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    let pwd = ftp_stream.pwd().await.unwrap();
     assert_eq!(&pwd, "/");
 }
 
@@ -305,15 +304,15 @@ async fn cwd() {
 
     tokio::spawn(libunftp::Server::with_fs(path.clone()).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
     let basename = dir_in_root.path().file_name().unwrap();
 
-    ensure_login_required(ftp_stream.cwd(basename.to_str().unwrap()).compat().await);
+    ensure_login_required(ftp_stream.cwd(basename.to_str().unwrap()).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    ftp_stream.cwd(basename.to_str().unwrap()).compat().await.unwrap();
-    let pwd = ftp_stream.pwd().compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.cwd(basename.to_str().unwrap()).await.unwrap();
+    let pwd = ftp_stream.pwd().await.unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
 }
 
@@ -325,19 +324,19 @@ async fn cdup() {
 
     tokio::spawn(libunftp::Server::with_fs(path.clone()).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let dir_in_root = tempfile::TempDir::new_in(path).unwrap();
     let basename = dir_in_root.path().file_name().unwrap();
 
-    ensure_login_required(ftp_stream.cdup().compat().await);
+    ensure_login_required(ftp_stream.cdup().await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    ftp_stream.cwd(basename.to_str().unwrap()).compat().await.unwrap();
-    let pwd = ftp_stream.pwd().compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.cwd(basename.to_str().unwrap()).await.unwrap();
+    let pwd = ftp_stream.pwd().await.unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
 
-    ftp_stream.cdup().compat().await.unwrap();
-    let pwd = ftp_stream.pwd().compat().await.unwrap();
+    ftp_stream.cdup().await.unwrap();
+    let pwd = ftp_stream.pwd().await.unwrap();
     assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/"));
 }
 
@@ -348,14 +347,14 @@ async fn dele() {
 
     tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let file_in_root = tempfile::NamedTempFile::new().unwrap();
     let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
 
-    ensure_login_required(ftp_stream.rm(file_name).compat().await);
+    ensure_login_required(ftp_stream.rm(file_name).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    ftp_stream.rm(file_name).compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.rm(file_name).await.unwrap();
     assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
 }
 
@@ -366,12 +365,12 @@ async fn quit() {
 
     tokio::spawn(libunftp::Server::with_fs(root).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
-    ftp_stream.quit().compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
+    ftp_stream.quit().await.unwrap();
     // Make sure the connection is actually closed
     // This may take some time, so we'll sleep for a bit.
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    ftp_stream.noop().compat().await.unwrap_err();
+    ftp_stream.noop().await.unwrap_err();
 }
 
 #[tokio::test]
@@ -388,12 +387,12 @@ async fn nlst() {
         let _f = std::fs::File::create(path);
     }
 
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
 
-    ensure_login_required(ftp_stream.nlst(None).compat().await);
+    ensure_login_required(ftp_stream.nlst(None).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    let list = ftp_stream.nlst(None).compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    let list = ftp_stream.nlst(None).await.unwrap();
     assert_eq!(list, vec!["test.txt"]);
 }
 
@@ -404,13 +403,13 @@ async fn mkdir() {
 
     tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let new_dir_name = "hallo";
 
-    ensure_login_required(ftp_stream.mkdir(new_dir_name).compat().await);
+    ensure_login_required(ftp_stream.mkdir(new_dir_name).await);
 
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
-    ftp_stream.mkdir(new_dir_name).compat().await.unwrap();
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.mkdir(new_dir_name).await.unwrap();
 
     let full_path = root.join(new_dir_name);
     let metadata = std::fs::metadata(full_path).unwrap();
@@ -433,14 +432,14 @@ async fn rename() {
     let full_to = root.join("nu ben ik hier.txt");
     let to_filename = full_to.file_name().unwrap().to_str().unwrap();
 
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.expect("Failed to connect");
+    let mut ftp_stream = FtpStream::connect(addr).await.expect("Failed to connect");
 
     // Make sure we fail if we're not logged in
-    ensure_login_required(ftp_stream.rename(&from_filename, &to_filename).compat().await);
+    ensure_login_required(ftp_stream.rename(&from_filename, &to_filename).await);
 
     // Do the renaming
-    ftp_stream.login("some", "user").compat().await.unwrap();
-    ftp_stream.rename(&from_filename, &to_filename).compat().await.expect("Failed to rename");
+    ftp_stream.login("some", "user").await.unwrap();
+    ftp_stream.rename(&from_filename, &to_filename).await.expect("Failed to rename");
 
     // Give the OS some time to actually rename the thingy.
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -460,7 +459,7 @@ async fn size() {
     tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
     tokio::time::sleep(Duration::new(1, 0)).await;
 
-    let mut ftp_stream = FtpStream::connect(addr).compat().await.unwrap();
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let file_in_root = tempfile::NamedTempFile::new_in(root).unwrap();
     let file_name = file_in_root.path().file_name().unwrap().to_str().unwrap();
 
@@ -469,11 +468,11 @@ async fn size() {
     w.flush().expect("Should be able to flush the temp file.");
 
     // Make sure we fail if we're not logged in
-    ensure_login_required(ftp_stream.size(file_name).compat().await);
-    ftp_stream.login("hoi", "jij").compat().await.unwrap();
+    ensure_login_required(ftp_stream.size(file_name).await);
+    ftp_stream.login("hoi", "jij").await.unwrap();
 
     // Make sure we fail if we don't supply a path
-    ftp_stream.size("").compat().await.unwrap_err();
+    ftp_stream.size("").await.unwrap_err();
     let size1 = ftp_stream.size(file_name).await;
     let size2 = size1.unwrap();
     let size3 = size2.unwrap();
