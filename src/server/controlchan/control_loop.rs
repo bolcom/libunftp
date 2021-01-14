@@ -95,7 +95,7 @@ where
         .control_msg_tx(control_msg_tx.clone())
         .destination(destination);
 
-    let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id)));
+    let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.source)));
 
     let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr()?;
