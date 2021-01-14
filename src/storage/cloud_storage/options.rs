@@ -1,11 +1,12 @@
 //! Contains code pertaining to initialization options for the [`Cloud Storage Backend`](super::CloudStorage)
 
+use core::fmt;
 use std::{convert::TryFrom, path::PathBuf};
 use yup_oauth2::ServiceAccountKey;
 
 /// Used with [`CloudStorage::new`](super::CloudStorage::new()) to specify how the storage back-end
 /// will authenticate with Google Cloud Storage.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum AuthMethod {
     /// Authenticate using a private service account key
     ServiceAccountKey(Vec<u8>),
@@ -51,6 +52,26 @@ impl AuthMethod {
             AuthMethod::ServiceAccountKey(key) => {
                 serde_json::from_slice(key).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad service account key: {}", e)))
             }
+        }
+    }
+}
+
+impl fmt::Display for AuthMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthMethod::WorkloadIdentity(None) => write!(f, "Workload Identity"),
+            AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "Workload Identity with service account {}", s),
+            AuthMethod::ServiceAccountKey(_) => write!(f, "Service Account Key"),
+        }
+    }
+}
+
+impl fmt::Debug for AuthMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthMethod::WorkloadIdentity(None) => write!(f, "WorkloadIdentity(None)"),
+            AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "WorkloadIdentity(Some({}))", s),
+            AuthMethod::ServiceAccountKey(_) => write!(f, "ServiceAccountKey(*******)"),
         }
     }
 }
