@@ -135,7 +135,12 @@ async fn run_test(test: impl Future<Output = ()>) {
 
     tokio::spawn(
         Server::new(Box::new(move || {
-            CloudStorage::new(GCS_BASE_URL, GCS_BUCKET, PathBuf::new(), AuthMethod::ServiceAccountKey(b"unftp_test".to_vec()))
+            CloudStorage::new(
+                GCS_BASE_URL,
+                GCS_BUCKET,
+                PathBuf::from("/unftp"),
+                AuthMethod::ServiceAccountKey(b"unftp_test".to_vec()),
+            )
         }))
         .logger(Some(Logger::root(drain, o!())))
         .listen(ADDR),
