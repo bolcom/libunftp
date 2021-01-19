@@ -21,11 +21,11 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.42"
-bytes = "1.0"
+bytes = "1.0.1"
 bytes05 = { package="bytes", version= "0.5" }
 chrono = {version = "0.4.19", features = ["serde"]}
 derive_more = { version = "0.99.11", features = ["display"] }
-futures = {version = "0.3.9", features = ["std"]}
+futures = {version = "0.3.12", features = ["std"]}
 hyper = { version = "0.14.2", optional = true, features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1", optional = true }
 itertools = "0.10.0"
@@ -36,9 +36,9 @@ percent-encoding = { version = "2.1.0", optional = true }
 prometheus = "0.11.0"
 proxy-protocol = {version = "0.1.1"}
 rand = "0.8.1"
-regex = "1.4.2"
+regex = "1.4.3"
 rustls = "0.19.0"
-serde = { version = "1.0.118", optional = true, features = ["derive"] }
+serde = { version = "1.0.120", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.61", optional = true }
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
@@ -50,7 +50,7 @@ tokio-util = { version = "0.6.0", features=["codec", "compat"] }
 tracing = "0.1.22"
 tracing-attributes = "0.1.11"
 tracing-futures = { version = "0.2.4", features = ["std", "std-future", "futures-03"]}
-uuid = { version = "0.8.1", features = ["v4"] }
+uuid = { version = "0.8.2", features = ["v4"] }
 yup-oauth2 = {version = "5.0.1", optional = true}
 
 
@@ -64,8 +64,8 @@ slog-term = "2.6.0"
 slog-async = "2.5.0"
 pretty_assertions = "0.6.1"
 pretty_env_logger = "0.4.0"
-tempfile = "3.1.0"
-tokio = { version = "1.0.1", features = ["rt-multi-thread"]}
+tempfile = "3.2.0"
+tokio = { version = "1.0.2", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
 more-asserts = "0.2.1"
 
