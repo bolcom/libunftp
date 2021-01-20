@@ -135,7 +135,7 @@ async fn run_test(test: impl Future<Output = ()>) {
 
     tokio::spawn(
         Server::new(Box::new(move || {
-            CloudStorage::new(
+            CloudStorage::with_api_base(
                 GCS_BASE_URL,
                 GCS_BUCKET,
                 PathBuf::from("/unftp"),

@@ -67,14 +67,24 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             .value_of(FTPS_KEY_FILE)
             .ok_or("Internal error: use of an undefined command line parameter")?;
         libunftp::Server::new(Box::new(move || {
-            libunftp::storage::cloud_storage::CloudStorage::new("https://www.googleapis.com", &bucket_name, PathBuf::new(), service_account_key.clone())
+            libunftp::storage::cloud_storage::CloudStorage::with_api_base(
+                "https://www.googleapis.com",
+                &bucket_name,
+                PathBuf::new(),
+                service_account_key.clone(),
+            )
         }))
         .ftps(ftps_certs_file, ftps_key_file)
         .listen(BIND_ADDRESS)
         .await?;
     } else {
         libunftp::Server::new(Box::new(move || {
-            libunftp::storage::cloud_storage::CloudStorage::new("https://www.googleapis.com", &bucket_name, PathBuf::new(), service_account_key.clone())
+            libunftp::storage::cloud_storage::CloudStorage::with_api_base(
+                "https://www.googleapis.com",
+                &bucket_name,
+                PathBuf::new(),
+                service_account_key.clone(),
+            )
         }))
         .listen(BIND_ADDRESS)
         .await?;

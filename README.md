@@ -35,7 +35,7 @@ Then add the libunftp and tokio crates to your project's dependencies in `Cargo.
 
 ```toml
 [dependencies]
-libunftp = "0.15.0"
+libunftp = "0.16.0"
 tokio = { version = "1", features = ["full"] }
 ```
 

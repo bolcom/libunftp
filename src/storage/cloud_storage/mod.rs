@@ -45,8 +45,32 @@ pub struct CloudStorage {
 }
 
 impl CloudStorage {
-    /// Creates a new CloudStorage backend connected to the specified GCS bucket.
-    pub fn new<Str, AuthHow>(base_url: Str, bucket: Str, root: PathBuf, auth: AuthHow) -> Self
+    /// Creates a new Google Cloud Storage backend connected to the specified GCS `bucket`. The `auth`
+    /// parameter specifies how libunftp will authenticate with GCS.
+    pub fn new<Str, AuthHow>(bucket: Str, auth: AuthHow) -> Self
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
+    {
+        Self::with_bucket_root(bucket.into(), PathBuf::new(), auth)
+    }
+
+    /// Creates a new Google Cloud Storage backend connected to the specified GCS `bucket`. The `auth`
+    /// parameter specifies how libunftp will authenticate with GCS. Files will be placed and
+    /// looked for in the specified `root` directory/prefix inside the bucket.
+    pub fn with_bucket_root<Str, AuthHow>(bucket: Str, root: PathBuf, auth: AuthHow) -> Self
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
+    {
+        Self::with_api_base(String::from("https://www.googleapis.com"), bucket.into(), root, auth)
+    }
+
+    /// Creates a new Google Cloud Storage backend connected to the specified GCS `bucket` using GCS API
+    /// `base_url` for JSON API requests. Files will be placed and looked for in the specified
+    /// `root` directory inside the bucket. The `auth` parameter specifies how libunftp will
+    /// authenticate.
+    pub fn with_api_base<Str, AuthHow>(base_url: Str, bucket: Str, root: PathBuf, auth: AuthHow) -> Self
     where
         Str: Into<String>,
         AuthHow: Into<AuthMethod>,
