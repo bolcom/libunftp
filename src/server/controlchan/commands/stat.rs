@@ -56,8 +56,21 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match self.path.clone() {
             None => {
-                let text: Vec<&str> = vec!["Status:", "Powered by libunftp"];
-                // TODO: Add useful information here like libunftp version, auth type, storage type, IP etc.
+                let session = args.session.lock().await;
+                let text: Vec<String> = vec![
+                    "server status:".to_string(),
+                    format!("powered by libunftp: {}", env!("CARGO_PKG_VERSION")),
+                    format!("sbe: {}", session.storage.name()),
+                    format!("authenticator: {}", args.authenticator.name()),
+                    format!("user: {}", session.username.as_ref().unwrap()),
+                    format!("client addr: {}", session.source),
+                    format!("ftps configured: {}", args.tls_configured),
+                    format!("cmd channel in tls mode: {}", session.cmd_tls),
+                    format!("data channel in tls mode: {}", session.data_tls),
+                    format!("cwd: {}", session.cwd.to_string_lossy()),
+                    format!("rename from path: {:?}", session.rename_from),
+                    format!("offset for REST: {}", session.start_pos),
+                ];
                 Ok(Reply::new_multiline(ReplyCode::SystemStatus, text))
             }
             Some(path) => {

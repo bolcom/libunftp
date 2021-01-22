@@ -143,6 +143,11 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
 
+    /// Implement to set the name of the storage back-end. By default it returns the type signature.
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
+
     /// Tells which optional features are supported by the storage back-end
     /// Return a value with bits set according to the FEATURE_* constants.
     fn supported_features(&self) -> u32 {
