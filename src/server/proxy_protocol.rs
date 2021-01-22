@@ -1,5 +1,6 @@
 use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
 use rand::{rngs::OsRng, RngCore};
@@ -68,7 +69,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
                     return Err(ProxyError::CrlfError);
                 }
 
-                let mut phb = bytes05::Bytes::copy_from_slice(&rbuf[..=i + pos]);
+                let mut phb = Bytes::copy_from_slice(&rbuf[..=i + pos]);
                 let proxyhdr = match ProxyHeader::decode(&mut phb) {
                     Ok(h) => h,
                     Err(_) => return Err(ProxyError::DecodeError),
