@@ -66,11 +66,15 @@ For more help refer to:
 - the [API Documentation](https://docs.rs/libunftp).
 - [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
 
+## Support
+
+Support is given on a best effort basis. You can follow news and talk to us on [Telegram](https://t.me/unftp) or create a Github issue.
+
 ## Contributing
 
 Thank you for your interest in contributing to libunftp!
 
-Please feel free to create a github issue if you encounter any problems.
+Please feel free to create a Github issue if you encounter any problems.
 
 Want to submit a feature request? Then head over to our [contribution guide (CONTRIBUTING.md)](CONTRIBUTING.md).
 
