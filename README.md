@@ -4,6 +4,8 @@
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
 [![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
 [![Crate License](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
+[![Follow on Telegram](https://img.shields.io/badge/Chat%20on-Telegram-brightgreen.svg)](https://t.me/unftp)  
+
 
 When you need to FTP, but don't want to.
 
@@ -66,9 +68,12 @@ For more help refer to:
 - the [API Documentation](https://docs.rs/libunftp).
 - [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
 
-## Support
+## Getting help and staying informed
 
-Support is given on a best effort basis. You can follow news and talk to us on [Telegram](https://t.me/unftp) or create a Github issue.
+Support is given on a best effort basis. You are welcome to engage us on [the discussions page](https://github.com/bolcom/libunftp/discussions)
+or create a Github issue.
+
+You can also follow news and talk to us on [Telegram](https://t.me/unftp) 
 
 ## Contributing
 
