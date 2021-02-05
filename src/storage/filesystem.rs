@@ -186,7 +186,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         let r = tokio::fs::symlink_metadata(from).await;
         match r {
             Ok(metadata) => {
-                if metadata.is_file() {
+                if metadata.is_file() || metadata.is_dir() {
                     let r = tokio::fs::rename(from_rename, to).await;
                     match r {
                         Ok(_) => Ok(()),
@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn fs_rename() {
+    fn fs_rename_file() {
         let root = tempfile::TempDir::new().unwrap().into_path();
         let file = tempfile::NamedTempFile::new_in(&root).unwrap();
         let old_filename = file.path().file_name().unwrap().to_str().unwrap();
@@ -453,6 +453,28 @@ mod tests {
 
         let old_full_path = root.join(old_filename);
         std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
+    }
+
+    #[test]
+    fn fs_rename_dir() {
+        let root = tempfile::TempDir::new().unwrap().into_path();
+        let dir = tempfile::TempDir::new_in(&root).unwrap();
+        let old_dir = dir.path().file_name().unwrap().to_str().unwrap();
+        let new_dir = "new-dir";
+
+        // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
+        // to completion
+        let rt = Runtime::new().unwrap();
+
+        let fs = Filesystem::new(&root);
+        let r = rt.block_on(fs.rename(&Some(DefaultUser {}), &old_dir, &new_dir));
+        assert!(r.is_ok());
+
+        let new_full_path = root.join(new_dir);
+        assert!(std::fs::metadata(new_full_path).expect("new directory not found").is_dir());
+
+        let old_full_path = root.join(old_dir);
+        std::fs::symlink_metadata(old_full_path).expect_err("Old directory should not exists anymore");
     }
 }
 
