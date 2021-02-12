@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.16.1"
+version = "0.16.2"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -58,7 +58,7 @@ pam-auth = { package = "pam", version = "0.7.0", optional = true }
 [dev-dependencies]
 async_ftp = "5.0.0"
 clap = "2.33.3"
-slog-term = "2.7.0"
+slog-term = "2.8.0"
 slog-async = "2.6.0"
 pretty_assertions = "0.6.1"
 pretty_env_logger = "0.4.0"
