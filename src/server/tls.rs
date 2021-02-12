@@ -45,6 +45,7 @@ pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P) -> Arc<rustls::Ser
     let privkey: PrivateKey = load_private_key(key_file);
 
     let mut config = rustls::ServerConfig::new(NoClientAuth::new());
+    config.session_storage = Arc::new(rustls::NoServerSessionStorage {});
     config.key_log = Arc::new(rustls::KeyLogFile::new());
     config.set_single_cert(certs, privkey).expect("Failed to setup TLS certificate chain and key");
     Arc::new(config)

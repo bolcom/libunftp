@@ -1,6 +1,8 @@
 //! A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud Storage from Google
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
+#![allow(clippy::unnecessary_wraps)]
+
 pub mod object_metadata;
 pub mod options;
 mod response_body;
@@ -138,7 +140,6 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         response.to_metadata()
     }
 
-    #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
     async fn list<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
     where
