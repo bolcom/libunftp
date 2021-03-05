@@ -1,4 +1,4 @@
-//! A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud Storage from Google
+//! A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud Storage from Google
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
 #![allow(clippy::unnecessary_wraps)]
@@ -9,13 +9,6 @@ mod response_body;
 mod uri;
 mod workflow_identity;
 
-use crate::storage::{
-    cloud_storage::{
-        options::AuthMethod,
-        response_body::{Item, ResponseBody},
-    },
-    Error, ErrorKind, Fileinfo, Metadata, StorageBackend,
-};
 use async_trait::async_trait;
 use bytes::Buf;
 use futures::prelude::*;
@@ -27,8 +20,11 @@ use hyper::{
     Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
+use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use mime::APPLICATION_OCTET_STREAM;
 use object_metadata::ObjectMetadata;
+use options::AuthMethod;
+use response_body::{Item, ResponseBody};
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -38,7 +34,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::ServiceAccountAuthenticator;
 
-/// A [`StorageBackend`](crate::storage::StorageBackend) that uses Cloud storage from Google.
+/// A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud storage from Google.
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,

@@ -2,12 +2,12 @@
 // See https://github.com/mechiru/gcemeta/blob/master/src/metadata.rs
 // See https://github.com/mechiru/gouth/blob/master/gouth/src/source/metadata.rs
 
-use crate::storage::{Error, ErrorKind};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::http::header;
 use hyper::{Body, Client, Method, Request, Response};
 use hyper_rustls::HttpsConnector;
+use libunftp::storage::{Error, ErrorKind};
 
 // Environment variable specifying the GCE metadata hostname.
 // If empty, the default value of `METADATA_IP` is used instead.

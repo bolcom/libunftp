@@ -133,6 +133,3 @@ pub(crate) mod storage_backend;
 pub use storage_backend::{Fileinfo, Metadata, Permissions, Result, StorageBackend, FEATURE_RESTART};
 
 pub mod filesystem;
-
-#[cfg(feature = "cloud_storage")]
-pub mod cloud_storage;

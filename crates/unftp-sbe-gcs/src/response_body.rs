@@ -1,6 +1,6 @@
 use super::ObjectMetadata;
-use crate::storage::{Error, Fileinfo};
 use chrono::prelude::*;
+use libunftp::storage::{Error, Fileinfo};
 use serde::{de, Deserialize};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -87,7 +87,7 @@ pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, Obje
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::storage::storage_backend::Metadata;
+    use libunftp::storage::Metadata;
     use std::time::SystemTime;
 
     #[test]

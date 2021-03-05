@@ -1,7 +1,7 @@
 //! The Metadata for the CloudStorage
 
-use crate::storage::storage_backend::Metadata;
-use crate::storage::{Error, ErrorKind};
+use libunftp::storage::Metadata;
+use libunftp::storage::{Error, ErrorKind};
 use std::time::SystemTime;
 
 /// The struct that implements the Metadata trait for the CloudStorage

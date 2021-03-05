@@ -1,5 +1,5 @@
-use crate::storage::{Error, ErrorKind};
 use hyper::Uri;
+use libunftp::storage::{Error, ErrorKind};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::{Path, PathBuf};
 
