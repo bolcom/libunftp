@@ -1,9 +1,8 @@
 use async_ftp::FtpStream;
 use lazy_static::*;
-use libunftp::{
-    storage::cloud_storage::{options::AuthMethod, CloudStorage},
-    Server,
-};
+use libunftp::Server;
+use unftp_sbe_gcs::CloudStorage;
+
 use more_asserts::assert_ge;
 use path_abs::PathInfo;
 use pretty_assertions::assert_eq;
@@ -17,6 +16,7 @@ use std::{
     time::Duration,
 };
 use tokio::{macros::support::Future, sync::Mutex};
+use unftp_sbe_gcs::options::AuthMethod;
 
 /*
 FIXME: this is just MVP tests. need to add:
