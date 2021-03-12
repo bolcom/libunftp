@@ -1,11 +1,11 @@
-## Run GCS storage backend tests with GCP instead of fake-gcs
+## Running integration tests against GCP instead of fake-gcs
 
-1. Export a serviceaccount key with access to bucket. This can most easily
+1. Export a service account key with access to bucket. This can most easily
 be done on the web GUI, under `IAM/Service accounts`.
 Put the exported key file (in JSON format) in the root of the project.
 
 
-2. Change the constant at the begin of `gcs.rs` to point to GCP:
+2. Change the constant at the beginning of `main.rs` to point to GCP:
 
 ```rust
 const GCS_SA_KEY: &'static str = "bolcom-dev-unftp-dev-738-09647c413689.json";

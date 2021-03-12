@@ -1,33 +1,40 @@
 [package]
 name = "unftp-sbe-gcs"
 version = "0.1.0"
-authors = ["Hannes de Jager <hdejager@bol.com>"]
+authors = [
+    "Agoston Horvath <ahorvath@bol.com>",
+    "Dávid Kosztka <dkosztka@bol.com>",
+    "Hannes de Jager <hdejager@bol.com>",
+    "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
+]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "Apache-2.0"
+keywords = ["libunftp", "unftp", "ftp", "ftps", "storage", "gcs"]
+categories = ["network-programming"]
+documentation = "https://docs.rs/unftp-sbe-gcs"
+homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gcs"
+repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gcs"
+readme = "README.md"
 
 [dependencies]
+async-trait = "0.1.42"
+bytes = "1.0.1"
+chrono = {version = "0.4.19", features = ["serde"]}
+futures = {version = "0.3.12", features = ["std"]}
+hyper = { version = "0.14.4", features= ["client", "runtime", "stream", "http1"]}
+hyper-rustls = { version = "0.22.1"}
+libunftp = { version="0.16.2", path="../../"}
+mime = {version = "0.3.16"}
+percent-encoding = { version = "2.1.0"}
+serde = { version = "1.0.123", features = ["derive"] }
+serde_json = { version = "1.0.62"}
 tokio = { version = "1.2.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
 tokio-stream = "0.1.3"
 tokio-util = { version = "0.6.3", features=["codec", "compat"] }
-async-trait = "0.1.42"
-futures = {version = "0.3.12", features = ["std"]}
 tracing = "0.1.23"
 tracing-attributes = "0.1.12"
 tracing-futures = { version = "0.2.4", features = ["std", "std-future", "futures-03"]}
-hyper = { version = "0.14.4", features= ["client", "runtime", "stream", "http1"]}
-serde = { version = "1.0.123", features = ["derive"] }
-serde_json = { version = "1.0.62"}
 yup-oauth2 = {version = "5.0.3"}
-chrono = {version = "0.4.19", features = ["serde"]}
-hyper-rustls = { version = "0.22.1"}
-percent-encoding = { version = "2.1.0"}
-bytes = "1.0.1"
-mime = {version = "0.3.16"}
-
-[dependencies.libunftp]
-path="../../"
-version="0.16.2"
 
 [dev-dependencies]
 async_ftp = "5.0.0"

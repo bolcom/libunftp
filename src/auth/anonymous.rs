@@ -4,7 +4,7 @@ use crate::auth::*;
 use async_trait::async_trait;
 
 ///
-/// [`Authenticator`] implementation that simply allows everyone.
+/// [`Authenticator`](crate::auth::Authenticator) implementation that simply allows everyone.
 ///
 /// # Example
 ///
@@ -16,7 +16,6 @@ use async_trait::async_trait;
 /// let my_auth = AnonymousAuthenticator{};
 /// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), DefaultUser{});
 /// ```
-/// [`Authenticator`]: ../spi/trait.Authenticator.html
 ///
 #[derive(Debug)]
 pub struct AnonymousAuthenticator;

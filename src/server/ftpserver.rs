@@ -44,7 +44,7 @@ use tokio_stream::StreamExt;
 /// drop(rt);
 /// ```
 ///
-/// [`Authenticator`]: auth/trait.Authenticator.html
+/// [`Authenticator`]: auth::Authenticator
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
 pub struct Server<Storage, User>
 where

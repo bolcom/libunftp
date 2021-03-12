@@ -1,7 +1,12 @@
-//! A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud Storage from Google
-// FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
-
+#![deny(clippy::all)]
+#![deny(missing_docs)]
+#![forbid(unsafe_code)]
 #![allow(clippy::unnecessary_wraps)]
+
+//! An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files
+//! in [Google Cloud Storage](https://cloud.google.com/storage).
+
+// FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
 pub mod object_metadata;
 pub mod options;
