@@ -23,6 +23,7 @@ edition = "2018"
 
 members = [
     "crates/unftp-sbe-gcs",
+    "crates/unftp-auth-rest",
 ]
 
 [dependencies]
@@ -31,17 +32,13 @@ bytes = "1.0.1"
 chrono = {version = "0.4.19", features = ["serde"]}
 derive_more = { version = "0.99.11", features = ["display"] }
 futures = {version = "0.3.12", features = ["std"]}
-hyper = { version = "0.14.4", optional = true, features= ["client", "runtime", "stream", "http1"]}
-hyper-rustls = { version = "0.22.1", optional = true }
 itertools = "0.10.0"
 lazy_static = "1.4.0"
 mime = {version = "0.3.16", optional = true}
 path_abs = "0.5.0"
-percent-encoding = { version = "2.1.0", optional = true }
 prometheus = "0.11.0"
 proxy-protocol = "0.2.0"
 rand = "0.8.3"
-regex = "1.4.3"
 rustls = "0.19.0"
 serde = { version = "1.0.123", optional = true, features = ["derive"] }
 serde_json = { version = "1.0.62", optional = true }
@@ -66,22 +63,17 @@ clap = "2.33.3"
 slog-term = "2.8.0"
 slog-async = "2.6.0"
 pretty_assertions = "0.6.1"
-pretty_env_logger = "0.4.0"
 tempfile = "3.2.0"
 tokio = { version = "1.2.0", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
 more-asserts = "0.2.1"
 unftp-sbe-gcs = { path = "../libunftp/crates/unftp-sbe-gcs"}
-
+unftp-auth-rest = { path = "../libunftp/crates/unftp-auth-rest"}
+pretty_env_logger = "0.4.0"
 
 [features]
 pam_auth = ["pam-auth"]
-rest_auth = ["hyper", "percent-encoding", "serde", "serde_json"]
 jsonfile_auth = ["serde", "serde_json"]
-
-[[example]]
-name = "rest"
-required-features = ["rest_auth"]
 
 [[example]]
 name = "jsonfile_auth"

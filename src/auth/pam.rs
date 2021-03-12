@@ -1,6 +1,6 @@
 //! [`Authenticator`] implementation that authenticates against [`PAM`].
 //!
-//! [`Authenticator`]: trait.Authenticator.html
+//! [`Authenticator`]: crate::auth::Authenticator
 //! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 
 use crate::auth::*;
@@ -8,7 +8,7 @@ use async_trait::async_trait;
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
-/// [`Authenticator`]: ../trait.Authenticator.html
+/// [`Authenticator`]: crate::auth::Authenticator
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[derive(Debug)]
 pub struct PAMAuthenticator {

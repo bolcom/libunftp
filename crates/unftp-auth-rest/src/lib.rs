@@ -1,16 +1,21 @@
-//! [`Authenticator`] implementation that authenticates against a JSON REST API.
-//!
-//! [`Authenticator`]: trait.Authenticator.html
+#![deny(clippy::all)]
+#![deny(missing_docs)]
+#![forbid(unsafe_code)]
 
-use crate::auth::*;
+//! This crate provides a [libunftp](https://crates.io/crates/libunftp) `Authenticator`
+//! implementation that authenticates by consuming a JSON REST API.
+//!
+
 use async_trait::async_trait;
 use hyper::{http::uri::InvalidUri, Body, Client, Method, Request};
+use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::string::String;
 
-/// [`Authenticator`] implementation that authenticates against a JSON REST API.
+/// A [libunftp](https://crates.io/crates/libunftp) `Authenticator`
+/// implementation that authenticates by consuming a JSON REST API.
 ///
 /// [`Authenticator`]: ../spi/trait.Authenticator.html
 #[derive(Clone, Debug)]
@@ -25,7 +30,7 @@ pub struct RestAuthenticator {
     regex: Regex,
 }
 
-///
+/// Used to build the [`RestAuthenticator`](crate::RestAuthenticator)
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
     username_placeholder: String,
@@ -44,7 +49,7 @@ impl Builder {
         Builder { ..Default::default() }
     }
 
-    /// specify the placeholder string in the rest of the fields that would be replaced by the username
+    /// Specifies the placeholder string in the rest of the fields that would be replaced by the username
     pub fn with_username_placeholder(mut self, s: String) -> Self {
         self.username_placeholder = s;
         self
@@ -87,7 +92,7 @@ impl Builder {
         self
     }
 
-    ///
+    /// Creates the authenticator.
     pub fn build(self) -> Result<RestAuthenticator, Box<dyn std::error::Error>> {
         Ok(RestAuthenticator {
             username_placeholder: self.username_placeholder,
@@ -134,14 +139,20 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             .method(method)
             .header("Content-type", "application/json")
             .uri(url)
-            .body(Body::from(body))?;
+            .body(Body::from(body))
+            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
         let client = Client::new();
 
-        let resp = client.request(req).await?;
-        let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+        let resp = client
+            .request(req)
+            .await
+            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
+        let body_bytes = hyper::body::to_bytes(resp.into_body())
+            .await
+            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
-        let body: Value = serde_json::from_slice(&body_bytes)?;
+        let body: Value = serde_json::from_slice(&body_bytes).map_err(|e| AuthenticationError::with_source("rest authenticator unmarshalling error", e))?;
         let parsed = match body.pointer(&selector) {
             Some(parsed) => parsed.to_string(),
             None => json!(null).to_string(),
@@ -199,23 +210,5 @@ impl From<hyper::Error> for RestError {
 impl From<serde_json::error::Error> for RestError {
     fn from(e: serde_json::error::Error) -> Self {
         Self::JSONDeserializationError(e)
-    }
-}
-
-impl std::convert::From<hyper::Error> for AuthenticationError {
-    fn from(e: hyper::Error) -> Self {
-        AuthenticationError::with_source("rest authenticator http client error", e)
-    }
-}
-
-impl std::convert::From<serde_json::Error> for AuthenticationError {
-    fn from(e: serde_json::Error) -> Self {
-        AuthenticationError::with_source("rest authenticator unmarshalling error", e)
-    }
-}
-
-impl std::convert::From<hyper::http::Error> for AuthenticationError {
-    fn from(e: hyper::http::Error) -> Self {
-        AuthenticationError::with_source("rest authenticator http error", e)
     }
 }

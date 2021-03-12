@@ -1,6 +1,6 @@
 //! [`Authenticator`] implementation that authenticates against a JSON file.
 //!
-//! [`Authenticator`]: trait.Authenticator.html
+//! [`Authenticator`]: crate::auth::Authenticator
 
 use crate::auth::*;
 use async_trait::async_trait;
@@ -14,9 +14,7 @@ struct Credentials {
     password: String,
 }
 
-/// [`Authenticator`] implementation that authenticates against a JSON file.
-///
-/// [`Authenticator`]: ../trait.Authenticator.html
+/// [`Authenticator`](crate::auth::Authenticator) implementation that authenticates against a JSON file.
 ///
 /// Example credentials file format:
 /// [
