@@ -6,6 +6,7 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::{str, time::Duration};
+use unftp_sbe_fs::ServerExt;
 
 fn ensure_login_required<T: Debug>(r: Result<T>) {
     let err = r.unwrap_err().to_string();

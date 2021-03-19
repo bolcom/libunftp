@@ -21,6 +21,7 @@
 //! ```no_run
 //! use libunftp::auth::{Authenticator, AuthenticationError, UserDetail};
 //! use async_trait::async_trait;
+//! use unftp_sbe_fs::Filesystem;
 //!
 //! #[derive(Debug)]
 //! struct RandomAuthenticator;
@@ -49,8 +50,8 @@
 //! ```
 //! # // Make it compile
 //! # type RandomAuthenticator = libunftp::auth::AnonymousAuthenticator;
-//! let server = libunftp::Server::with_fs_and_auth(
-//!   "/srv/ftp",
+//! let server = libunftp::Server::with_authenticator(
+//!   Box::new(move || { unftp_sbe_fs::Filesystem::new("/srv/ftp") }),
 //!   std::sync::Arc::new(RandomAuthenticator{})
 //! );
 //! ```

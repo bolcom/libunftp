@@ -9,13 +9,13 @@ use super::{
     tls::FtpsConfig,
 };
 use crate::{
-    auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
+    auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
     server::{
         proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
         session::SharedSession,
         Reply,
     },
-    storage::{filesystem::Filesystem, Metadata, StorageBackend},
+    storage::{Metadata, StorageBackend},
 };
 
 use futures::{channel::mpsc::channel, SinkExt};
@@ -35,6 +35,7 @@ use tokio_stream::StreamExt;
 ///
 /// ```rust
 /// use libunftp::Server;
+/// use unftp_sbe_fs::ServerExt;
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
@@ -137,6 +138,7 @@ where
     ///
     /// ```rust
     /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
+    /// use unftp_sbe_fs::ServerExt;
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
@@ -157,6 +159,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
@@ -185,6 +188,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp").greeting("Welcome to my FTP Server");
@@ -204,6 +208,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp").idle_session_timeout(600);
@@ -229,6 +234,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp").metrics();
@@ -251,6 +257,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
     ///              .passive_host([127,0,0,1]);
@@ -259,6 +266,7 @@ where
     ///
     /// ```rust
     /// use libunftp::{Server,options};
+    /// use unftp_sbe_fs::ServerExt;
     /// use std::net::Ipv4Addr;
     ///
     /// let server = Server::with_fs("/tmp")
@@ -269,6 +277,7 @@ where
     ///
     /// ```rust
     /// use libunftp::{Server,options};
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
     ///              .passive_host(options::PassiveHost::FromConnection);
@@ -278,6 +287,7 @@ where
     ///
     /// ```rust
     /// use libunftp::{Server,options};
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
     ///              .passive_host("ftp.myserver.org");
@@ -293,6 +303,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
     /// let server = Server::with_fs("/tmp")
@@ -328,6 +339,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp").proxy_protocol_mode(2121);
@@ -344,6 +356,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
@@ -508,52 +521,6 @@ where
                 tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
             }
         }
-    }
-}
-
-impl Server<Filesystem, DefaultUser> {
-    /// Create a new `Server` with the given filesystem root.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    ///
-    /// let server = Server::with_fs("/srv/ftp");
-    /// ```
-    pub fn with_fs<P: Into<PathBuf> + Send + 'static>(path: P) -> Self {
-        let p = path.into();
-        Server::new(Box::new(move || {
-            let p = &p.clone();
-            Filesystem::new(p)
-        }))
-    }
-}
-
-impl<User> Server<Filesystem, User>
-where
-    User: UserDetail + 'static,
-{
-    /// Create a new `Server` using the filesystem backend and the specified authenticator
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    /// use libunftp::auth::AnonymousAuthenticator;
-    /// use std::sync::Arc;
-    ///
-    /// let server = Server::with_fs_and_auth("/srv/ftp", Arc::new(AnonymousAuthenticator{}));
-    /// ```
-    pub fn with_fs_and_auth<P: Into<PathBuf> + Send + 'static>(path: P, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
-        let p = path.into();
-        Server::with_authenticator(
-            Box::new(move || {
-                let p = &p.clone();
-                Filesystem::new(p)
-            }),
-            authenticator,
-        )
     }
 }
 

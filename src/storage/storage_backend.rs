@@ -1,6 +1,7 @@
 //! Defines the service provider interface for storage back-end implementors.
 
 use super::error::Error;
+use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use itertools::Itertools;
@@ -247,4 +248,14 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
 
     /// Changes the working directory to the given path.
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        match err.kind() {
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            _ => Error::new(ErrorKind::LocalError, err),
+        }
+    }
 }

@@ -267,7 +267,7 @@ mod tests {
 
         assert_eq!(meta.is_dir(), my_meta.is_dir());
         assert_eq!(meta.is_file(), my_meta.is_file());
-        assert_eq!(meta.is_symlink(), my_meta.is_symlink());
+        assert_eq!(meta.file_type().is_symlink(), my_meta.file_type().is_symlink());
         assert_eq!(meta.len(), my_meta.len());
         assert_eq!(meta.modified().unwrap(), my_meta.modified().unwrap());
     }
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(my_fileinfo.path, relpath);
         assert_eq!(my_fileinfo.metadata.is_dir(), meta.is_dir());
         assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
-        assert_eq!(my_fileinfo.metadata.is_symlink(), meta.is_symlink());
+        assert_eq!(my_fileinfo.metadata.is_symlink(), meta.file_type().is_symlink());
         assert_eq!(my_fileinfo.metadata.len(), meta.len());
         assert_eq!(my_fileinfo.metadata.modified().unwrap(), meta.modified().unwrap());
     }

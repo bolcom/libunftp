@@ -2,6 +2,7 @@ use std::env;
 use std::sync::Arc;
 use tokio::runtime::Builder as TokioBuilder;
 use unftp_auth_rest::{Builder, RestAuthenticator};
+use unftp_sbe_fs::ServerExt;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
