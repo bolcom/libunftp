@@ -1,9 +1,9 @@
 //! [`Authenticator`] implementation that authenticates against a JSON file.
 //!
-//! [`Authenticator`]: crate::auth::Authenticator
+//! [`Authenticator`]: libunftp::auth::Authenticator
 
-use crate::auth::*;
 use async_trait::async_trait;
+use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use serde::Deserialize;
 use std::{fs, time::Duration};
 use tokio::time::sleep;
@@ -14,7 +14,7 @@ struct Credentials {
     password: String,
 }
 
-/// [`Authenticator`](crate::auth::Authenticator) implementation that authenticates against a JSON file.
+/// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against a JSON file.
 ///
 /// Example credentials file format:
 /// [

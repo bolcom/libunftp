@@ -71,6 +71,3 @@ pub use user::{DefaultUser, UserDetail};
 
 #[cfg(all(feature = "pam_auth", target_family = "unix"))]
 pub mod pam;
-
-#[cfg(feature = "jsonfile_auth")]
-pub mod jsonfile;
