@@ -1,0 +1,29 @@
+[package]
+name = "unftp-auth-jsonfile"
+version = "0.1.0"
+authors = [
+    "Agoston Horvath <ahorvath@bol.com>",
+    "Dávid Kosztka <dkosztka@bol.com>",
+    "Hannes de Jager <hdejager@bol.com>",
+    "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
+]
+edition = "2018"
+license = "Apache-2.0"
+keywords = ["libunftp", "unftp", "ftp", "ftps", "json", "auth", "authenticator"]
+categories = ["network-programming"]
+documentation = "https://docs.rs/unftp-auth-jsonfile"
+homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
+repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
+readme = "README.md"
+
+[dependencies]
+async-trait = "0.1.42"
+libunftp = { version="0.16.2", path="../../"}
+serde = { version = "1.0.123", features = ["derive"] }
+serde_json = { version = "1.0.62" }
+tokio = { version = "1.2.0", features = ["rt", "time"]}
+tracing = "0.1.23"
+tracing-attributes = "0.1.12"
+
+[dev-dependencies]
+pretty_env_logger = "0.4.0"
