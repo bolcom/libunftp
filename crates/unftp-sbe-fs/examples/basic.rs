@@ -1,3 +1,5 @@
+use unftp_sbe_fs::ServerExt;
+
 #[tokio::main]
 pub async fn main() {
     pretty_env_logger::init();

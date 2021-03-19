@@ -17,9 +17,15 @@
 //! use std::fmt::Debug;
 //! use std::path::{Path, PathBuf};
 //! use libunftp::auth::DefaultUser;
+//! use std::time::SystemTime;
 //!
 //! #[derive(Debug)]
 //! pub struct Vfs {}
+//!
+//! #[derive(Debug)]
+//! pub struct Meta {
+//!     inner: std::fs::Metadata,
+//! }
 //!
 //! impl Vfs {
 //!   fn new() -> Vfs { Vfs{} }
@@ -27,7 +33,7 @@
 //!
 //! #[async_trait]
 //! impl libunftp::storage::StorageBackend<DefaultUser> for Vfs {
-//!     type Metadata = std::fs::Metadata;
+//!     type Metadata = Meta;
 //!
 //!     async fn metadata<P: AsRef<Path> + Send + Debug>(
 //!         &self,
@@ -111,12 +117,42 @@
 //!         unimplemented!()
 //!     }
 //! }
+//!
+//! impl Metadata for Meta {
+//!     fn len(&self) -> u64 {
+//!         self.inner.len()
+//!     }
+//!
+//!     fn is_dir(&self) -> bool {
+//!         self.inner.is_dir()
+//!     }
+//!
+//!     fn is_file(&self) -> bool {
+//!         self.inner.is_file()
+//!     }
+//!
+//!     fn is_symlink(&self) -> bool {
+//!        self.inner.file_type().is_symlink()
+//!     }
+//!
+//!     fn modified(&self) -> Result<SystemTime> {
+//!         self.inner.modified().map_err(|e| e.into())
+//!     }
+//!
+//!     fn gid(&self) -> u32 {
+//!         0
+//!     }
+//!
+//!     fn uid(&self) -> u32 {
+//!         0
+//!     }
+//! }
 //! ```
 //!
 //! 3. Initialize it with the [`Server`](crate::Server):
 //!
 //! ```no_run
-//! # use libunftp::storage::filesystem::Filesystem;
+//! # use unftp_sbe_fs::Filesystem;
 //! # struct Vfs{};
 //! # impl Vfs { fn new() -> Filesystem { Filesystem::new("/") } }
 //! let vfs_provider = Box::new(|| Vfs::new());
@@ -131,5 +167,3 @@ pub use error::{Error, ErrorKind};
 
 pub(crate) mod storage_backend;
 pub use storage_backend::{Fileinfo, Metadata, Permissions, Result, StorageBackend, FEATURE_RESTART};
-
-pub mod filesystem;

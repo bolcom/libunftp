@@ -38,6 +38,7 @@ Then add the libunftp and tokio crates to your project's dependencies in `Cargo.
 ```toml
 [dependencies]
 libunftp = "0.16.2"
+unftp-sbe-fs = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -45,6 +46,8 @@ Now you're ready to develop your server!
 Add the following to `src/main.rs`:
 
 ```rust
+use unftp_sbe_fs::ServerExt;
+
 #[tokio::main]
 pub async fn main() {
     let ftp_home = std::env::temp_dir();

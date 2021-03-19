@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use unftp_auth_jsonfile::JsonFileAuthenticator;
+use unftp_sbe_fs::ServerExt;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
