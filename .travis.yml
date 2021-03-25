@@ -14,7 +14,7 @@ os:
   - windows
 
 before_script:
-  - if [[ $TRAVIS_OS_NAME == "osx" ]]; then export TEST_FEATURES=""; else export TEST_FEATURES="--all-features"; fi
+  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then export IGN=""; else export IGN="--exclude unftp-auth-pam"; fi
   - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
   - rustup component add rustfmt
   - if [ $TRAVIS_RUST_VERSION != 'nightly' ]; then rustup component add clippy; else rustup component add clippy --toolchain=nightly || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy; fi
@@ -23,9 +23,11 @@ cache: cargo
 
 script:
   - cargo fmt --all -- --check
-  - cargo clippy --all-features --all-targets
-  - cargo test --verbose $TEST_FEATURES --all-targets
-  - cargo build --verbose --all-features --all-targets
+  - cargo clippy --verbose --workspace
+  - cargo test --verbose --workspace --exclude unftp-sbe-gcs $IGN
+  - cargo test --doc --workspace
+  - cargo build --verbose --workspace
+  - cargo build --examples --workspace
 
 matrix:
   allow_failures:

@@ -24,7 +24,8 @@ edition = "2018"
 members = [
     "crates/unftp-sbe-gcs",
     "crates/unftp-auth-rest",
-    "crates/unftp-auth-jsonfile"
+    "crates/unftp-auth-jsonfile",
+    "crates/unftp-auth-pam"
 ]
 
 [dependencies]
@@ -53,9 +54,6 @@ tracing-attributes = "0.1.12"
 tracing-futures = { version = "0.2.4", features = ["std", "std-future", "futures-03"]}
 uuid = { version = "0.8.2", features = ["v4"] }
 
-[target.'cfg(unix)'.dependencies]
-pam-auth = { package = "pam", version = "0.7.0", optional = true }
-
 [dev-dependencies]
 async_ftp = "5.0.0"
 clap = "2.33.3"
@@ -69,9 +67,6 @@ more-asserts = "0.2.1"
 unftp-sbe-gcs = { path = "../libunftp/crates/unftp-sbe-gcs"}
 unftp-auth-rest = { path = "../libunftp/crates/unftp-auth-rest"}
 pretty_env_logger = "0.4.0"
-
-[features]
-pam_auth = ["pam-auth"]
 
 [profile.release]
 lto = "fat"

@@ -1,0 +1,27 @@
+[package]
+name = "unftp-auth-pam"
+version = "0.1.0"
+authors = [
+    "Agoston Horvath <ahorvath@bol.com>",
+    "Dávid Kosztka <dkosztka@bol.com>",
+    "Hannes de Jager <hdejager@bol.com>",
+    "Koen Wilde <koen@chillheid.nl>",
+    "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
+]
+edition = "2018"
+license = "Apache-2.0"
+keywords = ["libunftp", "unftp", "ftp", "ftps", "pam", "auth", "authenticator"]
+categories = ["network-programming"]
+documentation = "https://docs.rs/unftp-auth-pam"
+homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-pam"
+repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-pam"
+readme = "README.md"
+
+[dependencies]
+async-trait = "0.1.42"
+libunftp = { version="0.16.2", path="../../"}
+tracing = "0.1.23"
+tracing-attributes = "0.1.12"
+
+[target.'cfg(target_family = "unix")'.dependencies]
+pam-auth = { package = "pam", version = "0.7.0"}

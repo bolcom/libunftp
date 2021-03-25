@@ -1,14 +1,16 @@
+#![cfg(target_family = "unix")]
+
 //! [`Authenticator`] implementation that authenticates against [`PAM`].
 //!
-//! [`Authenticator`]: crate::auth::Authenticator
+//! [`Authenticator`]: libunftp::auth::Authenticator
 //! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 
-use crate::auth::*;
 use async_trait::async_trait;
+use libunftp::auth::*;
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
-/// [`Authenticator`]: crate::auth::Authenticator
+/// [`Authenticator`]: libunftp::auth::Authenticator
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[derive(Debug)]
 pub struct PamAuthenticator {
@@ -32,16 +34,10 @@ impl Authenticator<DefaultUser> for PamAuthenticator {
         let username = username.to_string();
         let password = password.to_string();
 
-        let mut auth = pam_auth::Authenticator::with_password(&service)?;
+        let mut auth = pam_auth::Authenticator::with_password(&service).map_err(|e| AuthenticationError::with_source("pam error", e))?;
 
         auth.get_handler().set_credentials(&username, &password);
-        auth.authenticate()?;
+        auth.authenticate().map_err(|e| AuthenticationError::with_source("pam error", e))?;
         Ok(DefaultUser {})
-    }
-}
-
-impl std::convert::From<pam_auth::PamError> for AuthenticationError {
-    fn from(e: pam_auth::PamError) -> Self {
-        AuthenticationError::with_source("pam error", e)
     }
 }
