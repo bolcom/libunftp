@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn fileinfo_fmt() {
-        struct MockMetadata {};
+        struct MockMetadata {}
         impl Metadata for MockMetadata {
             fn len(&self) -> u64 {
                 5

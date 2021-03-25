@@ -174,9 +174,9 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
     let p1 = port >> 8;
     let p2 = port - (p1 * 256);
     let octets = match passive_host {
-        PassiveHost::IP(ip) => ip.octets(),
+        PassiveHost::Ip(ip) => ip.octets(),
         PassiveHost::FromConnection => conn_ip.octets(),
-        PassiveHost::DNS(ref dns_name) => {
+        PassiveHost::Dns(ref dns_name) => {
             let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
             match tokio::net::lookup_host(x).await {
                 Err(_) => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),

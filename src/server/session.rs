@@ -1,7 +1,7 @@
 //! The session module implements per-connection session handling and currently also
 //! implements the handling for the *data* channel.
 
-use super::{chancomms::ControlChanMsg, tls::FTPSConfig};
+use super::{chancomms::ControlChanMsg, tls::FtpsConfig};
 use crate::auth::UserDetail;
 use crate::server::chancomms::DataChanCmd;
 use crate::{
@@ -83,7 +83,7 @@ where
     pub state: SessionState,
     // Tells if FTPS/TLS security is available to the session or not. The variables cmd_tls and
     // data_tls tells if the channels are actually encrypted or not.
-    pub ftps_config: FTPSConfig,
+    pub ftps_config: FtpsConfig,
     // True if the command channel is in secure mode at the moment. Changed by AUTH and CCC commands.
     pub cmd_tls: bool,
     // True if the data channel is in secure mode at the moment. Changed by the PROT command.
@@ -120,7 +120,7 @@ where
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
-            ftps_config: FTPSConfig::Off,
+            ftps_config: FtpsConfig::Off,
             cmd_tls: false,
             data_tls: false,
             collect_metrics: false,
@@ -129,7 +129,7 @@ where
         }
     }
 
-    pub fn ftps(mut self, mode: FTPSConfig) -> Self {
+    pub fn ftps(mut self, mode: FtpsConfig) -> Self {
         self.ftps_config = mode;
         self
     }

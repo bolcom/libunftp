@@ -171,10 +171,10 @@ where
 
             match &params[..] {
                 b"UTF8 ON" => Command::Opts {
-                    option: Opt::UTF8 { on: true },
+                    option: Opt::Utf8 { on: true },
                 },
                 b"UTF8 OFF" => Command::Opts {
-                    option: Opt::UTF8 { on: false },
+                    option: Opt::Utf8 { on: false },
                 },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
             }
@@ -368,7 +368,7 @@ fn parse_to_eol_with_null(text: String) -> Result<(String, bool, usize)> {
                 contains_null = true;
             }
             ('\r', _) => {
-                return Err(ParseErrorKind::InvalidEOL.into());
+                return Err(ParseErrorKind::InvalidEol.into());
             }
             (_, '\n') => {
                 return Ok((text, contains_null, 1));
@@ -377,7 +377,7 @@ fn parse_to_eol_with_null(text: String) -> Result<(String, bool, usize)> {
         }
         last_ch = ch;
     }
-    Err(ParseErrorKind::InvalidEOL.into())
+    Err(ParseErrorKind::InvalidEol.into())
 }
 
 fn normalize(token: &[u8]) -> Result<String> {

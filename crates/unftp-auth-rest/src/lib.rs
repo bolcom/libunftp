@@ -190,15 +190,15 @@ pub enum RestError {
     ///
     InvalidUri(InvalidUri),
     ///
-    HTTPStatusError(u16),
+    HttpStatusError(u16),
     ///
     HyperError(hyper::Error),
     ///
     HttpError(String),
     ///
-    JSONDeserializationError(serde_json::Error),
+    JsonDeserializationError(serde_json::Error),
     ///
-    JSONSerializationError(serde_json::Error),
+    JsonSerializationError(serde_json::Error),
 }
 
 impl From<hyper::Error> for RestError {
@@ -209,6 +209,6 @@ impl From<hyper::Error> for RestError {
 
 impl From<serde_json::error::Error> for RestError {
     fn from(e: serde_json::error::Error) -> Self {
-        Self::JSONDeserializationError(e)
+        Self::JsonDeserializationError(e)
     }
 }

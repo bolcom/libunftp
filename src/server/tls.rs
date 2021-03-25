@@ -9,30 +9,30 @@ use std::sync::Arc;
 
 // FTPSConfig shows how TLS security is configured for the server or a particular channel.
 #[derive(Clone, Debug)]
-pub enum FTPSConfig {
+pub enum FtpsConfig {
     Off,
     On { certs_file: PathBuf, key_file: PathBuf },
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct FTPSNotAvailable;
+pub struct FtpsNotAvailable;
 
-impl fmt::Display for FTPSNotAvailable {
+impl fmt::Display for FtpsNotAvailable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "FTPS not configured/available")
     }
 }
 
-impl Error for FTPSNotAvailable {}
+impl Error for FtpsNotAvailable {}
 
 // Converts
-impl TryFrom<FTPSConfig> for tokio_rustls::TlsAcceptor {
-    type Error = FTPSNotAvailable;
+impl TryFrom<FtpsConfig> for tokio_rustls::TlsAcceptor {
+    type Error = FtpsNotAvailable;
 
-    fn try_from(config: FTPSConfig) -> Result<Self, Self::Error> {
+    fn try_from(config: FtpsConfig) -> Result<Self, Self::Error> {
         match config {
-            FTPSConfig::Off => Err(FTPSNotAvailable),
-            FTPSConfig::On { certs_file, key_file } => {
+            FtpsConfig::Off => Err(FtpsNotAvailable),
+            FtpsConfig::On { certs_file, key_file } => {
                 let acceptor: tokio_rustls::TlsAcceptor = new_config(certs_file, key_file).into();
                 Ok(acceptor)
             }

@@ -5,7 +5,7 @@ use crate::{
         chancomms::{ControlChanMsg, ProxyLoopSender},
         controlchan::{
             auth::AuthMiddleware,
-            codecs::FTPCodec,
+            codecs::FtpCodec,
             command::Command,
             commands,
             error::{ControlChanError, ControlChanErrorKind},
@@ -17,7 +17,7 @@ use crate::{
         },
         ftpserver::options::{FtpsRequired, PassiveHost},
         session::SharedSession,
-        tls::FTPSConfig,
+        tls::FtpsConfig,
         Event, Session, SessionState,
     },
     storage::{ErrorKind, Metadata, StorageBackend},
@@ -51,7 +51,7 @@ where
     pub authenticator: Arc<dyn Authenticator<User>>,
     pub passive_ports: Range<u16>,
     pub passive_host: PassiveHost,
-    pub ftps_config: FTPSConfig,
+    pub ftps_config: FtpsConfig,
     pub collect_metrics: bool,
     pub idle_session_timeout: Duration,
     pub logger: slog::Logger,
@@ -86,7 +86,7 @@ where
         ..
     } = config;
 
-    let tls_configured = matches!(ftps_config, FTPSConfig::On { .. });
+    let tls_configured = matches!(ftps_config, FtpsConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
     let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
@@ -141,8 +141,8 @@ where
         next: event_chain,
     };
 
-    let codec = FTPCodec::new();
-    let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FTPCodec> = codec.framed(Box::new(tcp_stream));
+    let codec = FtpCodec::new();
+    let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FtpCodec> = codec.framed(Box::new(tcp_stream));
     let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
 
     reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
@@ -195,7 +195,7 @@ where
                         let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = Box::new(acceptor.accept(io).await.unwrap());
 
                         // Wrap in codec again and get sink + source
-                        let codec = FTPCodec::new();
+                        let codec = FtpCodec::new();
                         let cmd_and_reply_stream = codec.framed(io);
                         let (sink, src) = cmd_and_reply_stream.split();
                         let src = src.fuse();
@@ -247,7 +247,7 @@ where
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
         ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),
-        ControlChanErrorKind::UTF8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
+        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
         ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"), false),
         ControlChanErrorKind::ControlChannelTimeout => (
             Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),

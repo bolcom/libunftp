@@ -11,20 +11,20 @@ use async_trait::async_trait;
 /// [`Authenticator`]: crate::auth::Authenticator
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[derive(Debug)]
-pub struct PAMAuthenticator {
+pub struct PamAuthenticator {
     service: String,
 }
 
-impl PAMAuthenticator {
-    /// Initialize a new [`PAMAuthenticator`] for the given PAM service.
+impl PamAuthenticator {
+    /// Initialize a new [`PamAuthenticator`] for the given PAM service.
     pub fn new<S: Into<String>>(service: S) -> Self {
         let service = service.into();
-        PAMAuthenticator { service }
+        PamAuthenticator { service }
     }
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for PAMAuthenticator {
+impl Authenticator<DefaultUser> for PamAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {

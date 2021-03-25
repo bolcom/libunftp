@@ -23,7 +23,7 @@ use async_trait::async_trait;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Opt {
     /// The client wants us to enable UTF-8 encoding for file paths and such.
-    UTF8 { on: bool },
+    Utf8 { on: bool },
 }
 
 #[derive(Debug)]
@@ -47,8 +47,8 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.option {
-            Opt::UTF8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
-            Opt::UTF8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
+            Opt::Utf8 { on: true } => Ok(Reply::new(ReplyCode::FileActionOkay, "Always in UTF-8 mode.")),
+            Opt::Utf8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
         }
     }
 }

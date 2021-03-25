@@ -21,7 +21,7 @@ pub struct ControlChanError {
 pub enum ControlChanErrorKind {
     /// We encountered a system IO error.
     #[display(fmt = "Failed to perform IO")]
-    IOError,
+    IoError,
     /// Something went wrong parsing the client's command.
     #[display(fmt = "Failed to parse command")]
     ParseError,
@@ -38,7 +38,7 @@ pub enum ControlChanErrorKind {
     InternalMsgError,
     /// We encountered a non-UTF8 character in the command.
     #[display(fmt = "Non-UTF8 character in command")]
-    UTF8Error,
+    Utf8Error,
     /// The client issued a command we don't know about.
     #[display(fmt = "Unknown command: {}", command)]
     UnknownCommand {
@@ -79,7 +79,7 @@ impl From<ControlChanErrorKind> for ControlChanError {
 impl From<std::io::Error> for ControlChanError {
     fn from(err: std::io::Error) -> ControlChanError {
         ControlChanError {
-            kind: ControlChanErrorKind::IOError,
+            kind: ControlChanErrorKind::IoError,
             source: Some(Box::new(err)),
         }
     }
@@ -88,7 +88,7 @@ impl From<std::io::Error> for ControlChanError {
 impl From<std::str::Utf8Error> for ControlChanError {
     fn from(err: std::str::Utf8Error) -> ControlChanError {
         ControlChanError {
-            kind: ControlChanErrorKind::UTF8Error,
+            kind: ControlChanErrorKind::Utf8Error,
             source: Some(Box::new(err)),
         }
     }
@@ -97,7 +97,7 @@ impl From<std::str::Utf8Error> for ControlChanError {
 impl From<ParseError> for ControlChanError {
     fn from(err: ParseError) -> ControlChanError {
         let kind: ControlChanErrorKind = match err.kind().clone() {
-            ParseErrorKind::InvalidUTF8 => ControlChanErrorKind::UTF8Error,
+            ParseErrorKind::InvalidUtf8 => ControlChanErrorKind::Utf8Error,
             ParseErrorKind::InvalidCommand => ControlChanErrorKind::InvalidCommand,
             _ => ControlChanErrorKind::InvalidCommand,
         };

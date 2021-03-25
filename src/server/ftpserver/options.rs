@@ -22,9 +22,9 @@ pub enum PassiveHost {
     /// Use the IP address of the control connection
     FromConnection,
     /// Advertise this specific IP address
-    IP(Ipv4Addr),
+    Ip(Ipv4Addr),
     /// Resolve this DNS name into an IPv4 address.
-    DNS(String),
+    Dns(String),
     // We also be nice to have:
     // - PerUser(Box<dyn (Fn(Box<dyn UserDetail>) -> Ipv4Addr) + Send + Sync>) or something like
     //   that to allow a per user decision
@@ -34,21 +34,21 @@ impl Eq for PassiveHost {}
 
 impl From<Ipv4Addr> for PassiveHost {
     fn from(ip: Ipv4Addr) -> Self {
-        PassiveHost::IP(ip)
+        PassiveHost::Ip(ip)
     }
 }
 
 impl From<[u8; 4]> for PassiveHost {
     fn from(ip: [u8; 4]) -> Self {
-        PassiveHost::IP(ip.into())
+        PassiveHost::Ip(ip.into())
     }
 }
 
 impl From<&str> for PassiveHost {
     fn from(dns_or_ip: &str) -> Self {
         match dns_or_ip.parse() {
-            Ok(IpAddr::V4(ip)) => PassiveHost::IP(ip),
-            _ => PassiveHost::DNS(dns_or_ip.to_string()),
+            Ok(IpAddr::V4(ip)) => PassiveHost::Ip(ip),
+            _ => PassiveHost::Dns(dns_or_ip.to_string()),
         }
     }
 }

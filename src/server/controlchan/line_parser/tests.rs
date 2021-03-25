@@ -37,14 +37,14 @@ fn parse_user_cmd_nl() {
 // Although we accept requests ending in only '\n', we won't accept requests ending only in '\r'
 fn parse_user_cmd_cr() {
     let input = "USER Dolores\r";
-    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEOL)));
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEol)));
 }
 
 #[test]
 // We should fail if the request does not end in '\n' or '\r'
 fn parse_user_cmd_no_eol() {
     let input = "USER Dolores";
-    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEOL)));
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEol)));
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn parse_opts() {
     assert_eq!(
         parse(input),
         Ok(Command::Opts {
-            option: Opt::UTF8 { on: true }
+            option: Opt::Utf8 { on: true }
         })
     );
 
@@ -297,7 +297,7 @@ fn parse_opts() {
     assert_eq!(
         parse(input),
         Ok(Command::Opts {
-            option: Opt::UTF8 { on: false }
+            option: Opt::Utf8 { on: false }
         })
     );
 }

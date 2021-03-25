@@ -2,7 +2,7 @@
 
 use super::{
     chancomms::{ControlChanMsg, DataChanMsg},
-    tls::FTPSConfig,
+    tls::FtpsConfig,
 };
 use crate::server::session::SharedSession;
 use crate::{
@@ -33,7 +33,7 @@ where
     pub storage: Arc<Storage>,
     pub cwd: PathBuf,
     pub start_pos: u64,
-    pub ftps_mode: FTPSConfig,
+    pub ftps_mode: FtpsConfig,
     pub logger: slog::Logger,
     pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
     pub data_abort_rx: Option<Receiver<()>>,
@@ -220,10 +220,10 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn writer(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
+    async fn writer(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         match ftps_mode {
-            FTPSConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
-            FTPSConfig::On { certs_file, key_file } => {
+            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
+            FtpsConfig::On { certs_file, key_file } => {
                 let io = async move {
                     let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
                     acceptor.accept(socket).await.unwrap()
@@ -235,10 +235,10 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn reader(socket: tokio::net::TcpStream, ftps_mode: FTPSConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
+    async fn reader(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         match ftps_mode {
-            FTPSConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
-            FTPSConfig::On { certs_file, key_file } => {
+            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
+            FtpsConfig::On { certs_file, key_file } => {
                 let io = async move {
                     let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
                     acceptor.accept(socket).await.unwrap()
@@ -322,7 +322,7 @@ where
                 return;
             }
         };
-        let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FTPSConfig::Off };
+        let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FtpsConfig::Off };
         let command_executor = DataCommandExecutor {
             user: session.user.clone(),
             socket,

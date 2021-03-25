@@ -22,10 +22,10 @@ pub enum ParseErrorKind {
     InvalidCommand,
     /// Non-UTF8 character encountered.
     #[display(fmt = "Non-UTF8 character while parsing")]
-    InvalidUTF8,
+    InvalidUtf8,
     /// Invalid end-of-line character.
     #[display(fmt = "Invalid end-of-line")]
-    InvalidEOL,
+    InvalidEol,
 }
 
 impl ParseError {
@@ -44,7 +44,7 @@ impl From<ParseErrorKind> for ParseError {
 impl From<Utf8Error> for ParseError {
     fn from(_: Utf8Error) -> ParseError {
         ParseError {
-            kind: ParseErrorKind::InvalidUTF8,
+            kind: ParseErrorKind::InvalidUtf8,
         }
     }
 }

@@ -6,7 +6,7 @@ use tokio_util::codec::{Decoder, Encoder};
 
 // FTPCodec implements tokio's `Decoder` and `Encoder` traits for the control channel, that we'll
 // use to decode FTP commands and encode their responses.
-pub struct FTPCodec {
+pub struct FtpCodec {
     // Stored index of the next index to examine for a '\n' character. This is used to optimize
     // searching. For example, if `decode` was called with `abc`, it would hold `3`, because that
     // is the next index to examine. The next time `decode` is called with `abcde\n`, we will only
@@ -14,13 +14,13 @@ pub struct FTPCodec {
     next_index: usize,
 }
 
-impl FTPCodec {
+impl FtpCodec {
     pub fn new() -> Self {
-        FTPCodec { next_index: 0 }
+        FtpCodec { next_index: 0 }
     }
 }
 
-impl Decoder for FTPCodec {
+impl Decoder for FtpCodec {
     type Item = Command;
     type Error = ControlChanError;
 
@@ -39,7 +39,7 @@ impl Decoder for FTPCodec {
     }
 }
 
-impl Encoder<Reply> for FTPCodec {
+impl Encoder<Reply> for FtpCodec {
     type Error = ControlChanError;
 
     // Here we encode the outgoing response

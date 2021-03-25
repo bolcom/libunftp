@@ -6,7 +6,7 @@ use super::{
     controlchan,
     datachan::spawn_processing,
     ftpserver::{error::ServerError, options::FtpsRequired},
-    tls::FTPSConfig,
+    tls::FtpsConfig,
 };
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, DefaultUser, UserDetail},
@@ -57,7 +57,7 @@ where
     passive_ports: Range<u16>,
     passive_host: PassiveHost,
     collect_metrics: bool,
-    ftps_mode: FTPSConfig,
+    ftps_mode: FtpsConfig,
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
@@ -120,7 +120,7 @@ where
             authenticator,
             passive_ports: options::DEFAULT_PASSIVE_PORTS,
             passive_host: options::DEFAULT_PASSIVE_HOST,
-            ftps_mode: FTPSConfig::Off,
+            ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
             proxy_protocol_mode: ProxyMode::Off,
@@ -162,7 +162,7 @@ where
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.ftps_mode = FTPSConfig::On {
+        self.ftps_mode = FtpsConfig::On {
             certs_file: certs_file.into(),
             key_file: key_file.into(),
         };
@@ -262,7 +262,7 @@ where
     /// use std::net::Ipv4Addr;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .passive_host(options::PassiveHost::IP(Ipv4Addr::new(127, 0, 0, 1)));
+    ///              .passive_host(options::PassiveHost::Ip(Ipv4Addr::new(127, 0, 0, 1)));
     /// ```
     ///
     /// To determine the passive IP from the incoming control connection:
