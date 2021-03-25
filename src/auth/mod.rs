@@ -68,6 +68,3 @@ pub use authenticator::{AuthenticationError, Authenticator};
 
 mod user;
 pub use user::{DefaultUser, UserDetail};
-
-#[cfg(all(feature = "pam_auth", target_family = "unix"))]
-pub mod pam;
