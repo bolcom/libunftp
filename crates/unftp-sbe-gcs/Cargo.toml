@@ -1,5 +1,6 @@
 [package]
 name = "unftp-sbe-gcs"
+description = "A storage back-end for libunftp, storing files in Google Cloud Storage (GCS)"
 version = "0.1.0"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -9,7 +10,7 @@ authors = [
 ]
 edition = "2018"
 license = "Apache-2.0"
-keywords = ["libunftp", "unftp", "ftp", "ftps", "storage", "gcs"]
+keywords = ["libunftp", "unftp", "ftp", "ftps", "gcs"]
 categories = ["network-programming"]
 documentation = "https://docs.rs/unftp-sbe-gcs"
 homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gcs"

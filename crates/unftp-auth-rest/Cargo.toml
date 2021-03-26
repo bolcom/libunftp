@@ -1,6 +1,7 @@
 [package]
 name = "unftp-auth-rest"
 version = "0.1.0"
+description = "An authenticator back-end for libunftp that consumes an HTTP API to authenticate"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -9,7 +10,7 @@ authors = [
 ]
 edition = "2018"
 license = "Apache-2.0"
-keywords = ["libunftp", "unftp", "ftp", "ftps", "auth", "http", "rest", "extension"]
+keywords = ["libunftp", "ftp", "ftps", "auth", "rest"]
 categories = ["network-programming"]
 documentation = "https://docs.rs/unftp-auth-rest"
 homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-rest"
