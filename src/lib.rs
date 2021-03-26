@@ -4,19 +4,22 @@
 
 //! libunftp is an extensible, async, cloud orientated FTP(S) server library.
 //!
-//! Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem,
-//! [Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a
-//! perfect match for the cloud.
+//! Because of its plug-able authentication (e.g. PAM, JSON File, Generic REST) and storage
+//! backends (e.g. local filesystem, [Google Cloud Storage](https://cloud.google.com/storage)) it's
+//! more flexible than traditional FTP servers and a perfect match for the cloud.
 //!
-//! It runs on top of the Tokio asynchronous run-time and tries to make use of Async IO as much as possible.
+//! It runs on top of the Tokio asynchronous run-time and tries to make use of Async IO as much as
+//! possible.
 //!
 //! # Quick Start
 //!
-//! Add the libunftp and tokio crates to your project's dependencies in Cargo.toml
+//! Add the libunftp and tokio crates to your project's dependencies in Cargo.toml. Then also choose
+//! a [storage back-end implementation](https://crates.io/search?page=1&per_page=10&q=unftp-sbe) to
+//! add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sbe-fs):
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.16.2"
+//! libunftp = "0.17.0"
 //! unftp-sbe-fs = "0.1"
 //! tokio = { version = "1", features = ["full"] }
 //! ```

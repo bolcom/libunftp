@@ -1,14 +1,11 @@
 #![deny(missing_docs)]
 
-//! Contains the [`Authenticator`](crate::auth::Authenticator) and [`UserDetail`](crate::auth::UserDetail) traits that are used by various implementations
-//! and also the `Server` to authenticate users.
+//! Contains the [`Authenticator`](crate::auth::Authenticator) and [`UserDetail`](crate::auth::UserDetail)
+//! traits that are used to extend libunftp's authentication and user detail storage capabilities.
 //!
-//! Defines the common interface that can be implemented for a multitude of authentication
-//! backends, e.g. *LDAP* or *PAM*. It is used by [`Server`] to authenticate users.
-//!
-//! You can define your own implementation to integrate your FTP(S) server with whatever
-//! authentication mechanism you need. For example, to define an `Authenticator` that will randomly
-//! decide:
+//! Pre-made implemenations exists on crates.io and you can define your own implementation to
+//! integrate your FTP(S) server with whatever authentication mechanism you need. For example, to
+//! define an `Authenticator` that will randomly decide:
 //!
 //! 1. Declare a dependency on the async-trait crate
 //!

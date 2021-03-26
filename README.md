@@ -14,9 +14,9 @@ When you need to FTP, but don't want to.
 The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's an extensible, async, cloud orientated FTP(S) 
 server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
 
-Because of its plug-able authentication (PAM, JSON File, Generic REST) and storage backends (e.g. local filesystem, 
-[Google Cloud Storage](https://cloud.google.com/storage)) it's more flexible than traditional FTP servers and a 
-perfect match for the cloud.
+Because of its plug-able authentication (e.g. PAM, JSON File, Generic REST) and storage
+backends (e.g. local filesystem, [Google Cloud Storage](https://cloud.google.com/storage)) it's
+more flexible than traditional FTP servers and a perfect match for the cloud.
 
 It runs on top of the [Tokio](https://tokio.rs) asynchronous run-time and tries to make use of Async IO as much as 
 possible.
@@ -33,11 +33,14 @@ If you've got Rust and cargo installed, create your project with
 cargo new myftp
 ```
 
-Then add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`:
+Add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`. Then also choose
+a [storage back-end implementation](https://crates.io/search?page=1&per_page=10&q=unftp-sbe) to
+add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sbe-fs):
+
 
 ```toml
 [dependencies]
-libunftp = "0.16.2"
+libunftp = "0.17.0"
 unftp-sbe-fs = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -84,7 +87,8 @@ Thank you for your interest in contributing to libunftp!
 
 Please feel free to create a Github issue if you encounter any problems.
 
-Want to submit a feature request? Then head over to our [contribution guide (CONTRIBUTING.md)](CONTRIBUTING.md).
+Want to submit a feature request or develop your own storage or authentication back-end? Then head over to 
+our [contribution guide (CONTRIBUTING.md)](CONTRIBUTING.md).
 
 ## License
 

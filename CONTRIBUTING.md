@@ -4,6 +4,20 @@ libunftp welcomes contribution from everyone in the form of suggestions, bug rep
 
 Please reach out here in a GitHub issue if we can do anything to help you contribute.
 
+# Contributing to the bundled authentication or storage back-end implementations
+
+Please find them in the crates directory. We welcome improvements to them.
+
+# Developing your own authentication or storage back-end implementation
+
+We would love to see many of these emerge on crates.io to create an ecosystem of usable FTP building blocks for Rust. If
+we can ask that you prefix your crate names:
+
+- unftp-auth-* for authentication implementations
+- unftp-sbe-* for storage back-end implementations
+
+Keeping this naming convention will allow a consistent and easy way for people to find libunftp extentions on crates.io
+
 ## Submitting bug reports and feature requests
 
 When reporting a bug or asking for help, please include enough details so that the people helping you can reproduce the behavior you are seeing. For some tips on how to approach this, read about how to produce a [Minimal, Complete, and Verifiable example](https://stackoverflow.com/help/mcve).

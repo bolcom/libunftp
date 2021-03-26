@@ -21,7 +21,7 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.42"
-libunftp = { version="0.16.2", path="../../"}
+libunftp = { version="0.17.0", path="../../"}
 tracing = "0.1.23"
 tracing-attributes = "0.1.12"
 tokio = { version = "1.2.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
@@ -34,7 +34,7 @@ async_ftp = "5.0.0"
 clap = "2.33.3"
 slog-term = "2.8.0"
 slog-async = "2.6.0"
-pretty_assertions = "0.6.1"
+pretty_assertions = "0.7.1"
 tempfile = "3.2.0"
 tokio = { version = "1.2.0", features = ["rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
