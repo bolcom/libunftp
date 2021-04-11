@@ -38,6 +38,8 @@ where
             | Event::Command(Command::User { .. })
             | Event::Command(Command::Pass { .. })
             | Event::Command(Command::Auth { .. })
+            | Event::Command(Command::Prot { .. })
+            | Event::Command(Command::Pbsz { .. })
             | Event::Command(Command::Feat)
             | Event::Command(Command::Noop)
             | Event::Command(Command::Quit) => self.next.handle(event).await,
