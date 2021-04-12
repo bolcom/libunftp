@@ -22,7 +22,7 @@ edition = "2018"
 [workspace]
 
 members = [
-    "crates/unftp-auth-jsonfile",
+    "crates/unftp-auth-json",
     "crates/unftp-auth-pam",
     "crates/unftp-auth-rest",
     "crates/unftp-sbe-fs",
