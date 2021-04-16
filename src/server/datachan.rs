@@ -7,7 +7,6 @@ use super::{
 use crate::server::session::SharedSession;
 use crate::{
     auth::UserDetail,
-    server::tls::new_config,
     storage::{Error, ErrorKind, Metadata, StorageBackend},
 };
 
@@ -223,9 +222,10 @@ where
     async fn writer(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         match ftps_mode {
             FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
-            FtpsConfig::On { certs_file, key_file } => {
+            FtpsConfig::Building { .. } => panic!("Illegal state"),
+            FtpsConfig::On { tls_config } => {
                 let io = async move {
-                    let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
+                    let acceptor: TlsAcceptor = tls_config.into();
                     acceptor.accept(socket).await.unwrap()
                 }
                 .await;
@@ -238,9 +238,10 @@ where
     async fn reader(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         match ftps_mode {
             FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
-            FtpsConfig::On { certs_file, key_file } => {
+            FtpsConfig::Building { .. } => panic!("Illegal state"),
+            FtpsConfig::On { tls_config } => {
                 let io = async move {
-                    let acceptor: TlsAcceptor = new_config(certs_file, key_file).into();
+                    let acceptor: TlsAcceptor = tls_config.into();
                     acceptor.accept(socket).await.unwrap()
                 }
                 .await;
