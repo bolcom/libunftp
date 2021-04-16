@@ -47,7 +47,7 @@ struct Credentials {
 // ]
 
 #[derive(Clone, Debug)]
-pub struct JsonAuthenticator {
+pub struct JsonFileAuthenticator {
     db: HashMap<String, Password>,
 }
 
@@ -58,12 +58,12 @@ struct Password {
     pbkdf2_iter: NonZeroU32,
 }
 
-impl JsonAuthenticator {
+impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from file.
     pub fn from_file<P: AsRef<Path>>(filename: P) -> Result<Self, Box<dyn std::error::Error>> {
         let json: String = fs::read_to_string(filename)?;
 
-        JsonAuthenticator::from_json(json)
+        JsonFileAuthenticator::from_json(json)
     }
 
     /// Initialize a new [`JsonFileAuthenticator`] from json string.
@@ -73,7 +73,7 @@ impl JsonAuthenticator {
         if db.len() != salts.len() {
             return Err(Box::new(std::io::Error::from(std::io::ErrorKind::InvalidData)));
         }
-        Ok(JsonAuthenticator {
+        Ok(JsonFileAuthenticator {
             db: db
                 .into_iter()
                 .map(|user_info| {
@@ -96,7 +96,7 @@ impl JsonAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for JsonAuthenticator {
+impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {
@@ -136,7 +136,7 @@ mod test {
     "pbkdf2_iter": 5000
   }
 ]"#;
-        let json_authenticator = JsonAuthenticator::from_json(json).unwrap();
+        let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
         assert_eq!(json_authenticator.authenticate("alice", "not secret").await.unwrap(), DefaultUser);
         assert_eq!(json_authenticator.authenticate("bella", "also not secret").await.unwrap(), DefaultUser);
         match json_authenticator.authenticate("bella", "bad secret").await {
@@ -163,6 +163,6 @@ mod test {
     "pbkdf2_iter": 5000
   }
 ]"#;
-        assert!(JsonAuthenticator::from_json(json).is_err());
+        assert!(JsonFileAuthenticator::from_json(json).is_err());
     }
 }
