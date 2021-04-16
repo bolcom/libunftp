@@ -1,5 +1,5 @@
 [package]
-name = "unftp-auth-json"
+name = "unftp-auth-jsonfile"
 version = "0.1.0"
 description = "An authenticator back-end for libunftp that authenticates against a JSON file"
 authors = [
@@ -12,9 +12,9 @@ edition = "2018"
 license = "Apache-2.0"
 keywords = ["libunftp", "unftp", "ftp", "ftps", "json"]
 categories = ["network-programming"]
-documentation = "https://docs.rs/unftp-auth-json"
-homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-json"
-repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-json"
+documentation = "https://docs.rs/unftp-auth-jsonfile"
+homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
+repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
 readme = "README.md"
 
 [dependencies]

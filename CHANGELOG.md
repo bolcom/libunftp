@@ -1,7 +1,5 @@
 # Changelog
 
-## 2021-04-12 unftp-auth-jsonfile renamed to unftp-auth-json
-
 ## 2021-03-26 Newly splitted auth and storage back-ends
 
 - Released [unftp-sbe-gcs](https://crates.io/crates/unftp-sbe-gcs)

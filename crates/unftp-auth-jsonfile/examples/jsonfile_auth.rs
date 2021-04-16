@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use unftp_auth_json::JsonAuthenticator;
+use unftp_auth_jsonfile::JsonAuthenticator;
 use unftp_sbe_fs::ServerExt;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
