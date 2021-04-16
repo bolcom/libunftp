@@ -58,6 +58,8 @@ struct Password {
     pbkdf2_iter: NonZeroU32,
 }
 
+
+
 impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from file.
     pub fn from_file<P: AsRef<Path>>(filename: P) -> Result<Self, Box<dyn std::error::Error>> {
@@ -71,7 +73,7 @@ impl JsonFileAuthenticator {
         let db: Vec<Credentials> = serde_json::from_str::<Vec<Credentials>>(&json.into())?;
         let salts: BTreeSet<String> = db.iter().map(|credential| credential.pbkdf2_salt.clone()).collect();
         if db.len() != salts.len() {
-            return Err(Box::new(std::io::Error::from(std::io::ErrorKind::InvalidData)));
+            return Err(Box::new(AuthenticationError::new("The provided salts for the JsonFileAuthenticator must be unique.")));
         }
         Ok(JsonFileAuthenticator {
             db: db
