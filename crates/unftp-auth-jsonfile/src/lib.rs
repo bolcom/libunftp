@@ -27,7 +27,7 @@ struct Credentials {
     pbkdf2_iter: NonZeroU32,
 }
 
-/// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against a JSON.
+/// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against JSON.
 ///
 /// Verifies passwords against pbkdf2_key using the corresponding parameters form JSON.
 /// Example credentials file format:
