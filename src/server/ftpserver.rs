@@ -18,6 +18,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
+use crate::server::tls;
 use futures::{channel::mpsc::channel, SinkExt};
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
@@ -165,7 +166,7 @@ where
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.ftps_mode = FtpsConfig::On {
+        self.ftps_mode = FtpsConfig::Building {
             certs_file: certs_file.into(),
             key_file: key_file.into(),
         };
@@ -371,7 +372,14 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
+    pub async fn listen<T: Into<String> + Debug>(mut self, bind_address: T) -> std::result::Result<(), ServerError> {
+        self.ftps_mode = match self.ftps_mode {
+            FtpsConfig::Off => FtpsConfig::Off,
+            FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
+                tls_config: tls::new_config(certs_file, key_file),
+            },
+            FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
+        };
         match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
             ProxyMode::Off => self.listen_normal_mode(bind_address).await,

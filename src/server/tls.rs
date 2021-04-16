@@ -2,16 +2,28 @@ use rustls::{Certificate, NoClientAuth, PrivateKey};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Formatter;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 // FTPSConfig shows how TLS security is configured for the server or a particular channel.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum FtpsConfig {
     Off,
-    On { certs_file: PathBuf, key_file: PathBuf },
+    Building { certs_file: PathBuf, key_file: PathBuf },
+    On { tls_config: Arc<rustls::ServerConfig> },
+}
+
+impl fmt::Debug for FtpsConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            FtpsConfig::Off => write!(f, "Off"),
+            FtpsConfig::Building { .. } => write!(f, "Building"),
+            FtpsConfig::On { .. } => write!(f, "On"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -25,15 +37,19 @@ impl fmt::Display for FtpsNotAvailable {
 
 impl Error for FtpsNotAvailable {}
 
-// Converts
+// Attempts to convert TLS configuration to an TLS Acceptor
 impl TryFrom<FtpsConfig> for tokio_rustls::TlsAcceptor {
     type Error = FtpsNotAvailable;
 
     fn try_from(config: FtpsConfig) -> Result<Self, Self::Error> {
         match config {
             FtpsConfig::Off => Err(FtpsNotAvailable),
-            FtpsConfig::On { certs_file, key_file } => {
+            FtpsConfig::Building { certs_file, key_file } => {
                 let acceptor: tokio_rustls::TlsAcceptor = new_config(certs_file, key_file).into();
+                Ok(acceptor)
+            }
+            FtpsConfig::On { tls_config } => {
+                let acceptor: tokio_rustls::TlsAcceptor = tls_config.into();
                 Ok(acceptor)
             }
         }
