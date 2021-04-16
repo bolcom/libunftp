@@ -20,7 +20,7 @@ use std::{
 use tokio::time::sleep;
 
 #[derive(Deserialize, Clone, Debug)]
-struct Credential {
+struct Credentials {
     username: String,
     pbkdf2_salt: String,
     pbkdf2_key: String,
@@ -68,7 +68,7 @@ impl JsonAuthenticator {
 
     /// Initialize a new [`JsonFileAuthenticator`] from json string.
     pub fn from_json<T: Into<String>>(json: T) -> Result<Self, Box<dyn std::error::Error>> {
-        let db: Vec<Credential> = serde_json::from_str::<Vec<Credential>>(&json.into())?;
+        let db: Vec<Credentials> = serde_json::from_str::<Vec<Credentials>>(&json.into())?;
         let salts: BTreeSet<String> = db.iter().map(|credential| credential.pbkdf2_salt.clone()).collect();
         if db.len() != salts.len() {
             return Err(Box::new(std::io::Error::from(std::io::ErrorKind::InvalidData)));
