@@ -24,7 +24,7 @@ chrono = {version = "0.4.19", features = ["serde"]}
 futures = {version = "0.3.12", features = ["std"]}
 hyper = { version = "0.14.4", features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1"}
-libunftp = { version="0.17.0", path="../../"}
+libunftp = { version="0.17.1", path="../../"}
 mime = {version = "0.3.16"}
 percent-encoding = { version = "2.1.0"}
 tokio = { version = "1.2.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}

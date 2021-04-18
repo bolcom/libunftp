@@ -1,5 +1,14 @@
 # Changelog
 
+## 2021-04-18 libunftp v0.17.1
+
+_tag: libunftp-0.17.1_
+
+Changes in this release:
+
+- [#327](https://github.com/bolcom/libunftp/issues/327) Allow PROT and PBSZ without requiring authentication.
+- [#330](https://github.com/bolcom/libunftp/pull/330) Load TLS certificates only once at startup instead of on every connect.
+
 ## 2021-03-26 Newly splitted auth and storage back-ends
 
 - Released [unftp-sbe-gcs](https://crates.io/crates/unftp-sbe-gcs)
