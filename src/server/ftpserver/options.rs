@@ -1,5 +1,6 @@
 //! Contains code pertaining to the setup options that can be given to the [`Server`](crate::Server)
 
+use bitflags::bitflags;
 use std::fmt::Formatter;
 use std::ops::Range;
 use std::{
@@ -53,7 +54,7 @@ impl From<&str> for PassiveHost {
     }
 }
 
-/// The option to `Server.ftps_required`. It allows the user to specify whethere clients are required
+/// The option to `Server.ftps_required`. It allows the user to specify whether clients are required
 /// to upgrade a to secure TLS connection i.e. use FTPS.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FtpsRequired {
@@ -87,5 +88,27 @@ impl Display for FtpsRequired {
                 FtpsRequired::None => "FTPS not enforced",
             }
         )
+    }
+}
+
+bitflags! {
+    /// Used to configure TLS options employed for FTPS
+    pub struct TlsFlags: u32 {
+        /// Enables TLS version 1.2
+        const V1_2               = 0b00000001;
+        /// Enables TLS version 1.3
+        const V1_3               = 0b00000010;
+        /// Enables TLS session resumption via means of sever side session IDs.
+        const RESUMPTION_SESS_ID = 0b00001000;
+        /// Enables TLS session resumption via means tickets ([rfc5077](https://tools.ietf.org/html/rfc5077))
+        const RESUMPTION_TICKETS = 0b00010000;
+        /// Enables the latest safe TLS versions i.e. 1.2 and 1.3
+        const LATEST_VERSIONS = Self::V1_2.bits | Self::V1_3.bits;
+    }
+}
+
+impl Default for TlsFlags {
+    fn default() -> TlsFlags {
+        TlsFlags::V1_2 | TlsFlags::RESUMPTION_SESS_ID | TlsFlags::RESUMPTION_TICKETS
     }
 }

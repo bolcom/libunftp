@@ -28,7 +28,7 @@ use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     SinkExt, StreamExt,
 };
-use std::{convert::TryInto, net::SocketAddr, ops::Range, sync::Arc, time::Duration};
+use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -191,7 +191,10 @@ where
                         let io = codec_io.into_inner();
 
                         // Wrap in TLS Stream
-                        let acceptor: tokio_rustls::TlsAcceptor = ftps_config.clone().try_into().unwrap(); // unwrap because we can't be in upgrading to TLS if it was never configured.
+                        let acceptor: tokio_rustls::TlsAcceptor = match ftps_config.clone() {
+                            FtpsConfig::On { tls_config } => tls_config.into(),
+                            _ => panic!("Could not create TLS acceptor. Illegal program state"),
+                        };
                         let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = Box::new(acceptor.accept(io).await.unwrap());
 
                         // Wrap in codec again and get sink + source
