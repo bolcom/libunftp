@@ -36,7 +36,6 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         let user = session.user.clone();
-        let start_pos: u64 = session.start_pos;
         let storage: Arc<Storage> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
         let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
@@ -46,10 +45,11 @@ where
         tokio::spawn(async move {
             match storage.metadata(&user, &path).await {
                 Ok(metadata) => {
+                    let file_len = metadata.len();
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                             ReplyCode::FileStatus,
-                            (metadata.len() - start_pos).to_string(),
+                            file_len.to_string(),
                         )))
                         .await
                     {
