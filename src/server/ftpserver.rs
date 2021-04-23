@@ -376,7 +376,7 @@ where
         self.ftps_mode = match self.ftps_mode {
             FtpsConfig::Off => FtpsConfig::Off,
             FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
-                tls_config: tls::new_config(certs_file, key_file),
+                tls_config: tls::new_config(certs_file, key_file)?,
             },
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
