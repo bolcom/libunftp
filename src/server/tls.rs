@@ -1,5 +1,5 @@
-use crate::options::TlsFlags;
-use rustls::{internal::pemfile, Certificate, NoClientAuth, NoServerSessionStorage, PrivateKey, ProtocolVersion, ServerConfig, Ticketer};
+use crate::options::{FtpsClientAuth, TlsFlags};
+use rustls::{internal::pemfile, Certificate, NoClientAuth, NoServerSessionStorage, PrivateKey, ProtocolVersion, RootCertStore, ServerConfig, Ticketer};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Formatter;
@@ -38,11 +38,29 @@ impl fmt::Display for FtpsNotAvailable {
 
 impl Error for FtpsNotAvailable {}
 
-pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P, flags: TlsFlags) -> std::io::Result<Arc<ServerConfig>> {
+pub fn new_config<P: AsRef<Path>>(
+    certs_file: P,
+    key_file: P,
+    flags: TlsFlags,
+    client_auth: FtpsClientAuth,
+    trust_store: P,
+) -> std::io::Result<Arc<ServerConfig>> {
     let certs: Vec<Certificate> = load_certs(certs_file)?;
     let privkey: PrivateKey = load_private_key(key_file)?;
 
-    let mut config = rustls::ServerConfig::new(NoClientAuth::new());
+    let client_auther = match client_auth {
+        FtpsClientAuth::Off => NoClientAuth::new(),
+        FtpsClientAuth::Request => {
+            let store: RootCertStore = root_cert_store(trust_store)?;
+            rustls::AllowAnyAnonymousOrAuthenticatedClient::new(store)
+        }
+        FtpsClientAuth::Require => {
+            let store: RootCertStore = root_cert_store(trust_store)?;
+            rustls::AllowAnyAuthenticatedClient::new(store)
+        }
+    };
+
+    let mut config = rustls::ServerConfig::new(client_auther);
     // Support session resumption with server side state (Session IDs)
     config.session_storage = if flags.contains(TlsFlags::RESUMPTION_SESS_ID) {
         TlsSessionCache::new(1024)
@@ -70,6 +88,14 @@ pub fn new_config<P: AsRef<Path>>(certs_file: P, key_file: P, flags: TlsFlags) -
     config.versions = versions;
 
     Ok(Arc::new(config))
+}
+
+fn root_cert_store<P: AsRef<Path>>(trust_pem: P) -> std::io::Result<RootCertStore> {
+    let mut store = rustls::RootCertStore::empty();
+    let file: File = File::open(trust_pem)?;
+    let mut reader: BufReader<File> = BufReader::new(file);
+    store.add_pem_file(&mut reader).map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other))?;
+    Ok(store)
 }
 
 fn load_certs<P: AsRef<Path>>(filename: P) -> std::io::Result<Vec<Certificate>> {

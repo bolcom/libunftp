@@ -1,7 +1,10 @@
-//! Contains the [`StorageBackend`](crate::storage::StorageBackend) trait and its bundled implementations that can used by the `Server`.
+//! Contains the [`StorageBackend`](crate::storage::StorageBackend) trait that can be implemented to
+//! create virtual file systems for libunftp.
 //!
-//! You can define your own implementation to integrate your FTP(S) server with whatever
-//! backend you need. To create a new storage back-end:
+//! Pre-made implemenations exists on crates.io (search for `unftp-sbe-`) and you can define your
+//! own implementation to integrate your FTP(S) server with whatever storage mechanism you prefer.
+//!
+//! To create a new storage back-end:
 //!
 //! 1. Declare a dependency on the async-trait crate
 //!

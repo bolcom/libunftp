@@ -15,6 +15,7 @@ pub(crate) const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 pub(crate) const DEFAULT_PASSIVE_HOST: PassiveHost = PassiveHost::FromConnection;
 pub(crate) const DEFAULT_PASSIVE_PORTS: Range<u16> = 49152..65535;
 pub(crate) const DEFAULT_FTPS_REQUIRE: FtpsRequired = FtpsRequired::None;
+pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 
 /// The option to `Server.passive_host`. It allows the user to specify how the IP address
 /// communicated in the _PASV_ response is determined.
@@ -109,6 +110,42 @@ bitflags! {
 
 impl Default for TlsFlags {
     fn default() -> TlsFlags {
+        // Switch TLS 1.3 off by default since we still see a PUT bug with lftp when switching
+        // session resumption on along with TLS 1.3.
         TlsFlags::V1_2 | TlsFlags::RESUMPTION_SESS_ID | TlsFlags::RESUMPTION_TICKETS
+    }
+}
+
+/// The option to `Server.ftps_client_auth`. Tells if and how mutual TLS (client certificate
+/// authentication) should be handled.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum FtpsClientAuth {
+    /// Mutual TLS is switched off and the server won't ask the client for a certificate in the TLS
+    /// protocol. This is the default.
+    Off,
+    /// Mutual TLS is on and whilst the server will request a certificate it will still proceed
+    /// without one. If a certificate is sent by the client it will be validated against the
+    /// configured trust anchors (see [Server::ftps_trust_store](crate::Server::ftps_trust_store)).
+    Request,
+    /// Mutual TLS is on, the server will request a certificate and it won't proceed without a
+    /// client certificate that validates against the configured trust anchors (see
+    /// [Server::ftps_trust_store](crate::Server::ftps_trust_store)).
+    Require,
+}
+
+impl Eq for FtpsClientAuth {}
+
+impl Default for FtpsClientAuth {
+    fn default() -> FtpsClientAuth {
+        FtpsClientAuth::Off
+    }
+}
+
+impl From<bool> for FtpsClientAuth {
+    fn from(on: bool) -> Self {
+        match on {
+            true => FtpsClientAuth::Require,
+            false => FtpsClientAuth::Off,
+        }
     }
 }
