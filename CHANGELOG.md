@@ -1,6 +1,8 @@
 # Changelog
 
-## Upcoming
+## 2021-04-25 libunftp v0.17.2
+
+_tag: libunftp-0.17.2_
 
 - Fixed output formatting of the FEAT command.
 - Fixed the SIZE command that wrongly took the REST restart position into account and also caused number overflows 
