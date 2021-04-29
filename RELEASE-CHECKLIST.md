@@ -18,3 +18,4 @@
   > libunftp-0.17.1
   or
   > unftp-sbe-fs-0.1.1    
+* Notify the Telegram channel.

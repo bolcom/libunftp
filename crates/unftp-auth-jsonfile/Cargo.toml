@@ -18,14 +18,14 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-j
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.42"
-libunftp = { version="0.17.0", path="../../"}
+async-trait = "0.1.50"
+libunftp = { version="0.17.2", path="../../"}
 unftp-sbe-fs = { version="0.1", path="../unftp-sbe-fs"}
-serde = { version = "1.0.123", features = ["derive"] }
-serde_json = { version = "1.0.62" }
-tokio = { version = "1.2.0", features = ["rt", "time"]}
-tracing = "0.1.23"
-tracing-attributes = "0.1.12"
+serde = { version = "1.0.125", features = ["derive"] }
+serde_json = { version = "1.0.64" }
+tokio = { version = "1.5.0", features = ["rt", "time"]}
+tracing = "0.1.25"
+tracing-attributes = "0.1.15"
 ring = "0.16.20"
 base64 = "0.13.0"
 

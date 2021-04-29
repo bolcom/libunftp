@@ -60,7 +60,7 @@ pub enum ErrorKind {
     /// Error that will cause a FTP reply code of 451 to be returned to the FTP client. Its means
     /// the requested action was aborted due to a local error (internal storage back-end error) in
     /// processing.
-    /// #[display(fmt = "451 Local error")]
+    #[display(fmt = "451 Local error")]
     LocalError,
     /// 551 Requested action aborted. Page type unknown.
     #[display(fmt = "551 Page type unknown")]

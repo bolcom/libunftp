@@ -18,6 +18,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
+use crate::options::TlsFlags;
+use crate::server::tls;
 use futures::{channel::mpsc::channel, SinkExt};
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
@@ -61,6 +63,7 @@ where
     ftps_mode: FtpsConfig,
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
+    ftps_tls_flags: TlsFlags,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
@@ -84,6 +87,7 @@ where
             .field("ftps_mode", &self.ftps_mode)
             .field("ftps_required_control_chan", &self.ftps_required_control_chan)
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
+            .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -129,6 +133,7 @@ where
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
+            ftps_tls_flags: TlsFlags::default(),
         }
     }
 
@@ -165,7 +170,7 @@ where
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
-        self.ftps_mode = FtpsConfig::On {
+        self.ftps_mode = FtpsConfig::Building {
             certs_file: certs_file.into(),
             key_file: key_file.into(),
         };
@@ -179,6 +184,27 @@ where
     {
         self.ftps_required_control_chan = for_control_chan.into();
         self.ftps_required_data_chan = for_data_chan.into();
+        self
+    }
+
+    /// Switches TLS features on or off.
+    ///
+    /// # Example
+    ///
+    /// This example enables only TLS v1.3 and allows TLS session resumption with tickets.
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::options::TlsFlags;
+    ///
+    /// let mut server = Server::with_fs("/tmp")
+    ///                  .greeting("Welcome to my FTP Server")
+    ///                  .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
+    ///                  .ftps_tls_flags(TlsFlags::V1_3 | TlsFlags::RESUMPTION_TICKETS);
+    /// ```
+    pub fn ftps_tls_flags(mut self, flags: TlsFlags) -> Self {
+        self.ftps_tls_flags = flags;
         self
     }
 
@@ -371,7 +397,14 @@ where
     /// This function panics when called with invalid addresses or when the process is unable to
     /// `bind()` to the address.
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
+    pub async fn listen<T: Into<String> + Debug>(mut self, bind_address: T) -> std::result::Result<(), ServerError> {
+        self.ftps_mode = match self.ftps_mode {
+            FtpsConfig::Off => FtpsConfig::Off,
+            FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
+                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags)?,
+            },
+            FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
+        };
         match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
             ProxyMode::Off => self.listen_normal_mode(bind_address).await,
