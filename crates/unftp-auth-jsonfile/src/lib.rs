@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use ring::{
     digest::SHA512_OUTPUT_LEN,
-    pbkdf2::{verify, PBKDF2_HMAC_SHA512},
+    pbkdf2::{verify, PBKDF2_HMAC_SHA256},
 };
 use serde::Deserialize;
 use std::{
@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 use tokio::time::sleep;
+use bytes::Bytes;
 
 #[derive(Deserialize, Clone, Debug)]
 struct Credentials {
@@ -29,18 +30,29 @@ struct Credentials {
 
 /// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against JSON.
 ///
+/// Example of using nettle-pbkdf2 with a generated 64 bit secure salt
+///
+/// Generate a secure salt:
+/// salt=$(dd if=/dev/random bs=1 count=8)
+///
+/// Generate the base64 encoded PBKDF2 key, to be copied into the pbkdf2_key:
+/// echo -n "mypassword" | nettle-pbkdf2 -i 5000 -l 64 --hex-salt $(xxd -p -c 80 <<<$salt) --raw |openssl base64 -A
+///
+/// Convert the salt into base64 to be copied into the pbkdf2_salt:
+/// openssl base64 -A <<<$salt
+///
 /// Verifies passwords against pbkdf2_key using the corresponding parameters form JSON.
 /// Example credentials file format:
 /// [
 //   {
 //     "username": "testuser1",
-//     "pbkdf2_salt": "testuser1.acme.bol.com",
+//     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
 //     "username": "testuser2",
-//     "pbkdf2_salt": "testuser2.acme.bol.com",
+//     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
 //   }
@@ -53,7 +65,7 @@ pub struct JsonFileAuthenticator {
 
 #[derive(Clone, Debug)]
 struct Password {
-    pbkdf2_salt: String,
+    pbkdf2_salt: Bytes,
     pbkdf2_key: [u8; SHA512_OUTPUT_LEN],
     pbkdf2_iter: NonZeroU32,
 }
@@ -82,7 +94,10 @@ impl JsonFileAuthenticator {
                     (
                         user_info.username,
                         Password {
-                            pbkdf2_salt: user_info.pbkdf2_salt,
+                            pbkdf2_salt: base64::decode(user_info.pbkdf2_salt)
+                                .expect("Could not base64 decode the salt")
+                                .try_into()
+                                .expect(format!("Could not convert Vec<u8> to [u8; {}]", SHA512_OUTPUT_LEN).as_str()),
                             pbkdf2_key: base64::decode(user_info.pbkdf2_key)
                                 .expect("Could not base64 decode the key")
                                 .try_into()
@@ -105,7 +120,7 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
         let db: HashMap<String, Password> = self.db.clone();
 
         if let Some(c) = db.get(username) {
-            if let Ok(()) = verify(PBKDF2_HMAC_SHA512, c.pbkdf2_iter, c.pbkdf2_salt.as_bytes(), password.as_bytes(), &c.pbkdf2_key) {
+            if let Ok(()) = verify(PBKDF2_HMAC_SHA256, c.pbkdf2_iter, &c.pbkdf2_salt, password.as_bytes(), &c.pbkdf2_key) {
                 return Ok(DefaultUser);
             } else {
                 return Err(AuthenticationError::BadUser);
