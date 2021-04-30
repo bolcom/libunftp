@@ -5,7 +5,7 @@
 use async_trait::async_trait;
 use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use ring::{
-    digest::SHA512_OUTPUT_LEN,
+    digest::SHA256_OUTPUT_LEN,
     pbkdf2::{verify, PBKDF2_HMAC_SHA256},
 };
 use serde::Deserialize;
@@ -19,6 +19,10 @@ use std::{
 };
 use tokio::time::sleep;
 use bytes::Bytes;
+use valid::{
+    Validate,
+    constraint::Length,
+}
 
 #[derive(Deserialize, Clone, Debug)]
 struct Credentials {
@@ -30,16 +34,16 @@ struct Credentials {
 
 /// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against JSON.
 ///
-/// Example of using nettle-pbkdf2 with a generated 64 bit secure salt
+/// Example of using nettle-pbkdf2 with a generated 256 bit secure salt
 ///
 /// Generate a secure salt:
 /// salt=$(dd if=/dev/random bs=1 count=8)
 ///
 /// Generate the base64 encoded PBKDF2 key, to be copied into the pbkdf2_key:
-/// echo -n "mypassword" | nettle-pbkdf2 -i 5000 -l 64 --hex-salt $(xxd -p -c 80 <<<$salt) --raw |openssl base64 -A
+/// echo -n "mypassword" | nettle-pbkdf2 -i 5000 -l 32 --hex-salt $(echo -n $salt | xxd -p -c 80) --raw |openssl base64 -A
 ///
 /// Convert the salt into base64 to be copied into the pbkdf2_salt:
-/// openssl base64 -A <<<$salt
+/// echo -n $salt | openssl base64 -A
 ///
 /// Verifies passwords against pbkdf2_key using the corresponding parameters form JSON.
 /// Example credentials file format:
@@ -66,11 +70,9 @@ pub struct JsonFileAuthenticator {
 #[derive(Clone, Debug)]
 struct Password {
     pbkdf2_salt: Bytes,
-    pbkdf2_key: [u8; SHA512_OUTPUT_LEN],
+    pbkdf2_key: Bytes,
     pbkdf2_iter: NonZeroU32,
 }
-
-
 
 impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from file.
@@ -92,16 +94,20 @@ impl JsonFileAuthenticator {
                 .into_iter()
                 .map(|user_info| {
                     (
-                        user_info.username,
+                        user_info.username.clone(),
                         Password {
                             pbkdf2_salt: base64::decode(user_info.pbkdf2_salt)
                                 .expect("Could not base64 decode the salt")
                                 .try_into()
-                                .expect(format!("Could not convert Vec<u8> to [u8; {}]", SHA512_OUTPUT_LEN).as_str()),
+                                .expect("Could not convert String to Bytes"),
                             pbkdf2_key: base64::decode(user_info.pbkdf2_key)
-                                .expect("Could not base64 decode the key")
+                                .expect("Could not decode base64")
+                                .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
+                                .result()
+                                .unwrap_or_else({ let u = user_info.username.clone(); move |_| panic!("Key of user \"{}\" is too long", &u) })
+                                .unwrap()
                                 .try_into()
-                                .expect(format!("Could not convert Vec<u8> to [u8; {}]", SHA512_OUTPUT_LEN).as_str()),
+                                .expect("Could not convert to Bytes"),
                             pbkdf2_iter: user_info.pbkdf2_iter,
                         },
                     )
@@ -123,7 +129,8 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             if let Ok(()) = verify(PBKDF2_HMAC_SHA256, c.pbkdf2_iter, &c.pbkdf2_salt, password.as_bytes(), &c.pbkdf2_key) {
                 return Ok(DefaultUser);
             } else {
-                return Err(AuthenticationError::BadUser);
+                sleep(Duration::from_millis(1500)).await;
+                return Err(AuthenticationError::BadPassword);
             }
         } else {
             {
@@ -142,21 +149,21 @@ mod test {
         let json: &str = r#"[
   {
     "username": "alice",
-    "pbkdf2_salt": "thisisabadsalt",
-    "pbkdf2_key": "Egbi+LYfwn00V+HwFq146kmhoE4TYaqPFCA7mKkfzEpSZe2zMqXz/8LfA7HjYvXgiLzOuDij2wf50eKcWOcjYQ==",
-    "pbkdf2_iter": 5000
+    "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHQ=",
+    "pbkdf2_key": "jZZ20ehafJPQPhUKsAAMjXS4wx9FSbzUgMn7HJqx4Hg=",
+    "pbkdf2_iter": 500000
   },
   {
     "username": "bella",
-    "pbkdf2_salt": "thisisabadsalttoo",
-    "pbkdf2_key": "9QSFDFRU80n1Jktu6s3Wo0XEArW3eQdw9zt4L9OBJjsGOYAsHfWqR4RKGwzve0Dih2M3Az+HHvKC9f43wYRRng==",
-    "pbkdf2_iter": 5000
+    "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
+    "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
+    "pbkdf2_iter": 500000
   }
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
-        assert_eq!(json_authenticator.authenticate("alice", "not secret").await.unwrap(), DefaultUser);
-        assert_eq!(json_authenticator.authenticate("bella", "also not secret").await.unwrap(), DefaultUser);
-        match json_authenticator.authenticate("bella", "bad secret").await {
+        assert_eq!(json_authenticator.authenticate("alice", "this is the correct password for alice").await.unwrap(), DefaultUser);
+        assert_eq!(json_authenticator.authenticate("bella", "this is the correct password for bella").await.unwrap(), DefaultUser);
+        match json_authenticator.authenticate("bella", "this is the wrong password").await {
             Err(AuthenticationError::BadUser) => assert!(true),
             _ => assert!(false),
         }
@@ -169,15 +176,15 @@ mod test {
         let json: &str = r#"[
   {
     "username": "alice",
-    "pbkdf2_salt": "salt",
-    "pbkdf2_key": "Egbi+LYfwn00V+HwFq146kmhoE4TYaqPFCA7mKkfzEpSZe2zMqXz/8LfA7HjYvXgiLzOuDij2wf50eKcWOcjYQ==",
-    "pbkdf2_iter": 5000
+    "pbkdf2_salt": "bXlzYWx0",
+    "pbkdf2_key": "b189PjHvYwkr23K6NfXehHpP/6GdFmtIgSTBbgVI7XQ=",
+    "pbkdf2_iter": 500000
   },
   {
     "username": "bella",
-    "pbkdf2_salt": "salt",
-    "pbkdf2_key": "9QSFDFRU80n1Jktu6s3Wo0XEArW3eQdw9zt4L9OBJjsGOYAsHfWqR4RKGwzve0Dih2M3Az+HHvKC9f43wYRRng==",
-    "pbkdf2_iter": 5000
+    "pbkdf2_salt": "bXlzYWx0",
+    "pbkdf2_key": "GtJ90iforiOhm0QTlutBZh/re0Tybd4zMj5KU4/AvtE=",
+    "pbkdf2_iter": 500000
   }
 ]"#;
         assert!(JsonFileAuthenticator::from_json(json).is_err());
