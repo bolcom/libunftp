@@ -3,32 +3,30 @@
 //! [`Authenticator`]: libunftp::auth::Authenticator
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use ring::{
     digest::SHA256_OUTPUT_LEN,
     pbkdf2::{verify, PBKDF2_HMAC_SHA256},
 };
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    fs,
-    num::NonZeroU32,
-    path::Path,
-    time::Duration,
-};
+use std::{collections::HashMap, convert::TryInto, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
-use bytes::Bytes;
-use valid::{
-    Validate,
-    constraint::Length,
-};
+use valid::{constraint::Length, Validate};
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(untagged)]
 enum Credentials {
-    Plaintext { username: String, password: String },
-    Pbkdf2 { username: String, pbkdf2_salt: String, pbkdf2_key: String, pbkdf2_iter: NonZeroU32 },
+    Plaintext {
+        username: String,
+        password: String,
+    },
+    Pbkdf2 {
+        username: String,
+        pbkdf2_salt: String,
+        pbkdf2_key: String,
+        pbkdf2_iter: NonZeroU32,
+    },
 }
 
 /// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against JSON.
@@ -50,13 +48,13 @@ enum Credentials {
 //   {
 //     "username": "testuser1",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
-//     "pbkdf2_key": "<<BASE_64_KDF>>",
+//     "pbkdf2_key": "<<BASE_64_KEY>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
 //     "username": "testuser2",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
-//     "pbkdf2_key": "<<BASE_64_KDF>>",
+//     "pbkdf2_key": "<<BASE_64_KEY>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
@@ -72,8 +70,14 @@ pub struct JsonFileAuthenticator {
 
 #[derive(Clone, Debug)]
 enum Password {
-    PlainPassword { password: String },
-    Pbkdf2Password { pbkdf2_salt: Bytes, pbkdf2_key: Bytes, pbkdf2_iter: NonZeroU32 }
+    PlainPassword {
+        password: String,
+    },
+    Pbkdf2Password {
+        pbkdf2_salt: Bytes,
+        pbkdf2_key: Bytes,
+        pbkdf2_iter: NonZeroU32,
+    },
 }
 
 impl JsonFileAuthenticator {
@@ -90,35 +94,34 @@ impl JsonFileAuthenticator {
         Ok(JsonFileAuthenticator {
             db: db
                 .into_iter()
-                .map(|user_info| {
-                        match user_info {
-                            Credentials::Plaintext {username, password} => {
-                                (
-                                    username,
-                                    Password::PlainPassword {password },
-                                )
-                            },
-                            Credentials::Pbkdf2 {username, pbkdf2_salt, pbkdf2_key, pbkdf2_iter} => {
-                                (
-                                    username.clone(),
-                                    Password::Pbkdf2Password {
-                                        pbkdf2_salt: base64::decode(pbkdf2_salt)
-                                            .expect("Could not base64 decode the salt")
-                                            .try_into()
-                                            .expect("Could not convert String to Bytes"),
-                                        pbkdf2_key: base64::decode(pbkdf2_key)
-                                            .expect("Could not decode base64")
-                                            .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
-                                            .result()
-                                            .unwrap_or_else({ let u = username; move |_| panic!("Key of user \"{}\" is too long", &u) })
-                                            .unwrap()
-                                            .try_into()
-                                            .expect("Could not convert to Bytes"),
-                                        pbkdf2_iter,
-                                    },
-                                )
-                            }
-                        }
+                .map(|user_info| match user_info {
+                    Credentials::Plaintext { username, password } => (username, Password::PlainPassword { password }),
+                    Credentials::Pbkdf2 {
+                        username,
+                        pbkdf2_salt,
+                        pbkdf2_key,
+                        pbkdf2_iter,
+                    } => (
+                        username.clone(),
+                        Password::Pbkdf2Password {
+                            pbkdf2_salt: base64::decode(pbkdf2_salt)
+                                .expect("Could not base64 decode the salt")
+                                .try_into()
+                                .expect("Could not convert String to Bytes"),
+                            pbkdf2_key: base64::decode(pbkdf2_key)
+                                .expect("Could not decode base64")
+                                .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
+                                .result()
+                                .unwrap_or_else({
+                                    let u = username;
+                                    move |_| panic!("Key of user \"{}\" is too long", &u)
+                                })
+                                .unwrap()
+                                .try_into()
+                                .expect("Could not convert to Bytes"),
+                            pbkdf2_iter,
+                        },
+                    ),
                 })
                 .into_iter()
                 .collect(),
@@ -134,23 +137,27 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
         let db: HashMap<String, Password> = self.db.clone();
 
         if let Some(c) = db.get(username) {
-            match c {
-                Password::PlainPassword {password } => {
+            if let Ok(()) = match c {
+                Password::PlainPassword { password } => {
                     if pass == password {
-                        return Ok(DefaultUser)
+                        Ok(())
                     } else {
-                        sleep(Duration::from_millis(1500)).await;
-                        return Err(AuthenticationError::BadPassword);
+                        Err(())
                     }
                 }
-                Password::Pbkdf2Password { pbkdf2_iter, pbkdf2_salt, pbkdf2_key } => {
-                    if let Ok(()) = verify(PBKDF2_HMAC_SHA256, *pbkdf2_iter, pbkdf2_salt, pass.as_bytes(), pbkdf2_key) {
-                        return Ok(DefaultUser);
-                    } else {
-                        sleep(Duration::from_millis(1500)).await;
-                        return Err(AuthenticationError::BadPassword);
-                    }
-                }
+                Password::Pbkdf2Password {
+                    pbkdf2_iter,
+                    pbkdf2_salt,
+                    pbkdf2_key,
+                } => match verify(PBKDF2_HMAC_SHA256, *pbkdf2_iter, pbkdf2_salt, pass.as_bytes(), pbkdf2_key) {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(()),
+                },
+            } {
+                return Ok(DefaultUser);
+            } else {
+                sleep(Duration::from_millis(1500)).await;
+                return Err(AuthenticationError::BadPassword);
             }
         } else {
             {
@@ -185,8 +192,20 @@ mod test {
   }
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
-        assert_eq!(json_authenticator.authenticate("alice", "this is the correct password for alice").await.unwrap(), DefaultUser);
-        assert_eq!(json_authenticator.authenticate("bella", "this is the correct password for bella").await.unwrap(), DefaultUser);
+        assert_eq!(
+            json_authenticator
+                .authenticate("alice", "this is the correct password for alice")
+                .await
+                .unwrap(),
+            DefaultUser
+        );
+        assert_eq!(
+            json_authenticator
+                .authenticate("bella", "this is the correct password for bella")
+                .await
+                .unwrap(),
+            DefaultUser
+        );
         assert_eq!(json_authenticator.authenticate("carol", "not so secure").await.unwrap(), DefaultUser);
         match json_authenticator.authenticate("bella", "this is the wrong password").await {
             Err(AuthenticationError::BadPassword) => assert!(true),
