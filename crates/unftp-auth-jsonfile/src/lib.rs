@@ -10,7 +10,7 @@ use ring::{
 };
 use serde::Deserialize;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     convert::TryInto,
     fs,
     num::NonZeroU32,
@@ -22,14 +22,13 @@ use bytes::Bytes;
 use valid::{
     Validate,
     constraint::Length,
-}
+};
 
 #[derive(Deserialize, Clone, Debug)]
-struct Credentials {
-    username: String,
-    pbkdf2_salt: String,
-    pbkdf2_key: String,
-    pbkdf2_iter: NonZeroU32,
+#[serde(tag = "type", rename_all = "lowercase")]
+enum Credentials {
+    Plaintext { username: String, password: String },
+    Pbkdf2 { username: String, pbkdf2_salt: String, pbkdf2_key: String, pbkdf2_iter: NonZeroU32 },
 }
 
 /// [`Authenticator`](libunftp::auth::Authenticator) implementation that authenticates against JSON.
@@ -49,16 +48,23 @@ struct Credentials {
 /// Example credentials file format:
 /// [
 //   {
+//     "type": "pbkdf2",
 //     "username": "testuser1",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
+//     "type": "pbkdf2",
 //     "username": "testuser2",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
+//   },
+//   {
+//     "type": "plaintext",
+//     "username": "carol",
+//     "password": "secret"
 //   }
 // ]
 
@@ -68,10 +74,9 @@ pub struct JsonFileAuthenticator {
 }
 
 #[derive(Clone, Debug)]
-struct Password {
-    pbkdf2_salt: Bytes,
-    pbkdf2_key: Bytes,
-    pbkdf2_iter: NonZeroU32,
+enum Password {
+    PlainPassword { password: String },
+    Pbkdf2Password { pbkdf2_salt: Bytes, pbkdf2_key: Bytes, pbkdf2_iter: NonZeroU32 }
 }
 
 impl JsonFileAuthenticator {
@@ -85,32 +90,42 @@ impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from json string.
     pub fn from_json<T: Into<String>>(json: T) -> Result<Self, Box<dyn std::error::Error>> {
         let db: Vec<Credentials> = serde_json::from_str::<Vec<Credentials>>(&json.into())?;
-        let salts: BTreeSet<String> = db.iter().map(|credential| credential.pbkdf2_salt.clone()).collect();
-        if db.len() != salts.len() {
-            return Err(Box::new(AuthenticationError::new("The provided salts for the JsonFileAuthenticator must be unique.")));
-        }
+        // let salts: BTreeSet<String> = db.iter().map(|credential| credential.pbkdf2_salt.clone()).collect();
+        // if db.len() != salts.len() {
+        //     return Err(Box::new(AuthenticationError::new("The provided salts for the JsonFileAuthenticator must be unique.")));
+        // }
         Ok(JsonFileAuthenticator {
             db: db
                 .into_iter()
                 .map(|user_info| {
-                    (
-                        user_info.username.clone(),
-                        Password {
-                            pbkdf2_salt: base64::decode(user_info.pbkdf2_salt)
-                                .expect("Could not base64 decode the salt")
-                                .try_into()
-                                .expect("Could not convert String to Bytes"),
-                            pbkdf2_key: base64::decode(user_info.pbkdf2_key)
-                                .expect("Could not decode base64")
-                                .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
-                                .result()
-                                .unwrap_or_else({ let u = user_info.username.clone(); move |_| panic!("Key of user \"{}\" is too long", &u) })
-                                .unwrap()
-                                .try_into()
-                                .expect("Could not convert to Bytes"),
-                            pbkdf2_iter: user_info.pbkdf2_iter,
-                        },
-                    )
+                        match user_info {
+                            Credentials::Plaintext {username, password} => {
+                                (
+                                    username,
+                                    Password::PlainPassword {password },
+                                )
+                            },
+                            Credentials::Pbkdf2 {username, pbkdf2_salt, pbkdf2_key, pbkdf2_iter} => {
+                                (
+                                    username.clone(),
+                                    Password::Pbkdf2Password {
+                                        pbkdf2_salt: base64::decode(pbkdf2_salt)
+                                            .expect("Could not base64 decode the salt")
+                                            .try_into()
+                                            .expect("Could not convert String to Bytes"),
+                                        pbkdf2_key: base64::decode(pbkdf2_key)
+                                            .expect("Could not decode base64")
+                                            .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
+                                            .result()
+                                            .unwrap_or_else({ let u = username; move |_| panic!("Key of user \"{}\" is too long", &u) })
+                                            .unwrap()
+                                            .try_into()
+                                            .expect("Could not convert to Bytes"),
+                                        pbkdf2_iter,
+                                    },
+                                )
+                            }
+                        }
                 })
                 .into_iter()
                 .collect(),
@@ -122,15 +137,27 @@ impl JsonFileAuthenticator {
 impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, password: &str) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, username: &str, pass: &str) -> Result<DefaultUser, AuthenticationError> {
         let db: HashMap<String, Password> = self.db.clone();
 
         if let Some(c) = db.get(username) {
-            if let Ok(()) = verify(PBKDF2_HMAC_SHA256, c.pbkdf2_iter, &c.pbkdf2_salt, password.as_bytes(), &c.pbkdf2_key) {
-                return Ok(DefaultUser);
-            } else {
-                sleep(Duration::from_millis(1500)).await;
-                return Err(AuthenticationError::BadPassword);
+            match c {
+                Password::PlainPassword {password } => {
+                    if pass == password {
+                        return Ok(DefaultUser)
+                    } else {
+                        sleep(Duration::from_millis(1500)).await;
+                        return Err(AuthenticationError::BadPassword);
+                    }
+                }
+                Password::Pbkdf2Password { pbkdf2_iter, pbkdf2_salt, pbkdf2_key } => {
+                    if let Ok(()) = verify(PBKDF2_HMAC_SHA256, *pbkdf2_iter, pbkdf2_salt, pass.as_bytes(), pbkdf2_key) {
+                        return Ok(DefaultUser);
+                    } else {
+                        sleep(Duration::from_millis(1500)).await;
+                        return Err(AuthenticationError::BadPassword);
+                    }
+                }
             }
         } else {
             {
@@ -148,16 +175,23 @@ mod test {
 
         let json: &str = r#"[
   {
+    "type": "pbkdf2",
     "username": "alice",
     "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHQ=",
     "pbkdf2_key": "jZZ20ehafJPQPhUKsAAMjXS4wx9FSbzUgMn7HJqx4Hg=",
     "pbkdf2_iter": 500000
   },
   {
+    "type": "pbkdf2",
     "username": "bella",
     "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
     "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
     "pbkdf2_iter": 500000
+  },
+  {
+    "type": "plaintext",
+    "username": "carol",
+    "password": "not so secure"
   }
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
@@ -167,26 +201,5 @@ mod test {
             Err(AuthenticationError::BadUser) => assert!(true),
             _ => assert!(false),
         }
-    }
-
-    #[tokio::test]
-    async fn test_salts_have_to_be_uniqe() {
-        use super::*;
-
-        let json: &str = r#"[
-  {
-    "username": "alice",
-    "pbkdf2_salt": "bXlzYWx0",
-    "pbkdf2_key": "b189PjHvYwkr23K6NfXehHpP/6GdFmtIgSTBbgVI7XQ=",
-    "pbkdf2_iter": 500000
-  },
-  {
-    "username": "bella",
-    "pbkdf2_salt": "bXlzYWx0",
-    "pbkdf2_key": "GtJ90iforiOhm0QTlutBZh/re0Tybd4zMj5KU4/AvtE=",
-    "pbkdf2_iter": 500000
-  }
-]"#;
-        assert!(JsonFileAuthenticator::from_json(json).is_err());
     }
 }
