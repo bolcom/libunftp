@@ -25,7 +25,7 @@ use valid::{
 };
 
 #[derive(Deserialize, Clone, Debug)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(untagged)]
 enum Credentials {
     Plaintext { username: String, password: String },
     Pbkdf2 { username: String, pbkdf2_salt: String, pbkdf2_key: String, pbkdf2_iter: NonZeroU32 },
@@ -48,21 +48,18 @@ enum Credentials {
 /// Example credentials file format:
 /// [
 //   {
-//     "type": "pbkdf2",
 //     "username": "testuser1",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
-//     "type": "pbkdf2",
 //     "username": "testuser2",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KDF>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
-//     "type": "plaintext",
 //     "username": "carol",
 //     "password": "secret"
 //   }
@@ -90,10 +87,6 @@ impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from json string.
     pub fn from_json<T: Into<String>>(json: T) -> Result<Self, Box<dyn std::error::Error>> {
         let db: Vec<Credentials> = serde_json::from_str::<Vec<Credentials>>(&json.into())?;
-        // let salts: BTreeSet<String> = db.iter().map(|credential| credential.pbkdf2_salt.clone()).collect();
-        // if db.len() != salts.len() {
-        //     return Err(Box::new(AuthenticationError::new("The provided salts for the JsonFileAuthenticator must be unique.")));
-        // }
         Ok(JsonFileAuthenticator {
             db: db
                 .into_iter()
@@ -175,21 +168,18 @@ mod test {
 
         let json: &str = r#"[
   {
-    "type": "pbkdf2",
     "username": "alice",
     "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHQ=",
     "pbkdf2_key": "jZZ20ehafJPQPhUKsAAMjXS4wx9FSbzUgMn7HJqx4Hg=",
     "pbkdf2_iter": 500000
   },
   {
-    "type": "pbkdf2",
     "username": "bella",
     "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
     "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
     "pbkdf2_iter": 500000
   },
   {
-    "type": "plaintext",
     "username": "carol",
     "password": "not so secure"
   }
@@ -197,7 +187,12 @@ mod test {
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
         assert_eq!(json_authenticator.authenticate("alice", "this is the correct password for alice").await.unwrap(), DefaultUser);
         assert_eq!(json_authenticator.authenticate("bella", "this is the correct password for bella").await.unwrap(), DefaultUser);
+        assert_eq!(json_authenticator.authenticate("carol", "not so secure").await.unwrap(), DefaultUser);
         match json_authenticator.authenticate("bella", "this is the wrong password").await {
+            Err(AuthenticationError::BadPassword) => assert!(true),
+            _ => assert!(false),
+        }
+        match json_authenticator.authenticate("chuck", "12345678").await {
             Err(AuthenticationError::BadUser) => assert!(true),
             _ => assert!(false),
         }
