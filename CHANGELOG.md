@@ -4,6 +4,12 @@
 
 - Added Mutual TLS support.
 
+## 2021-05-01 unftp-auth-jsonfile version 0.1.1
+
+_tag: unftp-auth-jsonfile-0.1.1_
+
+- Added support for PBKDF2 encoded passwords
+
 ## 2021-04-25 libunftp v0.17.2
 
 _tag: libunftp-0.17.2_

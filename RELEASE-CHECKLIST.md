@@ -4,10 +4,10 @@
 * Update Cargo.toml with the new version number
 * Search for the old version number to find references to it in documentation and update those occurrences.
 * Run `make pr-prep`, ensuring everything is green
-* Run unFTP while pointing to the new version of libunftp
+* Before releasing libunftp itself, run unFTP while pointing to the new version of libunftp
 * Make a new commit indicating the crate name and version number e.g.    
     > Release libunftp version x.y.x
-    
+
     or
 
     > Release unftp-sbe-fs version x.y.x
