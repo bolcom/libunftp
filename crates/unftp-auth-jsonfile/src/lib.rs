@@ -91,41 +91,35 @@ impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from json string.
     pub fn from_json<T: Into<String>>(json: T) -> Result<Self, Box<dyn std::error::Error>> {
         let db: Vec<Credentials> = serde_json::from_str::<Vec<Credentials>>(&json.into())?;
-        Ok(JsonFileAuthenticator {
-            db: db
-                .into_iter()
-                .map(|user_info| match user_info {
-                    Credentials::Plaintext { username, password } => (username, Password::PlainPassword { password }),
-                    Credentials::Pbkdf2 {
-                        username,
-                        pbkdf2_salt,
-                        pbkdf2_key,
-                        pbkdf2_iter,
-                    } => (
-                        username.clone(),
-                        Password::Pbkdf2Password {
-                            pbkdf2_salt: base64::decode(pbkdf2_salt)
-                                .expect("Could not base64 decode the salt")
-                                .try_into()
-                                .expect("Could not convert String to Bytes"),
-                            pbkdf2_key: base64::decode(pbkdf2_key)
-                                .expect("Could not decode base64")
-                                .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
-                                .result()
-                                .unwrap_or_else({
-                                    let u = username;
-                                    move |_| panic!("Key of user \"{}\" is too long", &u)
-                                })
-                                .unwrap()
-                                .try_into()
-                                .expect("Could not convert to Bytes"),
-                            pbkdf2_iter,
-                        },
-                    ),
-                })
-                .into_iter()
-                .collect(),
-        })
+        let map: Result<HashMap<String, Password>, _> = db
+            .into_iter()
+            .map(|user_info| JsonFileAuthenticator::creds_to_username_pw_pair(user_info))
+            .collect();
+        Ok(JsonFileAuthenticator { db: map? })
+    }
+
+    fn creds_to_username_pw_pair(user_info: Credentials) -> Result<(String, Password), Box<dyn std::error::Error>> {
+        let r = match user_info {
+            Credentials::Plaintext { username, password } => (username, Password::PlainPassword { password }),
+            Credentials::Pbkdf2 {
+                username,
+                pbkdf2_salt,
+                pbkdf2_key,
+                pbkdf2_iter,
+            } => (
+                username.clone(),
+                Password::Pbkdf2Password {
+                    pbkdf2_salt: base64::decode(pbkdf2_salt)?.try_into()?,
+                    pbkdf2_key: base64::decode(pbkdf2_key)?
+                        .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
+                        .result()?
+                        .unwrap()
+                        .try_into()?,
+                    pbkdf2_iter,
+                },
+            ),
+        };
+        Ok(r)
     }
 }
 
@@ -149,10 +143,7 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
                     pbkdf2_iter,
                     pbkdf2_salt,
                     pbkdf2_key,
-                } => match verify(PBKDF2_HMAC_SHA256, *pbkdf2_iter, pbkdf2_salt, pass.as_bytes(), pbkdf2_key) {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(()),
-                },
+                } => verify(PBKDF2_HMAC_SHA256, *pbkdf2_iter, pbkdf2_salt, pass.as_bytes(), pbkdf2_key).map_err(|_| ()),
             } {
                 return Ok(DefaultUser);
             } else {
@@ -160,10 +151,8 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
                 return Err(AuthenticationError::BadPassword);
             }
         } else {
-            {
-                sleep(Duration::from_millis(1500)).await;
-                Err(AuthenticationError::BadUser)
-            }
+            sleep(Duration::from_millis(1500)).await;
+            Err(AuthenticationError::BadUser)
         }
     }
 }
