@@ -18,7 +18,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
-use crate::options::TlsFlags;
+use crate::options::{FtpsClientAuth, TlsFlags};
 use crate::server::tls;
 use futures::{channel::mpsc::channel, SinkExt};
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
@@ -64,6 +64,8 @@ where
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
     ftps_tls_flags: TlsFlags,
+    ftps_client_auth: FtpsClientAuth,
+    ftps_trust_store: PathBuf,
     idle_session_timeout: std::time::Duration,
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
@@ -84,10 +86,12 @@ where
             .field("metrics", &self.collect_metrics)
             .field("passive_ports", &self.passive_ports)
             .field("passive_host", &self.passive_host)
+            .field("ftps_client_auth", &self.ftps_client_auth)
             .field("ftps_mode", &self.ftps_mode)
             .field("ftps_required_control_chan", &self.ftps_required_control_chan)
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("ftps_tls_flags", &self.ftps_tls_flags)
+            .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("proxy_protocol_switchboard", &self.proxy_protocol_switchboard)
@@ -134,6 +138,8 @@ where
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_tls_flags: TlsFlags::default(),
+            ftps_client_auth: FtpsClientAuth::default(),
+            ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
         }
     }
 
@@ -177,6 +183,30 @@ where
         self
     }
 
+    /// Allows switching on Mutual TLS. For this to work the trust anchors also needs to be set using
+    /// the [ftps_trust_store](crate::Server::ftps_trust_store) method.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::options::FtpsClientAuth;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
+    ///              .ftps_client_auth(FtpsClientAuth::Require)
+    ///              .ftps_trust_store("/srv/unftp/trusted.pem");
+    /// ```
+
+    pub fn ftps_client_auth<C>(mut self, auth: C) -> Self
+    where
+        C: Into<FtpsClientAuth>,
+    {
+        self.ftps_client_auth = auth.into();
+        self
+    }
+
     /// Configures whether client connections may use plaintext mode or not.
     pub fn ftps_required<R>(mut self, for_control_chan: R, for_data_chan: R) -> Self
     where
@@ -184,6 +214,29 @@ where
     {
         self.ftps_required_control_chan = for_control_chan.into();
         self.ftps_required_data_chan = for_data_chan.into();
+        self
+    }
+
+    /// Sets the certificates to use when verifying client certificates in Mutual TLS mode. This
+    /// should point to certificates in a PEM formatted file. For this to have any effect MTLS needs
+    /// to be switched on via the [ftps_client_auth](crate::Server::ftps_client_auth) method.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
+    ///              .ftps_client_auth(true)
+    ///              .ftps_trust_store("/srv/unftp/trusted.pem");
+    /// ```
+    pub fn ftps_trust_store<P>(mut self, trust: P) -> Self
+    where
+        P: Into<PathBuf>,
+    {
+        self.ftps_trust_store = trust.into();
         self
     }
 
@@ -401,7 +454,7 @@ where
         self.ftps_mode = match self.ftps_mode {
             FtpsConfig::Off => FtpsConfig::Off,
             FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
-                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags)?,
+                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags, self.ftps_client_auth, self.ftps_trust_store.clone())?,
             },
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };

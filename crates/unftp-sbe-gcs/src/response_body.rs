@@ -69,7 +69,7 @@ impl Item {
         let path: PathBuf = PathBuf::from(self.name.clone());
         let metadata: ObjectMetadata = self.to_metadata()?;
 
-        Ok(Fileinfo { metadata, path })
+        Ok(Fileinfo { path, metadata })
     }
 }
 

@@ -195,7 +195,14 @@ where
                             FtpsConfig::On { tls_config } => tls_config.into(),
                             _ => panic!("Could not create TLS acceptor. Illegal program state"),
                         };
-                        let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = Box::new(acceptor.accept(io).await.unwrap());
+                        let accepted = acceptor.accept(io).await;
+                        let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = match accepted {
+                            Ok(stream) => Box::new(stream),
+                            Err(err) => {
+                                slog::warn!(logger, "Closing control channel. Could not upgrade to TLS: {}", err);
+                                return;
+                            }
+                        };
 
                         // Wrap in codec again and get sink + source
                         let codec = FtpCodec::new();

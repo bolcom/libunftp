@@ -1,5 +1,9 @@
 # Changelog
 
+## Upcoming
+
+- Added Mutual TLS support.
+
 ## 2021-04-25 libunftp v0.17.2
 
 _tag: libunftp-0.17.2_
