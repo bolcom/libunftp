@@ -46,13 +46,13 @@ enum Credentials {
 /// Example credentials file format:
 /// [
 //   {
-//     "username": "testuser1",
+//     "username": "alice",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KEY>>",
 //     "pbkdf2_iter": 500000
 //   },
 //   {
-//     "username": "testuser2",
+//     "username": "bob",
 //     "pbkdf2_salt": "<<BASE_64_RANDOM_SALT>>",
 //     "pbkdf2_key": "<<BASE_64_KEY>>",
 //     "pbkdf2_iter": 500000
