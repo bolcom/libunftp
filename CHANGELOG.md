@@ -1,10 +1,12 @@
 # Changelog
 
-## Upcoming
+## 2021-05-02 libunftp v0.17.3
+
+_tag: libunftp-0.17.3_
 
 - Added Mutual TLS support.
 
-## 2021-05-01 unftp-auth-jsonfile version 0.1.1
+## 2021-05-01 unftp-auth-jsonfile v0.1.1
 
 _tag: unftp-auth-jsonfile-0.1.1_
 

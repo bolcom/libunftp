@@ -19,7 +19,7 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.50"
-libunftp = { version="0.17.2", path="../../"}
+libunftp = { version="0.17.3", path="../../"}
 unftp-sbe-fs = { version="0.1", path="../unftp-sbe-fs"}
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = { version = "1.0.64" }
