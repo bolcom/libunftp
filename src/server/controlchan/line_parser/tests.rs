@@ -339,6 +339,21 @@ fn parse_mkd() {
 }
 
 #[test]
+fn parse_mkd_eols() {
+    let input = "MKD \r";
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEol)));
+
+    let input = "MKD ";
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
+
+    let input = "MKD \n";
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
+
+    let input = "MKD .";
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidEol)));
+}
+
+#[test]
 fn parse_mkd_non_ascii() {
     let input = "MKD 目录\r\n";
     assert_eq!(parse(input), Ok(Command::Mkd { path: "目录".into() }));
@@ -354,6 +369,14 @@ fn parse_mkd_spaces() {
 fn parse_mkd_cr() {
     let input = "MKD foo\r\0\nboo.bar\r\n";
     assert_eq!(parse(input), Ok(Command::Mkd { path: "foo\r\nboo.bar".into() }));
+
+    let input = "MKD foo\r\0\nboo\0.bar\r\n";
+    assert_eq!(
+        parse(input),
+        Ok(Command::Mkd {
+            path: "foo\r\nboo\0.bar".into()
+        })
+    );
 }
 
 #[test]
@@ -477,6 +500,58 @@ fn parse_mdtm() {
         Test {
             input: "MDTM file.txt\r\n",
             expected: Ok(Command::Mdtm { file: "file.txt".into() }),
+        },
+    ];
+    for test in tests.iter() {
+        assert_eq!(parse(test.input), test.expected);
+    }
+}
+
+#[test]
+fn parse_md5() {
+    struct Test {
+        input: &'static str,
+        expected: Result<Command>,
+    }
+    let tests = [
+        Test {
+            input: "SITE MD5\r\n",
+            expected: Err(ParseErrorKind::InvalidCommand.into()),
+        },
+        Test {
+            input: "SITE MD5 \r\n",
+            expected: Err(ParseErrorKind::InvalidCommand.into()),
+        },
+        Test {
+            input: "SITE MD5 file.txt\r\n",
+            expected: Ok(Command::Md5 { file: "file.txt".into() }),
+        },
+    ];
+    for test in tests.iter() {
+        assert_eq!(parse(test.input), test.expected);
+    }
+}
+
+#[test]
+fn parse_site() {
+    struct Test {
+        input: &'static str,
+        expected: Result<Command>,
+    }
+    let tests = [
+        Test {
+            input: "SITE\r\n",
+            expected: Ok(Command::Other {
+                command_name: "".to_string(),
+                arguments: "".to_string(),
+            }),
+        },
+        Test {
+            input: "SITE \r\n",
+            expected: Ok(Command::Other {
+                command_name: "".to_string(),
+                arguments: "".to_string(),
+            }),
         },
     ];
     for test in tests.iter() {

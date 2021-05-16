@@ -235,3 +235,25 @@ fn fs_rename_dir() {
     let old_full_path = root.join(old_dir);
     std::fs::symlink_metadata(old_full_path).expect_err("Old directory should not exists anymore");
 }
+
+#[test]
+fn fs_md5() {
+    let root = std::env::temp_dir();
+    const DATA: &str = "Some known content.";
+
+    // Create a temp file with known content
+    let file = tempfile::NamedTempFile::new_in(&root).unwrap();
+    let filename = file.path().file_name().unwrap();
+    let mut file = file.as_file();
+
+    // Create a filesystem StorageBackend with the directory containing our temp file as root
+    let fs = Filesystem::new(&root);
+    file.write(DATA.as_bytes()).unwrap();
+
+    // Since the filesystem backend is based on futures, we need a runtime to run it
+    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+
+    let my_md5 = rt.block_on(fs.md5(&Some(DefaultUser {}), filename)).unwrap();
+
+    assert_eq!("ced0b2edc3ec36e8d914320cb0268359", my_md5);
+}

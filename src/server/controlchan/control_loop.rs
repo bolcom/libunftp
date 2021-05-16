@@ -409,6 +409,7 @@ where
             Command::Size { file } => Box::new(commands::Size::new(file)),
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
+            Command::Md5 { file } => Box::new(commands::Md5::new(file)),
             Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
         };
 

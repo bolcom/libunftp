@@ -160,6 +160,11 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// [`Metadata`]: ./trait.Metadata.html
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
+    /// Returns the `Md5` for the given file.
+    ///
+    /// [`Metadata`]: ./trait.Md5.html
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>;
+
     /// Returns the list of files in the given directory.
     async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where

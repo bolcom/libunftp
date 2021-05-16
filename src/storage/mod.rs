@@ -119,6 +119,14 @@
 //!     ) -> Result<()> {
 //!         unimplemented!()
 //!     }
+//!
+//!     async fn md5<P: AsRef<Path> + Send + Debug>(
+//!         &self,
+//!         user: &Option<DefaultUser>,
+//!         path: P,
+//!     ) -> Result<String> {
+//!         unimplemented!()
+//!     }
 //! }
 //!
 //! impl Metadata for Meta {
