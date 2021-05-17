@@ -291,6 +291,13 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         // TODO: Do we want to check here if the path is a directory?
         Ok(())
     }
+
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<String, Error>
+    where
+        P: AsRef<Path> + Send + Debug,
+    {
+        Err(Error::from(ErrorKind::CommandNotImplemented))
+    }
 }
 
 #[tracing_attributes::instrument]

@@ -128,17 +128,12 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         use tokio::io::AsyncSeekExt;
 
         let full_path = self.full_path(path).await?;
-
-        // // TODO: Remove async block
-        async move {
-            let mut file = tokio::fs::File::open(full_path).await?;
-            if start_pos > 0 {
-                file.seek(std::io::SeekFrom::Start(start_pos)).await?;
-            }
-            Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
+        let mut file = tokio::fs::File::open(full_path).await?;
+        if start_pos > 0 {
+            file.seek(std::io::SeekFrom::Start(start_pos)).await?;
         }
-        .map_err(|error: std::io::Error| error.into())
-        .await
+
+        Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
     }
 
     async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
@@ -217,6 +212,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         tokio::fs::read_dir(full_path).await.map_err(|error: std::io::Error| error.into()).map(|_| ())
     }
 
+    /// Returns the MD5 hash as a string
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<String>
     where
         P: AsRef<Path> + Send + Debug,

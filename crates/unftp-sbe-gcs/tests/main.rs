@@ -37,6 +37,7 @@ pub fn initialize_docker() -> Mutex<Child> {
     let buf = std::env::current_dir().unwrap();
     let current_dir = buf.display();
 
+    Command::new("mkdir").arg("-p").arg(format!("{}/tests/resources/data/{}", current_dir, GCS_BUCKET)).status().unwrap();
     Command::new("docker").arg("stop").arg("fake-gcs").status().unwrap();
     Command::new("docker").arg("rm").arg("fake-gcs").status().unwrap();
     let mut command = Command::new("docker");
@@ -90,6 +91,9 @@ async fn creating_directory_with_file_in_it() {
         let list_in = ftp_stream.list(None).await.unwrap();
         assert_eq!(list_in.len(), 1);
         assert!(list_in[0].ends_with(" greeting.txt"));
+
+        let remote_file = ftp_stream.simple_retr("greeting.txt").await.unwrap();
+        assert_eq!(str::from_utf8(&remote_file.into_inner()).unwrap().as_bytes(), content);
 
         // FIXME: `CWD ..` does nothing in GCS ATM (TODO)
         // ftp_stream.cwd("..").await.unwrap();
