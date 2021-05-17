@@ -378,20 +378,14 @@ fn parse_to_eol(line: &[u8]) -> Result<Bytes> {
         return Err(ParseErrorKind::InvalidEol.into());
     } else if line.len() == 2 {
         return match (line[0], line[1]) {
-            (b'\r', b'\n') => {
-                Ok(dest.into())
-            }
-            (b'\n', _) => {
-                Ok(dest.into())
-            }
+            (b'\r', b'\n') => Ok(dest.into()),
+            (b'\n', _) => Ok(dest.into()),
             (_, b'\n') => {
                 dest.push(line[0]);
                 Ok(dest.into())
             }
-            (_, _) => {
-                Err(ParseErrorKind::InvalidEol.into())
-            }
-        }
+            (_, _) => Err(ParseErrorKind::InvalidEol.into()),
+        };
     }
     dest.push(line[0]);
 
