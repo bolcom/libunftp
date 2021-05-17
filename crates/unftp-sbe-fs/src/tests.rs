@@ -102,13 +102,7 @@ fn fs_get() {
             return Err(());
         }
         assert_eq!(data.as_ref(), &*my_content);
-        // We need a `Err` branch because otherwise the compiler can't infer the `E` type,
-        // and I'm not sure where/how to annotate it.
-        if true {
-            Ok(())
-        } else {
-            Err(())
-        }
+        Ok(())
     })
     .unwrap();
 }

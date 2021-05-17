@@ -14,7 +14,7 @@ fn parse_user_cmd_crnl() {
 }
 
 #[test]
-// TODO: According to RFC 959, verbs should be interpreted without regards to case
+// According to RFC 959, verbs should be interpreted without regards to case
 fn parse_user_cmd_mixed_case() {
     let input = "uSeR Dolores\r\n";
     assert_eq!(parse(input).unwrap(), Command::User { username: "Dolores".into() });
