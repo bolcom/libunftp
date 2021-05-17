@@ -163,7 +163,12 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// Returns the `Md5` for the given file.
     ///
     /// [`Metadata`]: ./trait.Md5.html
-    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>;
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<String>
+    where
+        P: AsRef<Path> + Send + Debug,
+    {
+        Err(Error::from(ErrorKind::CommandNotImplemented))
+    }
 
     /// Returns the list of files in the given directory.
     async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
