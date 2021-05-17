@@ -5,7 +5,6 @@ pub use ext::ServerExt;
 
 use async_trait::async_trait;
 use crypto::{digest::Digest, md5::Md5};
-use futures::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use std::{
     fmt::Debug,

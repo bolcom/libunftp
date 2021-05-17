@@ -37,7 +37,11 @@ pub fn initialize_docker() -> Mutex<Child> {
     let buf = std::env::current_dir().unwrap();
     let current_dir = buf.display();
 
-    Command::new("mkdir").arg("-p").arg(format!("{}/tests/resources/data/{}", current_dir, GCS_BUCKET)).status().unwrap();
+    Command::new("mkdir")
+        .arg("-p")
+        .arg(format!("{}/tests/resources/data/{}", current_dir, GCS_BUCKET))
+        .status()
+        .unwrap();
     Command::new("docker").arg("stop").arg("fake-gcs").status().unwrap();
     Command::new("docker").arg("rm").arg("fake-gcs").status().unwrap();
     let mut command = Command::new("docker");
