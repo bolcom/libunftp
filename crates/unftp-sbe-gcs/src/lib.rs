@@ -8,11 +8,14 @@
 
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
+mod ext;
 pub mod object_metadata;
 pub mod options;
 mod response_body;
 mod uri;
 mod workflow_identity;
+
+pub use ext::ServerExt;
 
 use async_trait::async_trait;
 use bytes::Buf;
