@@ -36,7 +36,7 @@ tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures
 yup-oauth2 = {version = "5.0.3"}
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = { version = "1.0.64"}
-
+base64 = "0.13.0"
 
 [dev-dependencies]
 async_ftp = "5.0.0"

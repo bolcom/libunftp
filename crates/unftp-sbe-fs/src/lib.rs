@@ -4,7 +4,6 @@ mod ext;
 pub use ext::ServerExt;
 
 use async_trait::async_trait;
-use futures::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use std::{
     fmt::Debug,
@@ -77,7 +76,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     type Metadata = Meta;
 
     fn supported_features(&self) -> u32 {
-        libunftp::storage::FEATURE_RESTART
+        libunftp::storage::FEATURE_RESTART | libunftp::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]
@@ -127,17 +126,12 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
         use tokio::io::AsyncSeekExt;
 
         let full_path = self.full_path(path).await?;
-
-        // // TODO: Remove async block
-        async move {
-            let mut file = tokio::fs::File::open(full_path).await?;
-            if start_pos > 0 {
-                file.seek(std::io::SeekFrom::Start(start_pos)).await?;
-            }
-            Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
+        let mut file = tokio::fs::File::open(full_path).await?;
+        if start_pos > 0 {
+            file.seek(std::io::SeekFrom::Start(start_pos)).await?;
         }
-        .map_err(|error: std::io::Error| error.into())
-        .await
+
+        Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
     }
 
     async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(

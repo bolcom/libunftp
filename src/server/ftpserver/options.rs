@@ -149,3 +149,21 @@ impl From<bool> for FtpsClientAuth {
         }
     }
 }
+
+/// The options for `Server.sitemd5`.
+/// Allow MD5 either to be used by all, logged in users only or no one.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum SiteMd5 {
+    /// Enabled for all users, including anonymous
+    All,
+    /// Enabled for all non-anonymous users.
+    Accounts,
+    /// Disabled
+    None, // would be nice to have a per-user setting also.
+}
+
+impl Default for SiteMd5 {
+    fn default() -> SiteMd5 {
+        SiteMd5::Accounts
+    }
+}

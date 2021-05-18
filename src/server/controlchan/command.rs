@@ -115,6 +115,9 @@ pub enum Command {
     Mdtm {
         file: PathBuf,
     },
+    Md5 {
+        file: PathBuf,
+    },
     Other {
         command_name: String,
         arguments: String,

@@ -13,15 +13,13 @@ use std::str;
 /// Parse the given bytes into a [`Command`].
 ///
 /// [`Command`]: ./enum.Command.html
-#[allow(clippy::cognitive_complexity)]
 pub fn parse<T>(line: T) -> Result<Command>
 where
     T: AsRef<[u8]> + Into<Bytes>,
 {
     let vec = line.into().to_vec();
-    let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
-    let cmd_token = normalize(iter.next().unwrap())?;
-    let cmd_params = String::from(str::from_utf8(iter.next().unwrap_or(&[]))?);
+    let (cmd_token, cmd_params) = split_token_params(&vec);
+    let cmd_token = normalize(cmd_token)?;
 
     let cmd = match &*cmd_token {
         "USER" => {
@@ -329,6 +327,29 @@ where
             let file = String::from_utf8_lossy(&params).to_string().into();
             Command::Mdtm { file }
         }
+        "SITE" => {
+            let (cmd_token, cmd_params) = split_token_params(&cmd_params);
+            let cmd_token = normalize(cmd_token)?;
+
+            match &*cmd_token {
+                "MD5" => {
+                    let params = parse_to_eol(cmd_params)?;
+                    if params.is_empty() {
+                        return Err(ParseErrorKind::InvalidCommand.into());
+                    }
+
+                    let file = String::from_utf8_lossy(&params).to_string().into();
+                    Command::Md5 { file }
+                }
+                _ => {
+                    let params = parse_to_eol(cmd_params)?;
+                    Command::Other {
+                        command_name: cmd_token,
+                        arguments: String::from_utf8_lossy(&params).to_string(),
+                    }
+                }
+            }
+        }
         _ => {
             let params = parse_to_eol(cmd_params)?;
             Command::Other {
@@ -341,41 +362,53 @@ where
     Ok(cmd)
 }
 
-/// Try to parse `text`, up to end of line.
-fn parse_to_eol(text: String) -> Result<Bytes> {
-    match parse_to_eol_with_null(text) {
-        Err(e) => Err(e),
-        Ok((s, false, n)) => Ok(Bytes::copy_from_slice(&s.as_bytes()[..s.len() - n])),
-        Ok((mut s, true, n)) => {
-            s.retain(|c| c != '\0');
-            Ok(Bytes::copy_from_slice(&s.as_bytes()[..s.len() - n]))
-        }
-    }
+fn split_token_params(vec: &[u8]) -> (&[u8], &[u8]) {
+    let mut iter = vec.splitn(2, |&b| b == b' ' || b == b'\r' || b == b'\n');
+    let token = iter.next().unwrap_or(&[]);
+    let params = iter.next().unwrap_or(&[]);
+    (token, params)
 }
 
-fn parse_to_eol_with_null(text: String) -> Result<(String, bool, usize)> {
-    let mut last_ch = '\n';
-    let mut contains_null = false;
-    for (_, ch) in text.char_indices() {
-        match (last_ch, ch) {
-            ('\r', '\n') => {
-                return Ok((text, contains_null, 2));
+fn parse_to_eol(line: &[u8]) -> Result<Bytes> {
+    let mut dest: Vec<u8> = Vec::new();
+
+    if line.is_empty() || line[0] == b'\n' {
+        return Ok(Bytes::from(dest));
+    } else if line.len() == 1 {
+        return Err(ParseErrorKind::InvalidEol.into());
+    } else if line.len() == 2 {
+        return match (line[0], line[1]) {
+            (b'\r', b'\n') => Ok(dest.into()),
+            (b'\n', _) => Ok(dest.into()),
+            (_, b'\n') => {
+                dest.push(line[0]);
+                Ok(dest.into())
             }
-            ('\r', '\0') => {
-                contains_null = true;
+            (_, _) => Err(ParseErrorKind::InvalidEol.into()),
+        };
+    }
+    dest.push(line[0]);
+
+    let mut i = 1;
+    while i < line.len() - 1 {
+        match (line[i - 1], line[i], line[i + 1]) {
+            (_, b'\r', b'\0') => dest.push(line[i]),
+            (b'\r', b'\0', _) => {} // skip the NUL byte
+            (_, b'\r', b'\n') => {
+                return Ok(dest.into());
             }
-            ('\0', '\n') => {
-                contains_null = true;
+            (_, _, b'\n') => {
+                dest.push(line[i]);
+                return Ok(dest.into());
             }
-            ('\r', _) => {
+            (_, b'\r', _) => {
                 return Err(ParseErrorKind::InvalidEol.into());
             }
-            (_, '\n') => {
-                return Ok((text, contains_null, 1));
+            (_, _, _) => {
+                dest.push(line[i]);
             }
-            _ => {}
         }
-        last_ch = ch;
+        i += 1;
     }
     Err(ParseErrorKind::InvalidEol.into())
 }

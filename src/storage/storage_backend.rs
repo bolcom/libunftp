@@ -4,6 +4,7 @@ use super::error::Error;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
+use crypto::{digest::Digest, md5::Md5};
 use itertools::Itertools;
 use std::{
     fmt::{self, Debug, Formatter, Write},
@@ -11,10 +12,13 @@ use std::{
     result,
     time::SystemTime,
 };
+use tokio::io::AsyncReadExt;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
 pub const FEATURE_RESTART: u32 = 0b0000_0001;
+/// Whether or not this storage backend supports the SITE MD5 command
+pub const FEATURE_SITEMD5: u32 = 0b0000_0010;
 
 /// Result type used by traits in this module
 pub type Result<T> = result::Result<T, Error>;
@@ -159,6 +163,35 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     ///
     /// [`Metadata`]: ./trait.Metadata.html
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
+
+    /// Returns the MD5 hash for the given file.
+    ///
+    /// Whether or not you want to implement the md5 method yourself,
+    /// or you want to let your StorageBackend make use of the below
+    /// default implementation, you must still explicitly enable the
+    /// feature via the
+    /// [supported_features](crate::storage::StorageBackend::supported_features)
+    /// method.
+    ///
+    /// When implementing, use the lower case 2-digit hexadecimal
+    /// format (like the output of the `md5sum` command)
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>
+    where
+        P: AsRef<Path> + Send + Debug,
+    {
+        let mut md5sum = Md5::new();
+        let mut reader = self.get(user, path, 0).await?;
+        let mut buffer = vec![0_u8; 1024 * 1024 * 10];
+
+        while let Ok(n) = reader.read(&mut buffer[..]).await {
+            if n == 0 {
+                break;
+            }
+            md5sum.input(&buffer[0..n]);
+        }
+
+        Ok(md5sum.result_str())
+    }
 
     /// Returns the list of files in the given directory.
     async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>

@@ -1,6 +1,6 @@
 use super::ObjectMetadata;
 use chrono::prelude::*;
-use libunftp::storage::{Error, Fileinfo};
+use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{de, Deserialize};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -20,6 +20,8 @@ pub(crate) struct Item {
     // GCS API defines `size` as json string, doh
     #[serde(default, deserialize_with = "item_size_deserializer")]
     size: u64,
+    #[serde(rename = "md5Hash")]
+    md5_hash: String,
 }
 
 // TODO: this is a generic string->* deserializer, move to a util package
@@ -71,6 +73,11 @@ impl Item {
 
         Ok(Fileinfo { path, metadata })
     }
+
+    pub(crate) fn to_md5(&self) -> Result<String, Error> {
+        let md5 = base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
+    }
 }
 
 pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
@@ -99,6 +106,7 @@ mod test {
             name: "".into(),
             updated: date_time,
             size: 50,
+            md5_hash: "".into(),
         };
 
         let metadata: ObjectMetadata = item.to_metadata().unwrap();

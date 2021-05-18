@@ -113,7 +113,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        0
+        libunftp::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]
@@ -290,6 +290,33 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
         // TODO: Do we want to check here if the path is a directory?
         Ok(())
+    }
+
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<String, Error>
+    where
+        P: AsRef<Path> + Send + Debug,
+    {
+        let uri: Uri = self.uris.metadata(path)?;
+
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let token = self.get_token().await?;
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+
+        let body = unpack_response(response).await?;
+
+        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        Ok(response.to_md5()?)
     }
 }
 

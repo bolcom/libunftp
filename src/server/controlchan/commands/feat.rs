@@ -2,12 +2,15 @@
 
 use crate::{
     auth::UserDetail,
-    server::controlchan::{
-        error::ControlChanError,
-        handler::{CommandContext, CommandHandler},
-        Reply, ReplyCode,
+    server::{
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+        ftpserver::options::SiteMd5,
     },
-    storage::{Metadata, StorageBackend, FEATURE_RESTART},
+    storage::{Metadata, StorageBackend, FEATURE_RESTART, FEATURE_SITEMD5},
 };
 use async_trait::async_trait;
 
@@ -33,6 +36,9 @@ where
         }
         if args.storage_features & FEATURE_RESTART > 0 {
             feat_text.push(" REST STREAM");
+        }
+        if args.sitemd5 != SiteMd5::None && args.storage_features & FEATURE_SITEMD5 > 0 {
+            feat_text.push(" SITE MD5");
         }
 
         // Show them in alphabetical order.
