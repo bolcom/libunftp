@@ -113,7 +113,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        0
+        libunftp::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]

@@ -76,7 +76,7 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     type Metadata = Meta;
 
     fn supported_features(&self) -> u32 {
-        libunftp::storage::FEATURE_RESTART
+        libunftp::storage::FEATURE_RESTART | libunftp::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]

@@ -8,7 +8,7 @@ use crate::{
             Reply, ReplyCode,
         },
     },
-    storage::StorageBackend,
+    storage::{StorageBackend, FEATURE_SITEMD5}
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
@@ -33,6 +33,13 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        if !args.sitemd5_enabled {
+            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+        }
+        if args.storage_features & FEATURE_SITEMD5 == 0 {
+            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+        }
+
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
@@ -47,7 +54,7 @@ where
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                             ReplyCode::FileStatus,
-                            format!("{} {}", md5, path.as_path().display().to_string()),
+                            format!("{}    {}", md5, path.as_path().display().to_string()),
                         )))
                         .await
                     {

@@ -17,6 +17,8 @@ use tokio::io::AsyncReadExt;
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
 pub const FEATURE_RESTART: u32 = 0b0000_0001;
+/// Whether or not this storage backend supports the SITE MD5 command
+pub const FEATURE_SITEMD5: u32 = 0b0000_0010;
 
 /// Result type used by traits in this module
 pub type Result<T> = result::Result<T, Error>;

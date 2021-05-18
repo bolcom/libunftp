@@ -48,4 +48,5 @@ where
     pub storage_features: u32,
     pub tx_proxyloop: Option<ProxyLoopSender<Storage, User>>,
     pub logger: slog::Logger,
+    pub sitemd5_enabled: bool,
 }

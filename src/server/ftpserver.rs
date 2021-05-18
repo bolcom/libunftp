@@ -70,6 +70,7 @@ where
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
     logger: slog::Logger,
+    sitemd5_enabled: bool,
 }
 
 impl<Storage, User> Debug for Server<Storage, User>
@@ -140,6 +141,7 @@ where
             ftps_tls_flags: TlsFlags::default(),
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
+            sitemd5_enabled: false,
         }
     }
 
@@ -608,6 +610,27 @@ where
             }
         }
     }
+
+    /// Enables SITE MD5
+    ///
+    /// Warning:
+    /// Depending on the storage backend, SITE MD5 may use relatively much memory and generate high CPU usage.
+    /// This opens a Denial of Service vulnerability that could be exploited by malicious users, by means of flooding the server with SITE MD5 commands.
+    /// As such this feature is probably best user configured and disabled by default.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp").sitemd5();
+    /// ```
+    pub fn sitemd5(mut self) -> Self {
+        self.sitemd5_enabled = true;
+        self
+    }
 }
 
 impl<Storage, User> From<&Server<Storage, User>> for controlchan::LoopConfig<Storage, User>
@@ -629,6 +652,7 @@ where
             logger: server.logger.new(slog::o!()),
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
+            sitemd5_enabled: server.sitemd5_enabled,
         }
     }
 }

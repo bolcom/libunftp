@@ -7,7 +7,7 @@ use crate::{
         handler::{CommandContext, CommandHandler},
         Reply, ReplyCode,
     },
-    storage::{Metadata, StorageBackend, FEATURE_RESTART},
+    storage::{Metadata, StorageBackend, FEATURE_RESTART, FEATURE_SITEMD5},
 };
 use async_trait::async_trait;
 
@@ -23,7 +23,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let mut feat_text = vec![" SIZE", " MDTM", " UTF8", " SITE MD5"];
+        let mut feat_text = vec![" SIZE", " MDTM", " UTF8"];
         // Add the features. According to the spec each feature line must be
         // indented by a space.
         if args.tls_configured {
@@ -33,6 +33,9 @@ where
         }
         if args.storage_features & FEATURE_RESTART > 0 {
             feat_text.push(" REST STREAM");
+        }
+        if args.sitemd5_enabled && args.storage_features & FEATURE_SITEMD5 > 0 {
+            feat_text.push(" SITE MD5");
         }
 
         // Show them in alphabetical order.
