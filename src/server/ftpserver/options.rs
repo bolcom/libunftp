@@ -151,8 +151,8 @@ impl From<bool> for FtpsClientAuth {
     }
 }
 
-/// The option to `Server.sitemd5`. It allows the user to specify whether clients are required
-/// to upgrade a to secure TLS connection i.e. use FTPS.
+/// The options for `Server.sitemd5`.
+/// Allow MD5 either to be used by all, logged in users only or no one.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SiteMd5 {
     /// Enabled for all users, including anonymous

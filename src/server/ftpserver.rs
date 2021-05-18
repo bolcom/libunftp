@@ -628,7 +628,7 @@ where
     /// let mut server = Server::with_fs("/tmp").sitemd5(SiteMd5::None);
     /// ```
 
-    pub fn sitemd5<H: Into<SiteMd5>>(mut self, sitemd5_option: H) -> Self {
+    pub fn sitemd5<M: Into<SiteMd5>>(mut self, sitemd5_option: M) -> Self {
         self.sitemd5 = sitemd5_option.into();
         self
     }
