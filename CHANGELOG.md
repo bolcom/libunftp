@@ -4,7 +4,7 @@
 
 _tag: TAG_
 
-- Added SITE MD5 support for Filesystem backend as well as GCS. The feature is disabled by default.
+- Added SITE MD5 support for Filesystem and GCS storage backends. The feature is disabled by default.
 
 ## 2021-05-02 libunftp v0.17.3
 

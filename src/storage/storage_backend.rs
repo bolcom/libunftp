@@ -166,6 +166,11 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
 
     /// Returns the `Md5` for the given file.
     ///
+    /// Whether or not you want to implement the md5 method yourself,
+    /// or you want to let your StorageBackend make use of the below
+    /// default implementation, you must still explicitly enable the
+    /// feature via the `supported_features` method.
+    ///
     /// [`Metadata`]: ./trait.Md5.html
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>
     where
