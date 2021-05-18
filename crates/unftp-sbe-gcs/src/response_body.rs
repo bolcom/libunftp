@@ -21,7 +21,7 @@ pub(crate) struct Item {
     #[serde(default, deserialize_with = "item_size_deserializer")]
     size: u64,
     #[serde(rename = "md5Hash")]
-    pub md5_hash: String,
+    md5_hash: String,
 }
 
 // TODO: this is a generic string->* deserializer, move to a util package
