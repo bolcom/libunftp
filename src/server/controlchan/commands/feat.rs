@@ -2,10 +2,13 @@
 
 use crate::{
     auth::UserDetail,
-    server::controlchan::{
-        error::ControlChanError,
-        handler::{CommandContext, CommandHandler},
-        Reply, ReplyCode,
+    server::{
+        controlchan::{
+            error::ControlChanError,
+            handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
+        },
+        ftpserver::options::SiteMd5,
     },
     storage::{Metadata, StorageBackend, FEATURE_RESTART, FEATURE_SITEMD5},
 };
@@ -34,7 +37,7 @@ where
         if args.storage_features & FEATURE_RESTART > 0 {
             feat_text.push(" REST STREAM");
         }
-        if args.sitemd5_enabled && args.storage_features & FEATURE_SITEMD5 > 0 {
+        if args.sitemd5 != SiteMd5::None && args.storage_features & FEATURE_SITEMD5 > 0 {
             feat_text.push(" SITE MD5");
         }
 

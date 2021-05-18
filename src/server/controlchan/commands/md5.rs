@@ -7,6 +7,7 @@ use crate::{
             handler::{CommandContext, CommandHandler},
             Reply, ReplyCode,
         },
+        ftpserver::options::SiteMd5,
     },
     storage::{StorageBackend, FEATURE_SITEMD5},
 };
@@ -33,13 +34,6 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        if !args.sitemd5_enabled {
-            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
-        }
-        if args.storage_features & FEATURE_SITEMD5 == 0 {
-            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
-        }
-
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
@@ -47,6 +41,26 @@ where
         let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
+
+        match args.sitemd5 {
+            SiteMd5::All => {}
+            SiteMd5::Accounts => {
+                if let Some(u) = &session.username {
+                    if u == "anonymous" || u == "ftp" {
+                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+                    } else {
+                        slog::error!(logger, "NoneError for username. This shouldn't happen.");
+                        return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                    }
+                }
+            }
+            SiteMd5::None => {
+                return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+            }
+        }
+        if args.storage_features & FEATURE_SITEMD5 == 0 {
+            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+        }
 
         tokio::spawn(async move {
             match storage.md5(&user, &path).await {

@@ -3,7 +3,7 @@ use crate::{
     server::{
         chancomms::ProxyLoopSender,
         controlchan::{command::Command, error::ControlChanError, Reply},
-        ftpserver::options::PassiveHost,
+        ftpserver::options::{PassiveHost, SiteMd5},
         session::SharedSession,
         ControlChanMsg,
     },
@@ -48,5 +48,5 @@ where
     pub storage_features: u32,
     pub tx_proxyloop: Option<ProxyLoopSender<Storage, User>>,
     pub logger: slog::Logger,
-    pub sitemd5_enabled: bool,
+    pub sitemd5: SiteMd5,
 }

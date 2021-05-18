@@ -15,7 +15,7 @@ use crate::{
             middleware::ControlChanMiddleware,
             Reply, ReplyCode,
         },
-        ftpserver::options::{FtpsRequired, PassiveHost},
+        ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
         session::SharedSession,
         tls::FtpsConfig,
         Event, Session, SessionState,
@@ -57,7 +57,7 @@ where
     pub logger: slog::Logger,
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
-    pub sitemd5_enabled: bool,
+    pub sitemd5: SiteMd5,
 }
 
 /// Does TCP processing when a FTP client connects
@@ -84,7 +84,7 @@ where
         collect_metrics,
         idle_session_timeout,
         logger,
-        sitemd5_enabled,
+        sitemd5,
         ..
     } = config;
 
@@ -113,7 +113,7 @@ where
         local_addr,
         storage_features,
         tx_proxy_loop: proxyloop_msg_tx,
-        sitemd5_enabled,
+        sitemd5,
     };
 
     let event_chain = AuthMiddleware {
@@ -287,7 +287,7 @@ where
     local_addr: SocketAddr,
     storage_features: u32,
     tx_proxy_loop: Option<ProxyLoopSender<Storage, User>>,
-    sitemd5_enabled: bool,
+    sitemd5: SiteMd5,
 }
 
 impl<Storage, User> PrimaryEventHandler<Storage, User>
@@ -373,7 +373,7 @@ where
             storage_features: self.storage_features,
             tx_proxyloop: self.tx_proxy_loop.clone(),
             logger: self.logger.clone(),
-            sitemd5_enabled: self.sitemd5_enabled,
+            sitemd5: self.sitemd5,
         };
 
         let handler: Box<dyn CommandHandler<Storage, User>> = match cmd {
