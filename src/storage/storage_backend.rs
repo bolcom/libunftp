@@ -4,6 +4,7 @@ use super::error::Error;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
+use crypto::{digest::Digest, md5::Md5};
 use itertools::Itertools;
 use std::{
     fmt::{self, Debug, Formatter, Write},
@@ -11,6 +12,7 @@ use std::{
     result,
     time::SystemTime,
 };
+use tokio::io::AsyncReadExt;
 
 /// Tells if STOR/RETR restarts are supported by the storage back-end
 /// i.e. starting from a different byte offset.
@@ -163,11 +165,22 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// Returns the `Md5` for the given file.
     ///
     /// [`Metadata`]: ./trait.Md5.html
-    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<String>
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>
     where
         P: AsRef<Path> + Send + Debug,
     {
-        Err(Error::from(ErrorKind::CommandNotImplemented))
+        let mut md5sum = Md5::new();
+        let mut reader = self.get(user, path, 0).await?;
+        let mut buffer = vec![0_u8; 1024 * 1024 * 10];
+
+        while let Ok(n) = reader.read(&mut buffer[..]).await {
+            if n == 0 {
+                break;
+            }
+            md5sum.input(&buffer[0..n]);
+        }
+
+        Ok(md5sum.result_str())
     }
 
     /// Returns the list of files in the given directory.

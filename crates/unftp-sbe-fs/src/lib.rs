@@ -4,7 +4,6 @@ mod ext;
 pub use ext::ServerExt;
 
 use async_trait::async_trait;
-use crypto::{digest::Digest, md5::Md5};
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use std::{
     fmt::Debug,
@@ -209,30 +208,6 @@ impl<U: Send + Sync + Debug> StorageBackend<U> for Filesystem {
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<()> {
         let full_path = self.full_path(path).await?;
         tokio::fs::read_dir(full_path).await.map_err(|error: std::io::Error| error.into()).map(|_| ())
-    }
-
-    /// Returns the MD5 hash as a string
-    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<String>
-    where
-        P: AsRef<Path> + Send + Debug,
-    {
-        use tokio::io::AsyncReadExt;
-
-        let mut md5sum = Md5::new();
-        let mut buffer = [0; 4096];
-
-        let full_path = self.full_path(path).await?;
-
-        let mut file = tokio::fs::File::open(full_path).await?;
-
-        while let Ok(n) = file.read(&mut buffer).await {
-            if n == 0 {
-                break;
-            }
-            md5sum.input(&buffer[0..n]);
-        }
-
-        Ok(md5sum.result_str())
     }
 }
 

@@ -54,6 +54,7 @@ tracing = "0.1.25"
 tracing-attributes = "0.1.15"
 tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures-03"]}
 uuid = { version = "0.8.2", features = ["v4"] }
+rust-crypto = "^0.2"
 
 [dev-dependencies]
 pretty_assertions = "0.7.1"
