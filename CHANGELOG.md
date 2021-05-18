@@ -1,6 +1,6 @@
 # Changelog
 
-## <<DATE>> libunftp <<VERSION
+## Upcoming
 
 _tag: TAG_
 

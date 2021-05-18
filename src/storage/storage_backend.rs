@@ -164,14 +164,17 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// [`Metadata`]: ./trait.Metadata.html
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
 
-    /// Returns the `Md5` for the given file.
+    /// Returns the MD5 hash for the given file.
     ///
     /// Whether or not you want to implement the md5 method yourself,
     /// or you want to let your StorageBackend make use of the below
     /// default implementation, you must still explicitly enable the
-    /// feature via the `supported_features` method.
+    /// feature via the
+    /// [supported_features](crate::storage::StorageBackend::supported_features)
+    /// method.
     ///
-    /// [`Metadata`]: ./trait.Md5.html
+    /// When implementing, use the lower case 2-digit hexadecimal
+    /// format (like the output of the `md5sum` command)
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>
     where
         P: AsRef<Path> + Send + Debug,
