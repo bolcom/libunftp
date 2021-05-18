@@ -622,6 +622,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
+    /// use libunftp::options::SiteMd5;
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
