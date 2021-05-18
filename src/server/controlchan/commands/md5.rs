@@ -8,7 +8,7 @@ use crate::{
             Reply, ReplyCode,
         },
     },
-    storage::{StorageBackend, FEATURE_SITEMD5}
+    storage::{StorageBackend, FEATURE_SITEMD5},
 };
 use async_trait::async_trait;
 use futures::{channel::mpsc::Sender, prelude::*};
