@@ -27,4 +27,8 @@ impl Authenticator<DefaultUser> for AnonymousAuthenticator {
     async fn authenticate(&self, _username: &str, _password: &Credentials) -> Result<DefaultUser, AuthenticationError> {
         Ok(DefaultUser {})
     }
+
+    async fn cert_auth_sufficient(&self, _username: &str) -> bool {
+        true
+    }
 }

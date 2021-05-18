@@ -96,6 +96,8 @@ where
     // Tells if the data loop is running. The control channel need to know if the data channel is
     // busy so that it doesn't time out while the session is still in progress.
     pub data_busy: bool,
+    // The client certificate chain if it was received.
+    pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -126,6 +128,7 @@ where
             collect_metrics: false,
             start_pos: 0,
             data_busy: false,
+            cert_chain: None,
         }
     }
 

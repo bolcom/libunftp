@@ -65,6 +65,7 @@ pub enum ReplyCode {
     EnteringPassiveMode = 227,
     EnteringExtendedPassiveMode = 229,
     UserLoggedIn = 230,
+    UserLoggedInViaCert = 232,
     AuthOkayNoDataNeeded = 234,
     FileActionOkay = 250,
     DirCreated = 257,

@@ -71,7 +71,7 @@ where
                 let creds = crate::auth::Credentials {
                     password: Some(pass),
                     source_ip: session.source.ip(),
-                    certificate_chain: None,
+                    certificate_chain: session.cert_chain.clone(),
                 };
                 tokio::spawn(async move {
                     let msg = match auther.authenticate(&user, &creds).await {
