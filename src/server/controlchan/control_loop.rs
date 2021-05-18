@@ -28,6 +28,7 @@ use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     SinkExt, StreamExt,
 };
+use rustls::{ServerSession, Session as RustlsSession};
 use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -105,7 +106,7 @@ where
     let event_chain = PrimaryEventHandler {
         logger: logger.clone(),
         session: shared_session.clone(),
-        authenticator,
+        authenticator: authenticator.clone(),
         tls_configured,
         passive_ports,
         passive_host,
@@ -200,7 +201,14 @@ where
                         };
                         let accepted = acceptor.accept(io).await;
                         let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = match accepted {
-                            Ok(stream) => Box::new(stream),
+                            Ok(stream) => {
+                                let s: &ServerSession = stream.get_ref().1;
+                                if let Some(certs) = s.get_peer_certificates() {
+                                    let mut session = shared_session.lock().await;
+                                    session.cert_chain = Some(certs.iter().map(|c| crate::auth::ClientCert(c.0.clone())).collect());
+                                }
+                                Box::new(stream)
+                            }
                             Err(err) => {
                                 slog::warn!(logger, "Closing control channel. Could not upgrade to TLS: {}", err);
                                 return;
