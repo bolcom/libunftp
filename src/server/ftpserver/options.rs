@@ -16,7 +16,6 @@ pub(crate) const DEFAULT_PASSIVE_HOST: PassiveHost = PassiveHost::FromConnection
 pub(crate) const DEFAULT_PASSIVE_PORTS: Range<u16> = 49152..65535;
 pub(crate) const DEFAULT_FTPS_REQUIRE: FtpsRequired = FtpsRequired::None;
 pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
-pub(crate) const DEFAULT_SITEMD5: SiteMd5 = SiteMd5::Accounts;
 
 /// The option to `Server.passive_host`. It allows the user to specify how the IP address
 /// communicated in the _PASV_ response is determined.
@@ -161,4 +160,10 @@ pub enum SiteMd5 {
     Accounts,
     /// Disabled
     None, // would be nice to have a per-user setting also.
+}
+
+impl Default for SiteMd5 {
+    fn default() -> SiteMd5 {
+        SiteMd5::Accounts
+    }
 }

@@ -141,7 +141,7 @@ where
             ftps_tls_flags: TlsFlags::default(),
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
-            sitemd5: options::DEFAULT_SITEMD5,
+            sitemd5: SiteMd5::default(),
         }
     }
 
