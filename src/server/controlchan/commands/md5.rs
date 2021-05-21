@@ -44,16 +44,17 @@ where
 
         match args.sitemd5 {
             SiteMd5::All => {}
-            SiteMd5::Accounts => {
-                if let Some(u) = &session.username {
+            SiteMd5::Accounts => match &session.username {
+                Some(u) => {
                     if u == "anonymous" || u == "ftp" {
                         return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
-                    } else {
-                        slog::error!(logger, "NoneError for username. This shouldn't happen.");
-                        return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
                     }
                 }
-            }
+                None => {
+                    slog::error!(logger, "NoneError for username. This shouldn't happen.");
+                    return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                }
+            },
             SiteMd5::None => {
                 return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
             }
