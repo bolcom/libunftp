@@ -4,7 +4,7 @@ use super::UserDetail;
 use crate::BoxError;
 
 use async_trait::async_trait;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use thiserror::Error;
 
 /// Defines the requirements for Authentication implementations
@@ -13,8 +13,14 @@ pub trait Authenticator<User>: Sync + Send + Debug
 where
     User: UserDetail,
 {
-    /// Authenticate the given user with the given password.
-    async fn authenticate(&self, username: &str, password: &str) -> Result<User, AuthenticationError>;
+    /// Authenticate the given user with the given credentials.
+    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<User, AuthenticationError>;
+
+    /// Tells whether its OK to not ask for a password when a valid client cert
+    /// was presented.
+    async fn cert_auth_sufficient(&self, _username: &str) -> bool {
+        return false;
+    }
 
     /// Implement to set the name of the authenticator. By default it returns the type signature.
     fn name(&self) -> &str {
@@ -33,6 +39,14 @@ pub enum AuthenticationError {
     #[error("bad username")]
     BadUser,
 
+    /// A bad client certificate was presented.
+    #[error("bad client certificate")]
+    BadCert,
+
+    /// The source IP address was not allowed
+    #[error("client IP address not allowed")]
+    IpDisallowed,
+
     /// Another issue occurred during the authentication process.
     #[error("authentication error: {0}: {1:?}")]
     ImplPropagated(String, #[source] Option<BoxError>),
@@ -50,5 +64,45 @@ impl AuthenticationError {
         E: std::error::Error + Send + Sync + 'static,
     {
         AuthenticationError::ImplPropagated(s.into(), Some(Box::new(source)))
+    }
+}
+
+/// Credentials passed to an [Authenticator](crate::auth::Authenticator)
+///
+/// [Authenticator](crate::auth::Authenticator) implementations can assume that either `certificate_chain` or `password`
+/// will not be `None`.
+#[derive(Clone, Debug)]
+pub struct Credentials {
+    /// The password that the client sent.
+    pub password: Option<String>,
+    /// DER encoded x509 certificate chain coming from the client.
+    pub certificate_chain: Option<Vec<ClientCert>>,
+    /// The IP address of the user's connection
+    pub source_ip: std::net::IpAddr,
+}
+
+impl From<&str> for Credentials {
+    fn from(s: &str) -> Self {
+        Credentials {
+            password: Some(String::from(s)),
+            certificate_chain: None,
+            source_ip: [127, 0, 0, 1].into(),
+        }
+    }
+}
+
+/// Contains a single DER-encoded X.509 client certificate.
+#[derive(Clone, Eq, PartialEq)]
+pub struct ClientCert(pub Vec<u8>);
+
+impl std::fmt::Debug for ClientCert {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ClientCert(***)")
+    }
+}
+
+impl AsRef<[u8]> for ClientCert {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
