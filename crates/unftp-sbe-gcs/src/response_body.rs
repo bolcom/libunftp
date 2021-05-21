@@ -20,7 +20,7 @@ pub(crate) struct Item {
     // GCS API defines `size` as json string, doh
     #[serde(default, deserialize_with = "item_size_deserializer")]
     size: u64,
-    #[serde(rename = "md5Hash")]
+    #[serde(default, rename = "md5Hash")]
     md5_hash: String,
 }
 
