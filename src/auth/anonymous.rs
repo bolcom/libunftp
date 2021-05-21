@@ -14,7 +14,7 @@ use async_trait::async_trait;
 /// use async_trait::async_trait;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", "I ❤️ PB")).unwrap(), DefaultUser{});
+/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", &"I ❤️ PB".into())).unwrap(), DefaultUser{});
 /// ```
 ///
 #[derive(Debug)]
@@ -24,7 +24,7 @@ pub struct AnonymousAuthenticator;
 impl Authenticator<DefaultUser> for AnonymousAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, _username: &str, _password: &str) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, _username: &str, _password: &Credentials) -> Result<DefaultUser, AuthenticationError> {
         Ok(DefaultUser {})
     }
 }

@@ -68,8 +68,13 @@ where
                 // without this, the REST authenticator hangs when
                 // performing a http call through Hyper
                 let session2clone = args.session.clone();
+                let creds = crate::auth::Credentials {
+                    password: Some(pass),
+                    source_ip: session.source.ip(),
+                    certificate_chain: None,
+                };
                 tokio::spawn(async move {
-                    let msg = match auther.authenticate(&user, &pass).await {
+                    let msg = match auther.authenticate(&user, &creds).await {
                         Ok(user) => {
                             if user.account_enabled() {
                                 let mut session = session2clone.lock().await;

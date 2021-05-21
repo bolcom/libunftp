@@ -1,5 +1,12 @@
 # Changelog
 
+## Upcoming
+
+- Authenticators can now also take the connection source IP and the client certificate chain in account in addition to 
+  the password when performing authentication.
+- **Breaking**: The `Authenticator::authenticate` method now takes a `Credentials` structure instead of a `str` reference for the 
+  second parameter.
+- **unftp-auth-jsonfile**: Supports per user IP allow ranges
 
 ## 2021-05-22 unftp-sbe-gcs v0.1.1
 
