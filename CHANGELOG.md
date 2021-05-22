@@ -1,10 +1,19 @@
 # Changelog
 
+
+## 2021-05-22 unftp-sbe-gcs v0.1.1
+
+_tag: unftp-sbe-gcs-0.1.1_
+
+- Added an extension trait that adds a `Server::with_gcs` constructor.
+- Added support for the `SITE MD5` FTP command. Also see [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5) in libunftp. 
+
 ## 2021-05-22 libunftp 0.17.4
 
 _tag: libunftp-0.17.4_
 
-- Added SITE MD5 support for Filesystem and GCS storage backends. The feature is disabled by default.
+- Added a new `SITE MD5` command that allows FTP clients to obtain the MD5 checksum of a remote file. The feature is 
+  disabled for anonymous users by default. See [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5).
 
 ## 2021-05-02 libunftp v0.17.3
 

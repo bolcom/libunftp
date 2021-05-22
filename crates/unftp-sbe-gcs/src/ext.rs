@@ -1,9 +1,8 @@
 use crate::options::AuthMethod;
 use crate::CloudStorage;
-use libunftp::auth::{Authenticator, DefaultUser, UserDetail};
+use libunftp::auth::DefaultUser;
 use libunftp::Server;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 /// Extension trait purely for construction convenience.
 pub trait ServerExt {
