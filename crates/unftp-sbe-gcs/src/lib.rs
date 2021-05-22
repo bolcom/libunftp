@@ -5,6 +5,55 @@
 
 //! An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files
 //! in [Google Cloud Storage](https://cloud.google.com/storage).
+//!
+//! # Usage
+//!
+//! Add the needed dependencies to Cargo.toml:
+//!
+//! ```toml
+//! [dependencies]
+//! libunftp = "0.17.4"
+//! unftp-sbe-gcs = "0.1.1"
+//! tokio = { version = "1", features = ["full"] }
+//! ```
+//!
+//! And add to src/main.rs:
+//!
+//! ```no_run
+//! use libunftp::Server;
+//! use unftp_sbe_gcs::{ServerExt, options::AuthMethod};
+//! use std::path::PathBuf;
+//!
+//! #[tokio::main]
+//! pub async fn main() {
+//!     let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None))
+//!       .greeting("Welcome to my FTP server")
+//!       .passive_ports(50000..65535);
+//!
+//!     server.listen("127.0.0.1:2121").await;
+//! }
+//! ```
+//!
+//! This example uses the `ServerExt` extension trait. You can also call one of the other
+//! constructors of `Server` e.g.
+//!
+//! ```no_run
+//! use libunftp::Server;
+//! use unftp_sbe_gcs::{CloudStorage, options::AuthMethod};
+//! use std::path::PathBuf;
+//!
+//! #[tokio::main]
+//! pub async fn main() {
+//!     let server = libunftp::Server::new(
+//!         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
+//!       )
+//!       .greeting("Welcome to my FTP server")
+//!       .passive_ports(50000..65535);
+//!
+//!     server.listen("127.0.0.1:2121").await;
+//! }
+//! ```
+//!
 
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
