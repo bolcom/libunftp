@@ -1,8 +1,8 @@
 # Changelog
 
-## Upcoming
+## 2021-05-22 libunftp 0.17.4
 
-_tag: TAG_
+_tag: libunftp-0.17.4_
 
 - Added SITE MD5 support for Filesystem and GCS storage backends. The feature is disabled by default.
 
