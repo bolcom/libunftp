@@ -1,5 +1,10 @@
 # unftp-sbe-fs
 
+[![Crate Version](https://img.shields.io/crates/v/unftp-sbe-fs.svg)](https://crates.io/crates/unftp-sbe-fs)
+[![API Docs](https://docs.rs/unftp-sbe-fs/badge.svg)](https://docs.rs/unftp-sbe-fs)
+[![Crate License](https://img.shields.io/crates/l/unftp-sbe-fs.svg)](https://crates.io/crates/unftp-sbe-fs)
+[![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
+
 This unftp-sbe-fs crate allows you to use a regular Filesystem with
 [libunftp](https://github.com/bolcom/libunftp) and work like a regular
 FTP server.
@@ -64,7 +69,7 @@ Thank you for your interest in contributing to unftp-sbe-fs!
 Please feel free to create a Github issue if you encounter any problems.
 
 Want to submit a feature request or develop your own storage or authentication back-end? Then head over to 
-our [contribution guide (CONTRIBUTING.md)](CONTRIBUTING.md).
+our [contribution guide (CONTRIBUTING.md)](../../CONTRIBUTING.md).
 
 ## License
 
