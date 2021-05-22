@@ -2,7 +2,8 @@
 //!
 //! Here is an example for using this storage backend
 //!
-//! ```rust
+//! ```no_run
+
 //! use unftp_sbe_fs::ServerExt;
 //!
 //! #[tokio::main]
