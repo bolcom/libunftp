@@ -1,6 +1,6 @@
 [package]
 name = "unftp-sbe-fs"
-version = "0.1.0"
+version = "0.1.1"
 description = "A storage back-end for libunftp, storing files on local disk"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
