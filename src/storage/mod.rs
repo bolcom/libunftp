@@ -1,7 +1,7 @@
 //! Contains the [`StorageBackend`](crate::storage::StorageBackend) trait that can be implemented to
 //! create virtual file systems for libunftp.
 //!
-//! Pre-made implemenations exists on crates.io (search for `unftp-sbe-`) and you can define your
+//! Pre-made implementations exists on crates.io (search for `unftp-sbe-`) and you can define your
 //! own implementation to integrate your FTP(S) server with whatever storage mechanism you prefer.
 //!
 //! To create a new storage back-end:

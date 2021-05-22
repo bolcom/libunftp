@@ -59,7 +59,7 @@ You can also follow news and talk to us on [Telegram](https://t.me/unftp)
 
 ## Contributing
 
-Thank you for your interest in contributing to libunftp!
+Thank you for your interest in contributing to unftp-sbe-fs!
 
 Please feel free to create a Github issue if you encounter any problems.
 
