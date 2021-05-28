@@ -90,7 +90,7 @@ function generate_pbkdf2 {
 
 function usage {
     cat <<USAGE
-Usage: $(basename $0) [-l length] [-m length] [-s yes|no] [-c yes|no] [-d yes|no] [-n] [-p]
+Usage: $(basename $0) [-l length] [-m length] [-s yes|no] [-c yes|no] [-d yes|no] [-i iter] [-n] [-p] [-u] [-h]
 
 Flags
     -h            Show this summary
@@ -103,6 +103,7 @@ Options
     -s yes|no     Require at least one symbol (default: yes)
     -d yes|no     Require at least one digit (default: yes)
     -c yes|no     Require mixed case (default: yes)
+    -i iterations The number of iterations for PBKDF2 (default: 500000)
 USAGE
 }
 

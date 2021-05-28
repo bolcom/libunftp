@@ -24,5 +24,5 @@ publish: # Publishes the lib to crates.io
 
 .PHONY: key-generator-image
 key-generator-image: # Generate a Docker image for the unftp key generator script (files/run.sh)
-	docker build -f key-generator.Dockerfile -t bolcom/unftp-key-generator:latest -f key-generator.Dockerfile .
+	docker build -f key-generator.Dockerfile -t bolcom/unftp-key-generator:latest .
 
