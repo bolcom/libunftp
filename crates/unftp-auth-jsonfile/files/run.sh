@@ -3,7 +3,13 @@
 function error {
     RED='\033[0;31m'
     NO_COLOR='\033[0m'
-    echo -e ${RED}$*${NO_COLOR} >&2
+    echo -e ${RED}ERROR: $*${NO_COLOR} >&2
+}
+
+function warning {
+    YELLOW='\033[0;33m'
+    NO_COLOR='\033[0m'
+    echo -e ${YELLOW}WARNING: $*${NO_COLOR} >&2
 }
 
 function exit_fail {
@@ -20,8 +26,12 @@ function read_password {
     local valid_password
     while true; do
         valid_password=true
-        read -s -p "Enter password or press ENTER to generate one: " PASSWORD
-        echo
+        if ${opts[print]}; then
+            read -p "Enter password or press ENTER to generate one: " PASSWORD
+        else
+            read -s -p "Enter password or press ENTER to generate one: " PASSWORD
+            echo
+        fi
         if [[ ${#PASSWORD} -eq 0 ]]; then
             local output_length=16
             if [[ ${opts[length]} > 16 ]]; then
@@ -39,38 +49,41 @@ function read_password {
         else
             if [[ ${#PASSWORD} -lt ${opts[length]} ]]; then
                 valid_password=false
-                error "Password must be at least ${opts[length]} characters long."
+                warning "Password must be at least ${opts[length]} characters long."
             fi
             if [[ ${opts[case]} == "yes" ]] && ! ( [[ $PASSWORD =~ [[:upper:]] ]] && [[ $PASSWORD =~ [[:lower:]] ]] ); then
                 valid_password=false
-                error "Password complexity rules require a mixed case password. So make sure to include both lower and uppercase characters in your password."
+                warning "Password complexity rules require a mixed case password. So make sure to include both lower and uppercase characters in your password."
             fi
             if [[ ${opts[symbols]} == "yes" && ! $PASSWORD =~ [[:punct:]] ]]; then
                 valid_password=false
-                error "Password complexity rules require a symbolic character in the password."
+                warning "Password complexity rules require a symbolic character in the password."
             fi
             if [[ ${opts[digits]} == "yes" && ! $PASSWORD =~ [[:digit:]] ]]; then
                 valid_password=false
-                error "Password complexity rules require a digit character in the password."
+                warning "Password complexity rules require a digit character in the password."
             fi
         fi
-        if $valid_password; then
-            while true; do
-                read -s -p "Repeat password (leave blank to re-enter initial password): " _PASSWORD
-                echo
-                if [[ -z $_PASSWORD ]]; then
-                    break
-                elif [[ $_PASSWORD = $PASSWORD ]]; then
-                    return
-                else
-                    error "Repeated password does not match"
-                    error "Try again."
-                fi
-            done
-        else
-            echo
-            echo "Try again with above requirements satisfied."
+        if $valid_password && ${options[print]}; then
+            return
         fi
+        while true; do
+            if ! $valid_password; then
+                echo
+                warning "Password does not meet the above mentioned password complexity rules!\n To ignore this: Repeat the weak password at the next prompt.\n To be safe: press ENTER to try again."
+            fi
+            read -s -p "Repeat password (leave blank to re-enter initial password): " _PASSWORD
+            echo
+            if [[ -z $_PASSWORD ]]; then
+                break
+            elif [[ $_PASSWORD = $PASSWORD ]]; then
+                warning "Accepted a possibly insecure password."
+                return
+            else
+                error "Repeated password does not match"
+                error "Try again."
+            fi
+        done
     done
 }
 
@@ -88,6 +101,14 @@ function generate_pbkdf2 {
     fi
 }
 
+function validate_yes_no {
+    if [[ $1 =~ ^(yes|no)$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 function usage {
     cat <<USAGE
 Usage: $(basename $0) [-l length] [-m length] [-s yes|no] [-c yes|no] [-d yes|no] [-i iter] [-n] [-p] [-u] [-h]
@@ -96,6 +117,7 @@ Flags
     -h            Show this summary
     -n            Disable password complexity check (complexity options will be ignored)
     -u            Generate copy-pastable JSON credentials output for one or more users directly usable in unFTP
+    -p            Don't hide password input
 
 Options
     -l length     Minimum length requirement (default: 12)
@@ -112,8 +134,9 @@ options[length]=12
 options[symbols]=yes
 options[digits]=yes
 options[case]=yes
+options[print]=false
 options[iter]=500000
-while getopts ":l:m:s:c:d:i:nuh" arg; do
+while getopts ":l:m:s:c:d:i:nuph" arg; do
     case $arg in
         h)
             usage
@@ -126,13 +149,19 @@ while getopts ":l:m:s:c:d:i:nuh" arg; do
             options[maxlength]=$OPTARG
             ;;
         s)
+            validate_yes_no $OPTARG || exit_fail "Invalid param for -${arg}: valid values are 'yes' or 'no'"
             options[symbols]=$OPTARG
             ;;
         c)
+            validate_yes_no $OPTARG || exit_fail "Invalid param for -${arg}: valid values are 'yes' or 'no'"
             options[case]=$OPTARG
             ;;
         d)
+            validate_yes_no $OPTARG || exit_fail "Invalid param for -${arg}: valid values are 'yes' or 'no'"
             options[digits]=$OPTARG
+            ;;
+        i)
+            options[iter]=$OPTARG
             ;;
         n)
             options[length]=0
@@ -140,8 +169,8 @@ while getopts ":l:m:s:c:d:i:nuh" arg; do
         u)
             GENERATE_JSON=true
             ;;
-        i)
-            options[iter]=$OPTARG
+        p)
+            options[print]=true
             ;;
         :)
             error "$0: Must supply an argument to -$OPTARG"
