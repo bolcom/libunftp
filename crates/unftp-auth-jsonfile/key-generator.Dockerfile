@@ -1,6 +1,6 @@
 FROM alpine:latest
 
 RUN apk add bash openssl nettle-utils jq pwgen
-COPY files/run.sh /
+COPY files/key-generator.sh /
 
-ENTRYPOINT ["/run.sh"]
+ENTRYPOINT ["/key-generator.sh"]
