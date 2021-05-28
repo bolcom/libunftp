@@ -92,7 +92,7 @@ function generate_pbkdf2 {
     local username=$2
     local salt=$(dd if=/dev/urandom bs=1 count=8 2>/dev/null | hexdump -v -e '"\\" "x" 1/1 "%02x"')
     local b64_salt=$(echo -ne $salt | openssl base64 -A)
-    local pbkdf2=$(echo -n $PASSWORD | nettle-pbkdf2 -i 500000 -l 32 --hex-salt $(echo -n $salt | xxd -p -c 80) --raw |openssl base64 -A)
+    local pbkdf2=$(echo -n $PASSWORD | nettle-pbkdf2 -i 500000 -l 32 --hex-salt $(echo -ne $salt | xxd -p -c 80) --raw |openssl base64 -A)
 
     if [[ -n $username ]]; then
         ENTRY="\"username\": \"$username\", \"pbkdf2_salt\": \"$b64_salt\", \"pbkdf2_key\": \"${pbkdf2}\", \"pbkdf2_iter\": ${options[iter]}"
