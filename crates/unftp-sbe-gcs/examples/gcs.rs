@@ -2,11 +2,18 @@ use clap::{App, Arg};
 use std::{error::Error, path::PathBuf, result::Result};
 use tracing::Level;
 
+// To run this example with the local fake GCS (see tests/resources/gcs_test.sh) instead of Google GCS,
+// after starting fake-gcs-server, run this example with
+//   --fake-gcs-base-url http://localhost:9081
+//   --bucket-name test-bucket
+//   --service-account-key test.json    # create test.json first with `echo unftp_test > test.json`
+
 const BUCKET_NAME: &str = "bucket-name";
 const SERVICE_ACCOUNT_KEY: &str = "service-account-key";
 const FTPS_CERTS_FILE: &str = "ftps-certs-file";
 const FTPS_KEY_FILE: &str = "ftps-key-file";
 const BIND_ADDRESS: &str = "127.0.0.1:2121";
+const FAKE_GCS_BASE_URL: &str = "fake-gcs-base-url";
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
@@ -32,6 +39,15 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .env("LIBUNFTP_SERVICE_ACCOUNT_KEY")
                 .help("The service account key JSON file of the Google Cloud Storage bucket to be used")
                 .required(true),
+        )
+        .arg(
+            Arg::with_name(FAKE_GCS_BASE_URL)
+                .short("u")
+                .long(FAKE_GCS_BASE_URL)
+                .value_name("GCS_BASE_URL")
+                .env("LIBUNFTP_FAKE_GCS_BASE_URL")
+                .help("Alternative GCS Base URL to use for testing.")
+                .required(false),
         )
         .arg(
             Arg::with_name(FTPS_CERTS_FILE)
@@ -60,6 +76,11 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         .value_of(BUCKET_NAME)
         .ok_or("Internal error: use of an undefined command line parameter")?
         .to_owned();
+    let gcs_base_url = if let Some(base_url) = matches.value_of(FAKE_GCS_BASE_URL) {
+        String::from(base_url)
+    } else {
+        String::from("https://www.googleapis.com")
+    };
 
     let service_account_key: Vec<u8> = tokio::fs::read(service_account_key_path).await?;
     if let Some(ftps_certs_file) = matches.value_of(FTPS_CERTS_FILE) {
@@ -67,14 +88,14 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             .value_of(FTPS_KEY_FILE)
             .ok_or("Internal error: use of an undefined command line parameter")?;
         libunftp::Server::new(Box::new(move || {
-            unftp_sbe_gcs::CloudStorage::with_api_base("https://www.googleapis.com", &bucket_name, PathBuf::new(), service_account_key.clone())
+            unftp_sbe_gcs::CloudStorage::with_api_base(&gcs_base_url, &bucket_name, PathBuf::new(), service_account_key.clone())
         }))
         .ftps(ftps_certs_file, ftps_key_file)
         .listen(BIND_ADDRESS)
         .await?;
     } else {
         libunftp::Server::new(Box::new(move || {
-            unftp_sbe_gcs::CloudStorage::with_api_base("https://www.googleapis.com", &bucket_name, PathBuf::new(), service_account_key.clone())
+            unftp_sbe_gcs::CloudStorage::with_api_base(&gcs_base_url, &bucket_name, PathBuf::new(), service_account_key.clone())
         }))
         .listen(BIND_ADDRESS)
         .await?;
