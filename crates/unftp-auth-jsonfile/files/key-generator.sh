@@ -27,9 +27,9 @@ function read_password {
     while true; do
         valid_password=true
         if ${opts[print]}; then
-            read -p "Enter password or press ENTER to generate one: " PASSWORD
+            IFS= read -r -p "Enter password or press ENTER to generate one: " PASSWORD
         else
-            read -s -p "Enter password or press ENTER to generate one: " PASSWORD
+            IFS= read -r -s -p "Enter password or press ENTER to generate one: " PASSWORD
             echo
         fi
         if [[ ${#PASSWORD} -eq 0 ]]; then
@@ -51,15 +51,15 @@ function read_password {
                 valid_password=false
                 warning "Password must be at least ${opts[length]} characters long."
             fi
-            if [[ ${opts[case]} == "yes" ]] && ! ( [[ $PASSWORD =~ [[:upper:]] ]] && [[ $PASSWORD =~ [[:lower:]] ]] ); then
+            if [[ ${opts[case]} == "yes" ]] && ! ( [[ "$PASSWORD" =~ [[:upper:]] ]] && [[ "$PASSWORD" =~ [[:lower:]] ]] ); then
                 valid_password=false
                 warning "Password complexity rules require a mixed case password. So make sure to include both lower and uppercase characters in your password."
             fi
-            if [[ ${opts[symbols]} == "yes" && ! $PASSWORD =~ [[:punct:]] ]]; then
+            if [[ ${opts[symbols]} == "yes" && ! ( "$PASSWORD" =~ [[:punct:]] || "$PASSWORD" =~ " " ) ]]; then
                 valid_password=false
                 warning "Password complexity rules require a symbolic character in the password."
             fi
-            if [[ ${opts[digits]} == "yes" && ! $PASSWORD =~ [[:digit:]] ]]; then
+            if [[ ${opts[digits]} == "yes" && ! "$PASSWORD" =~ [[:digit:]] ]]; then
                 valid_password=false
                 warning "Password complexity rules require a digit character in the password."
             fi
@@ -72,12 +72,14 @@ function read_password {
                 echo
                 warning "Password does not meet the above mentioned password complexity rules!\n To ignore this: Repeat the weak password at the next prompt.\n To be safe: press ENTER to try again."
             fi
-            read -s -p "Repeat password (leave blank to re-enter initial password): " _PASSWORD
+            IFS= read -r -s -p "Repeat password (leave blank to re-enter initial password): " _PASSWORD
             echo
-            if [[ -z $_PASSWORD ]]; then
+            if [[ -z "$_PASSWORD" ]]; then
                 break
-            elif [[ $_PASSWORD = $PASSWORD ]]; then
-                warning "Accepted a possibly insecure password."
+            elif [[ "$_PASSWORD" = "$PASSWORD" ]]; then
+                if ! $valid_password; then
+                    warning "Accepted a possibly insecure password."
+                fi
                 return
             else
                 error "Repeated password does not match"
@@ -92,7 +94,7 @@ function generate_pbkdf2 {
     local username=$2
     local salt=$(dd if=/dev/urandom bs=1 count=8 2>/dev/null | hexdump -v -e '"\\" "x" 1/1 "%02x"')
     local b64_salt=$(echo -ne $salt | openssl base64 -A)
-    local pbkdf2=$(echo -n $PASSWORD | nettle-pbkdf2 -i 500000 -l 32 --hex-salt $(echo -ne $salt | xxd -p -c 80) --raw |openssl base64 -A)
+    local pbkdf2=$(echo -n "$PASSWORD" | nettle-pbkdf2 -i 500000 -l 32 --hex-salt $(echo -ne $salt | xxd -p -c 80) --raw |openssl base64 -A)
 
     if [[ -n $username ]]; then
         ENTRY="\"username\": \"$username\", \"pbkdf2_salt\": \"$b64_salt\", \"pbkdf2_key\": \"${pbkdf2}\", \"pbkdf2_iter\": ${options[iter]}"
@@ -190,7 +192,7 @@ if [[ -z $GENERATE_JSON ]]; then
     generate_pbkdf2 options
     exit 0
 else
-    read -p "Enter username or press ENTER to finish: " USERNAME
+    read -r -p "Enter username or press ENTER to finish: " USERNAME
     if [[ -z $USERNAME ]]; then
         exit 0
     fi
@@ -199,7 +201,7 @@ else
     json="[ { $ENTRY }"
     while [[ -n $USERNAME ]]; do
         jq <<<"$json ]"
-        read -p "Enter username or press ENTER to finish: " USERNAME
+        read -r -p "Enter username or press ENTER to finish: " USERNAME
         if [[ -z $USERNAME ]]; then
             break
         fi
