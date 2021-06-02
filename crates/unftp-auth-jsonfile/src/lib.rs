@@ -69,6 +69,18 @@
 //! ]
 //! ```
 //!
+//! # Preventing unauthorized access with allow lists
+//!
+//! ```json
+//! [
+//!   {
+//!     "username": "bob",
+//!     "password": "it is me",
+//!     "allowed_ip_ranges": ["192.168.178.0/24", "127.0.0.0/8"]
+//!   },
+//! ]
+//! ```
+//!
 //! # Using it with libunftp
 //!
 //! Use [JsonFileAuthenticator::from_file](crate::JsonFileAuthenticator::from_file) to load the JSON structure directly from a file.
@@ -96,14 +108,14 @@ enum Credentials {
     Plaintext {
         username: String,
         password: String,
-        ip_ranges: Option<Vec<String>>,
+        allowed_ip_ranges: Option<Vec<String>>,
     },
     Pbkdf2 {
         username: String,
         pbkdf2_salt: String,
         pbkdf2_key: String,
         pbkdf2_iter: NonZeroU32,
-        ip_ranges: Option<Vec<String>>,
+        allowed_ip_ranges: Option<Vec<String>>,
     },
 }
 
@@ -128,7 +140,7 @@ enum Password {
 #[derive(Clone, Debug)]
 struct UserCreds {
     pub password: Password,
-    pub ip_ranges: Option<IpRange<Ipv4Net>>,
+    pub allowed_ip_ranges: Option<IpRange<Ipv4Net>>,
 }
 
 impl JsonFileAuthenticator {
@@ -147,11 +159,15 @@ impl JsonFileAuthenticator {
 
     fn list_entry_to_map_entry(user_info: Credentials) -> Result<(String, UserCreds), Box<dyn std::error::Error>> {
         let map_entry = match user_info {
-            Credentials::Plaintext { username, password, ip_ranges } => (
+            Credentials::Plaintext {
+                username,
+                password,
+                allowed_ip_ranges: ip_ranges,
+            } => (
                 username.clone(),
                 UserCreds {
                     password: Password::PlainPassword { password },
-                    ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
+                    allowed_ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
                 },
             ),
             Credentials::Pbkdf2 {
@@ -159,7 +175,7 @@ impl JsonFileAuthenticator {
                 pbkdf2_salt,
                 pbkdf2_key,
                 pbkdf2_iter,
-                ip_ranges,
+                allowed_ip_ranges: ip_ranges,
             } => (
                 username.clone(),
                 UserCreds {
@@ -180,7 +196,7 @@ impl JsonFileAuthenticator {
                             .map_err(|_| "Could not convert to Bytes")?,
                         pbkdf2_iter,
                     },
-                    ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
+                    allowed_ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
                 },
             ),
         };
@@ -217,7 +233,7 @@ impl JsonFileAuthenticator {
     }
 
     fn ip_ok(creds: &libunftp::auth::Credentials, actual_creds: &UserCreds) -> bool {
-        match &actual_creds.ip_ranges {
+        match &actual_creds.allowed_ip_ranges {
             Some(allowed) => match creds.source_ip {
                 std::net::IpAddr::V4(ref ip) => allowed.contains(ip),
                 _ => false,
@@ -282,7 +298,7 @@ mod test {
   {
     "username": "dan",
     "password": "",
-    "ip_ranges": ["127.0.0.1/24"]
+    "allowed_ip_ranges": ["127.0.0.1/8"]
   }
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();

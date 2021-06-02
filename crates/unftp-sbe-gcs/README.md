@@ -5,7 +5,6 @@
 [![Crate License](https://img.shields.io/crates/l/unftp-sbe-gcs.svg)](https://crates.io/crates/unftp-sbe-gcs)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
-
 An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files in [Google Cloud Storage](https://cloud.google.com/storage). 
 Please refer to the documentation and the examples directory for usage instructions.
 
