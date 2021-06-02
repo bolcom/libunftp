@@ -43,6 +43,7 @@ mod syst;
 mod type_;
 mod user;
 
+pub use self::md5::Md5;
 pub use abor::Abor;
 pub use acct::Acct;
 pub use allo::Allo;
@@ -54,7 +55,6 @@ pub use dele::Dele;
 pub use feat::Feat;
 pub use help::Help;
 pub use list::List;
-pub use md5::Md5;
 pub use mdtm::Mdtm;
 pub use mkd::Mkd;
 pub use mode::{Mode, ModeParam};
