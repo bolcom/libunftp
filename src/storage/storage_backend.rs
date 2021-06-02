@@ -4,8 +4,8 @@ use super::error::Error;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
-use crypto::{digest::Digest, md5::Md5};
 use itertools::Itertools;
+use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},
     path::Path,
@@ -187,10 +187,10 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
             if n == 0 {
                 break;
             }
-            md5sum.input(&buffer[0..n]);
+            md5sum.update(&buffer[0..n]);
         }
 
-        Ok(md5sum.result_str())
+        Ok(format!("{:x}", md5sum.finalize()))
     }
 
     /// Returns the list of files in the given directory.
