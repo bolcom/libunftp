@@ -33,10 +33,9 @@ members = [
 async-trait = "0.1.50"
 bitflags = "1.2.1"
 bytes = "1.0.1"
-chrono = {version = "0.4.19", features = ["serde"]}
+chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 derive_more = { version = "0.99.14", features = ["display"] }
 futures = {version = "0.3.15", features = ["std"]}
-itertools = "0.10.0"
 lazy_static = "1.4.0"
 md-5 = "0.9.1"
 moka = "0.3.0"
@@ -47,10 +46,10 @@ rustls = "0.19.1"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
 thiserror = "1.0.25"
-tokio = { version = "1.6.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
+tokio = { version = "1.6.0", features = ["rt", "net", "sync", "io-util", "time"] }
 tokio-stream = "0.1.6"
 tokio-rustls = { version = "0.22.0" }
-tokio-util = { version = "0.6.7", features=["codec", "compat"] }
+tokio-util = { version = "0.6.7", features = ["codec"] }
 tracing = "0.1.26"
 tracing-attributes = "0.1.15"
 tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures-03"]}
@@ -58,5 +57,5 @@ uuid = { version = "0.8.2", features = ["v4"] }
 
 [dev-dependencies]
 pretty_assertions = "0.7.1"
-tokio = { version = "1.5.0", features = ["rt-multi-thread"]}
+tokio = { version = "1.5.0", features = ["macros", "rt-multi-thread"]}
 unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs"}
