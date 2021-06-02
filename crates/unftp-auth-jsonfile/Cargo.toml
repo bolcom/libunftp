@@ -19,19 +19,20 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.50"
+base64 = "0.13.0"
+bytes = "1.0.1"
+ipnet = "2.3.0"
+iprange = "0.6.4"
 libunftp = { version="0.17.4", path="../../"}
-unftp-sbe-fs = { version="0.1", path="../unftp-sbe-fs"}
+ring = "0.16.20"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = { version = "1.0.64" }
 tokio = { version = "1.5.0", features = ["rt", "time"]}
 tracing = "0.1.25"
 tracing-attributes = "0.1.15"
-ring = "0.16.20"
-base64 = "0.13.0"
-bytes = "1.0.1"
+unftp-sbe-fs = { version="0.1", path="../unftp-sbe-fs"}
 valid = "0.3.1"
-iprange = "0.6.4"
-ipnet = "2.3.0"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
+tokio = { version = "1.5.0", features = ["macros"]}

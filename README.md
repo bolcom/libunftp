@@ -21,6 +21,31 @@ more flexible than traditional FTP servers and a perfect match for the cloud.
 It runs on top of the [Tokio](https://tokio.rs) asynchronous run-time and tries to make use of Async IO as much as 
 possible.
 
+Feature highlights:
+
+* 39 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
+* Ability to implement own storage back-ends
+* Ability to implement own authentication back-ends
+* Explicit FTPS (TLS)
+* Mutual TLS (Client certificates)
+* TLS session resumption
+* Prometheus integration
+* Structured Logging
+* [Proxy Protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/) support
+* Automatic session timeouts
+* Per user IP allow lists
+
+Known storage back-ends:
+
+* [unftp-sbe-fs](https://crates.io/crates/unftp-sbe-fs) - Stores files on the local filesystem 
+* [unftp-sbe-gcs](https://crates.io/crates/unftp-sbe-gcs) - Stores files in Google Cloud Storage
+
+Known authentication back-ends:
+
+* [unftp-auth-jsonfile](https://crates.io/crates/unftp-auth-jsonfile) - Authenticates against JSON text.
+* [unftp-auth-pam](https://crates.io/crates/unftp-auth-pam) - Authenticates via [PAM](https://en.wikipedia.org/wiki/Linux_PAM).
+* [unftp-auth-rest](https://crates.io/crates/unftp-auth-rest) - Consumes an HTTP API to authenticate.
+
 ## Prerequisites
 
 You'll need [Rust](https://rust-lang.org) 1.41 or higher to build libunftp.
@@ -73,6 +98,7 @@ For more help refer to:
 - the [examples](./examples) directory.
 - the [API Documentation](https://docs.rs/libunftp).
 - [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
+- this [blog post](https://blog.abstractinvoke.com/05-07-unftp.html) about libunftp and unFTP.
 
 ## Getting help and staying informed
 

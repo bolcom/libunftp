@@ -19,6 +19,7 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.50"
+base64 = "0.13.0"
 bytes = "1.0.1"
 chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 futures = {version = "0.3.14", features = ["std"]}
@@ -27,6 +28,8 @@ hyper-rustls = { version = "0.22.1"}
 libunftp = { version="0.17.4", path="../../"}
 mime = {version = "0.3.16"}
 percent-encoding = { version = "2.1.0"}
+serde = { version = "1.0.125", features = ["derive"] }
+serde_json = { version = "1.0.64"}
 tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.5"
 tokio-util = { version = "0.6.6", features=["codec", "compat"] }
@@ -34,22 +37,19 @@ tracing = "0.1.25"
 tracing-attributes = "0.1.15"
 tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures-03"]}
 yup-oauth2 = {version = "5.0.3"}
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = { version = "1.0.64"}
-base64 = "0.13.0"
 
 [dev-dependencies]
 async_ftp = "5.0.0"
 clap = "2.33.3"
-slog-term = "2.8.0"
-slog-async = "2.6.0"
+lazy_static = "1.4.0"
+more-asserts = "0.2.1"
+path_abs = "0.5.0"
 pretty_assertions = "0.7.1"
 pretty_env_logger = "0.4.0"
+slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
+slog-async = "2.6.0"
+slog-stdlog = "4.1.0"
+slog-term = "2.8.0"
 tempfile = "3.2.0"
 tokio = { version = "1.5.0", features = ["macros", "rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
-more-asserts = "0.2.1"
-lazy_static = "1.4.0"
-path_abs = "0.5.0"
-slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
-slog-stdlog = "4.1.0"
