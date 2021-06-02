@@ -22,7 +22,7 @@ async-trait = "0.1.50"
 base64 = "0.13.0"
 bytes = "1.0.1"
 chrono = { version = "0.4.19", default-features = false, features = ["std"] }
-futures = {version = "0.3.14", features = ["std"]}
+futures = { version = "0.3.15", default-features = false, features = ["std"] }
 hyper = { version = "0.14.7", features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1"}
 libunftp = { version="0.17.4", path="../../"}

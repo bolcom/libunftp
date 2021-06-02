@@ -35,7 +35,7 @@ bitflags = "1.2.1"
 bytes = "1.0.1"
 chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 derive_more = { version = "0.99.14", features = ["display"] }
-futures = {version = "0.3.15", features = ["std"]}
+futures = { version = "0.3.15", default-features = false, features = ["std"] }
 lazy_static = "1.4.0"
 md-5 = "0.9.1"
 moka = "0.3.0"

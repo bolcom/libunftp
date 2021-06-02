@@ -9,12 +9,13 @@ use async_trait::async_trait;
 /// # Example
 ///
 /// ```rust
+/// # #[tokio::main]
+/// # async fn main() {
 /// use libunftp::auth::{Authenticator, AnonymousAuthenticator, DefaultUser};
-/// use futures::future::Future;
-/// use async_trait::async_trait;
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(futures::executor::block_on(my_auth.authenticate("Finn", &"I ❤️ PB".into())).unwrap(), DefaultUser{});
+/// assert_eq!(my_auth.authenticate("Finn", &"I ❤️ PB".into()).await.unwrap(), DefaultUser{});
+/// # }
 /// ```
 ///
 #[derive(Debug)]
