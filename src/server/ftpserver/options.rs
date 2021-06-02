@@ -34,6 +34,12 @@ pub enum PassiveHost {
 
 impl Eq for PassiveHost {}
 
+impl Default for PassiveHost {
+    fn default() -> Self {
+        PassiveHost::FromConnection
+    }
+}
+
 impl From<Ipv4Addr> for PassiveHost {
     fn from(ip: Ipv4Addr) -> Self {
         PassiveHost::Ip(ip)
