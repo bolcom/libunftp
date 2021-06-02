@@ -1,5 +1,5 @@
 /// A reply to the FTP client
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
     None,
     CodeAndMsg { code: ReplyCode, msg: String },
