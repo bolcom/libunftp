@@ -27,7 +27,7 @@ hyper-rustls = { version = "0.22.1"}
 libunftp = { version="0.17.4", path="../../"}
 mime = {version = "0.3.16"}
 percent-encoding = { version = "2.1.0"}
-tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
+tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.5"
 tokio-util = { version = "0.6.6", features=["codec", "compat"] }
 tracing = "0.1.25"
@@ -46,7 +46,7 @@ slog-async = "2.6.0"
 pretty_assertions = "0.7.1"
 pretty_env_logger = "0.4.0"
 tempfile = "3.2.0"
-tokio = { version = "1.5.0", features = ["rt-multi-thread"]}
+tokio = { version = "1.5.0", features = ["macros", "rt-multi-thread"]}
 tracing-subscriber = "0.2.15"
 more-asserts = "0.2.1"
 lazy_static = "1.4.0"
