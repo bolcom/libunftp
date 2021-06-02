@@ -33,9 +33,8 @@ serde_json = { version = "1.0.64"}
 tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.5"
 tokio-util = { version = "0.6.6", features=["codec", "compat"] }
-tracing = "0.1.25"
+tracing = { version = "0.1.26", default-features = false }
 tracing-attributes = "0.1.15"
-tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures-03"]}
 yup-oauth2 = {version = "5.0.3"}
 
 [dev-dependencies]
