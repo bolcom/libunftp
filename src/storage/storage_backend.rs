@@ -4,7 +4,6 @@ use super::error::Error;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
-use itertools::Itertools;
 use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},
@@ -208,7 +207,7 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     {
         let list = self.list(user, path).await?;
 
-        let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi).into_bytes()).concat();
+        let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi)).collect::<String>().into_bytes();
 
         Ok(std::io::Cursor::new(file_infos))
     }
@@ -228,9 +227,10 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
             .iter()
             .map(|file| {
                 let info = file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("");
-                format!("{}\r\n", info).into_bytes()
+                format!("{}\r\n", info)
             })
-            .concat();
+            .collect::<String>()
+            .into_bytes();
         Ok(std::io::Cursor::new(bytes))
     }
 
