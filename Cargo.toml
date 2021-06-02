@@ -50,7 +50,7 @@ thiserror = "1.0.25"
 tokio = { version = "1.6.0", features = ["rt", "net", "sync", "io-util", "macros", "time", "fs"]}
 tokio-stream = "0.1.6"
 tokio-rustls = { version = "0.22.0" }
-tokio-util = { version = "0.6.7", features=["codec", "compat"] }
+tokio-util = { version = "0.6.7", features = ["codec"] }
 tracing = "0.1.26"
 tracing-attributes = "0.1.15"
 tracing-futures = { version = "0.2.5", features = ["std", "std-future", "futures-03"]}
