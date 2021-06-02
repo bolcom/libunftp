@@ -20,7 +20,7 @@ readme = "README.md"
 [dependencies]
 async-trait = "0.1.50"
 bytes = "1.0.1"
-chrono = {version = "0.4.19", features = ["serde"]}
+chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 futures = {version = "0.3.14", features = ["std"]}
 hyper = { version = "0.14.7", features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1"}
