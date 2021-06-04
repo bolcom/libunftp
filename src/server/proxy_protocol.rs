@@ -3,13 +3,12 @@ use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
-use rand::{rngs::OsRng, RngCore};
 use std::net::SocketAddr;
 use std::{collections::HashMap, net::IpAddr, ops::Range};
 use tokio::{io::AsyncReadExt, sync::Mutex};
 
 lazy_static! {
-    static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
+    static ref OS_RNG: Mutex<()> = Mutex::new(());
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -200,10 +199,16 @@ where
     pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
-        let mut rng = OS_RNG.lock().await;
+        let lock = OS_RNG.lock().await;
         // change this to a "shuffle" method later on, to make sure we tried all available ports
         for _ in 1..10 {
-            let port = rng.next_u32() % rng_length as u32 + self.port_range.start as u32;
+            let random_u32 = {
+                let mut data = [0; 4];
+                getrandom::getrandom(&mut data).expect("Error generating random free port to reserve");
+                u32::from_ne_bytes(data)
+            };
+
+            let port = random_u32 % rng_length as u32 + self.port_range.start as u32;
             let session = session_arc.lock().await;
             if session.destination.is_some() {
                 let hash = construct_proxy_hash_key(&session.source.ip(), port as u16);
@@ -214,6 +219,8 @@ where
                 }
             }
         }
+        drop(lock);
+
         // out of tries
         slog::warn!(self.logger, "Out of tries reserving next free port!");
         Err(ProxyProtocolError::MaxRetriesError)
