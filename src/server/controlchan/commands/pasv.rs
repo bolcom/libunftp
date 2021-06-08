@@ -27,15 +27,11 @@ use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     prelude::*,
 };
-use lazy_static::lazy_static;
 use std::net::Ipv4Addr;
 use std::{io, net::SocketAddr, ops::Range};
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::net::TcpListener;
 
 const BIND_RETRIES: u8 = 10;
-lazy_static! {
-    static ref OS_RNG: Mutex<()> = Mutex::new(());
-}
 
 #[derive(Debug)]
 pub struct Pasv {}
@@ -51,7 +47,6 @@ impl Pasv {
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
-        let lock = OS_RNG.lock().await;
         for _ in 1..BIND_RETRIES {
             let random_u32 = {
                 let mut data = [0; 4];
@@ -65,7 +60,6 @@ impl Pasv {
                 break;
             }
         }
-        drop(lock);
 
         listener
     }

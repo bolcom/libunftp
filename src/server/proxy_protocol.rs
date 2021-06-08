@@ -1,15 +1,10 @@
 use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
-use lazy_static::lazy_static;
 use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
 use std::net::SocketAddr;
 use std::{collections::HashMap, net::IpAddr, ops::Range};
-use tokio::{io::AsyncReadExt, sync::Mutex};
-
-lazy_static! {
-    static ref OS_RNG: Mutex<()> = Mutex::new(());
-}
+use tokio::io::AsyncReadExt;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ProxyMode {
@@ -199,7 +194,6 @@ where
     pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
-        let lock = OS_RNG.lock().await;
         // change this to a "shuffle" method later on, to make sure we tried all available ports
         for _ in 1..10 {
             let random_u32 = {
@@ -219,7 +213,6 @@ where
                 }
             }
         }
-        drop(lock);
 
         // out of tries
         slog::warn!(self.logger, "Out of tries reserving next free port!");
