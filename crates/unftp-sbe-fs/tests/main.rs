@@ -209,9 +209,7 @@ async fn get() {
 
     // Write some random data to our file
     let mut data = vec![0; 1024];
-    for x in data.iter_mut() {
-        *x = rand::random();
-    }
+    getrandom::getrandom(&mut data).expect("Error generating random bytes");
     f.write_all(&data).unwrap();
 
     // Retrieve the remote file

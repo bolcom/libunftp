@@ -27,7 +27,7 @@ regex = "1.4.6"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = { version = "1.0.64"}
 tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "time"] }
-tracing = "0.1.25"
+tracing = { version = "0.1.26", default-features = false }
 tracing-attributes = "0.1.15"
 unftp-sbe-fs = { version="0.1", path="../unftp-sbe-fs"}
 

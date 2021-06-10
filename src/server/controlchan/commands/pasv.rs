@@ -27,16 +27,11 @@ use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     prelude::*,
 };
-use lazy_static::lazy_static;
-use rand::{rngs::OsRng, RngCore};
 use std::net::Ipv4Addr;
 use std::{io, net::SocketAddr, ops::Range};
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::net::TcpListener;
 
 const BIND_RETRIES: u8 = 10;
-lazy_static! {
-    static ref OS_RNG: Mutex<OsRng> = Mutex::new(OsRng);
-}
 
 #[derive(Debug)]
 pub struct Pasv {}
@@ -52,9 +47,14 @@ impl Pasv {
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
-        let mut rng = OS_RNG.lock().await;
         for _ in 1..BIND_RETRIES {
-            let port = rng.next_u32() % rng_length as u32 + passive_ports.start as u32;
+            let random_u32 = {
+                let mut data = [0; 4];
+                getrandom::getrandom(&mut data).expect("Error generating random port");
+                u32::from_ne_bytes(data)
+            };
+
+            let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
             listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
             if listener.is_ok() {
                 break;

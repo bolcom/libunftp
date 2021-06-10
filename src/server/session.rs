@@ -22,8 +22,11 @@ pub struct TraceId(u64);
 
 impl TraceId {
     pub fn new() -> Self {
+        let mut id = [0; 8];
         // For now keep it simple. Later we may need something more sophisticated
-        TraceId(rand::random())
+        getrandom::getrandom(&mut id).expect("Error generating random TraceId");
+
+        TraceId(u64::from_ne_bytes(id))
     }
 }
 
