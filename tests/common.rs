@@ -1,21 +1,19 @@
+use async_trait::async_trait;
 use lazy_static::*;
+use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use unftp_auth_jsonfile::JsonFileAuthenticator;
 use unftp_sbe_fs::ServerExt;
 
 lazy_static! {
     static ref CONSUMERS: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
-pub async fn run_with_json_auth() {
-    let addr = "127.0.0.1:2121";
+pub async fn run_with_auth() {
+    let addr = "127.0.0.1:2150";
     let server = libunftp::Server::with_fs(std::env::temp_dir())
-        .authenticator(Arc::new(
-            JsonFileAuthenticator::from_json("[{\"username\":\"test\",\"password\":\"test\"}]").unwrap(),
-        ))
+        .authenticator(Arc::new(TestAuthenticator {}))
         .greeting("Welcome test");
-    //    println!("Starting ftp server on {}", addr);
     server.listen(addr).await.unwrap();
 }
 
@@ -24,7 +22,7 @@ pub async fn initialize() {
     let mut lock = count.lock().await;
     *lock += 1;
     if *lock == 1 {
-        tokio::spawn(run_with_json_auth());
+        tokio::spawn(run_with_auth());
     }
     drop(lock);
 }
@@ -43,5 +41,25 @@ pub async fn finalize() {
             drop(lock);
             break;
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct TestAuthenticator;
+
+#[async_trait]
+impl Authenticator<DefaultUser> for TestAuthenticator {
+    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+        return match (username, &creds.password) {
+            ("test", Some(pwd)) => {
+                if pwd == "test" {
+                    Ok(DefaultUser {})
+                } else {
+                    Err(AuthenticationError::BadPassword)
+                }
+            }
+            ("test", None) => Err(AuthenticationError::BadPassword),
+            _ => Err(AuthenticationError::BadUser),
+        };
     }
 }

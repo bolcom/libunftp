@@ -33,7 +33,7 @@ async fn send_to_server(buffer: &str, stream: &TcpStream) {
 async fn tcp_connect() -> Result<TcpStream, Error> {
     let mut errcount: i32 = 0;
     loop {
-        match TcpStream::connect("127.0.0.1:2121").await {
+        match TcpStream::connect("127.0.0.1:2150").await {
             Ok(s) => return Ok(s),
             Err(e) => {
                 if errcount > 2 {
