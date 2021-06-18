@@ -62,7 +62,7 @@ where
                     Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials")),
                 }
             }
-            (SessionState::New, None, _) | (SessionState::WaitPass, None, _) | (SessionState::New, Some(_), false) => {
+            (SessionState::New, None, _) | (SessionState::New, Some(_), false) => {
                 let user = std::str::from_utf8(&self.username)?;
                 session.username = Some(user.to_string());
                 session.state = SessionState::WaitPass;

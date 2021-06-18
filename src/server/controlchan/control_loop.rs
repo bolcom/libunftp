@@ -351,7 +351,11 @@ where
                 session.state = WaitCmd;
                 Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
             }
-            AuthFailed => Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed")),
+            AuthFailed => {
+                let mut session = self.session.lock().await;
+                session.state = New; // According to RFC 959, a PASS command MUST precede a USER command
+                Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed"))
+            }
             StorageError(error_type) => match error_type.kind() {
                 ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
                 ErrorKind::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
