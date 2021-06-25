@@ -264,10 +264,9 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             Err(AuthenticationError::BadUser)
         };
 
-        match res {
-            Ok(_) | Err(AuthenticationError::BadUser) => {}
-            _ => sleep(Duration::from_millis(1500)).await,
-        };
+        if res.is_err() {
+            sleep(Duration::from_millis(1500)).await;
+        }
 
         res
     }
