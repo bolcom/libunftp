@@ -47,6 +47,10 @@ pub enum AuthenticationError {
     #[error("client IP address not allowed")]
     IpDisallowed,
 
+    /// The certificate CN is not allowed for this user
+    #[error("certificate does not match allowed CN for this user")]
+    CnDisallowed,
+
     /// Another issue occurred during the authentication process.
     #[error("authentication error: {0}: {1:?}")]
     ImplPropagated(String, #[source] Option<BoxError>),
@@ -94,6 +98,21 @@ impl From<&str> for Credentials {
 /// Contains a single DER-encoded X.509 client certificate.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ClientCert(pub Vec<u8>);
+
+use x509_parser::prelude::parse_x509_certificate;
+
+impl ClientCert {
+    /// Returns true if the Common Name from the client certificate matches the allowed_cn
+    pub fn verify_cn(&self, allowed_cn: &str) -> Result<bool, std::io::Error> {
+        let client_cert = parse_x509_certificate(&self.0);
+        let subject = match client_cert {
+            Ok(c) => c.1.subject().to_string(),
+            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        };
+
+        Ok(subject.contains(allowed_cn))
+    }
+}
 
 impl std::fmt::Debug for ClientCert {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
