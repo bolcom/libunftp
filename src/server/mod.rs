@@ -1,4 +1,4 @@
-//! Contains the [`Server`](crate::Server) struct that is used to configure and control a FTP server instance.
+//! Contains the [`Server`](crate::Server) struct that is used to configure and control an FTP server instance.
 
 mod chancomms;
 pub(crate) mod controlchan;

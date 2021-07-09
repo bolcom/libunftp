@@ -1,6 +1,6 @@
 [package]
 name = "unftp-sbe-fs"
-version = "0.1.1"
+version = "0.2.0"
 description = "A storage back-end for libunftp, storing files on local disk"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -21,10 +21,10 @@ readme = "README.md"
 [dependencies]
 async-trait = "0.1.50"
 futures = { version = "0.3.15", default-features = false, features = ["std"] }
-libunftp = { version="0.17.4", path="../../"}
-path_abs = "0.5.0"
-tokio = { version = "1.5.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
-tokio-stream = "0.1.5"
+libunftp = { version="0.18.0", path="../../"}
+path_abs = "0.5.1"
+tokio = { version = "1.8.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio-stream = "0.1.7"
 tracing = { version = "0.1.26", default-features = false }
 tracing-attributes = "0.1.15"
 
@@ -32,11 +32,11 @@ tracing-attributes = "0.1.15"
 async_ftp = "5.0.0"
 clap = "2.33.3"
 more-asserts = "0.2.1"
-pretty_assertions = "0.7.1"
+pretty_assertions = "0.7.2"
 pretty_env_logger = "0.4.0"
 slog-async = "2.6.0"
 slog-term = "2.8.0"
 tempfile = "3.2.0"
-tokio = { version = "1.5.0", features = ["macros", "rt-multi-thread"]}
-tracing-subscriber = "0.2.15"
+tokio = { version = "1.8.1", features = ["macros", "rt-multi-thread"]}
+tracing-subscriber = "0.2.19"
 getrandom = "0.2"

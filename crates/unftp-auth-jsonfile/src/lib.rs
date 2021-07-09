@@ -1,6 +1,8 @@
-//! This crate implements a libunftp `Authenticator` that authenticates against credentials in a JSON formatted file.
+//! This crate implements a [libunftp](https://docs.rs/libunftp/latest/libunftp) `Authenticator`
+//! that authenticates against credentials in a JSON format.
 //!
-//! It supports both plaintext as well as [PBKDF2](https://tools.ietf.org/html/rfc2898#section-5.2) encoded passwords.
+//! It supports both plaintext as well as [PBKDF2](https://tools.ietf.org/html/rfc2898#section-5.2)
+//! encoded passwords.
 //!
 //! # Plaintext example
 //!
@@ -19,7 +21,8 @@
 //! Currently only HMAC_SHA256 is supported by libunftp (more will be supported later).
 //!
 //! There are various tools that can be used to generate the key.
-//! In this example, we use [nettle-pbkdf2](http://www.lysator.liu.se/~nisse/nettle/) which can generate the HMAC_SHA256.
+//!
+//! In this example we show two ways to generate the PBKDF2. First we show how to use the common tool [nettle-pbkdf2](http://www.lysator.liu.se/~nisse/nettle/) directly.
 //!
 //! Generate a secure salt:
 //! ```sh
@@ -27,7 +30,8 @@
 //! ```
 //!
 //! Generate the base64 encoded PBKDF2 key, to be copied into the `pbkdf2_key` field of the JSON structure.
-//! Make sure however to not exceed the output length of the digest algorithm (256 bit, 32 bytes in our case):
+//!
+//! When using `nettle` directly, make sure not to exceed the output length of the digest algorithm (256 bit, 32 bytes in our case):
 //! ```sh
 //! echo -n "mypassword" | nettle-pbkdf2 -i 500000 -l 32 --hex-salt $(echo -n $salt | xxd -p -c 80) --raw |openssl base64 -A
 //! ```
@@ -37,7 +41,18 @@
 //! echo -n $salt | openssl base64 -A
 //! ```
 //!
-//! Now write these to the JSON file, as seen below. Make sure that `pbkdf2_iter` matches the iterations (`-i`) used with `nettle-pbkdf2`.
+//! Alternatively to using `nettle` directly, you may use our convenient docker image: bolcom/unftp-key-generator
+//!
+//! ```sh
+//! docker run -ti bolcom/unftp-key-generator -h
+//! ```
+//!
+//! Running it without options, will generate a PBKDF2 key and a random salt from a given password.
+//! If no password is entered, a secure password will be generated with default settings for the password complexity and number of iterations.
+//!
+//! Now write these to the JSON file, as seen below.
+//! If you use our unftp-key-generator, you can use the `-u` switch, to generate the JSON output directly.
+//! Otherwise, make sure that `pbkdf2_iter` in the example below, matches the iterations (`-i`) used with `nettle-pbkdf2`.
 //!
 //! ```json
 //! [
@@ -69,6 +84,13 @@
 //! ]
 //! ```
 //!
+//! # Using it with libunftp
+//!
+//! Use [JsonFileAuthenticator::from_file](crate::JsonFileAuthenticator::from_file) to load the JSON structure directly from a file.
+//! See the example `examples/jsonfile_auth.rs`.
+//!
+//! Alternatively use another source for your JSON credentials, and use [JsonFileAuthenticator::from_json](crate::JsonFileAuthenticator::from_json) instead.
+//!
 //! # Preventing unauthorized access with allow lists
 //!
 //! ```json
@@ -81,12 +103,46 @@
 //! ]
 //! ```
 //!
-//! # Using it with libunftp
+//! # Per user certificate validation
 //!
-//! Use [JsonFileAuthenticator::from_file](crate::JsonFileAuthenticator::from_file) to load the JSON structure directly from a file.
-//! See the example `examples/jsonfile_auth.rs`.
+//! The JSON authenticator can also check that the CN of a client certificate matches a certain
+//! string or substring. Furthermore, password-less; certificate only; authentication can be configured
+//! per user when libunftp is configured to use TLS and specifically also configured to request or
+//! require a client certificate through the [Server.ftps_client_auth](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.ftps_client_auth)
+//! method. For this to work correctly a trust store with the root certificate also needs to be configured
+//! with [Server.ftps_trust_store](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.ftps_trust_store).
 //!
-//! Alternatively use another source for your JSON credentials, and use [JsonFileAuthenticator::from_json](crate::JsonFileAuthenticator::from_json) instead.
+//! Given this example configuration:
+//!
+//! ```json
+//! [
+//!   {
+//!    "username": "eve",
+//!    "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
+//!    "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
+//!    "pbkdf2_iter": 500000,
+//!    "client_cert": {
+//!      "allowed_cn": "i.am.trusted"
+//!    }
+//!  },
+//!  {
+//!    "username": "freddie",
+//!    "client_cert": {}
+//!  },
+//!  {
+//!    "username": "santa",
+//!    "password": "clara",
+//!    "client_cert": {}
+//!  }
+//! ]
+//! ```
+//!
+//! we can see that Eve needs to present a valid client certificate with a CN matching "i.am.trusted"
+//! and then also needs to provide the correct password. Freddie just needs to present a valid
+//! certificate that is signed by a certificate in the trust store. No password is required for
+//! him when logging in. Santa needs to provide a valid certificate and password but the CN can
+//! be anything.
+//!
 
 use async_trait::async_trait;
 use bytes::Bytes;

@@ -61,7 +61,7 @@ where
     pub sitemd5: SiteMd5,
 }
 
-/// Does TCP processing when a FTP client connects
+/// Does TCP processing when an FTP client connects
 #[tracing_attributes::instrument]
 pub async fn spawn<Storage, User>(
     config: Config<Storage, User>,

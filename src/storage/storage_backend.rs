@@ -138,11 +138,10 @@ where
     }
 }
 
-/// The `StorageBackend` trait defines a common interface to different storage backends for our FTP
-/// [`Server`], e.g. for a [`Filesystem`] or Google Cloud Storage.
+/// The `StorageBackend` trait can be implemented to create custom FTP virtual file systems. Once
+/// implemented it needs to be registered with the [`Server`] on construction.
 ///
 /// [`Server`]: ../struct.Server.html
-/// [`filesystem`]: filesystem/struct.Filesystem.html
 #[async_trait]
 pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
