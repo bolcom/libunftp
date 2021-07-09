@@ -22,7 +22,7 @@ fn fs_stat() {
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
     let filename = path.file_name().unwrap();
-    let my_meta = rt.block_on(fs.metadata(&Some(DefaultUser {}), filename)).unwrap();
+    let my_meta = rt.block_on(fs.metadata(&DefaultUser {}, filename)).unwrap();
 
     assert_eq!(meta.is_dir(), my_meta.is_dir());
     assert_eq!(meta.is_file(), my_meta.is_file());
@@ -46,7 +46,7 @@ fn fs_list() {
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
-    let my_list = rt.block_on(fs.list(&Some(DefaultUser {}), "/")).unwrap();
+    let my_list = rt.block_on(fs.list(&DefaultUser {}, "/")).unwrap();
 
     assert_eq!(my_list.len(), 1);
 
@@ -71,7 +71,7 @@ fn fs_list_fmt() {
     let fs = Filesystem::new(&root.path());
 
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
-    let my_list = rt.block_on(fs.list_fmt(&Some(DefaultUser {}), "/")).unwrap();
+    let my_list = rt.block_on(fs.list_fmt(&DefaultUser {}, "/")).unwrap();
 
     let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
 
@@ -94,7 +94,7 @@ fn fs_get() {
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = Runtime::new().unwrap();
-    let mut my_file = rt.block_on(fs.get(&Some(DefaultUser {}), filename, 0)).unwrap();
+    let mut my_file = rt.block_on(fs.get(&DefaultUser {}, filename, 0)).unwrap();
     let mut my_content = Vec::new();
     rt.block_on(async move {
         let r = tokio::io::copy(&mut my_file, &mut my_content).await;
@@ -117,7 +117,7 @@ fn fs_put() {
     // to completion
     let rt = Runtime::new().unwrap();
 
-    rt.block_on(fs.put(&Some(DefaultUser {}), orig_content.as_ref(), "greeting.txt", 0))
+    rt.block_on(fs.put(&DefaultUser {}, orig_content.as_ref(), "greeting.txt", 0))
         .expect("Failed to `put` file");
 
     let mut written_content = Vec::new();
@@ -179,7 +179,7 @@ fn fs_mkd() {
     // to completion
     let rt = Runtime::new().unwrap();
 
-    rt.block_on(fs.mkd(&Some(DefaultUser {}), new_dir_name)).expect("Failed to mkd");
+    rt.block_on(fs.mkd(&DefaultUser {}, new_dir_name)).expect("Failed to mkd");
 
     let full_path = root.join(new_dir_name);
     let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -198,7 +198,7 @@ fn fs_rename_file() {
     let rt = Runtime::new().unwrap();
 
     let fs = Filesystem::new(&root);
-    let r = rt.block_on(fs.rename(&Some(DefaultUser {}), &old_filename, &new_filename));
+    let r = rt.block_on(fs.rename(&DefaultUser {}, &old_filename, &new_filename));
     assert!(r.is_ok());
 
     let new_full_path = root.join(new_filename);
@@ -220,7 +220,7 @@ fn fs_rename_dir() {
     let rt = Runtime::new().unwrap();
 
     let fs = Filesystem::new(&root);
-    let r = rt.block_on(fs.rename(&Some(DefaultUser {}), &old_dir, &new_dir));
+    let r = rt.block_on(fs.rename(&DefaultUser {}, &old_dir, &new_dir));
     assert!(r.is_ok());
 
     let new_full_path = root.join(new_dir);
@@ -247,7 +247,7 @@ fn fs_md5() {
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 
-    let my_md5 = rt.block_on(fs.md5(&Some(DefaultUser {}), filename)).unwrap();
+    let my_md5 = rt.block_on(fs.md5(&DefaultUser {}, filename)).unwrap();
 
     assert_eq!("ced0b2edc3ec36e8d914320cb0268359", my_md5);
 }

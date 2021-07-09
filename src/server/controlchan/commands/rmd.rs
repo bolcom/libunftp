@@ -47,7 +47,7 @@ where
         let mut tx_success = args.tx_control_chan.clone();
         let mut tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
-        if let Err(err) = storage.rmd(&session.user, path).await {
+        if let Err(err) = storage.rmd((*session.user).as_ref().unwrap(), path).await {
             slog::warn!(logger, "Failed to delete directory: {}", err);
             let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {

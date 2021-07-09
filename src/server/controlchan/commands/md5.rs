@@ -64,7 +64,7 @@ where
         }
 
         tokio::spawn(async move {
-            match storage.md5(&user, &path).await {
+            match storage.md5((*user).as_ref().unwrap(), &path).await {
                 Ok(md5) => {
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(

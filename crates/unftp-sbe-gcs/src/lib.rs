@@ -77,6 +77,7 @@ use hyper::{
     Body, Client, Request, Response,
 };
 use hyper_rustls::HttpsConnector;
+use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use mime::APPLICATION_OCTET_STREAM;
 use object_metadata::ObjectMetadata;
@@ -161,7 +162,7 @@ impl CloudStorage {
 }
 
 #[async_trait]
-impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
+impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
@@ -169,7 +170,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Self::Metadata, Error> {
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Self::Metadata, Error> {
         let uri: Uri = self.uris.metadata(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
@@ -193,10 +194,37 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
         response.to_metadata()
     }
 
-    #[tracing_attributes::instrument]
-    async fn list<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<String, Error>
     where
-        <Self as StorageBackend<U>>::Metadata: Metadata,
+        P: AsRef<Path> + Send + Debug,
+    {
+        let uri: Uri = self.uris.metadata(path)?;
+
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let token = self.get_token().await?;
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+
+        let body = unpack_response(response).await?;
+
+        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        Ok(response.to_md5()?)
+    }
+
+    #[tracing_attributes::instrument]
+    async fn list<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
+    where
+        <Self as StorageBackend<User>>::Metadata: Metadata,
     {
         let uri: Uri = self.uris.list(path)?;
 
@@ -217,7 +245,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     // #[tracing_attributes::instrument]
-    async fn get_into<'a, P, W: ?Sized>(&self, user: &Option<U>, path: P, start_pos: u64, output: &'a mut W) -> Result<u64, Error>
+    async fn get_into<'a, P, W: ?Sized>(&self, user: &User, path: P, start_pos: u64, output: &'a mut W) -> Result<u64, Error>
     where
         W: tokio::io::AsyncWrite + Unpin + Sync + Send,
         P: AsRef<Path> + Send + Debug,
@@ -233,7 +261,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     //#[tracing_attributes::instrument]
     async fn get<P: AsRef<Path> + Send + Debug>(
         &self,
-        _user: &Option<U>,
+        _user: &User,
         path: P,
         _start_pos: u64,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
@@ -262,7 +290,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
 
     async fn put<P: AsRef<Path> + Send + Debug, B: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
-        _user: &Option<U>,
+        _user: &User,
         bytes: B,
         path: P,
         _start_pos: u64,
@@ -290,7 +318,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.delete(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
@@ -308,7 +336,7 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<(), Error> {
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.mkd(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
@@ -327,48 +355,21 @@ impl<U: Sync + Send + Debug> StorageBackend<U> for CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _from: P, _to: P) -> Result<(), Error> {
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _from: P, _to: P) -> Result<(), Error> {
         // TODO: implement this
         Err(Error::from(ErrorKind::CommandNotImplemented))
     }
 
     #[tracing_attributes::instrument]
-    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
         // TODO: implement this
         Err(Error::from(ErrorKind::CommandNotImplemented))
     }
 
     #[tracing_attributes::instrument]
-    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, _path: P) -> Result<(), Error> {
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
         // TODO: Do we want to check here if the path is a directory?
         Ok(())
-    }
-
-    async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &Option<U>, path: P) -> Result<String, Error>
-    where
-        P: AsRef<Path> + Send + Debug,
-    {
-        let uri: Uri = self.uris.metadata(path)?;
-
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
-
-        let token = self.get_token().await?;
-        let request: Request<Body> = Request::builder()
-            .uri(uri)
-            .header(header::AUTHORIZATION, format!("Bearer {}", token))
-            .method(Method::GET)
-            .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
-
-        let body = unpack_response(response).await?;
-
-        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        Ok(response.to_md5()?)
     }
 }
 

@@ -157,29 +157,24 @@ mod tests {
     impl StorageBackend<DefaultUser> for Vfs {
         type Metadata = Meta;
 
-        async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<Self::Metadata> {
+        async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<Self::Metadata> {
             todo!()
         }
 
-        async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
+        async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
         where
             <Self as StorageBackend<DefaultUser>>::Metadata: Metadata,
         {
             todo!()
         }
 
-        async fn get<P: AsRef<Path> + Send + Debug>(
-            &self,
-            user: &Option<DefaultUser>,
-            path: P,
-            start_pos: u64,
-        ) -> Result<Box<dyn AsyncRead + Send + Sync + Unpin>> {
+        async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P, start_pos: u64) -> Result<Box<dyn AsyncRead + Send + Sync + Unpin>> {
             todo!()
         }
 
         async fn put<P: AsRef<Path> + Send + Debug, R: AsyncRead + Send + Sync + Unpin + 'static>(
             &self,
-            user: &Option<DefaultUser>,
+            user: &DefaultUser,
             input: R,
             path: P,
             start_pos: u64,
@@ -187,23 +182,23 @@ mod tests {
             todo!()
         }
 
-        async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<()> {
+        async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
             todo!()
         }
 
-        async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<()> {
+        async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
             todo!()
         }
 
-        async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, from: P, to: P) -> Result<()> {
+        async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, from: P, to: P) -> Result<()> {
             todo!()
         }
 
-        async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<()> {
+        async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
             todo!()
         }
 
-        async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<DefaultUser>, path: P) -> Result<()> {
+        async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
             todo!()
         }
     }

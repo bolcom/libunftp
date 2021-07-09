@@ -101,7 +101,7 @@ where
         let mut tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let get_result = self.storage.get_into(&self.user, path, self.start_pos, &mut output).await;
+        let get_result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
         match get_result {
             Ok(bytes_copied) => {
                 if let Err(err) = output.shutdown().await {
@@ -127,7 +127,12 @@ where
         let mut tx_error = self.control_msg_tx.clone();
         let put_result = self
             .storage
-            .put(&self.user, Self::reader(self.socket, self.ftps_mode).await, path, self.start_pos)
+            .put(
+                (*self.user).as_ref().unwrap(),
+                Self::reader(self.socket, self.ftps_mode).await,
+                path,
+                self.start_pos,
+            )
             .await;
         match put_result {
             Ok(bytes) => {
@@ -157,7 +162,7 @@ where
         };
         let mut tx_ok = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let result = match self.storage.list_fmt(&self.user, path).await {
+        let result = match self.storage.list_fmt((*self.user).as_ref().unwrap(), path).await {
             Ok(cursor) => {
                 slog::debug!(self.logger, "Copying future for List");
                 let mut input = cursor;
@@ -195,7 +200,7 @@ where
         };
         let mut tx_ok = self.control_msg_tx.clone();
         let mut tx_error = self.control_msg_tx.clone();
-        match self.storage.nlst(&self.user, path).await {
+        match self.storage.nlst((*self.user).as_ref().unwrap(), path).await {
             Ok(mut input) => {
                 let mut output = Self::writer(self.socket, self.ftps_mode).await;
                 match tokio::io::copy(&mut input, &mut output).await {

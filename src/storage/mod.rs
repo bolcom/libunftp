@@ -40,7 +40,7 @@
 //!
 //!     async fn metadata<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<Self::Metadata> {
 //!         unimplemented!()
@@ -48,7 +48,7 @@
 //!
 //!     async fn list<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
 //!     where
@@ -59,7 +59,7 @@
 //!
 //!     async fn get<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!         start_pos: u64,
 //!     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
@@ -71,7 +71,7 @@
 //!         R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static,
 //!     >(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         input: R,
 //!         path: P,
 //!         start_pos: u64,
@@ -81,7 +81,7 @@
 //!
 //!     async fn del<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<()> {
 //!         unimplemented!()
@@ -89,7 +89,7 @@
 //!
 //!     async fn mkd<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<()> {
 //!         unimplemented!()
@@ -97,7 +97,7 @@
 //!
 //!     async fn rename<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         from: P,
 //!         to: P,
 //!     ) -> Result<()> {
@@ -106,7 +106,7 @@
 //!
 //!     async fn rmd<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<()> {
 //!         unimplemented!()
@@ -114,7 +114,7 @@
 //!
 //!     async fn cwd<P: AsRef<Path> + Send + Debug>(
 //!         &self,
-//!         user: &Option<DefaultUser>,
+//!         user: &DefaultUser,
 //!         path: P,
 //!     ) -> Result<()> {
 //!         unimplemented!()
