@@ -1,12 +1,42 @@
 # Changelog
 
-## Upcoming
+## 2021-07-13 Release of all crates
 
-- Authenticators can now also take the connection source IP and the client certificate chain in account in addition to 
-  the password when performing authentication.
-- **Breaking**: The `Authenticator::authenticate` method now takes a `Credentials` structure instead of a `str` reference for the 
-  second parameter.
-- **unftp-auth-jsonfile**: Supports per user IP allow ranges
+### libunftp 0.18.0
+
+_tag: libunftp-0.18.0_
+
+- [#356](https://github.com/bolcom/libunftp/pull/356) Authenticators can now also take the connection source IP, and 
+  the client certificate chain into account in addition to the password when performing authentication.
+- [#356](https://github.com/bolcom/libunftp/pull/356/files) **Breaking**: The `Authenticator::authenticate` method now 
+  takes a `Credentials` structure reference instead of a `str` reference for the second parameter.
+- [#373](https://github.com/bolcom/libunftp/pull/373) **Breaking**: The `StorageBackend` methods were all changed to 
+  take a reference of a user (`&User`) instead of an optional reference to it (`&Option<User>`).
+- Dependency upgrades and cleanups
+- Fixed an issue where OPTS UTF8 returned the wrong FTP reply code
+- [#361](https://github.com/bolcom/libunftp/issues/361) Don't allow consecutive PASS commands
+- Added support for TLS client certificates
+- [#358](https://github.com/bolcom/libunftp/pull/358/files) Added the ability for authenticators to do password-less 
+  authentication when the user presents a valid client certificate. See the `Authenticator.cert_auth_sufficient` method. 
+  
+### unftp-auth-jsonfile v0.2.0
+
+_tag: unftp-auth-jsonfile-0.2.0_
+
+- Added support for per-user IP allow lists
+- [#369](https://github.com/bolcom/libunftp/issues/369) Added support for per-user client certificate CN matching
+- [#355](https://github.com/bolcom/libunftp/pull/355) Created a new Docker image that generates PBKDF2 keys for the
+  authenticator.
+
+### unftp-auth-* v0.2.0
+
+- compiled unftp-auth-pam against libunftp v0.18.0
+- compiled unftp-auth-rest against libunftp v0.18.0
+
+### unftp-sbe-* v0.2.0
+
+- compiled unftp-sbe-fs against libunftp v0.18.0
+- compiled unftp-sbe-gcs against libunftp v0.18.0
 
 ## 2021-05-22 unftp-sbe-gcs v0.1.1
 

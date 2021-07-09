@@ -42,22 +42,22 @@ impl From<ErrorKind> for Error {
 /// [`StorageBackend`]: trait.StorageBackend.html
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
 pub enum ErrorKind {
-    /// Error that will cause a FTP reply code of 450 to be returned to the FTP client.
+    /// Error that will cause an FTP reply code of 450 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred that my be
     /// retried for example in the case where a file is busy.
     #[display(fmt = "450 Transient file not available")]
     TransientFileNotAvailable,
-    /// Error that will cause a FTP reply code of 550 to be returned to the FTP client.
+    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
     /// make sense for it to be retried. For example in the case where a file is busy.
     #[display(fmt = "550 Permanent file not available")]
     PermanentFileNotAvailable,
-    /// Error that will cause a FTP reply code of 550 to be returned to the FTP client.
+    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
     /// make sense for it to be retried. For example in the case where file access is denied.
     #[display(fmt = "550 Permission denied")]
     PermissionDenied,
-    /// Error that will cause a FTP reply code of 451 to be returned to the FTP client. Its means
+    /// Error that will cause an FTP reply code of 451 to be returned to the FTP client. Its means
     /// the requested action was aborted due to a local error (internal storage back-end error) in
     /// processing.
     #[display(fmt = "451 Local error")]
@@ -72,11 +72,11 @@ pub enum ErrorKind {
     /// dataset).
     #[display(fmt = "552 Exceeded storage allocation error")]
     ExceededStorageAllocationError,
-    /// Error that will cause a FTP reply code of 553 to be returned to the FTP client. Its means
+    /// Error that will cause an FTP reply code of 553 to be returned to the FTP client. Its means
     /// the requested action was not taken due to an illegal file name.
     #[display(fmt = "553 File name not allowed error")]
     FileNameNotAllowedError,
-    /// Error that will cause a FTP reply code of 502. The indicates to the client that the command
+    /// Error that will cause an FTP reply code of 502. The indicates to the client that the command
     /// is not implemented for the storage back-end. For instance the GCS back-end don't implement
     /// RMD (remove directory) but returns this error instead from its StorageBackend::rmd
     /// implementation.

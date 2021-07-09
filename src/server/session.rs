@@ -46,7 +46,7 @@ pub enum SessionState {
 // The session shared via an asynchronous lock
 pub type SharedSession<S, U> = Arc<tokio::sync::Mutex<Session<S, U>>>;
 
-// This is where we keep the state for a ftp session.
+// This is where we keep the state for an ftp session.
 #[derive(Debug)]
 pub struct Session<Storage, User>
 where
