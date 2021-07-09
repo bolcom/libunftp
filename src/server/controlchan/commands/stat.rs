@@ -86,7 +86,7 @@ where
                 let logger = args.logger;
 
                 tokio::spawn(async move {
-                    match storage.list_fmt(&user, path).await {
+                    match storage.list_fmt((*user).as_ref().unwrap(), path).await {
                         Ok(mut cursor) => {
                             let mut result: String = String::new();
                             match cursor.read_to_string(&mut result) {

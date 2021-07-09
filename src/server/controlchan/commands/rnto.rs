@@ -38,7 +38,7 @@ where
         let reply = match session.rename_from.take() {
             Some(from) => {
                 let to = session.cwd.join(self.path.clone());
-                match storage.rename(&session.user, from, to).await {
+                match storage.rename((*session.user).as_ref().unwrap(), from, to).await {
                     Ok(_) => Reply::new(ReplyCode::FileActionOkay, "Renamed"),
                     Err(err) => {
                         slog::warn!(logger, "Error renaming: {:?}", err);

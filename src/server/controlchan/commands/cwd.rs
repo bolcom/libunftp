@@ -50,7 +50,7 @@ where
         let mut tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
 
-        if let Err(err) = storage.cwd(&session.user, path.clone()).await {
+        if let Err(err) = storage.cwd((*session.user).as_ref().unwrap(), path.clone()).await {
             slog::warn!(logger, "Failed to cwd directory: {}", err);
             let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {

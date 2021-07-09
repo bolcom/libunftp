@@ -46,7 +46,7 @@ where
         let logger = args.logger;
 
         tokio::spawn(async move {
-            match storage.metadata(&user, &path).await {
+            match storage.metadata((*user).as_ref().unwrap(), &path).await {
                 Ok(metadata) => {
                     let modification_time = match metadata.modified() {
                         Ok(v) => Some(v),

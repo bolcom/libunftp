@@ -49,7 +49,7 @@ where
         let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
-            match storage.del(&user, path).await {
+            match storage.del((*user).as_ref().unwrap(), path).await {
                 Ok(_) => {
                     if let Err(err) = tx_success.send(ControlChanMsg::DelSuccess).await {
                         slog::warn!(logger, "{}", err);

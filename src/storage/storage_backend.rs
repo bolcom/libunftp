@@ -1,6 +1,7 @@
 //! Defines the service provider interface for storage back-end implementors.
 
 use super::error::Error;
+use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
@@ -143,7 +144,7 @@ where
 /// [`Server`]: ../struct.Server.html
 /// [`filesystem`]: filesystem/struct.Filesystem.html
 #[async_trait]
-pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
+pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
 
@@ -161,7 +162,7 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// Returns the `Metadata` for the given file.
     ///
     /// [`Metadata`]: ./trait.Metadata.html
-    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Self::Metadata>;
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<Self::Metadata>;
 
     /// Returns the MD5 hash for the given file.
     ///
@@ -174,7 +175,7 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     ///
     /// When implementing, use the lower case 2-digit hexadecimal
     /// format (like the output of the `md5sum` command)
-    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<String>
+    async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<String>
     where
         P: AsRef<Path> + Send + Debug,
     {
@@ -193,14 +194,14 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     }
 
     /// Returns the list of files in the given directory.
-    async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
+    async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
-        <Self as StorageBackend<U>>::Metadata: Metadata;
+        <Self as StorageBackend<User>>::Metadata: Metadata;
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn list_fmt<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, Error>
+    async fn list_fmt<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, Error>
     where
         P: AsRef<Path> + Send + Debug,
         Self::Metadata: Metadata + 'static,
@@ -216,7 +217,7 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// immediately be sent to the client.
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn nlst<P>(&self, user: &Option<U>, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
+    async fn nlst<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
         P: AsRef<Path> + Send + Debug,
         Self::Metadata: Metadata + 'static,
@@ -238,7 +239,7 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The starting position will only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    async fn get_into<'a, P, W: ?Sized>(&self, user: &Option<U>, path: P, start_pos: u64, output: &'a mut W) -> Result<u64>
+    async fn get_into<'a, P, W: ?Sized>(&self, user: &User, path: P, start_pos: u64, output: &'a mut W) -> Result<u64>
     where
         W: tokio::io::AsyncWrite + Unpin + Sync + Send,
         P: AsRef<Path> + Send + Debug,
@@ -251,36 +252,31 @@ pub trait StorageBackend<U: Sync + Send + Debug>: Send + Sync + Debug {
     /// The starting position will only be greater than zero if the storage back-end implementation
     /// advertises to support partial reads through the supported_features method i.e. the result
     /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
-    async fn get<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &Option<U>,
-        path: P,
-        start_pos: u64,
-    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>>;
+    async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>>;
 
     /// Writes bytes from the given reader to the specified path starting at offset start_pos in the file
     async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
-        user: &Option<U>,
+        user: &User,
         input: R,
         path: P,
         start_pos: u64,
     ) -> Result<u64>;
 
     /// Deletes the file at the given path.
-    async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
     /// Creates the given directory.
-    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
     /// Renames the given file to the given new filename.
-    async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, from: P, to: P) -> Result<()>;
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &User, from: P, to: P) -> Result<()>;
 
     /// Deletes the given directory.
-    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
     /// Changes the working directory to the given path.
-    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &Option<U>, path: P) -> Result<()>;
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 }
 
 impl From<std::io::Error> for Error {

@@ -9,7 +9,7 @@ use std::fmt::{self, Debug, Display, Formatter};
 /// - Account settings
 /// - Authorization information
 ///
-/// At this time, this trait doesn't contain much, but it will grow over time to allow for per-user
+/// At this time, this trait doesn't contain much, but it may grow over time to allow for per-user
 /// authorization and behaviour.
 pub trait UserDetail: Send + Sync + Display + Debug {
     /// Tells if this subject's account is enabled. This default implementation simply returns true.
