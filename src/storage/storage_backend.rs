@@ -51,6 +51,11 @@ pub trait Metadata {
     /// Returns the `uid` of the file.
     fn uid(&self) -> u32;
 
+    /// Returns the number of links to the file. The default implementation always returns `1`
+    fn links(&self) -> u64 {
+        1
+    }
+
     /// Returns the `permissions` of the file. The default implementation assumes unix permissions
     /// and defaults to "rwxr-xr-x" (octal 7755)
     fn permissions(&self) -> Permissions {
@@ -120,7 +125,7 @@ where
         #[allow(clippy::write_literal)]
         write!(
             f,
-            "{filetype}{permissions} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",
+            "{filetype}{permissions} {links:>12} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",
             filetype = if self.metadata.is_dir() {
                 "d"
             } else if self.metadata.is_symlink() {
@@ -129,6 +134,7 @@ where
                 "-"
             },
             permissions = perms,
+            links = self.metadata.links(),
             owner = self.metadata.uid(),
             group = self.metadata.gid(),
             size = self.metadata.len(),
