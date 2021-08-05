@@ -39,6 +39,7 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
+    Epsv,
     Port,
     Retr {
         /// The path to the file the client would like to retrieve.
