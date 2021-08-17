@@ -20,12 +20,11 @@ use crate::{
 
 use crate::options::{FtpsClientAuth, TlsFlags};
 use crate::server::tls;
-use futures::{channel::mpsc::channel, SinkExt};
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{fmt::Debug, net::IpAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
 use tokio::io::AsyncWriteExt;
-use tokio_stream::StreamExt;
+use tokio::sync::mpsc::channel;
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -548,7 +547,7 @@ where
                         self.dispatch_data_connection(tcp_stream, connection).await;
                     }
                 },
-                Some(msg) = proxyloop_msg_rx.next() => {
+                Some(msg) = proxyloop_msg_rx.recv() => {
                     match msg {
                         ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
                             self.select_and_register_passive_port(session_arc).await;
@@ -574,7 +573,6 @@ where
                 None => {
                     slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
                     tcp_stream.shutdown().await.unwrap();
-                    return;
                 }
             }
         }
@@ -605,7 +603,7 @@ where
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
-                let mut tx = tx.clone();
+                let tx = tx.clone();
                 tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
             }
         }

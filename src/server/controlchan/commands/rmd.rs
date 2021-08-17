@@ -18,7 +18,6 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::prelude::*;
 use std::{string::String, sync::Arc};
 
 #[derive(Debug)]
@@ -44,8 +43,8 @@ where
         let session = args.session.lock().await;
         let storage: Arc<Storage> = Arc::clone(&session.storage);
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success = args.tx_control_chan.clone();
-        let mut tx_fail = args.tx_control_chan.clone();
+        let tx_success = args.tx_control_chan.clone();
+        let tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
         if let Err(err) = storage.rmd((*session.user).as_ref().unwrap(), path).await {
             slog::warn!(logger, "Failed to delete directory: {}", err);

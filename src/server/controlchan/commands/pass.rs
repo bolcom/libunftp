@@ -25,8 +25,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::{channel::mpsc::Sender, prelude::*};
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct Pass {
@@ -52,7 +52,7 @@ where
         let logger = args.logger;
         match &session.state {
             SessionState::WaitPass => {
-                let pass: &str = std::str::from_utf8(&self.password.as_ref())?;
+                let pass: &str = std::str::from_utf8(self.password.as_ref())?;
                 let pass: String = pass.to_string();
                 let user: String = match session.username.clone() {
                     Some(v) => v,
@@ -61,7 +61,7 @@ where
                         return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
                     }
                 };
-                let mut tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+                let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
 
                 let auther = args.authenticator.clone();
 

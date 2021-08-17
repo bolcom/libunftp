@@ -24,16 +24,16 @@ use crate::{
 };
 
 use async_trait::async_trait;
-use futures::{
-    channel::mpsc::{channel, Receiver, Sender},
-    SinkExt, StreamExt,
-};
+use futures_util::{SinkExt, StreamExt};
 use rustls::{ServerSession, Session as RustlsSession};
 use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::Mutex,
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        Mutex,
+    },
 };
 use tokio_util::codec::{Decoder, Framed};
 
@@ -91,7 +91,7 @@ where
 
     let tls_configured = matches!(ftps_config, FtpsConfig::On { .. });
     let storage_features = storage.supported_features();
-    let (control_msg_tx, control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
+    let (control_msg_tx, mut control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
     let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
@@ -147,13 +147,10 @@ where
 
     let codec = FtpCodec::new();
     let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FtpCodec> = codec.framed(Box::new(tcp_stream));
-    let (mut reply_sink, command_source) = cmd_and_reply_stream.split();
+    let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
 
     reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
     reply_sink.flush().await?;
-
-    let mut command_source = command_source.fuse();
-    let mut control_msg_rx = control_msg_rx.fuse();
 
     tokio::spawn(async move {
         // The control channel event loop
@@ -167,7 +164,7 @@ where
                     Some(cmd_result) = command_source.next() => {
                         incoming = Some(cmd_result.map(Event::Command));
                     },
-                    Some(msg) = control_msg_rx.next() => {
+                    Some(msg) = control_msg_rx.recv() => {
                         incoming = Some(Ok(Event::InternalMsg(msg)));
                     },
                     _ = &mut timeout_delay => {
@@ -191,7 +188,7 @@ where
                         slog::info!(logger, "Upgrading control channel to TLS");
 
                         // Get back the original TCP Stream
-                        let codec_io = reply_sink.reunite(command_source.into_inner()).unwrap();
+                        let codec_io = reply_sink.reunite(command_source).unwrap();
                         let io = codec_io.into_inner();
 
                         // Wrap in TLS Stream
@@ -219,7 +216,6 @@ where
                         let codec = FtpCodec::new();
                         let cmd_and_reply_stream = codec.framed(io);
                         let (sink, src) = cmd_and_reply_stream.split();
-                        let src = src.fuse();
                         reply_sink = sink;
                         command_source = src;
                     }

@@ -35,7 +35,7 @@ bitflags = "1.2.1"
 bytes = "1.0.1"
 chrono = { version = "0.4.19", default-features = false, features = ["std"] }
 derive_more = { version = "0.99.16", features = ["display"] }
-futures = { version = "0.3.15", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.15", default-features = false, features = ["alloc", "sink"] }
 getrandom = "0.2"
 lazy_static = "1.4.0"
 md-5 = "0.9.1"
@@ -46,8 +46,7 @@ rustls = "0.19.1"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
 thiserror = "1.0.26"
-tokio = { version = "1.8.1", features = ["rt", "net", "sync", "io-util", "time"] }
-tokio-stream = "0.1.7"
+tokio = { version = "1.8.1", features = ["macros", "rt", "net", "sync", "io-util", "time"] }
 tokio-rustls = { version = "0.22.0" }
 tokio-util = { version = "0.6.7", features = ["codec"] }
 tracing = { version = "0.1.26", default-features = false }

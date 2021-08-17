@@ -19,7 +19,6 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::prelude::*;
 
 #[derive(Debug)]
 pub struct Abor;
@@ -36,7 +35,7 @@ where
         let mut session = args.session.lock().await;
         let logger = args.logger;
         match session.data_abort_tx.take() {
-            Some(mut tx) => {
+            Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(()).await {
                         slog::warn!(logger, "abort failed: {}", err);

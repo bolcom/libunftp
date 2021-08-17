@@ -17,7 +17,6 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::prelude::*;
 
 // The parameter that can be given to the `AUTH` command.
 #[derive(Debug, PartialEq, Clone)]
@@ -46,7 +45,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let mut tx = args.tx_control_chan.clone();
+        let tx = args.tx_control_chan.clone();
         let logger = args.logger;
         match (args.tls_configured, self.protocol.clone()) {
             (true, AuthParam::Tls) => {

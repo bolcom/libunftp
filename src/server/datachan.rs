@@ -11,12 +11,9 @@ use crate::{
 };
 
 use crate::server::chancomms::DataChanCmd;
-use futures::{
-    channel::mpsc::{Receiver, Sender},
-    prelude::*,
-};
 use std::{path::PathBuf, sync::Arc};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_rustls::TlsAcceptor;
 
 #[derive(Debug)]
@@ -45,15 +42,15 @@ where
     User: UserDetail + 'static,
 {
     async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
-        let mut data_cmd_rx = self.data_cmd_rx.take().unwrap().fuse();
-        let mut data_abort_rx = self.data_abort_rx.take().unwrap().fuse();
+        let mut data_cmd_rx = self.data_cmd_rx.take().unwrap();
+        let mut data_abort_rx = self.data_abort_rx.take().unwrap();
         let mut timeout_delay = Box::pin(tokio::time::sleep(std::time::Duration::from_secs(5 * 60)));
         // TODO: Use configured timeout
         tokio::select! {
-            Some(command) = data_cmd_rx.next() => {
+            Some(command) = data_cmd_rx.recv() => {
                 self.handle_incoming(DataChanMsg::ExternalCommand(command)).await;
             },
-            Some(_) = data_abort_rx.next() => {
+            Some(_) = data_abort_rx.recv() => {
                 self.handle_incoming(DataChanMsg::Abort).await;
             },
             _ = &mut timeout_delay => {
@@ -98,8 +95,8 @@ where
     #[tracing_attributes::instrument]
     async fn exec_retr(self, path: String) {
         let path = self.cwd.join(path);
-        let mut tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
-        let mut tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
+        let tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
+        let tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
         let get_result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
         match get_result {
@@ -123,8 +120,8 @@ where
     #[tracing_attributes::instrument]
     async fn exec_stor(self, path: String) {
         let path = self.cwd.join(path);
-        let mut tx_ok = self.control_msg_tx.clone();
-        let mut tx_error = self.control_msg_tx.clone();
+        let tx_ok = self.control_msg_tx.clone();
+        let tx_error = self.control_msg_tx.clone();
         let put_result = self
             .storage
             .put(
@@ -160,7 +157,7 @@ where
             }
             None => self.cwd.clone(),
         };
-        let mut tx_ok = self.control_msg_tx.clone();
+        let tx_ok = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
         let result = match self.storage.list_fmt((*self.user).as_ref().unwrap(), path).await {
             Ok(cursor) => {
@@ -198,8 +195,8 @@ where
             Some(path) => self.cwd.join(path),
             None => self.cwd.clone(),
         };
-        let mut tx_ok = self.control_msg_tx.clone();
-        let mut tx_error = self.control_msg_tx.clone();
+        let tx_ok = self.control_msg_tx.clone();
+        let tx_error = self.control_msg_tx.clone();
         match self.storage.nlst((*self.user).as_ref().unwrap(), path).await {
             Ok(mut input) => {
                 let mut output = Self::writer(self.socket, self.ftps_mode).await;

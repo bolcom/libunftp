@@ -6,7 +6,7 @@ use crate::{
     server::controlchan::Reply,
     storage::{Error, StorageBackend},
 };
-use futures::channel::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 // Commands that can be send to the data channel / data loop.
 #[derive(PartialEq, Debug)]

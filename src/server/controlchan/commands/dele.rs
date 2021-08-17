@@ -18,8 +18,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::{channel::mpsc::Sender, prelude::*};
 use std::{string::String, sync::Arc};
+use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct Dele {
@@ -45,8 +45,8 @@ where
         let storage = Arc::clone(&session.storage);
         let user = session.user.clone();
         let path = session.cwd.join(self.path.clone());
-        let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
-        let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
             match storage.del((*user).as_ref().unwrap(), path).await {

@@ -31,8 +31,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{channel::mpsc::Sender, prelude::*};
 use std::{io::Read, sync::Arc};
+use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct Stat {
@@ -81,8 +81,8 @@ where
                 let user = session.user.clone();
                 let storage = Arc::clone(&session.storage);
 
-                let mut tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
-                let mut tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+                let tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+                let tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
                 let logger = args.logger;
 
                 tokio::spawn(async move {

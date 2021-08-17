@@ -20,7 +20,6 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::prelude::*;
 
 #[derive(Debug)]
 pub struct Retr;
@@ -41,7 +40,7 @@ where
         };
         let logger = args.logger;
         match session.data_cmd_tx.take() {
-            Some(mut tx) => {
+            Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
                         slog::warn!(logger, "{}", err);

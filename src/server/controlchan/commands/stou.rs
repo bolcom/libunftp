@@ -11,7 +11,6 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::prelude::*;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -34,7 +33,7 @@ where
         let path: String = session.cwd.join(&filename).to_string_lossy().to_string();
         let logger = args.logger;
         match session.data_cmd_tx.take() {
-            Some(mut tx) => {
+            Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(DataChanCmd::Stor { path }).await {
                         slog::warn!(logger, "sending command failed. {}", err);
