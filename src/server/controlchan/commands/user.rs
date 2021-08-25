@@ -84,7 +84,6 @@ mod tests {
     use crate::storage::{Metadata, StorageBackend};
     use async_trait::async_trait;
     use bytes::Bytes;
-    use futures::channel::mpsc;
     use pretty_assertions::assert_eq;
     use slog::o;
     use std::fmt::Debug;
@@ -92,6 +91,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::SystemTime;
     use tokio::io::AsyncRead;
+    use tokio::sync::mpsc;
     use tokio::sync::Mutex;
 
     #[derive(Debug)]

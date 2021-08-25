@@ -23,13 +23,10 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::{
-    channel::mpsc::{channel, Receiver, Sender},
-    prelude::*,
-};
 use std::net::Ipv4Addr;
 use std::{io, net::SocketAddr, ops::Range};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -141,7 +138,7 @@ impl Pasv {
     // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
     // should choose a data port and check for connections on it.
     #[tracing_attributes::instrument]
-    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, mut tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,

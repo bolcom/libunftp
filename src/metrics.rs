@@ -56,7 +56,7 @@ lazy_static! {
 fn add_event_metric(event: &Event) {
     match event {
         Event::Command(cmd) => {
-            add_command_metric(&cmd);
+            add_command_metric(cmd);
         }
         Event::InternalMsg(msg) => match msg {
             ControlChanMsg::SendData { bytes } => {

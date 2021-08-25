@@ -10,8 +10,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use futures::channel::mpsc::Sender;
 use std::{ops::Range, result::Result, sync::Arc};
+use tokio::sync::mpsc::Sender;
 
 // Common interface for all handlers of `Commands`
 #[async_trait]

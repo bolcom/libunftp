@@ -8,13 +8,13 @@ use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
 };
-use futures::channel::mpsc::{Receiver, Sender};
 use std::{
     fmt::{Debug, Formatter},
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
 };
+use tokio::sync::mpsc::{Receiver, Sender};
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Debug)]
