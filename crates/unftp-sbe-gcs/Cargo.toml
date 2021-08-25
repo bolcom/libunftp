@@ -30,7 +30,7 @@ mime = {version = "0.3.16"}
 percent-encoding = { version = "2.1.0"}
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = { version = "1.0.64"}
-tokio = { version = "1.8.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio = { version = "1.10.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.7"
 tokio-util = { version = "0.6.6", features=["codec", "compat"] }
 tracing = { version = "0.1.26", default-features = false }
@@ -50,5 +50,5 @@ slog-async = "2.6.0"
 slog-stdlog = "4.1.0"
 slog-term = "2.8.0"
 tempfile = "3.2.0"
-tokio = { version = "1.8.1", features = ["macros", "rt-multi-thread"]}
+tokio = { version = "1.10.1", features = ["macros", "rt-multi-thread"]}
 tracing-subscriber = "0.2.19"

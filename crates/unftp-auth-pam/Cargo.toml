@@ -28,4 +28,4 @@ tracing-attributes = "0.1.15"
 pam-auth = { package = "pam", version = "0.7.0"}
 
 [dev-dependencies]
-tokio = { version = "1.8.1", features = ["macros"]}
+tokio = { version = "1.10.1", features = ["macros"]}
