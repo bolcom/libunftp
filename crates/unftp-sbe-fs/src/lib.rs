@@ -224,6 +224,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 }
 
+#[allow(unreachable_code)]
 impl Metadata for Meta {
     fn len(&self) -> u64 {
         self.inner.len()
@@ -246,11 +247,57 @@ impl Metadata for Meta {
     }
 
     fn gid(&self) -> u32 {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::linux::fs::MetadataExt;
+
+            return self.inner.st_gid();
+        }
+
+        #[cfg(target_os = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            return self.inner.gid();
+        }
+
         0
     }
 
     fn uid(&self) -> u32 {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::linux::fs::MetadataExt;
+
+            return self.inner.st_uid();
+        }
+
+        #[cfg(target_os = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            return self.inner.uid();
+        }
+
         0
+    }
+
+    fn links(&self) -> u64 {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::linux::fs::MetadataExt;
+
+            return self.inner.st_nlink();
+        }
+
+        #[cfg(target_os = "unix")]
+        {
+            use std::os::unix::fs::MetadataExt;
+
+            return self.inner.nlink();
+        }
+
+        1
     }
 }
 
