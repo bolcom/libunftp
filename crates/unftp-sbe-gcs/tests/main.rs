@@ -127,7 +127,7 @@ async fn file_sizes() {
             println!("{}", f);
             let vec: Vec<&str> = f.split_whitespace().collect();
             // "coincidentally", file name matches file size
-            assert_eq!(vec[3], vec[7]);
+            assert_eq!(vec[4], vec[8]);
         });
     })
     .await;
