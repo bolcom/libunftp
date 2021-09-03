@@ -23,7 +23,6 @@ const METADATA_HOST: &str = "metadata.google.internal";
 const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
 
 // TODO: MAP to useful error type
-// TODO: Cache the token.
 pub(super) async fn request_token(service: Option<String>, client: Client<HttpsConnector<HttpConnector<GaiResolver>>>) -> Result<TokenResponse, Error> {
     // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
     let suffix = format!("instance/service-accounts/{}/token", service.unwrap_or_else(|| "default".to_string()));
