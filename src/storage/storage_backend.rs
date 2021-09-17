@@ -64,7 +64,7 @@ pub trait Metadata {
 }
 
 /// Represents the permissions of a _FTP File_
-pub struct Permissions(u32);
+pub struct Permissions(pub u32);
 
 const PERM_READ: u32 = 0b100100100;
 const PERM_WRITE: u32 = 0b010010010;
