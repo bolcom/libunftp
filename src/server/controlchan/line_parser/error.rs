@@ -16,6 +16,7 @@ pub struct ParseError {
 ///
 /// [ParseError]: ./struct.ParseError.html
 #[derive(Clone, Eq, PartialEq, Debug, Display)]
+#[allow(clippy::enum_variant_names)]
 pub enum ParseErrorKind {
     /// The client issued an invalid command (e.g. required parameters are missing).
     #[display(fmt = "Invalid command")]
