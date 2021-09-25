@@ -1,5 +1,20 @@
 # Changelog
 
+## 2021-09-25 libunftp 0.18.1
+
+_tag: libunftp-0.18.1_
+
+- Replace futures with futures-util and use Tokio's mpsc channels
+- [#371](https://github.com/bolcom/libunftp/pull/371), [#377](https://github.com/bolcom/libunftp/pull/377) Fixed an 
+  issue where rclone reported all file sizes as 0. The fix was to include the number of links to a file in the output 
+  to the client.
+- Fixed a unit tests
+- Upgraded dependencies
+- [#379](https://github.com/bolcom/libunftp/pull/379) Fixed an issue where the `Permissions` struct could not be used 
+  even though it was public.
+- [#380](https://github.com/bolcom/libunftp/pull/380), [#381](https://github.com/bolcom/libunftp/pull/381) Return STAT 
+  response as a multi-line in accordance with RFC 959 in order to fix an issue with the Cyberduck client.
+
 ## 2021-07-13 Release of all crates
 
 ### libunftp 0.18.0

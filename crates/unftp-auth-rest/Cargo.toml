@@ -21,7 +21,7 @@ readme = "README.md"
 async-trait = "0.1.51"
 hyper = { version = "0.14.13", features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1"}
-libunftp = { version="0.18.0", path="../../"}
+libunftp = { version="0.18.1", path="../../"}
 percent-encoding = { version = "2.1.0"}
 regex = "1.5.4"
 serde = { version = "1.0.130", features = ["derive"] }
