@@ -323,7 +323,7 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             let client_cert = &actual_creds.client_cert;
             let certificate = &creds.certificate_chain.as_ref().and_then(|x| x.first());
 
-            let ip_check_result = if !Self::ip_ok(creds, &actual_creds) {
+            let ip_check_result = if !Self::ip_ok(creds, actual_creds) {
                 Err(AuthenticationError::IpDisallowed)
             } else {
                 Ok(DefaultUser {})
@@ -334,7 +334,7 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
                 // Option, if it is set, the client cert is checked,
                 // otherwise any trusted client cert will be accepted
                 (Some(client_cert), Some(cert)) => match (&client_cert.allowed_cn, cert) {
-                    (Some(cn), cert) => match cert.verify_cn(&cn) {
+                    (Some(cn), cert) => match cert.verify_cn(cn) {
                         Ok(is_authorized) => {
                             if is_authorized {
                                 Some(Ok(DefaultUser {}))
