@@ -107,6 +107,7 @@ async fn creating_directory_with_file_in_it() {
     .await;
 }
 
+
 #[tokio::test(flavor = "current_thread")]
 async fn deleting_directory_fails_if_contains_file() {
     run_test(async {
@@ -122,11 +123,14 @@ async fn deleting_directory_fails_if_contains_file() {
         assert!(list_in[0].ends_with(" greeting.txt"));
 
         ftp_stream.cdup().await.unwrap();
-        let rmdir = ftp_stream.rmdir("deleting_directory_fails_if_contains_file").await.unwrap();
+        let result = ftp_stream.rmdir("deleting_directory_fails_if_contains_file").await;
+        assert!(result.is_err());
+        // FIXME: #383 Fix 'rmdir' for GCS backend
+        assert_eq!(result.unwrap_err().to_string(), "FTP InvalidResponse: Expected code [250], got response: 502 Command not implemented\r\n");
 
         let list_out = ftp_stream.list(None).await.unwrap();
         assert_ge!(list_out.len(), 1);
-        assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
+        assert!(list_out.iter().any(|t| t.ends_with("deleting_directory_fails_if_contains_file")))
     })
     .await;
 }
