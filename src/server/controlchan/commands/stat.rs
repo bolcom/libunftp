@@ -31,7 +31,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::Bytes;
-use std::{io::Read, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
@@ -86,19 +86,13 @@ where
                 let logger = args.logger;
 
                 tokio::spawn(async move {
-                    match storage.list_fmt((*user).as_ref().unwrap(), path).await {
-                        Ok(mut cursor) => {
-                            let mut result: String = String::new();
-                            match cursor.read_to_string(&mut result) {
-                                Ok(_) => {
-                                    if let Err(err) = tx_success
-                                        .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(ReplyCode::CommandOkay, result)))
-                                        .await
-                                    {
-                                        slog::warn!(logger, "{}", err);
-                                    }
-                                }
-                                Err(err) => slog::warn!(logger, "{}", err),
+                    match storage.list_vec((*user).as_ref().unwrap(), path).await {
+                        Ok(lines) => {
+                            if let Err(err) = tx_success
+                                .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(ReplyCode::CommandOkay, lines)))
+                                .await
+                            {
+                                slog::warn!(logger, "{}", err);
                             }
                         }
                         Err(e) => {

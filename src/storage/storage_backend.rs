@@ -64,7 +64,7 @@ pub trait Metadata {
 }
 
 /// Represents the permissions of a _FTP File_
-pub struct Permissions(u32);
+pub struct Permissions(pub u32);
 
 const PERM_READ: u32 = 0b100100100;
 const PERM_WRITE: u32 = 0b010010010;
@@ -216,6 +216,19 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi)).collect::<String>().into_bytes();
 
         Ok(std::io::Cursor::new(file_infos))
+    }
+
+    /// Returns directory listing as a vec of strings used for multi line response in the control channel.
+    #[tracing_attributes::instrument]
+    async fn list_vec<P>(&self, user: &User, path: P) -> std::result::Result<Vec<String>, Error>
+    where
+        P: AsRef<Path> + Send + Debug,
+        Self::Metadata: Metadata + 'static,
+    {
+        let inlist = self.list(user, path).await?;
+        let out = inlist.iter().map(|fi| fi.to_string()).collect::<Vec<String>>();
+
+        Ok(out)
     }
 
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can

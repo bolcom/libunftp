@@ -18,20 +18,20 @@ repository = "https://github.com/bolcom/libunftp/tree/hannes/crates/unftp-auth-r
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.50"
-hyper = { version = "0.14.10", features= ["client", "runtime", "stream", "http1"]}
+async-trait = "0.1.51"
+hyper = { version = "0.14.13", features= ["client", "runtime", "stream", "http1"]}
 hyper-rustls = { version = "0.22.1"}
-libunftp = { version="0.18.0", path="../../"}
+libunftp = { version="0.18.1", path="../../"}
 percent-encoding = { version = "2.1.0"}
 regex = "1.5.4"
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = { version = "1.0.64"}
-tokio = { version = "1.10.1", features = ["rt", "net", "sync", "io-util", "time"] }
-tracing = { version = "0.1.26", default-features = false }
-tracing-attributes = "0.1.15"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = { version = "1.0.68"}
+tokio = { version = "1.12.0", features = ["rt", "net", "sync", "io-util", "time"] }
+tracing = { version = "0.1.28", default-features = false }
+tracing-attributes = "0.1.16"
 
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.10.1", features = ["macros"] }
+tokio = { version = "1.12.0", features = ["macros"] }
 unftp-sbe-fs = { version="0.2", path="../unftp-sbe-fs"}
