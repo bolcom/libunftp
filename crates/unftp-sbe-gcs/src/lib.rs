@@ -105,9 +105,9 @@ impl CloudStorage {
     /// Creates a new Google Cloud Storage backend connected to the specified GCS `bucket`. The `auth`
     /// parameter specifies how libunftp will authenticate with GCS.
     pub fn new<Str, AuthHow>(bucket: Str, auth: AuthHow) -> Self
-        where
-            Str: Into<String>,
-            AuthHow: Into<AuthMethod>,
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
     {
         Self::with_bucket_root(bucket.into(), PathBuf::new(), auth)
     }
@@ -116,9 +116,9 @@ impl CloudStorage {
     /// parameter specifies how libunftp will authenticate with GCS. Files will be placed and
     /// looked for in the specified `root` directory/prefix inside the bucket.
     pub fn with_bucket_root<Str, AuthHow>(bucket: Str, root: PathBuf, auth: AuthHow) -> Self
-        where
-            Str: Into<String>,
-            AuthHow: Into<AuthMethod>,
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
     {
         Self::with_api_base(String::from("https://www.googleapis.com"), bucket.into(), root, auth)
     }
@@ -128,9 +128,9 @@ impl CloudStorage {
     /// `root` directory inside the bucket. The `auth` parameter specifies how libunftp will
     /// authenticate.
     pub fn with_api_base<Str, AuthHow>(base_url: Str, bucket: Str, root: PathBuf, auth: AuthHow) -> Self
-        where
-            Str: Into<String>,
-            AuthHow: Into<AuthMethod>,
+    where
+        Str: Into<String>,
+        AuthHow: Into<AuthMethod>,
     {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::with_native_roots());
         CloudStorage {
@@ -156,7 +156,7 @@ impl CloudStorage {
             AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
                 .await
                 .map(|t| t.access_token),
-            AuthMethod::None => Ok("unftp_test".to_string())
+            AuthMethod::None => Ok("unftp_test".to_string()),
         }
     }
 }
@@ -195,8 +195,8 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     }
 
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<String, Error>
-        where
-            P: AsRef<Path> + Send + Debug,
+    where
+        P: AsRef<Path> + Send + Debug,
     {
         let uri: Uri = self.uris.metadata(path)?;
 
@@ -223,8 +223,8 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
     #[tracing_attributes::instrument]
     async fn list<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>, Error>
-        where
-            <Self as StorageBackend<User>>::Metadata: Metadata,
+    where
+        <Self as StorageBackend<User>>::Metadata: Metadata,
     {
         let uri: Uri = self.uris.list(path)?;
 
@@ -246,9 +246,9 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
     // #[tracing_attributes::instrument]
     async fn get_into<'a, P, W: ?Sized>(&self, user: &User, path: P, start_pos: u64, output: &'a mut W) -> Result<u64, Error>
-        where
-            W: tokio::io::AsyncWrite + Unpin + Sync + Send,
-            P: AsRef<Path> + Send + Debug,
+    where
+        W: tokio::io::AsyncWrite + Unpin + Sync + Send,
+        P: AsRef<Path> + Send + Debug,
     {
         let reader = self.get(user, path, 0).await?;
         let mut reader = reader.take(start_pos);

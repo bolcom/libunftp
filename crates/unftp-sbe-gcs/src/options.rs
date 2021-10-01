@@ -50,7 +50,9 @@ impl TryFrom<Option<PathBuf>> for AuthMethod {
 impl AuthMethod {
     pub(super) fn to_service_account_key(&self) -> std::io::Result<ServiceAccountKey> {
         match self {
-            AuthMethod::WorkloadIdentity(_) | AuthMethod::None => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option")),
+            AuthMethod::WorkloadIdentity(_) | AuthMethod::None => {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option"))
+            }
             AuthMethod::ServiceAccountKey(key) => {
                 serde_json::from_slice(key).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad service account key: {}", e)))
             }
