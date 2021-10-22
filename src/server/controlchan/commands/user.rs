@@ -1,4 +1,5 @@
 use crate::auth::{AuthenticationError, Credentials};
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     auth::UserDetail,
     server::{
@@ -57,18 +58,22 @@ where
                         session.username = Some(user.to_string());
                         session.state = SessionState::WaitCmd;
                         session.user = Arc::new(Some(user_detail));
-                        Ok(Reply::new(ReplyCode::UserLoggedInViaCert, "User logged in"))
+                        Ok(Reply::new(ReplyCode::UserLoggedInViaCert, ServerState::Healty, "User logged in"))
                     }
-                    Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials")),
+                    Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Invalid credentials")),
                 }
             }
             (SessionState::New, None, _) | (SessionState::New, Some(_), false) => {
                 let user = std::str::from_utf8(&self.username)?;
                 session.username = Some(user.to_string());
                 session.state = SessionState::WaitPass;
-                Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
+                Ok(Reply::new(ReplyCode::NeedPassword, ServerState::Healty, "Password Required"))
             }
-            _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
+            _ => Ok(Reply::new(
+                ReplyCode::BadCommandSequence,
+                ServerState::Healty,
+                "Please create a new connection to switch user",
+            )),
         }
     }
 }

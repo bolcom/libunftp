@@ -2,6 +2,7 @@
 
 use super::{
     chancomms::{ControlChanMsg, DataChanMsg},
+    controlchan::reply::ServerState,
     tls::FtpsConfig,
 };
 use crate::server::session::SharedSession;
@@ -213,7 +214,15 @@ where
                 }
             }
             Err(e) => {
-                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                if let Err(err) = tx_error
+                    .send(ControlChanMsg::StorageError(Error::new(
+                        ErrorKind::LocalError {
+                            server_state: ServerState::Healty,
+                        },
+                        e,
+                    )))
+                    .await
+                {
                     slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
                 }
             }

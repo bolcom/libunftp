@@ -10,6 +10,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -30,6 +31,6 @@ where
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let text = vec!["Help:", "Powered by libunftp"];
         // TODO: Add useful information here like operating server type and app name.
-        Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))
+        Ok(Reply::new_multiline(ReplyCode::HelpMessage, ServerState::Healty, text))
     }
 }

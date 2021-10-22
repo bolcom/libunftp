@@ -49,14 +49,18 @@ impl Encoder<Reply> for FtpCodec {
             Reply::None => {
                 return Ok(());
             }
-            Reply::CodeAndMsg { code, msg } => {
+            Reply::CodeAndMsg { code, server_state: _, msg } => {
                 if msg.is_empty() {
                     writeln!(buffer, "{}\r", code as u32)?;
                 } else {
                     writeln!(buffer, "{} {}\r", code as u32, msg)?;
                 }
             }
-            Reply::MultiLine { code, mut lines } => {
+            Reply::MultiLine {
+                code,
+                server_state: _,
+                mut lines,
+            } => {
                 // Get the last line since it needs to be preceded by the response code.
                 let last_line = lines.pop().unwrap();
                 // Lines starting with a digit should be indented

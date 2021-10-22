@@ -11,6 +11,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
     },
@@ -54,10 +55,14 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
+                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, ServerState::Healty, "Upgrading to TLS"))
             }
-            (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
-            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+            (true, AuthParam::Ssl) => Ok(Reply::new(
+                ReplyCode::CommandNotImplementedForParameter,
+                ServerState::Healty,
+                "Auth SSL not implemented",
+            )),
+            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "TLS/SSL not configured")),
         }
     }
 }

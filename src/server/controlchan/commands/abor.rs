@@ -10,6 +10,7 @@
 // connection must be closed.
 
 use crate::auth::UserDetail;
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     server::controlchan::{
         error::ControlChanError,
@@ -41,9 +42,9 @@ where
                         slog::warn!(logger, "abort failed: {}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, "Closed data channel"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Closed data channel"))
             }
-            None => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Data channel already closed")),
+            None => Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Data channel already closed")),
         }
     }
 }

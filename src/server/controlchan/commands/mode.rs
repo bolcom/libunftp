@@ -17,6 +17,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -57,9 +58,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.params {
-            ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
+            ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "Using Stream transfer mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
+                ServerState::Healty,
                 "Only Stream transfer mode is supported",
             )),
         }

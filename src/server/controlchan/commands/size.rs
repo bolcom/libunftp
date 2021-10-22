@@ -5,6 +5,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
         },
         controlchan::{Reply, ReplyCode},
     },
@@ -47,8 +48,9 @@ where
                 Ok(metadata) => {
                     let file_len = metadata.len();
                     if let Err(err) = tx_success
-                        .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
+                        .send(ControlChanMsg::CommandChannelReply(Reply::new(
                             ReplyCode::FileStatus,
+                            ServerState::Healty,
                             file_len.to_string(),
                         )))
                         .await

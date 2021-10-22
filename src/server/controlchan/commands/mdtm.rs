@@ -5,6 +5,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
     },
@@ -60,8 +61,9 @@ where
 
                     if let Some(mtime) = modification_time {
                         if let Err(err) = tx_success
-                            .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
+                            .send(ControlChanMsg::CommandChannelReply(Reply::new(
                                 ReplyCode::FileStatus,
+                                ServerState::Healty,
                                 DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
                             )))
                             .await

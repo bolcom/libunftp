@@ -8,6 +8,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -28,8 +29,9 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         // TODO: properly escape double quotes in `cwd`
-        Ok(Reply::new_with_string(
+        Ok(Reply::new(
             ReplyCode::DirCreated,
+            ServerState::Healty,
             format!("\"{}\"", session.cwd.as_path().display()),
         ))
     }

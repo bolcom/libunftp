@@ -9,6 +9,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
+use super::reply::ServerState;
+
 // Middleware that enforces FTPS on the control channel according to the specified setting/requirement.
 pub struct FtpsControlChanEnforcerMiddleware<Storage, User, Next>
 where
@@ -34,7 +36,11 @@ where
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
-                Event::Command(Command::Ccc) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
+                Event::Command(Command::Ccc) => Ok(Reply::new(
+                    ReplyCode::FtpsRequired,
+                    ServerState::Healty,
+                    "Cannot downgrade connection, TLS enforced.",
+                )),
                 Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
                     let is_tls = async {
                         let session = self.session.lock().await;
@@ -43,7 +49,11 @@ where
                     .await;
                     match is_tls {
                         true => self.next.handle(event).await,
-                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel")),
+                        false => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            ServerState::Healty,
+                            "A TLS connection is required on the control channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,
@@ -60,7 +70,11 @@ where
                         if is_anonymous_user(&username[..])? {
                             self.next.handle(Event::Command(Command::User { username })).await
                         } else {
-                            Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                            Ok(Reply::new(
+                                ReplyCode::FtpsRequired,
+                                ServerState::Healty,
+                                "A TLS connection is required on the control channel",
+                            ))
                         }
                     }
                     (false, Event::Command(Command::Pass { password })) => {
@@ -73,7 +87,11 @@ where
                                 if is_anonymous_user(username)? {
                                     self.next.handle(Event::Command(Command::Pass { password })).await
                                 } else {
-                                    Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                                    Ok(Reply::new(
+                                        ReplyCode::FtpsRequired,
+                                        ServerState::Healty,
+                                        "A TLS connection is required on the control channel",
+                                    ))
                                 }
                             }
                         }
@@ -118,7 +136,11 @@ where
                     .await;
                     match is_tls {
                         true => self.next.handle(event).await,
-                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                        false => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            ServerState::Healty,
+                            "A TLS connection is required on the data channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,
@@ -135,7 +157,11 @@ where
                     let is_anonymous = is_anonymous_user(username)?;
                     match (is_tls, is_anonymous) {
                         (true, _) | (false, true) => self.next.handle(event).await,
-                        _ => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                        _ => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            ServerState::Healty,
+                            "A TLS connection is required on the data channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,

@@ -9,6 +9,7 @@
 // pathname does not already exist.
 
 use crate::server::chancomms::DataChanCmd;
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -46,9 +47,13 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Ready to receive data"))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                ServerState::Healty,
+                "No data connection established",
+            )),
         }
     }
 }

@@ -13,6 +13,7 @@ use crate::{
             handler::{CommandContext, CommandHandler},
             log::LoggingMiddleware,
             middleware::ControlChanMiddleware,
+            reply::ServerState,
             Reply, ReplyCode,
         },
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
@@ -149,7 +150,9 @@ where
     let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FtpCodec> = codec.framed(Box::new(tcp_stream));
     let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
 
-    reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
+    reply_sink
+        .send(Reply::new(ReplyCode::ServiceReady, ServerState::Healty, config.greeting))
+        .await?;
     reply_sink.flush().await?;
 
     tokio::spawn(async move {
@@ -263,14 +266,25 @@ where
 {
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
-        ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),
-        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
-        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"), false),
+        ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Command not implemented"), false),
+        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Invalid UTF8 in command"), true),
+        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, ServerState::Healty, "Invalid Parameter"), false),
         ControlChanErrorKind::ControlChannelTimeout => (
-            Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+            Reply::new(
+                ReplyCode::ClosingControlConnection,
+                ServerState::Healty,
+                "Session timed out. Closing control connection",
+            ),
             true,
         ),
-        _ => (Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"), true),
+        _ => (
+            Reply::new(
+                ReplyCode::LocalError,
+                ServerState::Healty,
+                "Unknown internal server error, please try again later",
+            ),
+            true,
+        ),
     }
 }
 
@@ -306,30 +320,34 @@ where
         use SessionState::*;
 
         match msg {
-            NotFound => Ok(Reply::new(ReplyCode::FileError, "File not found")),
-            PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
+            NotFound => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "File not found")),
+            PermissionDenied => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "Permision denied")),
             SendData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Successfully sent"))
             }
-            WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
-            ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
+            WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Failed to write file")),
+            ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, ServerState::Healty, "Datachannel unexpectedly closed")),
             WrittenData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "File successfully written"))
             }
-            DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
-            UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
-            DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
-            DirectoryListFailure => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Failed to list the directory")),
-            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully cwd")),
-            DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "File successfully removed")),
-            DelFail => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
+            DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "unFTP holds your data for you")),
+            UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Unknown Error")),
+            DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Listed the directory")),
+            DirectoryListFailure => Ok(Reply::new(
+                ReplyCode::ClosingDataConnection,
+                ServerState::Healty,
+                "Failed to list the directory",
+            )),
+            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "Successfully cwd")),
+            DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "File successfully removed")),
+            DelFail => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Failed to delete the file")),
             // The InternalMsg::Quit will never be reached, because we catch it in the task before
             // this closure is called (because we have to close the connection).
-            Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
+            Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, ServerState::Healty, "Bye!")),
             SecureControlChannel => {
                 let mut session = self.session.lock().await;
                 session.cmd_tls = true;
@@ -340,28 +358,30 @@ where
                 session.cmd_tls = false;
                 Ok(Reply::none())
             }
-            MkdirSuccess(path) => Ok(Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string())),
-            MkdirFail => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
+            MkdirSuccess(path) => Ok(Reply::new(ReplyCode::DirCreated, ServerState::Healty, path.to_string_lossy().to_string())),
+            MkdirFail => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "Failed to create directory")),
             AuthSuccess => {
                 let mut session = self.session.lock().await;
                 session.state = WaitCmd;
-                Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
+                Ok(Reply::new(ReplyCode::UserLoggedIn, ServerState::Healty, "User logged in, proceed"))
             }
             AuthFailed => {
                 let mut session = self.session.lock().await;
                 session.state = New; // According to RFC 959, a PASS command MUST precede a USER command
-                Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed"))
+                Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Authentication failed"))
             }
             StorageError(error_type) => match error_type.kind() {
-                ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
-                ErrorKind::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
-                ErrorKind::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
-                ErrorKind::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
-                ErrorKind::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
-                ErrorKind::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
-                ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
-                ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
-                ErrorKind::CommandNotImplemented => Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command not implemented")),
+                ErrorKind::ExceededStorageAllocationError { server_state } => {
+                    Ok(Reply::new(ReplyCode::ExceededStorageAllocation, server_state, "Exceeded storage allocation"))
+                }
+                ErrorKind::FileNameNotAllowedError { server_state } => Ok(Reply::new(ReplyCode::BadFileName, server_state, "File name not allowed")),
+                ErrorKind::InsufficientStorageSpaceError { server_state } => Ok(Reply::new(ReplyCode::OutOfSpace, server_state, "Insufficient storage space")),
+                ErrorKind::LocalError { server_state } => Ok(Reply::new(ReplyCode::LocalError, server_state, "Local error")),
+                ErrorKind::PageTypeUnknown { server_state } => Ok(Reply::new(ReplyCode::PageTypeUnknown, server_state, "Page type unknown")),
+                ErrorKind::TransientFileNotAvailable { server_state } => Ok(Reply::new(ReplyCode::TransientFileError, server_state, "File not found")),
+                ErrorKind::PermanentFileNotAvailable { server_state } => Ok(Reply::new(ReplyCode::FileError, server_state, "File not found")),
+                ErrorKind::PermissionDenied { server_state } => Ok(Reply::new(ReplyCode::FileError, server_state, "Permission denied")),
+                ErrorKind::CommandNotImplemented { server_state } => Ok(Reply::new(ReplyCode::CommandNotImplemented, server_state, "Command not implemented")),
             },
             CommandChannelReply(reply) => Ok(reply),
         }
@@ -423,7 +443,7 @@ where
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
-            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
+            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Command not implemented")),
         };
 
         handler.handle(args).await

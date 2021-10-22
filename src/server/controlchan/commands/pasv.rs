@@ -13,6 +13,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
         datachan,
@@ -110,7 +111,13 @@ impl Pasv {
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
 
         let listener = match listener {
-            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            Err(_) => {
+                return Ok(Reply::new(
+                    ReplyCode::CantOpenDataConnection,
+                    ServerState::Healty,
+                    "No data connection established",
+                ))
+            }
             Ok(l) => l,
         };
 
@@ -176,10 +183,22 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
         PassiveHost::Dns(ref dns_name) => {
             let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
             match tokio::net::lookup_host(x).await {
-                Err(_) => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                Err(_) => {
+                    return Reply::new(
+                        ReplyCode::CantOpenDataConnection,
+                        ServerState::Healty,
+                        format!("Could not resolve DNS address '{}'", dns_name),
+                    )
+                }
                 Ok(mut ip_iter) => loop {
                     match ip_iter.next() {
-                        None => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                        None => {
+                            return Reply::new(
+                                ReplyCode::CantOpenDataConnection,
+                                ServerState::Healty,
+                                format!("Could not resolve DNS address '{}'", dns_name),
+                            )
+                        }
                         Some(SocketAddr::V4(ip)) => break ip.ip().octets(),
                         Some(SocketAddr::V6(_)) => continue,
                     }
@@ -187,8 +206,9 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
             }
         }
     };
-    Reply::new_with_string(
+    Reply::new(
         ReplyCode::EnteringPassiveMode,
+        ServerState::Healty,
         format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
     )
 }

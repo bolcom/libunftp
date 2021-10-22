@@ -1,5 +1,6 @@
 //! The RFC 959 Rename To (`RNTO`) command
 
+use crate::server::controlchan::reply::ServerState;
 use crate::storage::{Metadata, StorageBackend};
 use crate::{
     auth::UserDetail,
@@ -39,14 +40,18 @@ where
             Some(from) => {
                 let to = session.cwd.join(self.path.clone());
                 match storage.rename((*session.user).as_ref().unwrap(), from, to).await {
-                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, "Renamed"),
+                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "Renamed"),
                     Err(err) => {
                         slog::warn!(logger, "Error renaming: {:?}", err);
-                        Reply::new(ReplyCode::FileError, "Storage error while renaming")
+                        Reply::new(ReplyCode::FileError, ServerState::Healty, "Storage error while renaming")
                     }
                 }
             }
-            None => Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first"),
+            None => Reply::new(
+                ReplyCode::TransientFileError,
+                ServerState::Healty,
+                "Please tell me what file you want to rename first",
+            ),
         };
         Ok(reply)
     }

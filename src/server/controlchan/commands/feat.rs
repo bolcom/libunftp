@@ -6,6 +6,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
         ftpserver::options::SiteMd5,
@@ -46,7 +47,7 @@ where
         feat_text.insert(0, "Extensions supported:");
         feat_text.push("END");
 
-        let reply = Reply::new_multiline(ReplyCode::SystemStatus, feat_text);
+        let reply = Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healty, feat_text);
         Ok(reply)
     }
 }

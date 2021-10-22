@@ -1,8 +1,8 @@
 //! Defines the service provider interface for storage back-end implementors.
 
 use super::error::Error;
-use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
+use crate::{auth::UserDetail, server::controlchan::reply::ServerState};
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
 use md5::{Digest, Md5};
@@ -122,7 +122,6 @@ where
             }
         };
         let perms = format!("{}", self.metadata.permissions());
-        #[allow(clippy::write_literal)]
         write!(
             f,
             "{filetype}{permissions} {links:>12} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",
@@ -300,9 +299,18 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         match err.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
-            _ => Error::new(ErrorKind::LocalError, err),
+            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            }),
+            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied {
+                server_state: ServerState::Healty,
+            }),
+            _ => Error::new(
+                ErrorKind::LocalError {
+                    server_state: ServerState::Healty,
+                },
+                err,
+            ),
         }
     }
 }

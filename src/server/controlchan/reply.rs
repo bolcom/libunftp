@@ -1,9 +1,29 @@
+use derive_more::Display;
+
 /// A reply to the FTP client
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
     None,
-    CodeAndMsg { code: ReplyCode, msg: String },
-    MultiLine { code: ReplyCode, lines: Vec<String> },
+    CodeAndMsg {
+        code: ReplyCode,
+        server_state: ServerState,
+        msg: String,
+    },
+    MultiLine {
+        code: ReplyCode,
+        server_state: ServerState,
+        lines: Vec<String>,
+    },
+}
+
+/// It tells if unFTP is considered helthy from
+/// operational point of view
+#[derive(Debug, Display, Clone, Eq, PartialEq, Copy)]
+pub enum ServerState {
+    /// Indicates that the server is considerd healty.
+    Healty,
+    /// Indicates that the server is not consicerd healty.
+    Unhealthy,
 }
 
 /// The reply codes according to RFC 959.
@@ -98,24 +118,22 @@ pub enum ReplyCode {
 }
 
 impl Reply {
-    pub fn new(code: ReplyCode, message: &str) -> Self {
+    pub fn new<S: Into<String>>(code: ReplyCode, server_state: ServerState, message: S) -> Self {
         Reply::CodeAndMsg {
             code,
-            msg: message.to_string(),
+            server_state,
+            msg: message.into(),
         }
     }
 
-    pub fn new_with_string(code: ReplyCode, msg: String) -> Self {
-        Reply::CodeAndMsg { code, msg }
-    }
-
-    pub fn new_multiline<I>(code: ReplyCode, lines: I) -> Self
+    pub fn new_multiline<I>(code: ReplyCode, server_state: ServerState, lines: I) -> Self
     where
         I: IntoIterator,
         I::Item: std::fmt::Display,
     {
         Reply::MultiLine {
             code,
+            server_state,
             lines: lines.into_iter().map(|item| format!("{}", item)).collect(),
         }
     }

@@ -1,4 +1,4 @@
-use crate::BoxError;
+use crate::{server::controlchan::reply::ServerState, BoxError};
 use derive_more::Display;
 use thiserror::Error;
 
@@ -46,40 +46,67 @@ pub enum ErrorKind {
     /// The storage back-end implementation should return this if a error occurred that my be
     /// retried for example in the case where a file is busy.
     #[display(fmt = "450 Transient file not available")]
-    TransientFileNotAvailable,
+    TransientFileNotAvailable {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
     /// make sense for it to be retried. For example in the case where a file is busy.
     #[display(fmt = "550 Permanent file not available")]
-    PermanentFileNotAvailable,
+    PermanentFileNotAvailable {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
     /// make sense for it to be retried. For example in the case where file access is denied.
     #[display(fmt = "550 Permission denied")]
-    PermissionDenied,
+    PermissionDenied {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// Error that will cause an FTP reply code of 451 to be returned to the FTP client. Its means
     /// the requested action was aborted due to a local error (internal storage back-end error) in
     /// processing.
     #[display(fmt = "451 Local error")]
-    LocalError,
+    LocalError {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// 551 Requested action aborted. Page type unknown.
     #[display(fmt = "551 Page type unknown")]
-    PageTypeUnknown,
+    PageTypeUnknown {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// 452 Requested action not taken. Insufficient storage space in system.
     #[display(fmt = "452 Insufficient storage space error")]
-    InsufficientStorageSpaceError,
+    InsufficientStorageSpaceError {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// 552 Requested file action aborted. Exceeded storage allocation (for current directory or
     /// dataset).
     #[display(fmt = "552 Exceeded storage allocation error")]
-    ExceededStorageAllocationError,
+    ExceededStorageAllocationError {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// Error that will cause an FTP reply code of 553 to be returned to the FTP client. Its means
     /// the requested action was not taken due to an illegal file name.
     #[display(fmt = "553 File name not allowed error")]
-    FileNameNotAllowedError,
+    FileNameNotAllowedError {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
     /// Error that will cause an FTP reply code of 502. The indicates to the client that the command
     /// is not implemented for the storage back-end. For instance the GCS back-end don't implement
     /// RMD (remove directory) but returns this error instead from its StorageBackend::rmd
     /// implementation.
     #[display(fmt = "502 Command not implemented")]
-    CommandNotImplemented,
+    CommandNotImplemented {
+        /// The ServerState, when the error occured
+        server_state: ServerState,
+    },
 }

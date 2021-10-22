@@ -23,6 +23,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -42,6 +43,6 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         // ALLO is obsolete and we'll just ignore it.
-        Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
+        Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, ServerState::Healty, "Ignored"))
     }
 }

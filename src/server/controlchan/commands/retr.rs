@@ -13,6 +13,7 @@ use crate::{
             command::Command,
             error::{ControlChanError, ControlChanErrorKind},
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply,
         },
         ReplyCode,
@@ -46,7 +47,7 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending data"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Sending data"))
             }
             None => Err(ControlChanErrorKind::InternalServerError.into()),
         }

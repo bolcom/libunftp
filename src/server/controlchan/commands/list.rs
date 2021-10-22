@@ -14,6 +14,7 @@
 // in a program, but may be quite useful to a human user.
 
 use crate::server::chancomms::DataChanCmd;
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -50,9 +51,13 @@ where
                         slog::warn!(logger, "could not notify data channel to respond with LIST. {}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Sending directory list"))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                ServerState::Healty,
+                "No data connection established",
+            )),
         }
     }
 }

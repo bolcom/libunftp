@@ -1,6 +1,6 @@
 use super::ObjectMetadata;
 use chrono::prelude::*;
-use libunftp::storage::{Error, ErrorKind, Fileinfo};
+use libunftp::storage::{Error, ErrorKind, Fileinfo, ServerState};
 use serde::{de, Deserialize};
 use std::fmt::Display;
 use std::str::FromStr;
@@ -75,7 +75,14 @@ impl Item {
     }
 
     pub(crate) fn to_md5(&self) -> Result<String, Error> {
-        let md5 = base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        let md5 = base64::decode(&self.md5_hash).map_err(|e| {
+            Error::new(
+                ErrorKind::LocalError {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
         Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
     }
 }

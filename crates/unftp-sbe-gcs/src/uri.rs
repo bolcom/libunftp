@@ -1,5 +1,5 @@
 use hyper::Uri;
-use libunftp::storage::{Error, ErrorKind};
+use libunftp::storage::{Error, ErrorKind, ServerState};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::{Path, PathBuf};
 
@@ -73,13 +73,19 @@ impl GcsUri {
             let result_path = utf8_percent_encode(path, NON_ALPHANUMERIC).collect::<String>();
             Ok(result_path)
         } else {
-            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            }))
         }
     }
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
-    Uri::from_maybe_shared(path_and_query).map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
+    Uri::from_maybe_shared(path_and_query).map_err(|_| {
+        Error::from(ErrorKind::FileNameNotAllowedError {
+            server_state: ServerState::Healty,
+        })
+    })
 }
 
 #[cfg(test)]

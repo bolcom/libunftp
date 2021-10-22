@@ -9,6 +9,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -27,6 +28,6 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::CommandOkay, "Successfully did nothing"))
+        Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "Successfully did nothing"))
     }
 }

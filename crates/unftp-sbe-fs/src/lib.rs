@@ -22,7 +22,7 @@ pub use ext::ServerExt;
 
 use async_trait::async_trait;
 use libunftp::auth::UserDetail;
-use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, ServerState, StorageBackend};
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -50,7 +50,11 @@ pub struct Meta {
 /// filesystem... hmm...
 fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
     use path_abs::PathAbs;
-    let p = PathAbs::new(path).map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))?;
+    let p = PathAbs::new(path).map_err(|_| {
+        Error::from(ErrorKind::FileNameNotAllowedError {
+            server_state: ServerState::Healty,
+        })
+    })?;
     Ok(p.as_path().to_path_buf())
 }
 
@@ -77,14 +81,21 @@ impl Filesystem {
             self.root.join(path)
         };
 
-        let real_full_path = tokio::task::spawn_blocking(move || canonicalize(full_path))
-            .await
-            .map_err(|e| Error::new(ErrorKind::LocalError, e))??;
+        let real_full_path = tokio::task::spawn_blocking(move || canonicalize(full_path)).await.map_err(|e| {
+            Error::new(
+                ErrorKind::LocalError {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })??;
 
         if real_full_path.starts_with(&self.root) {
             Ok(real_full_path)
         } else {
-            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            }))
         }
     }
 }
@@ -101,9 +112,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Self::Metadata> {
         let full_path = self.full_path(path).await?;
 
-        let fs_meta = tokio::fs::symlink_metadata(full_path)
-            .await
-            .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
+        let fs_meta = tokio::fs::symlink_metadata(full_path).await.map_err(|_| {
+            Error::from(ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            })
+        })?;
         Ok(Meta { inner: fs_meta })
     }
 
@@ -207,13 +220,25 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
                     let r = tokio::fs::rename(from_rename, to).await;
                     match r {
                         Ok(_) => Ok(()),
-                        Err(e) => Err(Error::new(ErrorKind::PermanentFileNotAvailable, e)),
+                        Err(e) => Err(Error::new(
+                            ErrorKind::PermanentFileNotAvailable {
+                                server_state: ServerState::Healty,
+                            },
+                            e,
+                        )),
                     }
                 } else {
-                    Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+                    Err(Error::from(ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    }))
                 }
             }
-            Err(e) => Err(Error::new(ErrorKind::PermanentFileNotAvailable, e)),
+            Err(e) => Err(Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )),
         }
     }
 

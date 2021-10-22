@@ -1,6 +1,7 @@
 //! The RFC 959 Store File Uniquely (`STOU`) command
 
 use crate::server::chancomms::DataChanCmd;
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
@@ -39,9 +40,17 @@ where
                         slog::warn!(logger, "sending command failed. {}", err);
                     }
                 });
-                Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
+                Ok(Reply::new(
+                    ReplyCode::FileStatusOkay,
+                    ServerState::Healty,
+                    filename.to_string_lossy().to_string(),
+                ))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                ServerState::Healty,
+                "No data connection established",
+            )),
         }
     }
 }

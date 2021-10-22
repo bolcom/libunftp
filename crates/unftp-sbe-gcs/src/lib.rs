@@ -78,6 +78,7 @@ use hyper::{
 };
 use hyper_rustls::HttpsConnector;
 use libunftp::auth::UserDetail;
+use libunftp::storage::ServerState;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use mime::APPLICATION_OCTET_STREAM;
 use object_metadata::ObjectMetadata;
@@ -151,7 +152,14 @@ impl CloudStorage {
 
                 auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
                     .map_ok(|t| t.as_str().to_string())
-                    .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+                    .map_err(|e| {
+                        Error::new(
+                            ErrorKind::PermanentFileNotAvailable {
+                                server_state: ServerState::Healty,
+                            },
+                            e,
+                        )
+                    })
                     .await
             }
             AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
@@ -181,15 +189,46 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
 
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
 
         let body = unpack_response(response).await?;
 
-        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
-        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Item = serde_json::from_str(body_str).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
         response.to_metadata()
     }
@@ -208,15 +247,46 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
 
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
 
         let body = unpack_response(response).await?;
 
-        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
-        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Item = serde_json::from_str(body_str).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
         Ok(response.to_md5()?)
     }
@@ -237,10 +307,34 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
         let body = unpack_response(response).await?;
-        let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
         response.list()
     }
 
@@ -274,9 +368,26 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::GET)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
 
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
         result_based_on_http_status(response.status(), ())?;
 
         let futures_io_async_read = response
@@ -308,11 +419,35 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::CONTENT_TYPE, APPLICATION_OCTET_STREAM.to_string())
             .method(Method::POST)
             .body(Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze())))
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
 
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
         let body = unpack_response(response).await?;
-        let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Item = serde_json::from_reader(body.reader()).map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
         Ok(response.to_metadata()?.len())
     }
@@ -328,8 +463,25 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
             .method(Method::DELETE)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
         unpack_response(response).await?;
 
         Ok(())
@@ -348,8 +500,25 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .header(header::CONTENT_LENGTH, "0")
             .method(Method::POST)
             .body(Body::empty())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-        let response: Response<Body> = client.request(request).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::PermanentFileNotAvailable {
+                        server_state: ServerState::Healty,
+                    },
+                    e,
+                )
+            })
+            .await?;
         unpack_response(response).await?;
         Ok(())
     }
@@ -357,13 +526,17 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     #[tracing_attributes::instrument]
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _from: P, _to: P) -> Result<(), Error> {
         // TODO: implement this
-        Err(Error::from(ErrorKind::CommandNotImplemented))
+        Err(Error::from(ErrorKind::CommandNotImplemented {
+            server_state: ServerState::Healty,
+        }))
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
         // TODO: implement this
-        Err(Error::from(ErrorKind::CommandNotImplemented))
+        Err(Error::from(ErrorKind::CommandNotImplemented {
+            server_state: ServerState::Healty,
+        }))
     }
 
     #[tracing_attributes::instrument]
@@ -376,7 +549,16 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 #[tracing_attributes::instrument]
 async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     let status: StatusCode = response.status();
-    let body = aggregate(response).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+    let body = aggregate(response)
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })
+        .await?;
     result_based_on_http_status(status, body)
 }
 
@@ -387,10 +569,18 @@ fn to_tokio_async_read(r: impl futures::io::AsyncRead) -> impl tokio::io::AsyncR
 fn result_based_on_http_status<T>(status: StatusCode, ok_val: T) -> Result<T, Error> {
     if !status.is_success() {
         let err_kind = match status.as_u16() {
-            404 => ErrorKind::PermanentFileNotAvailable,
-            401 | 403 => ErrorKind::PermissionDenied,
-            429 => ErrorKind::TransientFileNotAvailable,
-            _ => ErrorKind::LocalError,
+            404 => ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            },
+            401 | 403 => ErrorKind::PermissionDenied {
+                server_state: ServerState::Healty,
+            },
+            429 => ErrorKind::TransientFileNotAvailable {
+                server_state: ServerState::Healty,
+            },
+            _ => ErrorKind::LocalError {
+                server_state: ServerState::Healty,
+            },
         };
         // TODO: Consume error message in body and add as error source somehow.
         return Err(Error::from(err_kind));

@@ -1,7 +1,7 @@
 //! The Metadata for the CloudStorage
 
-use libunftp::storage::Metadata;
 use libunftp::storage::{Error, ErrorKind};
+use libunftp::storage::{Metadata, ServerState};
 use std::time::SystemTime;
 
 /// The struct that implements the Metadata trait for the CloudStorage
@@ -37,7 +37,9 @@ impl Metadata for ObjectMetadata {
     fn modified(&self) -> Result<SystemTime, Error> {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
-            None => Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
+            None => Err(Error::from(ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            })),
         }
     }
 

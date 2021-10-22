@@ -18,6 +18,7 @@
 // command, respectively.
 
 use crate::auth::UserDetail;
+use crate::server::controlchan::reply::ServerState;
 use crate::{
     server::controlchan::{
         error::ControlChanError,
@@ -40,6 +41,6 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::NotLoggedIn, "Rejected"))
+        Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Rejected"))
     }
 }

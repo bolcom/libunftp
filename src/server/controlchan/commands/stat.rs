@@ -24,6 +24,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
     },
@@ -71,7 +72,7 @@ where
                     format!("rename from path: {:?}", session.rename_from),
                     format!("offset for REST: {}", session.start_pos),
                 ];
-                Ok(Reply::new_multiline(ReplyCode::SystemStatus, text))
+                Ok(Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healty, text))
             }
             Some(path) => {
                 let path: &str = std::str::from_utf8(&path)?;
@@ -89,14 +90,26 @@ where
                     match storage.list_vec((*user).as_ref().unwrap(), path).await {
                         Ok(lines) => {
                             if let Err(err) = tx_success
-                                .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(ReplyCode::CommandOkay, lines)))
+                                .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(
+                                    ReplyCode::CommandOkay,
+                                    ServerState::Healty,
+                                    lines,
+                                )))
                                 .await
                             {
                                 slog::warn!(logger, "{}", err);
                             }
                         }
                         Err(e) => {
-                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                            if let Err(err) = tx_fail
+                                .send(ControlChanMsg::StorageError(Error::new(
+                                    ErrorKind::LocalError {
+                                        server_state: ServerState::Healty,
+                                    },
+                                    e,
+                                )))
+                                .await
+                            {
                                 slog::warn!(logger, "{}", err);
                             }
                         }

@@ -17,6 +17,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -60,9 +61,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.params {
-            StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
+            StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "In File structure mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
+                ServerState::Healty,
                 "Only File structure mode is supported",
             )),
         }

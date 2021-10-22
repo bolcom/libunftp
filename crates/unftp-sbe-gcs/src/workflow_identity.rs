@@ -7,7 +7,7 @@ use hyper::client::HttpConnector;
 use hyper::http::header;
 use hyper::{Body, Client, Method, Request, Response};
 use hyper_rustls::HttpsConnector;
-use libunftp::storage::{Error, ErrorKind};
+use libunftp::storage::{Error, ErrorKind, ServerState};
 
 // Environment variable specifying the GCE metadata hostname.
 // If empty, the default value of `METADATA_IP` is used instead.
@@ -37,16 +37,42 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
         .header(header::USER_AGENT, USER_AGENT)
         .method(Method::GET)
         .body(Body::empty())
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        .map_err(|e| {
+            Error::new(
+                ErrorKind::PermanentFileNotAvailable {
+                    server_state: ServerState::Healty,
+                },
+                e,
+            )
+        })?;
 
-    let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+    let response: Response<Body> = client.request(request).await.map_err(|e| {
+        Error::new(
+            ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            },
+            e,
+        )
+    })?;
 
-    let body_bytes = hyper::body::to_bytes(response.into_body())
-        .await
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+    let body_bytes = hyper::body::to_bytes(response.into_body()).await.map_err(|e| {
+        Error::new(
+            ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            },
+            e,
+        )
+    })?;
 
     let unmarshall_result: serde_json::Result<TokenResponse> = serde_json::from_slice(body_bytes.to_vec().as_slice());
-    unmarshall_result.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+    unmarshall_result.map_err(|e| {
+        Error::new(
+            ErrorKind::PermanentFileNotAvailable {
+                server_state: ServerState::Healty,
+            },
+            e,
+        )
+    })
 }
 
 // Example:

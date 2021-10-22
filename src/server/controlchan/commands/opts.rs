@@ -12,6 +12,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
@@ -47,8 +48,12 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.option {
-            Opt::Utf8 { on: true } => Ok(Reply::new(ReplyCode::CommandOkay, "Always in UTF-8 mode.")),
-            Opt::Utf8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
+            Opt::Utf8 { on: true } => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "Always in UTF-8 mode.")),
+            Opt::Utf8 { on: false } => Ok(Reply::new(
+                ReplyCode::CommandNotImplementedForParameter,
+                ServerState::Healty,
+                "Non UTF-8 mode not supported",
+            )),
         }
     }
 }

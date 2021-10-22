@@ -1,6 +1,8 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
 
-use crate::server::{Command, ControlChanError, ControlChanErrorKind, ControlChanMiddleware, ControlChanMsg, Event, Reply, ReplyCode};
+use crate::server::{
+    controlchan::reply::ServerState, Command, ControlChanError, ControlChanErrorKind, ControlChanMiddleware, ControlChanMsg, Event, Reply, ReplyCode,
+};
 
 use async_trait::async_trait;
 use lazy_static::*;
@@ -99,12 +101,12 @@ fn add_command_metric(cmd: &Command) {
 fn add_reply_metric(reply: &Reply) {
     match *reply {
         Reply::None => {}
-        Reply::CodeAndMsg { code, .. } => add_replycode_metric(code),
-        Reply::MultiLine { code, .. } => add_replycode_metric(code),
+        Reply::CodeAndMsg { code, server_state, .. } => add_replycode_metric(code, server_state),
+        Reply::MultiLine { code, server_state, .. } => add_replycode_metric(code, server_state),
     }
 }
 
-fn add_replycode_metric(code: ReplyCode) {
+fn add_replycode_metric(code: ReplyCode, server_state: ServerState) {
     let range = format!("{}xx", code as u32 / 100 % 10);
-    FTP_REPLY_TOTAL.with_label_values(&[&range]).inc();
+    FTP_REPLY_TOTAL.with_label_values(&[&range, &server_state.to_string()]).inc();
 }

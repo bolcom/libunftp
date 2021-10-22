@@ -3,6 +3,7 @@
 use crate::auth::UserDetail;
 use crate::server::controlchan::error::ControlChanError;
 use crate::server::controlchan::handler::{CommandContext, CommandHandler};
+use crate::server::controlchan::reply::ServerState;
 use crate::server::{Reply, ReplyCode};
 use crate::storage::{Metadata, StorageBackend};
 
@@ -33,6 +34,6 @@ where
         // } else {
         //     Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
         // }
-        Ok(Reply::new(ReplyCode::CommandNotImplemented, "CCC not implemented"))
+        Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "CCC not implemented"))
     }
 }

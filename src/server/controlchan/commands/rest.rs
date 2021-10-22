@@ -11,6 +11,7 @@ use crate::{
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
+        reply::ServerState,
         Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend, FEATURE_RESTART},
@@ -38,11 +39,15 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         if args.storage_features & FEATURE_RESTART == 0 {
-            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+            return Ok(Reply::new(
+                ReplyCode::CommandNotImplemented,
+                ServerState::Healty,
+                "Not supported by the selected storage back-end.",
+            ));
         }
         let mut session = args.session.lock().await;
         session.start_pos = self.offset;
         let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", self.offset);
-        Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
+        Ok(Reply::new(ReplyCode::FileActionPending, ServerState::Healty, &*msg))
     }
 }

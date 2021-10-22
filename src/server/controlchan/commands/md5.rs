@@ -5,6 +5,7 @@ use crate::{
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            reply::ServerState,
             Reply, ReplyCode,
         },
         ftpserver::options::SiteMd5,
@@ -47,28 +48,37 @@ where
             SiteMd5::Accounts => match &session.username {
                 Some(u) => {
                     if u == "anonymous" || u == "ftp" {
-                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "Command is not available."));
                     }
                 }
                 None => {
                     slog::error!(logger, "NoneError for username. This shouldn't happen.");
-                    return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                    return Ok(Reply::new(
+                        ReplyCode::NotLoggedIn,
+                        ServerState::Healty,
+                        "Please open a new connection to re-authenticate",
+                    ));
                 }
             },
             SiteMd5::None => {
-                return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+                return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "Command is not available."));
             }
         }
         if args.storage_features & FEATURE_SITEMD5 == 0 {
-            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+            return Ok(Reply::new(
+                ReplyCode::CommandNotImplemented,
+                ServerState::Healty,
+                "Not supported by the selected storage back-end.",
+            ));
         }
 
         tokio::spawn(async move {
             match storage.md5((*user).as_ref().unwrap(), &path).await {
                 Ok(md5) => {
                     if let Err(err) = tx_success
-                        .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
+                        .send(ControlChanMsg::CommandChannelReply(Reply::new(
                             ReplyCode::FileStatus,
+                            ServerState::Healty,
                             format!("{}    {}", md5, path.as_path().display().to_string()),
                         )))
                         .await
