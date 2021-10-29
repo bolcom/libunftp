@@ -21,7 +21,7 @@ Add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-libunftp = "0.18.1"
+libunftp = "0.19.0"
 unftp-sbe-fs = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -60,7 +60,7 @@ For more help refer to:
 Support is given on a best effort basis. You are welcome to engage us on [the discussions page](https://github.com/bolcom/libunftp/discussions)
 or create a Github issue.
 
-You can also follow news and talk to us on [Telegram](https://t.me/unftp) 
+You can also follow news and talk to us on [Telegram](https://t.me/unftp)
 
 ## Contributing
 
@@ -68,7 +68,7 @@ Thank you for your interest in contributing to unftp-sbe-fs!
 
 Please feel free to create a Github issue if you encounter any problems.
 
-Want to submit a feature request or develop your own storage or authentication back-end? Then head over to 
+Want to submit a feature request or develop your own storage or authentication back-end? Then head over to
 our [contribution guide (CONTRIBUTING.md)](../../CONTRIBUTING.md).
 
 ## License
