@@ -93,10 +93,11 @@ use uri::GcsUri;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 /// A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud storage from Google.
+/// cloned for each controlchan!
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,
-    client: Client<HttpsConnector<HttpConnector>>, //TODO: maybe it should be an Arc<> or a 'static
+    client: Client<HttpsConnector<HttpConnector>>,
     auth: AuthMethod,
 }
 
@@ -139,13 +140,11 @@ impl CloudStorage {
         }
     }
 
+    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it in `CloudStorage`.
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
         match &self.auth {
-            AuthMethod::ServiceAccountKey(k) => {
-                if b"unftp_test" == k.as_slice() {
-                    return Ok("test".to_string());
-                }
+            AuthMethod::ServiceAccountKey(_) => {
                 let key = self.auth.to_service_account_key()?;
                 let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client.clone()).build().await?;
 
@@ -157,6 +156,7 @@ impl CloudStorage {
             AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
                 .await
                 .map(|t| t.access_token),
+            AuthMethod::None => Ok("unftp_test".to_string()),
         }
     }
 }

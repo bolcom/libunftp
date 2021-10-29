@@ -20,7 +20,6 @@ use unftp_sbe_gcs::options::AuthMethod;
 
 /*
 FIXME: this is just MVP tests. need to add:
-- deleting_directory_deletes_files_in_it() and/or deleting_directory_fails_if_contains_file()
 - ...
  */
 
@@ -33,6 +32,7 @@ const ADDR: &str = "127.0.0.1:1234";
 const GCS_BASE_URL: &str = "http://localhost:9081";
 const GCS_BUCKET: &str = "test-bucket";
 
+// FIXME: switch to testcontainers-rs
 pub fn initialize_docker() -> Mutex<Child> {
     let buf = std::env::current_dir().unwrap();
     let current_dir = buf.display();
@@ -99,12 +99,40 @@ async fn creating_directory_with_file_in_it() {
         let remote_file = ftp_stream.simple_retr("greeting.txt").await.unwrap();
         assert_eq!(str::from_utf8(&remote_file.into_inner()).unwrap().as_bytes(), content);
 
-        // FIXME: `CWD ..` does nothing in GCS ATM (TODO)
-        // ftp_stream.cwd("..").await.unwrap();
         ftp_stream.cdup().await.unwrap();
         let list_out = ftp_stream.list(None).await.unwrap();
         assert_ge!(list_out.len(), 1);
         assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn deleting_directory_fails_if_contains_file() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        ftp_stream.login("anonymous", "").await.unwrap();
+        ftp_stream.mkdir("deleting_directory_fails_if_contains_file").await.unwrap();
+        ftp_stream.cwd("deleting_directory_fails_if_contains_file").await.unwrap();
+
+        let content = b"Hello from this test!\n";
+        ftp_stream.put("greeting.txt", &mut Cursor::new(content)).await.unwrap();
+        let list_in = ftp_stream.list(None).await.unwrap();
+        assert_eq!(list_in.len(), 1);
+        assert!(list_in[0].ends_with(" greeting.txt"));
+
+        ftp_stream.cdup().await.unwrap();
+        let result = ftp_stream.rmdir("deleting_directory_fails_if_contains_file").await;
+        assert!(result.is_err());
+        // FIXME: #383 Fix 'rmdir' for GCS backend
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "FTP InvalidResponse: Expected code [250], got response: 502 Command not implemented\r\n"
+        );
+
+        let list_out = ftp_stream.list(None).await.unwrap();
+        assert_ge!(list_out.len(), 1);
+        assert!(list_out.iter().any(|t| t.ends_with("deleting_directory_fails_if_contains_file")))
     })
     .await;
 }
@@ -133,7 +161,6 @@ async fn file_sizes() {
     .await;
 }
 
-// FIXME: `move async` is beta in rust 1.48, hence the `impl Future`
 async fn run_test(test: impl Future<Output = ()>) {
     let mut child = DOCKER.lock().await;
 
@@ -143,12 +170,7 @@ async fn run_test(test: impl Future<Output = ()>) {
 
     tokio::spawn(
         Server::new(Box::new(move || {
-            CloudStorage::with_api_base(
-                GCS_BASE_URL,
-                GCS_BUCKET,
-                PathBuf::from("/unftp"),
-                AuthMethod::ServiceAccountKey(b"unftp_test".to_vec()),
-            )
+            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/unftp"), AuthMethod::None)
         }))
         .logger(Some(Logger::root(drain, o!())))
         .listen(ADDR),
@@ -167,5 +189,5 @@ async fn run_test(test: impl Future<Output = ()>) {
     println!("stdout: {}", stdout);
     println!("stderr: {}", stderr);
 
-    // FIXME: stop docker container (atm there is no mechanism in cargo test for cleanup hooks)
+    // FIXME: stop docker container
 }

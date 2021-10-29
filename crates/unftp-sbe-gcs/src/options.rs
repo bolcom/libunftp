@@ -8,6 +8,8 @@ use yup_oauth2::ServiceAccountKey;
 /// will authenticate with Google Cloud Storage.
 #[derive(PartialEq, Clone)]
 pub enum AuthMethod {
+    /// Used for testing purposes only
+    None,
     /// Authenticate using a private service account key
     ServiceAccountKey(Vec<u8>),
     /// Authenticate using GCE [Workload Identity](https://cloud.google.com/blog/products/containers-kubernetes/introducing-workload-identity-better-authentication-for-your-gke-applications)
@@ -48,7 +50,9 @@ impl TryFrom<Option<PathBuf>> for AuthMethod {
 impl AuthMethod {
     pub(super) fn to_service_account_key(&self) -> std::io::Result<ServiceAccountKey> {
         match self {
-            AuthMethod::WorkloadIdentity(_) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option")),
+            AuthMethod::WorkloadIdentity(_) | AuthMethod::None => {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option"))
+            }
             AuthMethod::ServiceAccountKey(key) => {
                 serde_json::from_slice(key).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad service account key: {}", e)))
             }
@@ -62,6 +66,7 @@ impl fmt::Display for AuthMethod {
             AuthMethod::WorkloadIdentity(None) => write!(f, "Workload Identity"),
             AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "Workload Identity with service account {}", s),
             AuthMethod::ServiceAccountKey(_) => write!(f, "Service Account Key"),
+            AuthMethod::None => write!(f, "None"),
         }
     }
 }
@@ -72,6 +77,7 @@ impl fmt::Debug for AuthMethod {
             AuthMethod::WorkloadIdentity(None) => write!(f, "WorkloadIdentity(None)"),
             AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "WorkloadIdentity(Some({}))", s),
             AuthMethod::ServiceAccountKey(_) => write!(f, "ServiceAccountKey(*******)"),
+            AuthMethod::None => write!(f, "None"),
         }
     }
 }
