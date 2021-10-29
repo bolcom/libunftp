@@ -37,7 +37,7 @@ where
         session.rename_from = Some(session.cwd.join(self.path.clone()));
         Ok(Reply::new(
             ReplyCode::FileActionPending,
-            ServerState::Healty,
+            ServerState::Healthy,
             "Tell me, what would you like the new name to be?",
         ))
     }

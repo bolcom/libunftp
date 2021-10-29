@@ -74,7 +74,7 @@ impl GcsUri {
             Ok(result_path)
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             }))
         }
     }
@@ -83,7 +83,7 @@ impl GcsUri {
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
     Uri::from_maybe_shared(path_and_query).map_err(|_| {
         Error::from(ErrorKind::FileNameNotAllowedError {
-            server_state: ServerState::Healty,
+            server_state: ServerState::Healthy,
         })
     })
 }

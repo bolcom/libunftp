@@ -300,14 +300,14 @@ impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         match err.kind() {
             std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             }),
             std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             }),
             _ => Error::new(
                 ErrorKind::LocalError {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 err,
             ),

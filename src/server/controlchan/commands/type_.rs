@@ -50,6 +50,6 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "Always in binary mode"))
+        Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healthy, "Always in binary mode"))
     }
 }

@@ -78,7 +78,7 @@ impl Item {
         let md5 = base64::decode(&self.md5_hash).map_err(|e| {
             Error::new(
                 ErrorKind::LocalError {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )

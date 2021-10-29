@@ -40,16 +40,16 @@ where
             Some(from) => {
                 let to = session.cwd.join(self.path.clone());
                 match storage.rename((*session.user).as_ref().unwrap(), from, to).await {
-                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "Renamed"),
+                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, ServerState::Healthy, "Renamed"),
                     Err(err) => {
                         slog::warn!(logger, "Error renaming: {:?}", err);
-                        Reply::new(ReplyCode::FileError, ServerState::Healty, "Storage error while renaming")
+                        Reply::new(ReplyCode::FileError, ServerState::Healthy, "Storage error while renaming")
                     }
                 }
             }
             None => Reply::new(
                 ReplyCode::TransientFileError,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Please tell me what file you want to rename first",
             ),
         };

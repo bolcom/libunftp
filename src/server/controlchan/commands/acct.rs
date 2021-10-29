@@ -41,6 +41,6 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Rejected"))
+        Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healthy, "Rejected"))
     }
 }

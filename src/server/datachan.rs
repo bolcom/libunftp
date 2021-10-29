@@ -217,7 +217,7 @@ where
                 if let Err(err) = tx_error
                     .send(ControlChanMsg::StorageError(Error::new(
                         ErrorKind::LocalError {
-                            server_state: ServerState::Healty,
+                            server_state: ServerState::Healthy,
                         },
                         e,
                     )))

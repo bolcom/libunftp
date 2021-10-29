@@ -40,7 +40,7 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
         .map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -49,7 +49,7 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
     let response: Response<Body> = client.request(request).await.map_err(|e| {
         Error::new(
             ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             e,
         )
@@ -58,7 +58,7 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
     let body_bytes = hyper::body::to_bytes(response.into_body()).await.map_err(|e| {
         Error::new(
             ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             e,
         )
@@ -68,7 +68,7 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
     unmarshall_result.map_err(|e| {
         Error::new(
             ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             e,
         )

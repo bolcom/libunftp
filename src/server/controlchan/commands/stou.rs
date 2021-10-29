@@ -42,13 +42,13 @@ where
                 });
                 Ok(Reply::new(
                     ReplyCode::FileStatusOkay,
-                    ServerState::Healty,
+                    ServerState::Healthy,
                     filename.to_string_lossy().to_string(),
                 ))
             }
             None => Ok(Reply::new(
                 ReplyCode::CantOpenDataConnection,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "No data connection established",
             )),
         }

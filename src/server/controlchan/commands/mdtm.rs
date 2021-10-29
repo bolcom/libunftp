@@ -63,7 +63,7 @@ where
                         if let Err(err) = tx_success
                             .send(ControlChanMsg::CommandChannelReply(Reply::new(
                                 ReplyCode::FileStatus,
-                                ServerState::Healty,
+                                ServerState::Healthy,
                                 DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
                             )))
                             .await

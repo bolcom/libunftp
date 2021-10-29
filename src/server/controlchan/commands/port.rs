@@ -42,7 +42,7 @@ where
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         Ok(Reply::new(
             ReplyCode::CommandNotImplemented,
-            ServerState::Healty,
+            ServerState::Healthy,
             "ACTIVE mode is not supported - use PASSIVE instead",
         ))
     }

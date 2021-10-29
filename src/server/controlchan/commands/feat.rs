@@ -47,7 +47,7 @@ where
         feat_text.insert(0, "Extensions supported:");
         feat_text.push("END");
 
-        let reply = Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healty, feat_text);
+        let reply = Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healthy, feat_text);
         Ok(reply)
     }
 }

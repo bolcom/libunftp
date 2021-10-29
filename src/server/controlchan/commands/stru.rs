@@ -61,10 +61,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.params {
-            StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "In File structure mode")),
+            StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healthy, "In File structure mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Only File structure mode is supported",
             )),
         }

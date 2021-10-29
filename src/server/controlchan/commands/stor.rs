@@ -47,11 +47,11 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Ready to receive data"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healthy, "Ready to receive data"))
             }
             None => Ok(Reply::new(
                 ReplyCode::CantOpenDataConnection,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "No data connection established",
             )),
         }

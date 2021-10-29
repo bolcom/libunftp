@@ -38,7 +38,7 @@ where
             (FtpsRequired::All, event) => match event {
                 Event::Command(Command::Ccc) => Ok(Reply::new(
                     ReplyCode::FtpsRequired,
-                    ServerState::Healty,
+                    ServerState::Healthy,
                     "Cannot downgrade connection, TLS enforced.",
                 )),
                 Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
@@ -51,7 +51,7 @@ where
                         true => self.next.handle(event).await,
                         false => Ok(Reply::new(
                             ReplyCode::FtpsRequired,
-                            ServerState::Healty,
+                            ServerState::Healthy,
                             "A TLS connection is required on the control channel",
                         )),
                     }
@@ -72,7 +72,7 @@ where
                         } else {
                             Ok(Reply::new(
                                 ReplyCode::FtpsRequired,
-                                ServerState::Healty,
+                                ServerState::Healthy,
                                 "A TLS connection is required on the control channel",
                             ))
                         }
@@ -89,7 +89,7 @@ where
                                 } else {
                                     Ok(Reply::new(
                                         ReplyCode::FtpsRequired,
-                                        ServerState::Healty,
+                                        ServerState::Healthy,
                                         "A TLS connection is required on the control channel",
                                     ))
                                 }
@@ -138,7 +138,7 @@ where
                         true => self.next.handle(event).await,
                         false => Ok(Reply::new(
                             ReplyCode::FtpsRequired,
-                            ServerState::Healty,
+                            ServerState::Healthy,
                             "A TLS connection is required on the data channel",
                         )),
                     }
@@ -159,7 +159,7 @@ where
                         (true, _) | (false, true) => self.next.handle(event).await,
                         _ => Ok(Reply::new(
                             ReplyCode::FtpsRequired,
-                            ServerState::Healty,
+                            ServerState::Healthy,
                             "A TLS connection is required on the data channel",
                         )),
                     }

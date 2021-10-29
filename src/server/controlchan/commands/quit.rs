@@ -46,6 +46,6 @@ where
         if let Err(send_res) = tx.send(ControlChanMsg::Quit).await {
             slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
-        Ok(Reply::new(ReplyCode::ClosingControlConnection, ServerState::Healty, "Bye!"))
+        Ok(Reply::new(ReplyCode::ClosingControlConnection, ServerState::Healthy, "Bye!"))
     }
 }

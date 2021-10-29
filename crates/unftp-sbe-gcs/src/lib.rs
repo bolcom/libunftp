@@ -155,7 +155,7 @@ impl CloudStorage {
                     .map_err(|e| {
                         Error::new(
                             ErrorKind::PermanentFileNotAvailable {
-                                server_state: ServerState::Healty,
+                                server_state: ServerState::Healthy,
                             },
                             e,
                         )
@@ -192,7 +192,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -203,7 +203,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -215,7 +215,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -224,7 +224,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let response: Item = serde_json::from_str(body_str).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -250,7 +250,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -261,7 +261,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -273,7 +273,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -282,7 +282,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let response: Item = serde_json::from_str(body_str).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -310,7 +310,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -320,7 +320,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -330,7 +330,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -371,7 +371,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -382,7 +382,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -422,7 +422,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -433,7 +433,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -443,7 +443,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let response: Item = serde_json::from_reader(body.reader()).map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -466,7 +466,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -476,7 +476,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -503,7 +503,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -513,7 +513,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
             .map_err(|e| {
                 Error::new(
                     ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     },
                     e,
                 )
@@ -527,7 +527,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _from: P, _to: P) -> Result<(), Error> {
         // TODO: implement this
         Err(Error::from(ErrorKind::CommandNotImplemented {
-            server_state: ServerState::Healty,
+            server_state: ServerState::Healthy,
         }))
     }
 
@@ -535,7 +535,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
         // TODO: implement this
         Err(Error::from(ErrorKind::CommandNotImplemented {
-            server_state: ServerState::Healty,
+            server_state: ServerState::Healthy,
         }))
     }
 
@@ -553,7 +553,7 @@ async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
         .map_err(|e| {
             Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -570,16 +570,16 @@ fn result_based_on_http_status<T>(status: StatusCode, ok_val: T) -> Result<T, Er
     if !status.is_success() {
         let err_kind = match status.as_u16() {
             404 => ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             401 | 403 => ErrorKind::PermissionDenied {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             429 => ErrorKind::TransientFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
             _ => ErrorKind::LocalError {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             },
         };
         // TODO: Consume error message in body and add as error source somehow.

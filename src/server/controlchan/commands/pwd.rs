@@ -31,7 +31,7 @@ where
         // TODO: properly escape double quotes in `cwd`
         Ok(Reply::new(
             ReplyCode::DirCreated,
-            ServerState::Healty,
+            ServerState::Healthy,
             format!("\"{}\"", session.cwd.as_path().display()),
         ))
     }

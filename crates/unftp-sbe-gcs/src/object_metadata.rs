@@ -38,7 +38,7 @@ impl Metadata for ObjectMetadata {
         match self.last_updated {
             Some(timestamp) => Ok(timestamp),
             None => Err(Error::from(ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             })),
         }
     }

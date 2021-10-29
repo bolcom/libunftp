@@ -47,7 +47,7 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Sending data"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healthy, "Sending data"))
             }
             None => Err(ControlChanErrorKind::InternalServerError.into()),
         }

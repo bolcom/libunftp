@@ -51,11 +51,11 @@ where
                         slog::warn!(logger, "could not notify data channel to respond with LIST. {}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healty, "Sending directory list"))
+                Ok(Reply::new(ReplyCode::FileStatusOkay, ServerState::Healthy, "Sending directory list"))
             }
             None => Ok(Reply::new(
                 ReplyCode::CantOpenDataConnection,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "No data connection established",
             )),
         }

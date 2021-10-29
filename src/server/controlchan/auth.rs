@@ -52,7 +52,7 @@ where
                 }
                 .await;
                 if session_state != SessionState::WaitCmd {
-                    Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Please authenticate"))
+                    Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healthy, "Please authenticate"))
                 } else {
                     self.next.handle(event).await
                 }

@@ -52,7 +52,7 @@ fn canonicalize<P: AsRef<Path>>(path: P) -> Result<PathBuf> {
     use path_abs::PathAbs;
     let p = PathAbs::new(path).map_err(|_| {
         Error::from(ErrorKind::FileNameNotAllowedError {
-            server_state: ServerState::Healty,
+            server_state: ServerState::Healthy,
         })
     })?;
     Ok(p.as_path().to_path_buf())
@@ -84,7 +84,7 @@ impl Filesystem {
         let real_full_path = tokio::task::spawn_blocking(move || canonicalize(full_path)).await.map_err(|e| {
             Error::new(
                 ErrorKind::LocalError {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )
@@ -94,7 +94,7 @@ impl Filesystem {
             Ok(real_full_path)
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             }))
         }
     }
@@ -114,7 +114,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
         let fs_meta = tokio::fs::symlink_metadata(full_path).await.map_err(|_| {
             Error::from(ErrorKind::PermanentFileNotAvailable {
-                server_state: ServerState::Healty,
+                server_state: ServerState::Healthy,
             })
         })?;
         Ok(Meta { inner: fs_meta })
@@ -222,20 +222,20 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
                         Ok(_) => Ok(()),
                         Err(e) => Err(Error::new(
                             ErrorKind::PermanentFileNotAvailable {
-                                server_state: ServerState::Healty,
+                                server_state: ServerState::Healthy,
                             },
                             e,
                         )),
                     }
                 } else {
                     Err(Error::from(ErrorKind::PermanentFileNotAvailable {
-                        server_state: ServerState::Healty,
+                        server_state: ServerState::Healthy,
                     }))
                 }
             }
             Err(e) => Err(Error::new(
                 ErrorKind::PermanentFileNotAvailable {
-                    server_state: ServerState::Healty,
+                    server_state: ServerState::Healthy,
                 },
                 e,
             )),

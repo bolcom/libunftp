@@ -33,7 +33,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        Ok(Reply::new(ReplyCode::SystemType, ServerState::Healty, "UNIX Type: L8"))
+        Ok(Reply::new(ReplyCode::SystemType, ServerState::Healthy, "UNIX Type: L8"))
         // TODO change this for windows
     }
 }

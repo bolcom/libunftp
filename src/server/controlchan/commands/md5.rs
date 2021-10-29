@@ -48,26 +48,26 @@ where
             SiteMd5::Accounts => match &session.username {
                 Some(u) => {
                     if u == "anonymous" || u == "ftp" {
-                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "Command is not available."));
+                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healthy, "Command is not available."));
                     }
                 }
                 None => {
                     slog::error!(logger, "NoneError for username. This shouldn't happen.");
                     return Ok(Reply::new(
                         ReplyCode::NotLoggedIn,
-                        ServerState::Healty,
+                        ServerState::Healthy,
                         "Please open a new connection to re-authenticate",
                     ));
                 }
             },
             SiteMd5::None => {
-                return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "Command is not available."));
+                return Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healthy, "Command is not available."));
             }
         }
         if args.storage_features & FEATURE_SITEMD5 == 0 {
             return Ok(Reply::new(
                 ReplyCode::CommandNotImplemented,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Not supported by the selected storage back-end.",
             ));
         }
@@ -78,7 +78,7 @@ where
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new(
                             ReplyCode::FileStatus,
-                            ServerState::Healty,
+                            ServerState::Healthy,
                             format!("{}    {}", md5, path.as_path().display().to_string()),
                         )))
                         .await

@@ -42,9 +42,13 @@ where
                         slog::warn!(logger, "abort failed: {}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Closed data channel"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healthy, "Closed data channel"))
             }
-            None => Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Data channel already closed")),
+            None => Ok(Reply::new(
+                ReplyCode::ClosingDataConnection,
+                ServerState::Healthy,
+                "Data channel already closed",
+            )),
         }
     }
 }

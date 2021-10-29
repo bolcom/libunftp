@@ -32,6 +32,6 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         session.cwd.pop();
-        Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "OK"))
+        Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healthy, "OK"))
     }
 }

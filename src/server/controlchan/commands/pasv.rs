@@ -114,7 +114,7 @@ impl Pasv {
             Err(_) => {
                 return Ok(Reply::new(
                     ReplyCode::CantOpenDataConnection,
-                    ServerState::Healty,
+                    ServerState::Healthy,
                     "No data connection established",
                 ))
             }
@@ -186,7 +186,7 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
                 Err(_) => {
                     return Reply::new(
                         ReplyCode::CantOpenDataConnection,
-                        ServerState::Healty,
+                        ServerState::Healthy,
                         format!("Could not resolve DNS address '{}'", dns_name),
                     )
                 }
@@ -195,7 +195,7 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
                         None => {
                             return Reply::new(
                                 ReplyCode::CantOpenDataConnection,
-                                ServerState::Healty,
+                                ServerState::Healthy,
                                 format!("Could not resolve DNS address '{}'", dns_name),
                             )
                         }
@@ -208,7 +208,7 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
     };
     Reply::new(
         ReplyCode::EnteringPassiveMode,
-        ServerState::Healty,
+        ServerState::Healthy,
         format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
     )
 }

@@ -20,9 +20,9 @@ pub enum Reply {
 /// operational point of view
 #[derive(Debug, Display, Clone, Eq, PartialEq, Copy)]
 pub enum ServerState {
-    /// Indicates that the server is considerd healty.
-    Healty,
-    /// Indicates that the server is not consicerd healty.
+    /// Indicates that the server is considerd healthy.
+    Healthy,
+    /// Indicates that the server is not consicerd healthy.
     Unhealthy,
 }
 

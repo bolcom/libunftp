@@ -34,6 +34,6 @@ where
         // } else {
         //     Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
         // }
-        Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "CCC not implemented"))
+        Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healthy, "CCC not implemented"))
     }
 }

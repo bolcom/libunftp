@@ -61,7 +61,7 @@ where
                         slog::error!(logger, "NoneError for username. This shouldn't happen.");
                         return Ok(Reply::new(
                             ReplyCode::NotLoggedIn,
-                            ServerState::Healty,
+                            ServerState::Healthy,
                             "Please open a new connection to re-authenticate",
                         ));
                     }
@@ -101,10 +101,14 @@ where
                 });
                 Ok(Reply::none())
             }
-            SessionState::New => Ok(Reply::new(ReplyCode::BadCommandSequence, ServerState::Healty, "Please supply a username first")),
+            SessionState::New => Ok(Reply::new(
+                ReplyCode::BadCommandSequence,
+                ServerState::Healthy,
+                "Please supply a username first",
+            )),
             _ => Ok(Reply::new(
                 ReplyCode::NotLoggedIn,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Please open a new connection to re-authenticate",
             )),
         }

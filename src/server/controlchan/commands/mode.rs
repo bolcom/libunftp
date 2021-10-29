@@ -58,10 +58,10 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         match &self.params {
-            ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "Using Stream transfer mode")),
+            ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healthy, "Using Stream transfer mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Only Stream transfer mode is supported",
             )),
         }

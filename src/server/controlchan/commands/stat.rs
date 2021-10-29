@@ -72,7 +72,7 @@ where
                     format!("rename from path: {:?}", session.rename_from),
                     format!("offset for REST: {}", session.start_pos),
                 ];
-                Ok(Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healty, text))
+                Ok(Reply::new_multiline(ReplyCode::SystemStatus, ServerState::Healthy, text))
             }
             Some(path) => {
                 let path: &str = std::str::from_utf8(&path)?;
@@ -92,7 +92,7 @@ where
                             if let Err(err) = tx_success
                                 .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(
                                     ReplyCode::CommandOkay,
-                                    ServerState::Healty,
+                                    ServerState::Healthy,
                                     lines,
                                 )))
                                 .await
@@ -104,7 +104,7 @@ where
                             if let Err(err) = tx_fail
                                 .send(ControlChanMsg::StorageError(Error::new(
                                     ErrorKind::LocalError {
-                                        server_state: ServerState::Healty,
+                                        server_state: ServerState::Healthy,
                                     },
                                     e,
                                 )))

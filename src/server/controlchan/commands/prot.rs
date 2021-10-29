@@ -51,21 +51,21 @@ where
                 session.data_tls = false;
                 Ok(Reply::new(
                     ReplyCode::CommandOkay,
-                    ServerState::Healty,
+                    ServerState::Healthy,
                     "PROT OK. Switching data channel to plaintext",
                 ))
             }
             (true, ProtParam::Private) => {
                 let mut session = args.session.lock().await;
                 session.data_tls = true;
-                Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healty, "PROT OK. Securing data channel"))
+                Ok(Reply::new(ReplyCode::CommandOkay, ServerState::Healthy, "PROT OK. Securing data channel"))
             }
             (true, _) => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "PROT S/E not implemented",
             )),
-            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healty, "TLS/SSL not configured")),
+            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, ServerState::Healthy, "TLS/SSL not configured")),
         }
     }
 }

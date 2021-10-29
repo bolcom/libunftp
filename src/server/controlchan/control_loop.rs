@@ -151,7 +151,7 @@ where
     let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
 
     reply_sink
-        .send(Reply::new(ReplyCode::ServiceReady, ServerState::Healty, config.greeting))
+        .send(Reply::new(ReplyCode::ServiceReady, ServerState::Healthy, config.greeting))
         .await?;
     reply_sink.flush().await?;
 
@@ -266,13 +266,16 @@ where
 {
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
-        ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Command not implemented"), false),
-        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Invalid UTF8 in command"), true),
-        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, ServerState::Healty, "Invalid Parameter"), false),
+        ControlChanErrorKind::UnknownCommand { .. } => (
+            Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healthy, "Command not implemented"),
+            false,
+        ),
+        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healthy, "Invalid UTF8 in command"), true),
+        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, ServerState::Healthy, "Invalid Parameter"), false),
         ControlChanErrorKind::ControlChannelTimeout => (
             Reply::new(
                 ReplyCode::ClosingControlConnection,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Session timed out. Closing control connection",
             ),
             true,
@@ -280,7 +283,7 @@ where
         _ => (
             Reply::new(
                 ReplyCode::LocalError,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Unknown internal server error, please try again later",
             ),
             true,
@@ -320,34 +323,34 @@ where
         use SessionState::*;
 
         match msg {
-            NotFound => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "File not found")),
-            PermissionDenied => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "Permision denied")),
+            NotFound => Ok(Reply::new(ReplyCode::FileError, ServerState::Healthy, "File not found")),
+            PermissionDenied => Ok(Reply::new(ReplyCode::FileError, ServerState::Healthy, "Permision denied")),
             SendData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Successfully sent"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healthy, "Successfully sent"))
             }
-            WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Failed to write file")),
-            ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, ServerState::Healty, "Datachannel unexpectedly closed")),
+            WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healthy, "Failed to write file")),
+            ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, ServerState::Healthy, "Datachannel unexpectedly closed")),
             WrittenData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "File successfully written"))
+                Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healthy, "File successfully written"))
             }
-            DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "unFTP holds your data for you")),
-            UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Unknown Error")),
-            DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healty, "Listed the directory")),
+            DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healthy, "unFTP holds your data for you")),
+            UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healthy, "Unknown Error")),
+            DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, ServerState::Healthy, "Listed the directory")),
             DirectoryListFailure => Ok(Reply::new(
                 ReplyCode::ClosingDataConnection,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Failed to list the directory",
             )),
-            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "Successfully cwd")),
-            DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healty, "File successfully removed")),
-            DelFail => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healty, "Failed to delete the file")),
+            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healthy, "Successfully cwd")),
+            DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, ServerState::Healthy, "File successfully removed")),
+            DelFail => Ok(Reply::new(ReplyCode::TransientFileError, ServerState::Healthy, "Failed to delete the file")),
             // The InternalMsg::Quit will never be reached, because we catch it in the task before
             // this closure is called (because we have to close the connection).
-            Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, ServerState::Healty, "Bye!")),
+            Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, ServerState::Healthy, "Bye!")),
             SecureControlChannel => {
                 let mut session = self.session.lock().await;
                 session.cmd_tls = true;
@@ -358,17 +361,17 @@ where
                 session.cmd_tls = false;
                 Ok(Reply::none())
             }
-            MkdirSuccess(path) => Ok(Reply::new(ReplyCode::DirCreated, ServerState::Healty, path.to_string_lossy().to_string())),
-            MkdirFail => Ok(Reply::new(ReplyCode::FileError, ServerState::Healty, "Failed to create directory")),
+            MkdirSuccess(path) => Ok(Reply::new(ReplyCode::DirCreated, ServerState::Healthy, path.to_string_lossy().to_string())),
+            MkdirFail => Ok(Reply::new(ReplyCode::FileError, ServerState::Healthy, "Failed to create directory")),
             AuthSuccess => {
                 let mut session = self.session.lock().await;
                 session.state = WaitCmd;
-                Ok(Reply::new(ReplyCode::UserLoggedIn, ServerState::Healty, "User logged in, proceed"))
+                Ok(Reply::new(ReplyCode::UserLoggedIn, ServerState::Healthy, "User logged in, proceed"))
             }
             AuthFailed => {
                 let mut session = self.session.lock().await;
                 session.state = New; // According to RFC 959, a PASS command MUST precede a USER command
-                Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Authentication failed"))
+                Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healthy, "Authentication failed"))
             }
             StorageError(error_type) => match error_type.kind() {
                 ErrorKind::ExceededStorageAllocationError { server_state } => {
@@ -443,7 +446,7 @@ where
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
-            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healty, "Command not implemented")),
+            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, ServerState::Healthy, "Command not implemented")),
         };
 
         handler.handle(args).await

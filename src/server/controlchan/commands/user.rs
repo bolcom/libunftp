@@ -58,20 +58,20 @@ where
                         session.username = Some(user.to_string());
                         session.state = SessionState::WaitCmd;
                         session.user = Arc::new(Some(user_detail));
-                        Ok(Reply::new(ReplyCode::UserLoggedInViaCert, ServerState::Healty, "User logged in"))
+                        Ok(Reply::new(ReplyCode::UserLoggedInViaCert, ServerState::Healthy, "User logged in"))
                     }
-                    Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healty, "Invalid credentials")),
+                    Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, ServerState::Healthy, "Invalid credentials")),
                 }
             }
             (SessionState::New, None, _) | (SessionState::New, Some(_), false) => {
                 let user = std::str::from_utf8(&self.username)?;
                 session.username = Some(user.to_string());
                 session.state = SessionState::WaitPass;
-                Ok(Reply::new(ReplyCode::NeedPassword, ServerState::Healty, "Password Required"))
+                Ok(Reply::new(ReplyCode::NeedPassword, ServerState::Healthy, "Password Required"))
             }
             _ => Ok(Reply::new(
                 ReplyCode::BadCommandSequence,
-                ServerState::Healty,
+                ServerState::Healthy,
                 "Please create a new connection to switch user",
             )),
         }
