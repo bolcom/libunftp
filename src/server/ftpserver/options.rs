@@ -1,11 +1,12 @@
 //! Contains code pertaining to the setup options that can be given to the [`Server`](crate::Server)
 
 use bitflags::bitflags;
-use std::fmt::Formatter;
-use std::ops::Range;
 use std::{
+    fmt::Formatter,
     fmt::{self, Debug, Display},
+    future::Future,
     net::{IpAddr, Ipv4Addr},
+    ops::Range,
 };
 
 // Once we're sure about the types of these I think its good to expose it to the API user so that
@@ -171,5 +172,34 @@ pub enum SiteMd5 {
 impl Default for SiteMd5 {
     fn default() -> SiteMd5 {
         SiteMd5::Accounts
+    }
+}
+
+/// dfd
+pub enum Shutdown<Signal: Future<Output = ()> + Send + Sync> {
+    /// No shutdown signal is given.
+    ///
+    /// This will cause libunftp keep on running as long as the future returned by [Server.listen()](crate::Server::listen)
+    /// are polled.
+    None,
+    /// The given shutdown signal will be adhered to
+    GracefulAcceptingConnections(Signal),
+    /// The given shutdown signal will be adhered to
+    GracefulBlockingConnections(Signal),
+}
+
+// impl<Signal: Future<Output = ()> + Send + Sync> Shutdown<Signal> {
+//     fn into_signal(self) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+//         match self {
+//             Shutdown::None => Box::pin(futures_util::future::pending()) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
+//             Shutdown::GracefulAcceptingConnections(signal) => Box::pin(signal) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
+//             Shutdown::GracefulBlockingConnections(signal) => Box::pin(signal) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
+//         }
+//     }
+// }
+
+impl<Signal: Future<Output = ()> + Send + Sync> Default for Shutdown<Signal> {
+    fn default() -> Self {
+        Shutdown::None
     }
 }
