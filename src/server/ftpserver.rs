@@ -22,6 +22,8 @@ use crate::options::{FtpsClientAuth, TlsFlags};
 use crate::server::tls;
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
+use std::future::Future;
+use std::pin::Pin;
 use std::{fmt::Debug, net::IpAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::channel;
@@ -69,7 +71,8 @@ where
     proxy_protocol_mode: ProxyMode,
     proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
     logger: slog::Logger,
-    sitemd5: SiteMd5,
+    site_md5: SiteMd5,
+    shutdown: Option<Pin<Box<dyn Future<Output = ()> + Send + Sync>>>,
 }
 
 impl<Storage, User> Debug for Server<Storage, User>
@@ -122,9 +125,9 @@ where
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn with_authenticator(s: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
+    pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         Server {
-            storage: s,
+            storage: sbe_generator,
             greeting: DEFAULT_GREETING,
             authenticator,
             passive_ports: options::DEFAULT_PASSIVE_PORTS,
@@ -140,7 +143,8 @@ where
             ftps_tls_flags: TlsFlags::default(),
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
-            sitemd5: SiteMd5::default(),
+            site_md5: SiteMd5::default(),
+            shutdown: Some(Box::pin(futures_util::future::pending())),
         }
     }
 
@@ -430,7 +434,41 @@ where
         self
     }
 
-    /// Runs the main ftp process asynchronously. Should be started in a async runtime context.
+    /// Allows telling libunftp when to shutdown gracefully
+    ///
+    /// The passed argument is a future that should only resolve once libunftp should shut down.
+    pub fn shutdown_indicator<T: Future<Output = ()> + Send + Sync + 'static>(mut self, indicator: options::Shutdown<T>) -> Self {
+        match indicator {
+            options::Shutdown::None => self.shutdown = Some(Box::pin(futures_util::future::pending())),
+            options::Shutdown::GracefulAcceptingConnections(signal) => self.shutdown = Some(Box::pin(signal)),
+            options::Shutdown::GracefulBlockingConnections(signal) => self.shutdown = Some(Box::pin(signal)),
+        };
+        self
+    }
+
+    /// Enables SITE MD5
+    ///
+    /// Warning:
+    /// Depending on the storage backend, SITE MD5 may use relatively much memory and generate high CPU usage.
+    /// This opens a Denial of Service vulnerability that could be exploited by malicious users, by means of flooding the server with SITE MD5 commands.
+    /// As such this feature is probably best user configured and at least disabled for anonymous users by default.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use libunftp::options::SiteMd5;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp").sitemd5(SiteMd5::None);
+    /// ```
+    pub fn sitemd5<M: Into<SiteMd5>>(mut self, sitemd5_option: M) -> Self {
+        self.site_md5 = sitemd5_option.into();
+        self
+    }
+
+    /// Runs the main FTP process asynchronously. Should be started in a async runtime context.
     ///
     /// # Example
     ///
@@ -446,10 +484,6 @@ where
     /// drop(rt);
     /// ```
     ///
-    /// # Panics
-    ///
-    /// This function panics when called with invalid addresses or when the process is unable to
-    /// `bind()` to the address.
     #[tracing_attributes::instrument]
     pub async fn listen<T: Into<String> + Debug>(mut self, bind_address: T) -> std::result::Result<(), ServerError> {
         self.ftps_mode = match self.ftps_mode {
@@ -459,21 +493,34 @@ where
             },
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
-        match self.proxy_protocol_mode {
-            ProxyMode::On { external_control_port } => self.listen_proxy_protocol_mode(bind_address, external_control_port).await,
-            ProxyMode::Off => self.listen_normal_mode(bind_address).await,
+
+        let shutdown = self.shutdown.take().unwrap();
+        let logger = self.logger.clone();
+        let bind_address: std::net::SocketAddr = bind_address.into().parse()?;
+
+        let listen_future = match self.proxy_protocol_mode {
+            ProxyMode::On { external_control_port } => Box::pin(self.listen_proxy_protocol_mode(bind_address, external_control_port))
+                as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            ProxyMode::Off => Box::pin(self.listen_normal_mode(bind_address)) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+        };
+
+        tokio::select! {
+            result = listen_future => result,
+            _ = shutdown => {
+                    slog::info!(logger, "Shutting Down");
+                    Ok(())
+                }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_normal_mode<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
-        let addr: std::net::SocketAddr = bind_address.into().parse()?;
-        let listener = tokio::net::TcpListener::bind(addr).await?;
+    async fn listen_normal_mode(&self, bind_address: std::net::SocketAddr) -> std::result::Result<(), ServerError> {
+        let listener = tokio::net::TcpListener::bind(bind_address).await?;
         loop {
             match listener.accept().await {
                 Ok((tcp_stream, socket_addr)) => {
                     slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
-                    let params: controlchan::LoopConfig<Storage, User> = (&self).into();
+                    let params: controlchan::LoopConfig<Storage, User> = self.into();
                     let result = controlchan::spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
                     if let Err(err) = result {
                         slog::error!(
@@ -492,13 +539,8 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn listen_proxy_protocol_mode<T: Into<String> + Debug>(
-        mut self,
-        bind_address: T,
-        external_control_port: u16,
-    ) -> std::result::Result<(), ServerError> {
-        let addr: std::net::SocketAddr = bind_address.into().parse()?;
-        let listener = tokio::net::TcpListener::bind(addr).await?;
+    async fn listen_proxy_protocol_mode(mut self, bind_address: std::net::SocketAddr, external_control_port: u16) -> std::result::Result<(), ServerError> {
+        let listener = tokio::net::TcpListener::bind(bind_address).await?;
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
@@ -608,29 +650,6 @@ where
             }
         }
     }
-
-    /// Enables SITE MD5
-    ///
-    /// Warning:
-    /// Depending on the storage backend, SITE MD5 may use relatively much memory and generate high CPU usage.
-    /// This opens a Denial of Service vulnerability that could be exploited by malicious users, by means of flooding the server with SITE MD5 commands.
-    /// As such this feature is probably best user configured and at least disabled for anonymous users by default.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use libunftp::Server;
-    /// use libunftp::options::SiteMd5;
-    /// use unftp_sbe_fs::ServerExt;
-    ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").sitemd5(SiteMd5::None);
-    /// ```
-
-    pub fn sitemd5<M: Into<SiteMd5>>(mut self, sitemd5_option: M) -> Self {
-        self.sitemd5 = sitemd5_option.into();
-        self
-    }
 }
 
 impl<Storage, User> From<&Server<Storage, User>> for controlchan::LoopConfig<Storage, User>
@@ -652,7 +671,7 @@ where
             logger: server.logger.new(slog::o!()),
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
-            sitemd5: server.sitemd5,
+            site_md5: server.site_md5,
         }
     }
 }

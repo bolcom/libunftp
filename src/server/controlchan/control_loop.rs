@@ -58,7 +58,7 @@ where
     pub logger: slog::Logger,
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
-    pub sitemd5: SiteMd5,
+    pub site_md5: SiteMd5,
 }
 
 /// Does TCP processing when an FTP client connects
@@ -85,7 +85,7 @@ where
         collect_metrics,
         idle_session_timeout,
         logger,
-        sitemd5,
+        site_md5: sitemd5,
         ..
     } = config;
 
