@@ -1,4 +1,5 @@
 pub mod error;
+mod listener;
 pub mod options;
 
 use super::{
@@ -10,6 +11,8 @@ use super::{
 };
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
+    options::{FtpsClientAuth, TlsFlags},
+    server::tls,
     server::{
         proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyMode, ProxyProtocolSwitchboard},
         session::SharedSession,
@@ -18,15 +21,10 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
-use crate::options::{FtpsClientAuth, TlsFlags};
-use crate::server::tls;
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::future::Future;
-use std::pin::Pin;
-use std::{fmt::Debug, net::IpAddr, ops::Range, path::PathBuf, sync::Arc, time::Duration};
-use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc::channel;
+use std::{fmt::Debug, future::Future, net::IpAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use tokio::{io::AsyncWriteExt, sync::mpsc::channel};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -55,7 +53,7 @@ where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
-    storage: Box<dyn (Fn() -> Storage) + Send + Sync>,
+    storage: Arc<Box<dyn (Fn() -> Storage) + Send + Sync>>,
     greeting: &'static str,
     authenticator: Arc<dyn Authenticator<User>>,
     passive_ports: Range<u16>,
@@ -127,7 +125,7 @@ where
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
     pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         Server {
-            storage: sbe_generator,
+            storage: Arc::new(sbe_generator),
             greeting: DEFAULT_GREETING,
             authenticator,
             passive_ports: options::DEFAULT_PASSIVE_PORTS,
@@ -501,7 +499,14 @@ where
         let listen_future = match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => Box::pin(self.listen_proxy_protocol_mode(bind_address, external_control_port))
                 as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
-            ProxyMode::Off => Box::pin(self.listen_normal_mode(bind_address)) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            ProxyMode::Off => Box::pin(
+                listener::Listener {
+                    bind_address,
+                    logger: self.logger.clone(),
+                    options: (&self).into(),
+                }
+                .listen(),
+            ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
         tokio::select! {
@@ -510,31 +515,6 @@ where
                     slog::info!(logger, "Shutting Down");
                     Ok(())
                 }
-        }
-    }
-
-    #[tracing_attributes::instrument]
-    async fn listen_normal_mode(&self, bind_address: std::net::SocketAddr) -> std::result::Result<(), ServerError> {
-        let listener = tokio::net::TcpListener::bind(bind_address).await?;
-        loop {
-            match listener.accept().await {
-                Ok((tcp_stream, socket_addr)) => {
-                    slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
-                    let params: controlchan::LoopConfig<Storage, User> = self.into();
-                    let result = controlchan::spawn_loop::<Storage, User>(params, tcp_stream, None, None).await;
-                    if let Err(err) = result {
-                        slog::error!(
-                            self.logger,
-                            "Could not spawn control channel loop for connection from {:?}: {:?}",
-                            socket_addr,
-                            err
-                        )
-                    }
-                }
-                Err(err) => {
-                    slog::error!(self.logger, "Error accepting incoming control connection {:?}", err);
-                }
-            }
         }
     }
 
@@ -662,6 +642,30 @@ where
         controlchan::LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
+            ftps_config: server.ftps_mode.clone(),
+            collect_metrics: server.collect_metrics,
+            greeting: server.greeting,
+            idle_session_timeout: server.idle_session_timeout,
+            passive_ports: server.passive_ports.clone(),
+            passive_host: server.passive_host.clone(),
+            logger: server.logger.new(slog::o!()),
+            ftps_required_control_chan: server.ftps_required_control_chan,
+            ftps_required_data_chan: server.ftps_required_data_chan,
+            site_md5: server.site_md5,
+        }
+    }
+}
+
+impl<Storage, User> From<&Server<Storage, User>> for listener::GlobalOptions<Storage, User>
+where
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+{
+    fn from(server: &Server<Storage, User>) -> Self {
+        listener::GlobalOptions {
+            authenticator: server.authenticator.clone(),
+            storage: server.storage.clone(),
             ftps_config: server.ftps_mode.clone(),
             collect_metrics: server.collect_metrics,
             greeting: server.greeting,

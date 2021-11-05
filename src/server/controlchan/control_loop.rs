@@ -41,7 +41,7 @@ trait AsyncReadAsyncWriteSendUnpin: AsyncRead + AsyncWrite + Send + Unpin {}
 
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> AsyncReadAsyncWriteSendUnpin for T {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config<Storage, User>
 where
     Storage: StorageBackend<User>,
