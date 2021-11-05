@@ -18,7 +18,7 @@ pub(crate) const DEFAULT_PASSIVE_PORTS: Range<u16> = 49152..65535;
 pub(crate) const DEFAULT_FTPS_REQUIRE: FtpsRequired = FtpsRequired::None;
 pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 
-/// The option to `Server.passive_host`. It allows the user to specify how the IP address
+/// The option to [Server.passive_host](crate::Server::passive_host). It allows the user to specify how the IP address
 /// communicated in the _PASV_ response is determined.
 #[derive(Debug, PartialEq, Clone)]
 pub enum PassiveHost {
@@ -62,7 +62,7 @@ impl From<&str> for PassiveHost {
     }
 }
 
-/// The option to `Server.ftps_required`. It allows the user to specify whether clients are required
+/// The option to [Server.ftps_required](crate::Server::ftps_required). It allows the user to specify whether clients are required
 /// to upgrade a to secure TLS connection i.e. use FTPS.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FtpsRequired {
@@ -123,7 +123,7 @@ impl Default for TlsFlags {
     }
 }
 
-/// The option to `Server.ftps_client_auth`. Tells if and how mutual TLS (client certificate
+/// The option to [Server.ftps_client_auth](crate::Server::ftps_client_auth). Tells if and how mutual TLS (client certificate
 /// authentication) should be handled.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FtpsClientAuth {
@@ -157,7 +157,7 @@ impl From<bool> for FtpsClientAuth {
     }
 }
 
-/// The options for `Server.sitemd5`.
+/// The options for [Server.sitemd5](crate::Server::sitemd5).
 /// Allow MD5 either to be used by all, logged in users only or no one.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SiteMd5 {
@@ -175,28 +175,26 @@ impl Default for SiteMd5 {
     }
 }
 
-/// dfd
+/// Shutdown allows users to specify the way in which a (graceful) shutdown of libunftp should
+/// happen.
 pub enum Shutdown<Signal: Future<Output = ()> + Send + Sync> {
-    /// No shutdown signal is given.
+    /// No shutdown signal will be adhered to.
     ///
-    /// This will cause libunftp keep on running as long as the future returned by [Server.listen()](crate::Server::listen)
-    /// are polled.
+    /// This will cause libunftp to keep on running as long as the future returned
+    /// by [Server.listen()](crate::Server::listen) are polled.
     None,
-    /// The given shutdown signal will be adhered to
+    /// The given shutdown signal will be adhered to and control channel connections will still be
+    /// accepted for a while as connections are drained. Clients connecting during this phase will
+    /// receive an FTP error code.
+    ///
+    /// The shutdown signal can simply be an async block that, when it completes, signals shutdown.
     GracefulAcceptingConnections(Signal),
-    /// The given shutdown signal will be adhered to
+    /// The given shutdown signal will be adhered to and libunftp will block new incoming control
+    /// channel connections while draining existing connections.
+    ///
+    /// The shutdown signal can simply be an async block that, when it completes, signals a shutdown.
     GracefulBlockingConnections(Signal),
 }
-
-// impl<Signal: Future<Output = ()> + Send + Sync> Shutdown<Signal> {
-//     fn into_signal(self) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
-//         match self {
-//             Shutdown::None => Box::pin(futures_util::future::pending()) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
-//             Shutdown::GracefulAcceptingConnections(signal) => Box::pin(signal) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
-//             Shutdown::GracefulBlockingConnections(signal) => Box::pin(signal) as Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
-//         }
-//     }
-// }
 
 impl<Signal: Future<Output = ()> + Send + Sync> Default for Shutdown<Signal> {
     fn default() -> Self {
