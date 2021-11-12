@@ -44,22 +44,28 @@ pub struct Stru {
     params: StruParam,
 }
 
+impl super::Command for Stru {}
+
 impl Stru {
     pub fn new(params: StruParam) -> Self {
         Stru { params }
     }
 }
 
+#[derive(Debug)]
+pub struct StruHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Stru
+impl<Storage, User> CommandHandler<Storage, User> for StruHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        match &self.params {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Stru>().unwrap();
+        match &command.params {
             StruParam::File => Ok(Reply::new(ReplyCode::CommandOkay, "In File structure mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,

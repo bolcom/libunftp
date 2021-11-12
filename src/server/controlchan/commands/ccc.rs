@@ -1,25 +1,32 @@
 //! The RFC 2228 Clear Command Channel (`CCC`) command
 
-use crate::auth::UserDetail;
-use crate::server::controlchan::error::ControlChanError;
-use crate::server::controlchan::handler::{CommandContext, CommandHandler};
-use crate::server::{Reply, ReplyCode};
-use crate::storage::{Metadata, StorageBackend};
+use crate::{
+    auth::UserDetail,
+    server::controlchan::error::ControlChanError,
+    server::controlchan::handler::{CommandContext, CommandHandler},
+    server::{Reply, ReplyCode},
+    storage::{Metadata, StorageBackend},
+};
 
 use async_trait::async_trait;
 
 #[derive(Debug)]
 pub struct Ccc;
 
+#[derive(Debug)]
+pub struct CccHandler;
+
+impl super::Command for Ccc {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Ccc
+impl<Storage, User> CommandHandler<Storage, User> for CccHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         // let mut tx: Sender<InternalMsg> = args.tx.clone();
         // let session = args.session.lock().await;
         // let logger = args.logger;

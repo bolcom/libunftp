@@ -18,15 +18,20 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub struct Stou;
 
+#[derive(Debug)]
+pub struct StouHandler;
+
+impl super::Command for Stou {}
+
 #[async_trait]
-impl<Storager, User> CommandHandler<Storager, User> for Stou
+impl<Storager, User> CommandHandler<Storager, User> for StouHandler
 where
     User: UserDetail + 'static,
     Storager: StorageBackend<User> + 'static,
     Storager::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storager, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storager, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let uuid: String = Uuid::new_v4().to_string();
         let filename: &Path = std::path::Path::new(&uuid);

@@ -30,24 +30,30 @@ pub struct Auth {
     protocol: AuthParam,
 }
 
+impl super::Command for Auth {}
+
 impl Auth {
     pub fn new(protocol: AuthParam) -> Self {
         Auth { protocol }
     }
 }
 
+#[derive(Debug)]
+pub struct AuthHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Auth
+impl<Storage, User> CommandHandler<Storage, User> for AuthHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Auth>().unwrap();
         let tx = args.tx_control_chan.clone();
         let logger = args.logger;
-        match (args.tls_configured, self.protocol.clone()) {
+        match (args.tls_configured, command.protocol.clone()) {
             (true, AuthParam::Tls) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(ControlChanMsg::SecureControlChannel).await {

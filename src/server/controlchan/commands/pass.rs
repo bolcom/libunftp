@@ -36,26 +36,32 @@ pub struct Pass {
     password: password::Password,
 }
 
+impl super::Command for Pass {}
+
 impl Pass {
     pub fn new(password: password::Password) -> Self {
         Pass { password }
     }
 }
 
+#[derive(Debug)]
+pub struct PassHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Pass
+impl<Storage, User> CommandHandler<Storage, User> for PassHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Pass>().unwrap();
         let session = args.session.lock().await;
         let logger = args.logger;
         match &session.state {
             SessionState::WaitPass => {
-                let pass: &str = std::str::from_utf8(self.password.as_ref())?;
+                let pass: &str = std::str::from_utf8(command.password.as_ref())?;
                 let pass: String = pass.to_string();
                 let username: String = match session.username.clone() {
                     Some(v) => v,

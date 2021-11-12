@@ -27,24 +27,30 @@ pub struct Cwd {
     path: PathBuf,
 }
 
+impl super::Command for Cwd {}
+
 impl Cwd {
     pub fn new(path: PathBuf) -> Self {
         Cwd { path }
     }
 }
 
+#[derive(Debug)]
+pub struct CwdHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Cwd
+impl<Storage, User> CommandHandler<Storage, User> for CwdHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Cwd>().unwrap();
         let mut session = args.session.lock().await;
         let storage: Arc<Storage> = Arc::clone(&session.storage);
-        let path = session.cwd.join(self.path.clone());
+        let path = session.cwd.join(command.path.clone());
         let tx_success = args.tx_control_chan.clone();
         let tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;

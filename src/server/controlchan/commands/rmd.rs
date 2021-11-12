@@ -25,24 +25,30 @@ pub struct Rmd {
     path: String,
 }
 
+impl super::Command for Rmd {}
+
 impl Rmd {
     pub fn new(path: String) -> Self {
         Rmd { path }
     }
 }
 
+#[derive(Debug)]
+pub struct RmdHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Rmd
+impl<Storage, User> CommandHandler<Storage, User> for RmdHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Rmd>().unwrap();
         let session = args.session.lock().await;
         let storage: Arc<Storage> = Arc::clone(&session.storage);
-        let path = session.cwd.join(self.path.clone());
+        let path = session.cwd.join(command.path.clone());
         let path_str = path.to_string_lossy().to_string();
         let tx = args.tx_control_chan.clone();
         let logger = args.logger;

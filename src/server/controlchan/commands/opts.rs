@@ -31,22 +31,28 @@ pub struct Opts {
     option: Opt,
 }
 
+impl super::Command for Opts {}
+
 impl Opts {
     pub fn new(option: Opt) -> Self {
         Opts { option }
     }
 }
 
+#[derive(Debug)]
+pub struct OptsHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Opts
+impl<Storage, User> CommandHandler<Storage, User> for OptsHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        match &self.option {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Opts>().unwrap();
+        match &command.option {
             Opt::Utf8 { on: true } => Ok(Reply::new(ReplyCode::CommandOkay, "Always in UTF-8 mode.")),
             Opt::Utf8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
         }

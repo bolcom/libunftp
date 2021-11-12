@@ -31,15 +31,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Acct;
 
+#[derive(Debug)]
+pub struct AcctHandler;
+
+impl super::Command for Acct {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Acct
+impl<Storage, User> CommandHandler<Storage, User> for AcctHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         Ok(Reply::new(ReplyCode::NotLoggedIn, "Rejected"))
     }
 }

@@ -20,24 +20,30 @@ pub struct Md5 {
     path: PathBuf,
 }
 
+impl super::Command for Md5 {}
+
 impl Md5 {
     pub fn new(path: PathBuf) -> Self {
         Md5 { path }
     }
 }
 
+#[derive(Debug)]
+pub struct Md5Handler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Md5
+impl<Storage, User> CommandHandler<Storage, User> for Md5Handler
 where
     User: UserDetail,
     Storage: StorageBackend<User> + 'static,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Md5>().unwrap();
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
-        let path = session.cwd.join(self.path.clone());
+        let path = session.cwd.join(command.path.clone());
         let tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;

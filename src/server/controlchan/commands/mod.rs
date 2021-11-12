@@ -81,3 +81,53 @@ pub use stru::{Stru, StruParam};
 pub use syst::Syst;
 pub use type_::Type;
 pub use user::User;
+
+pub use self::md5::Md5Handler;
+pub use abor::AborHandler;
+pub use acct::AcctHandler;
+pub use allo::AlloHandler;
+pub use auth::AuthHandler;
+pub use ccc::CccHandler;
+pub use cdup::CdupHandler;
+pub use cwd::CwdHandler;
+pub use dele::DeleHandler;
+pub use feat::FeatHandler;
+pub use help::HelpHandler;
+pub use list::ListHandler;
+pub use mdtm::MdtmHandler;
+pub use mkd::MkdHandler;
+pub use mode::ModeHandler;
+pub use nlst::NlstHandler;
+pub use noop::NoopHandler;
+pub use opts::OptsHandler;
+pub use pass::PassHandler;
+pub use pasv::PasvHandler;
+pub use pbsz::PbszHandler;
+pub use port::PortHandler;
+pub use prot::ProtHandler;
+pub use pwd::PwdHandler;
+pub use quit::QuitHandler;
+pub use rest::RestHandler;
+pub use retr::RetrHandler;
+pub use rmd::RmdHandler;
+pub use rnfr::RnfrHandler;
+pub use rnto::RntoHandler;
+pub use size::SizeHandler;
+pub use stat::StatHandler;
+pub use stor::StorHandler;
+pub use stou::StouHandler;
+pub use stru::StruHandler;
+pub use syst::SystHandler;
+pub use type_::TypeHandler;
+pub use user::UserHandler;
+
+use downcast_rs::{impl_downcast, DowncastSync};
+use std::fmt::Debug;
+
+pub trait Command: Debug + DowncastSync {
+    /// The name of the command
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
+}
+impl_downcast!(sync Command);

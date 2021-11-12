@@ -39,22 +39,28 @@ pub struct Stat {
     path: Option<Bytes>,
 }
 
+impl super::Command for Stat {}
+
 impl Stat {
     pub fn new(path: Option<Bytes>) -> Self {
         Stat { path }
     }
 }
 
+#[derive(Debug)]
+pub struct StatHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Stat
+impl<Storage, User> CommandHandler<Storage, User> for StatHandler
 where
     User: UserDetail,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        match self.path.clone() {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Stat>().unwrap();
+        match command.path.clone() {
             None => {
                 let session = args.session.lock().await;
                 let text: Vec<String> = vec![

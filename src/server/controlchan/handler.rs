@@ -1,5 +1,6 @@
 use crate::{
     auth::{Authenticator, UserDetail},
+    server::controlchan::commands,
     server::{
         chancomms::ProxyLoopSender,
         controlchan::{command::Command, error::ControlChanError, Reply},
@@ -21,7 +22,7 @@ where
     Storage::Metadata: Metadata,
     User: UserDetail,
 {
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
+    async fn handle(&self, command: Box<dyn commands::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
 
     // Returns the name of the command handler
     fn name(&self) -> &str {

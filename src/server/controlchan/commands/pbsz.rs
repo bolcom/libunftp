@@ -23,15 +23,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Pbsz;
 
+#[derive(Debug)]
+pub struct PbszHandler;
+
+impl super::Command for Pbsz {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Pbsz
+impl<Storage, User> CommandHandler<Storage, User> for PbszHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         Ok(Reply::new(ReplyCode::CommandOkay, "OK"))
     }
 }

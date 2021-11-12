@@ -41,22 +41,28 @@ pub struct Mode {
     params: ModeParam,
 }
 
+impl super::Command for Mode {}
+
 impl Mode {
     pub fn new(params: ModeParam) -> Self {
         Mode { params }
     }
 }
 
+#[derive(Debug)]
+pub struct ModeHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Mode
+impl<Storage, User> CommandHandler<Storage, User> for ModeHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        match &self.params {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Mode>().unwrap();
+        match &command.params {
             ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,

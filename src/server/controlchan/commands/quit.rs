@@ -30,15 +30,20 @@ use tokio::sync::mpsc::Sender;
 #[derive(Debug)]
 pub struct Quit;
 
+#[derive(Debug)]
+pub struct QuitHandler;
+
+impl super::Command for Quit {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Quit
+impl<Storage, User> CommandHandler<Storage, User> for QuitHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         // Let the control loop know it can exit.

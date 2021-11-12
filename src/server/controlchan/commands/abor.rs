@@ -9,8 +9,8 @@
 // connection is not to be closed by the server, but the data
 // connection must be closed.
 
-use crate::auth::UserDetail;
 use crate::{
+    auth::UserDetail,
     server::controlchan::{
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
@@ -23,15 +23,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Abor;
 
+#[derive(Debug)]
+pub struct AborHandler;
+
+impl super::Command for Abor {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Abor
+impl<Storage, User> CommandHandler<Storage, User> for AborHandler
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
     User: UserDetail + 'static,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let logger = args.logger;
         match session.data_abort_tx.take() {

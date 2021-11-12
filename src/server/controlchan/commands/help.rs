@@ -19,15 +19,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Help;
 
+#[derive(Debug)]
+pub struct HelpHandler;
+
+impl super::Command for Help {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Help
+impl<Storage, User> CommandHandler<Storage, User> for HelpHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let text = vec!["Help:", "Powered by libunftp"];
         // TODO: Add useful information here like operating server type and app name.
         Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))

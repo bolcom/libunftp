@@ -26,25 +26,31 @@ pub struct Mkd {
     path: PathBuf,
 }
 
+impl super::Command for Mkd {}
+
 impl Mkd {
     pub fn new(path: PathBuf) -> Self {
         Mkd { path }
     }
 }
 
+#[derive(Debug)]
+pub struct MkdHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Mkd
+impl<Storage, User> CommandHandler<Storage, User> for MkdHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Mkd>().unwrap();
         let session = args.session.lock().await;
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
-        let path: PathBuf = session.cwd.join(self.path.clone());
+        let path: PathBuf = session.cwd.join(command.path.clone());
         let path_str = path.to_string_lossy().to_string();
         let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;

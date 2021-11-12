@@ -23,10 +23,11 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::net::Ipv4Addr;
-use std::{io, net::SocketAddr, ops::Range};
-use tokio::net::TcpListener;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use std::{io, net::Ipv4Addr, net::SocketAddr, ops::Range};
+use tokio::{
+    net::TcpListener,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -37,7 +38,14 @@ impl Pasv {
     pub fn new() -> Self {
         Pasv {}
     }
+}
 
+impl super::Command for Pasv {}
+
+#[derive(Debug)]
+pub struct PasvHandler {}
+
+impl PasvHandler {
     #[tracing_attributes::instrument]
     async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
@@ -107,7 +115,7 @@ impl Pasv {
             }
         };
 
-        let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
+        let listener = Self::try_port_range(args.local_addr, args.passive_ports).await;
 
         let listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
@@ -151,14 +159,14 @@ impl Pasv {
 }
 
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Pasv
+impl<Storage, User> CommandHandler<Storage, User> for PasvHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let sender: Option<ProxyLoopSender<Storage, User>> = args.tx_proxyloop.clone();
         match sender {
             Some(tx) => self.handle_proxy_mode(args, tx).await,

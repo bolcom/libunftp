@@ -32,15 +32,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Allo;
 
+#[derive(Debug)]
+pub struct AlloHandler;
+
+impl super::Command for Allo {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Allo
+impl<Storage, User> CommandHandler<Storage, User> for AlloHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         // ALLO is obsolete and we'll just ignore it.
         Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
     }

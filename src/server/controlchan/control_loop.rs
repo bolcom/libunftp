@@ -411,7 +411,70 @@ where
             sitemd5: self.sitemd5,
         };
 
-        let handler: Box<dyn CommandHandler<Storage, User>> = match cmd {
+        let handler: Box<dyn CommandHandler<Storage, User>> = match cmd.clone() {
+            Command::User { .. } => Box::new(commands::UserHandler {}),
+            Command::Pass { .. } => Box::new(commands::PassHandler {}),
+            Command::Syst => Box::new(commands::SystHandler {}),
+            Command::Stat { .. } => Box::new(commands::StatHandler {}),
+            Command::Acct { .. } => Box::new(commands::AcctHandler {}),
+            Command::Type => Box::new(commands::TypeHandler {}),
+            Command::Stru { .. } => Box::new(commands::StruHandler {}),
+            Command::Mode { .. } => Box::new(commands::ModeHandler {}),
+            Command::Help => Box::new(commands::HelpHandler {}),
+            Command::Noop => Box::new(commands::NoopHandler {}),
+            Command::Pasv => Box::new(commands::PasvHandler {}),
+            Command::Port => Box::new(commands::PortHandler {}),
+            Command::Retr { .. } => Box::new(commands::RetrHandler {}),
+            Command::Stor { .. } => Box::new(commands::StorHandler {}),
+            Command::List { .. } => Box::new(commands::ListHandler {}),
+            Command::Nlst { .. } => Box::new(commands::NlstHandler {}),
+            Command::Feat => Box::new(commands::FeatHandler {}),
+            Command::Pwd => Box::new(commands::PwdHandler {}),
+            Command::Cwd { .. } => Box::new(commands::CwdHandler {}),
+            Command::Cdup => Box::new(commands::CdupHandler {}),
+            Command::Opts { .. } => Box::new(commands::OptsHandler {}),
+            Command::Dele { .. } => Box::new(commands::DeleHandler {}),
+            Command::Rmd { .. } => Box::new(commands::RmdHandler {}),
+            Command::Quit => Box::new(commands::QuitHandler {}),
+            Command::Mkd { .. } => Box::new(commands::MkdHandler {}),
+            Command::Allo { .. } => Box::new(commands::AlloHandler {}),
+            Command::Abor => Box::new(commands::AborHandler {}),
+            Command::Stou => Box::new(commands::StouHandler {}),
+            Command::Rnfr { .. } => Box::new(commands::RnfrHandler {}),
+            Command::Rnto { .. } => Box::new(commands::RntoHandler {}),
+            Command::Auth { .. } => Box::new(commands::AuthHandler {}),
+            Command::Pbsz {} => Box::new(commands::PbszHandler {}),
+            Command::Ccc {} => Box::new(commands::CccHandler {}),
+            Command::Prot { .. } => Box::new(commands::ProtHandler {}),
+            Command::Size { .. } => Box::new(commands::SizeHandler {}),
+            Command::Rest { .. } => Box::new(commands::RestHandler {}),
+            Command::Mdtm { .. } => Box::new(commands::MdtmHandler {}),
+            Command::Md5 { .. } => Box::new(commands::Md5Handler {}),
+            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
+        };
+
+        handler.handle(cmd.into(), args).await
+    }
+}
+
+#[async_trait]
+impl<Storage, User> ControlChanMiddleware for PrimaryEventHandler<Storage, User>
+where
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+{
+    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
+        match event {
+            Event::Command(cmd) => self.handle_command(cmd).await,
+            Event::InternalMsg(msg) => self.handle_internal_msg(msg).await,
+        }
+    }
+}
+
+impl From<Command> for Box<dyn commands::Command> {
+    fn from(cmd: Command) -> Self {
+        match cmd.clone() {
             Command::User { username } => Box::new(commands::User::new(username)),
             Command::Pass { password } => Box::new(commands::Pass::new(password)),
             Command::Syst => Box::new(commands::Syst),
@@ -450,24 +513,7 @@ where
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
-            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
-        };
-
-        handler.handle(args).await
-    }
-}
-
-#[async_trait]
-impl<Storage, User> ControlChanMiddleware for PrimaryEventHandler<Storage, User>
-where
-    User: UserDetail + 'static,
-    Storage: StorageBackend<User> + 'static,
-    Storage::Metadata: Metadata,
-{
-    async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
-        match event {
-            Event::Command(cmd) => self.handle_command(cmd).await,
-            Event::InternalMsg(msg) => self.handle_internal_msg(msg).await,
+            Command::Other { .. } => Box::new(commands::Noop), // TODO: FIX
         }
     }
 }

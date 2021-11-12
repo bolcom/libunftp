@@ -20,15 +20,20 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct Cdup;
 
+#[derive(Debug)]
+pub struct CdupHandler;
+
+impl super::Command for Cdup {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Cdup
+impl<Storage, User> CommandHandler<Storage, User> for CdupHandler
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         session.cwd.pop();
         Ok(Reply::new(ReplyCode::FileActionOkay, "OK"))

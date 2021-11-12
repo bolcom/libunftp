@@ -29,22 +29,28 @@ pub struct Prot {
     param: ProtParam,
 }
 
+impl super::Command for Prot {}
+
 impl Prot {
     pub fn new(param: ProtParam) -> Self {
         Prot { param }
     }
 }
 
+#[derive(Debug)]
+pub struct ProtHandler {}
+
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Prot
+impl<Storage, User> CommandHandler<Storage, User> for ProtHandler
 where
     User: UserDetail,
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: 'static + Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        match (args.tls_configured, self.param.clone()) {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<Prot>().unwrap();
+        match (args.tls_configured, command.param.clone()) {
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock().await;
                 session.data_tls = false;

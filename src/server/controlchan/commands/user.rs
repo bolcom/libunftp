@@ -20,23 +20,30 @@ pub struct User {
     username: Bytes,
 }
 
+impl super::Command for User {}
+
 impl User {
     pub fn new(username: Bytes) -> Self {
         User { username }
     }
 }
 
+#[derive(Debug)]
+pub struct UserHandler {}
+
 #[async_trait]
-impl<Storage, Usr> CommandHandler<Storage, Usr> for User
+impl<Storage, Usr> CommandHandler<Storage, Usr> for UserHandler
 where
     Usr: UserDetail,
     Storage: StorageBackend<Usr> + 'static,
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storage, Usr>) -> Result<Reply, ControlChanError> {
+    async fn handle(&self, _command: Box<dyn super::Command>, args: CommandContext<Storage, Usr>) -> Result<Reply, ControlChanError> {
+        let command = _command.downcast_ref::<User>().unwrap();
+
         let mut session = args.session.lock().await;
-        let username_str = std::str::from_utf8(&self.username)?;
+        let username_str = std::str::from_utf8(&command.username)?;
         let cert_auth_sufficient = args.authenticator.cert_auth_sufficient(username_str).await;
         match (session.state, &session.cert_chain, cert_auth_sufficient) {
             (SessionState::New, Some(_), true) => {
@@ -63,7 +70,7 @@ where
                 }
             }
             (SessionState::New, None, _) | (SessionState::New, Some(_), false) => {
-                let user = std::str::from_utf8(&self.username)?;
+                let user = std::str::from_utf8(&command.username)?;
                 session.username = Some(user.to_string());
                 session.state = SessionState::WaitPass;
                 Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
