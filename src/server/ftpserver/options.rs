@@ -5,7 +5,6 @@ use std::time::Duration;
 use std::{
     fmt::Formatter,
     fmt::{self, Debug, Display},
-    future::Future,
     net::{IpAddr, Ipv4Addr},
     ops::Range,
 };
@@ -176,32 +175,44 @@ impl Default for SiteMd5 {
     }
 }
 
-/// The options for [Server.shutdown_indicator](crate::Server::shutdown_indicator) that allows users
-/// to specify the way in which a (graceful) shutdown of libunftp should happen.
-pub enum Shutdown<Signal: Future<Output = Duration> + Send + Sync> {
-    /// No shutdown signal will be adhered to.
-    ///
-    /// This will cause libunftp to keep on running as long as the future returned
-    /// by [Server.listen()](crate::Server::listen) are polled. A shutdown is possible by stopping
-    /// the polling but then of course it is not a graceful shutdown.
-    None,
-    /// The given shutdown signal will be adhered to and control channel connections will still be
-    /// accepted for a while as connections are drained. Clients connecting during this phase will
-    /// receive an FTP error code.
-    ///
-    /// The shutdown signal can simply be an async block that, when it completes, signals shutdown.
-    ///
-    /// *NOTE: NOT YET IMPLEMENTED*
-    GracefulAcceptingConnections(Signal),
-    /// The given shutdown signal will be adhered to and libunftp will block new incoming control
-    /// channel connections while draining existing connections.
-    ///
-    /// The shutdown signal can simply be an async block that, when it completes, signals a shutdown.
-    GracefulBlockingConnections(Signal),
+/// Tells how graceful shutdown should happen. An instance of this struct should be returned from
+/// the future passed to [Server.shutdown_indicator](crate::Server::shutdown_indicator).
+pub struct Shutdown {
+    pub(crate) grace_period: Duration,
+    //pub(crate) handle_new_connections: bool,
 }
 
-impl<Signal: Future<Output = Duration> + Send + Sync> Default for Shutdown<Signal> {
-    fn default() -> Self {
-        Shutdown::None
+impl Shutdown {
+    /// Creates a Shutdown instance with default values
+    pub fn new() -> Self {
+        Shutdown::default()
+    }
+
+    /// Defines how much time to allow for components to shut down before shutdown is forceful.
+    pub fn grace_period(mut self, d: impl Into<Duration>) -> Self {
+        self.grace_period = d.into();
+        self
+    }
+
+    // /// Control channel connections will still be accepted for a while as connections
+    // /// are drained. Clients connecting during this phase will receive an FTP error code.
+    // pub fn handle_new_connections(mut self) -> Self {
+    //     self.handle_new_connections = true;
+    //     self
+    // }
+    //
+    // /// Control channel connections will not be allowed during the shutdown phase.
+    // pub fn block_new_connections(mut self) -> Self {
+    //     self.handle_new_connections = false;
+    //     self
+    // }
+}
+
+impl Default for Shutdown {
+    fn default() -> Shutdown {
+        Shutdown {
+            grace_period: Duration::from_secs(10),
+            //handle_new_connections: false,
+        }
     }
 }
