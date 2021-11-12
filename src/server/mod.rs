@@ -7,6 +7,7 @@ pub(crate) mod ftpserver;
 mod password;
 mod proxy_protocol;
 mod session;
+pub(crate) mod shutdown;
 mod tls;
 
 pub(crate) use chancomms::ControlChanMsg;

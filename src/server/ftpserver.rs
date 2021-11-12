@@ -7,6 +7,7 @@ pub mod options;
 use super::{
     controlchan,
     ftpserver::{error::ServerError, options::FtpsRequired, options::SiteMd5},
+    shutdown,
     tls::FtpsConfig,
 };
 use crate::{
@@ -21,8 +22,7 @@ use crate::{
 
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::net::SocketAddr;
-use std::{fmt::Debug, future::Future, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -402,7 +402,7 @@ where
 
     /// Allows telling libunftp when to shutdown gracefully
     ///
-    /// The passed argument is a future that should only resolve once libunftp should shut down.
+    /// The passed argument may contain a future that should resolve when libunftp should shut down.
     pub fn shutdown_indicator<T: Future<Output = ()> + Send + Sync + 'static>(mut self, indicator: options::Shutdown<T>) -> Self {
         match indicator {
             options::Shutdown::None => self.shutdown = Some(Box::pin(futures_util::future::pending())),
@@ -412,12 +412,12 @@ where
         self
     }
 
-    /// Enables SITE MD5
+    /// Enables the FTP command 'SITE MD5'.
     ///
-    /// Warning:
-    /// Depending on the storage backend, SITE MD5 may use relatively much memory and generate high CPU usage.
-    /// This opens a Denial of Service vulnerability that could be exploited by malicious users, by means of flooding the server with SITE MD5 commands.
-    /// As such this feature is probably best user configured and at least disabled for anonymous users by default.
+    /// _Warning:_ Depending on the storage backend, SITE MD5 may use relatively much memory and
+    /// generate high CPU usage. This opens a Denial of Service vulnerability that could be exploited
+    /// by malicious users, by means of flooding the server with SITE MD5 commands. As such this
+    /// feature is probably best user configured and at least disabled for anonymous users by default.
     ///
     /// # Example
     ///
@@ -463,6 +463,7 @@ where
         let shutdown = self.shutdown.take().unwrap();
         let logger = self.logger.clone();
         let bind_address: SocketAddr = bind_address.into().parse()?;
+        let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
         let listen_future = match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => Box::pin(
@@ -472,6 +473,7 @@ where
                     logger: self.logger.clone(),
                     options: (&self).into(),
                     proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
+                    shutdown_topic: shutdown_notifier.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -480,6 +482,7 @@ where
                     bind_address,
                     logger: self.logger.clone(),
                     options: (&self).into(),
+                    shutdown_topic: shutdown_notifier.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -489,6 +492,9 @@ where
             result = listen_future => result,
             _ = shutdown => {
                     slog::info!(logger, "Shutting Down");
+                    shutdown_notifier.notify().await;
+                    shutdown_notifier.linger().await;
+                    // TODO: Implement feature where we keep on listening for a while i.e. GracefulAcceptingConnections
                     Ok(())
                 }
         }

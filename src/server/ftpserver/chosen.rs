@@ -11,6 +11,7 @@ use crate::{
 };
 use std::{ops::Range, sync::Arc, time::Duration};
 
+// Holds the options the libunftp user opted for.
 pub struct OptionsHolder<Storage, User>
 where
     Storage: StorageBackend<User>,
