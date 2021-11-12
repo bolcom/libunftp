@@ -187,7 +187,7 @@ where
             match incoming {
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::Quit))) => {
-                    slog::info!(logger, "Upgrading control channel to TLS");
+                    slog::info!(logger, "Exiting control loop");
                     return;
                 }
                 Some(Ok(event)) => {

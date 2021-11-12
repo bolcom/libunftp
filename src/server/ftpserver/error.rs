@@ -34,3 +34,15 @@ impl From<std::io::Error> for ServerError {
         ServerError::new("io error", e)
     }
 }
+
+#[derive(Error, Debug)]
+#[error("shutdown error: {msg}")]
+pub struct ShutdownError {
+    pub msg: String,
+}
+
+impl From<ShutdownError> for ServerError {
+    fn from(e: ShutdownError) -> Self {
+        ServerError::new("shutdown error", e)
+    }
+}
