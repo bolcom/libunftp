@@ -23,6 +23,7 @@ use crate::{
     storage::{ErrorKind, Metadata, StorageBackend},
 };
 
+use crate::server::shutdown;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::{ServerSession, Session as RustlsSession};
@@ -68,6 +69,7 @@ pub async fn spawn<Storage, User>(
     tcp_stream: TcpStream,
     destination: Option<SocketAddr>,
     proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
+    mut shutdown: shutdown::Listener,
 ) -> Result<(), ControlChanError>
 where
     User: UserDetail + 'static,
@@ -173,17 +175,22 @@ where
                             true => incoming = None,
                             false => incoming = Some(Err(ControlChanError::new(ControlChanErrorKind::ControlChannelTimeout)))
                         };
+                    },
+                    _ = shutdown.listen() => {
+                        slog::info!(logger, "Shutting down control loop");
+                        incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::Quit)))
+                        // TODO: Do we want to wait a bit for a data transfer to complete i.e. session.data_busy is true?
                     }
                 };
                 incoming
             };
             match incoming {
-                None => {}
+                None => {} // Loop again
+                Some(Ok(Event::InternalMsg(ControlChanMsg::Quit))) => {
+                    slog::info!(logger, "Upgrading control channel to TLS");
+                    return;
+                }
                 Some(Ok(event)) => {
-                    if let Event::InternalMsg(ControlChanMsg::Quit) = event {
-                        return;
-                    }
-
                     if let Event::InternalMsg(ControlChanMsg::SecureControlChannel) = event {
                         slog::info!(logger, "Upgrading control channel to TLS");
 

@@ -175,19 +175,22 @@ impl Default for SiteMd5 {
     }
 }
 
-/// Shutdown allows users to specify the way in which a (graceful) shutdown of libunftp should
-/// happen.
+/// The options for [Server.shutdown_indicator](crate::Server::shutdown_indicator) that allows users
+/// to specify the way in which a (graceful) shutdown of libunftp should happen.
 pub enum Shutdown<Signal: Future<Output = ()> + Send + Sync> {
     /// No shutdown signal will be adhered to.
     ///
     /// This will cause libunftp to keep on running as long as the future returned
-    /// by [Server.listen()](crate::Server::listen) are polled.
+    /// by [Server.listen()](crate::Server::listen) are polled. A shutdown is possible by stopping
+    /// the polling but then of course it is not a graceful shutdown.
     None,
     /// The given shutdown signal will be adhered to and control channel connections will still be
     /// accepted for a while as connections are drained. Clients connecting during this phase will
     /// receive an FTP error code.
     ///
     /// The shutdown signal can simply be an async block that, when it completes, signals shutdown.
+    ///
+    /// *NOTE: NOT YET IMPLEMENTED*
     GracefulAcceptingConnections(Signal),
     /// The given shutdown signal will be adhered to and libunftp will block new incoming control
     /// channel connections while draining existing connections.

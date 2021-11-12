@@ -1,6 +1,7 @@
 //! Contains the code that listens to control and data connections on a single TCP port (proxy
 //! protocol mode).
 
+use crate::server::shutdown;
 use crate::{
     auth::UserDetail,
     server::{
@@ -15,9 +16,11 @@ use crate::{
     storage::StorageBackend,
     ServerError,
 };
-use std::net::{IpAddr, SocketAddr};
-use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc::channel;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
+use tokio::{io::AsyncWriteExt, sync::mpsc::channel};
 
 // ProxyProtocolListener binds to a single port and assumes connections multiplexed by the
 // [proxy protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/)
@@ -31,6 +34,7 @@ where
     pub external_control_port: u16,
     pub options: OptionsHolder<Storage, User>,
     pub proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
+    pub shutdown_topic: Arc<shutdown::Notifier>,
 }
 
 impl<Storage, User> ProxyProtocolListener<Storage, User>
@@ -38,6 +42,7 @@ where
     Storage: StorageBackend<User> + 'static,
     User: UserDetail + 'static,
 {
+    // Starts listening, returning an error if the TCP address could not be bound to.
     pub async fn listen(mut self) -> std::result::Result<(), ServerError> {
         let listener = tokio::net::TcpListener::bind(self.bind_address).await?;
 
@@ -73,7 +78,7 @@ where
                         let source = connection.source;
                         slog::info!(self.logger, "Connection from {:?} is a control connection", source);
                         let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
-                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone())).await;
+                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }
