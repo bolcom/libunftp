@@ -1,6 +1,7 @@
 //! Contains code pertaining to the setup options that can be given to the [`Server`](crate::Server)
 
 use bitflags::bitflags;
+use std::time::Duration;
 use std::{
     fmt::Formatter,
     fmt::{self, Debug, Display},
@@ -177,7 +178,7 @@ impl Default for SiteMd5 {
 
 /// The options for [Server.shutdown_indicator](crate::Server::shutdown_indicator) that allows users
 /// to specify the way in which a (graceful) shutdown of libunftp should happen.
-pub enum Shutdown<Signal: Future<Output = ()> + Send + Sync> {
+pub enum Shutdown<Signal: Future<Output = Duration> + Send + Sync> {
     /// No shutdown signal will be adhered to.
     ///
     /// This will cause libunftp to keep on running as long as the future returned
@@ -199,7 +200,7 @@ pub enum Shutdown<Signal: Future<Output = ()> + Send + Sync> {
     GracefulBlockingConnections(Signal),
 }
 
-impl<Signal: Future<Output = ()> + Send + Sync> Default for Shutdown<Signal> {
+impl<Signal: Future<Output = Duration> + Send + Sync> Default for Shutdown<Signal> {
     fn default() -> Self {
         Shutdown::None
     }

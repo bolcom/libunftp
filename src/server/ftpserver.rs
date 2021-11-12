@@ -6,7 +6,7 @@ pub mod options;
 
 use super::{
     controlchan,
-    ftpserver::{error::ServerError, options::FtpsRequired, options::SiteMd5},
+    ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
     shutdown,
     tls::FtpsConfig,
 };
@@ -20,6 +20,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 
+use crate::server::shutdown::Notifier;
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
@@ -67,7 +68,7 @@ where
     proxy_protocol_mode: ProxyMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
-    shutdown: Option<Pin<Box<dyn Future<Output = ()> + Send + Sync>>>,
+    shutdown: Option<Pin<Box<dyn Future<Output = Duration> + Send + Sync>>>,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -403,7 +404,7 @@ where
     /// Allows telling libunftp when to shutdown gracefully
     ///
     /// The passed argument may contain a future that should resolve when libunftp should shut down.
-    pub fn shutdown_indicator<T: Future<Output = ()> + Send + Sync + 'static>(mut self, indicator: options::Shutdown<T>) -> Self {
+    pub fn shutdown_indicator<T: Future<Output = Duration> + Send + Sync + 'static>(mut self, indicator: options::Shutdown<T>) -> Self {
         match indicator {
             options::Shutdown::None => self.shutdown = Some(Box::pin(futures_util::future::pending())),
             options::Shutdown::GracefulAcceptingConnections(signal) => self.shutdown = Some(Box::pin(signal)),
@@ -490,14 +491,27 @@ where
 
         tokio::select! {
             result = listen_future => result,
-            _ = shutdown => {
-                    slog::info!(logger, "Shutting Down");
-                    shutdown_notifier.notify().await;
-                    shutdown_notifier.linger().await;
-                    // TODO: Implement feature where we keep on listening for a while i.e. GracefulAcceptingConnections
-                    Ok(())
-                }
+            grace_period = shutdown => {
+                slog::debug!(logger, "Shutting down within {:?}", grace_period);
+                shutdown_notifier.notify().await;
+                Self::shutdown_linger(logger, shutdown_notifier, grace_period).await
+            }
         }
+    }
+
+    // Waits for sub-components to shut down gracefully or aborts if the grace period expires
+    async fn shutdown_linger(logger: slog::Logger, shutdown_notifier: Arc<Notifier>, grace_period: Duration) -> std::result::Result<(), ServerError> {
+        let timeout = Box::pin(tokio::time::sleep(grace_period));
+        tokio::select! {
+            _ = shutdown_notifier.linger() => {
+                slog::debug!(logger, "Graceful shutdown complete");
+                Ok(())
+            },
+            _ = timeout => {
+                Err(ShutdownError{ msg: "shutdown grace period expired".to_string()}.into())
+            }
+        }
+        // TODO: Implement feature where we keep on listening for a while i.e. GracefulAcceptingConnections
     }
 }
 
