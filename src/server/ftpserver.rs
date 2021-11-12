@@ -68,7 +68,7 @@ where
     proxy_protocol_mode: ProxyMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
-    shutdown: Option<Pin<Box<dyn Future<Output = Duration> + Send + Sync>>>,
+    shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -112,7 +112,7 @@ where
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
-            shutdown: Some(Box::pin(futures_util::future::pending())),
+            shutdown: Box::pin(futures_util::future::pending()),
         }
     }
 
@@ -401,15 +401,29 @@ where
         self
     }
 
-    /// Allows telling libunftp when to shutdown gracefully
+    /// Allows telling libunftp when and how to shutdown gracefully.
     ///
-    /// The passed argument may contain a future that should resolve when libunftp should shut down.
-    pub fn shutdown_indicator<T: Future<Output = Duration> + Send + Sync + 'static>(mut self, indicator: options::Shutdown<T>) -> Self {
-        match indicator {
-            options::Shutdown::None => self.shutdown = Some(Box::pin(futures_util::future::pending())),
-            options::Shutdown::GracefulAcceptingConnections(signal) => self.shutdown = Some(Box::pin(signal)),
-            options::Shutdown::GracefulBlockingConnections(signal) => self.shutdown = Some(Box::pin(signal)),
-        };
+    /// The passed argument is a future that resolves when libunftp should shut down. The future
+    /// should return a [options::Shutdown](options::Shutdown) instance.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// let mut server = Server::with_fs("/tmp").shutdown_indicator(async {
+    ///    tokio::time::sleep(Duration::from_secs(10)).await; // Shut the server down after 10 seconds.
+    ///    libunftp::options::Shutdown::new()
+    ///      .grace_period(Duration::from_secs(5)) // Allow 5 seconds to shutdown gracefully
+    /// });
+    /// ```
+    pub fn shutdown_indicator<I>(mut self, indicator: I) -> Self
+    where
+        I: Future<Output = options::Shutdown> + Send + Sync + 'static,
+    {
+        self.shutdown = Box::pin(indicator);
         self
     }
 
@@ -461,7 +475,6 @@ where
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
 
-        let shutdown = self.shutdown.take().unwrap();
         let logger = self.logger.clone();
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
@@ -491,10 +504,10 @@ where
 
         tokio::select! {
             result = listen_future => result,
-            grace_period = shutdown => {
-                slog::debug!(logger, "Shutting down within {:?}", grace_period);
+            opts = self.shutdown => {
+                slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
                 shutdown_notifier.notify().await;
-                Self::shutdown_linger(logger, shutdown_notifier, grace_period).await
+                Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
             }
         }
     }
