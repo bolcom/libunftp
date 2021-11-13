@@ -122,7 +122,6 @@ where
             }
         };
         let perms = format!("{}", self.metadata.permissions());
-        #[allow(clippy::write_literal)]
         write!(
             f,
             "{filetype}{permissions} {links:>12} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",

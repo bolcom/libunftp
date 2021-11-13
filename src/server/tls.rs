@@ -1,13 +1,20 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
-use rustls::{internal::pemfile, Certificate, NoClientAuth, NoServerSessionStorage, PrivateKey, ProtocolVersion, RootCertStore, ServerConfig, Ticketer};
-use std::error::Error;
-use std::fmt;
-use std::fmt::Formatter;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
+use rustls::server::StoresServerSessions;
+use rustls::{
+    server::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage},
+    version::{TLS12, TLS13},
+    Certificate, NoKeyLog, PrivateKey, RootCertStore, ServerConfig, SupportedProtocolVersion, Ticketer,
+};
+use std::{
+    error::Error,
+    fmt,
+    fmt::Formatter,
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 // FTPSConfig shows how TLS security is configured for the server or a particular channel.
 #[derive(Clone)]
@@ -52,15 +59,30 @@ pub fn new_config<P: AsRef<Path>>(
         FtpsClientAuth::Off => NoClientAuth::new(),
         FtpsClientAuth::Request => {
             let store: RootCertStore = root_cert_store(trust_store)?;
-            rustls::AllowAnyAnonymousOrAuthenticatedClient::new(store)
+            AllowAnyAnonymousOrAuthenticatedClient::new(store)
         }
         FtpsClientAuth::Require => {
             let store: RootCertStore = root_cert_store(trust_store)?;
-            rustls::AllowAnyAuthenticatedClient::new(store)
+            AllowAnyAuthenticatedClient::new(store)
         }
     };
 
-    let mut config = rustls::ServerConfig::new(client_auther);
+    let mut versions: Vec<&SupportedProtocolVersion> = vec![];
+    if flags.contains(TlsFlags::V1_2) {
+        versions.push(&TLS12)
+    }
+    if flags.contains(TlsFlags::V1_3) {
+        versions.push(&TLS13)
+    }
+
+    let mut config = ServerConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&versions).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+        .with_client_cert_verifier(client_auther)
+        // No SNI, single certificate 
+        .with_single_cert(certs, privkey).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
     // Support session resumption with server side state (Session IDs)
     config.session_storage = if flags.contains(TlsFlags::RESUMPTION_SESS_ID) {
         TlsSessionCache::new(1024)
@@ -69,52 +91,48 @@ pub fn new_config<P: AsRef<Path>>(
     };
     // Support session resumption with tickets. See https://tools.ietf.org/html/rfc5077
     if flags.contains(TlsFlags::RESUMPTION_TICKETS) {
-        config.ticketer = Ticketer::new();
+        config.ticketer = Ticketer::new().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     };
     // Don't allow dumping session keys
-    config.key_log = Arc::new(rustls::NoKeyLog {});
-    // No SNI, single certificate
-    config
-        .set_single_cert(certs, privkey)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-    let mut versions: Vec<ProtocolVersion> = vec![];
-    if flags.contains(TlsFlags::V1_2) {
-        versions.push(ProtocolVersion::TLSv1_2)
-    }
-    if flags.contains(TlsFlags::V1_3) {
-        versions.push(ProtocolVersion::TLSv1_3)
-    }
-    config.versions = versions;
+    config.key_log = Arc::new(NoKeyLog {});
 
     Ok(Arc::new(config))
 }
 
 fn root_cert_store<P: AsRef<Path>>(trust_pem: P) -> std::io::Result<RootCertStore> {
-    let mut store = rustls::RootCertStore::empty();
-    let file: File = File::open(trust_pem)?;
-    let mut reader: BufReader<File> = BufReader::new(file);
-    store.add_pem_file(&mut reader).map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other))?;
+    let mut store = RootCertStore::empty();
+    let certs = load_certs(trust_pem)?;
+    for cert in certs.iter() {
+        store.add(cert).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?
+    }
     Ok(store)
 }
 
 fn load_certs<P: AsRef<Path>>(filename: P) -> std::io::Result<Vec<Certificate>> {
     let certfile: File = File::open(filename)?;
     let mut reader: BufReader<File> = BufReader::new(certfile);
-    pemfile::certs(&mut reader).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+    rustls_pemfile::certs(&mut reader)
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+        .map(|v| {
+            let mut res = Vec::with_capacity(v.len());
+            for e in v {
+                res.push(Certificate(e));
+            }
+            res
+        })
 }
 
 fn load_private_key<P: AsRef<Path>>(filename: P) -> std::io::Result<PrivateKey> {
     let rsa_keys = {
         let keyfile = File::open(&filename)?;
         let mut reader = BufReader::new(keyfile);
-        pemfile::rsa_private_keys(&mut reader).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?
+        rustls_pemfile::rsa_private_keys(&mut reader).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?
     };
 
     let pkcs8_keys = {
         let keyfile = File::open(&filename)?;
         let mut reader = BufReader::new(keyfile);
-        pemfile::pkcs8_private_keys(&mut reader).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?
+        rustls_pemfile::pkcs8_private_keys(&mut reader).map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?
     };
 
     // prefer to load pkcs8 keys
@@ -127,7 +145,7 @@ fn load_private_key<P: AsRef<Path>>(filename: P) -> std::io::Result<PrivateKey> 
         rsa_keys[0].clone()
     };
 
-    Ok(key)
+    Ok(PrivateKey(key))
 }
 
 /// Stores the session IDs server side.
@@ -146,7 +164,7 @@ impl TlsSessionCache {
     }
 }
 
-impl rustls::StoresServerSessions for TlsSessionCache {
+impl StoresServerSessions for TlsSessionCache {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         self.cache.insert(key, value);
         true
@@ -162,5 +180,9 @@ impl rustls::StoresServerSessions for TlsSessionCache {
         // For some reason rustls always calls take and so removes the session ID which then breaks
         // FileZilla for instance. So I implement take here to not really take, only get...
         // self.cache.invalidate(&key_as_vec);
+    }
+
+    fn can_cache(&self) -> bool {
+        true
     }
 }

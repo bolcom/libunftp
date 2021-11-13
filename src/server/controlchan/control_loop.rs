@@ -26,7 +26,7 @@ use crate::{
 use crate::server::shutdown;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
-use rustls::{ServerSession, Session as RustlsSession};
+use rustls::ServerConnection;
 use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -206,8 +206,8 @@ where
                         let accepted = acceptor.accept(io).await;
                         let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = match accepted {
                             Ok(stream) => {
-                                let s: &ServerSession = stream.get_ref().1;
-                                if let Some(certs) = s.get_peer_certificates() {
+                                let s: &ServerConnection = stream.get_ref().1;
+                                if let Some(certs) = s.peer_certificates() {
                                     let mut session = shared_session.lock().await;
                                     session.cert_chain = Some(certs.iter().map(|c| crate::auth::ClientCert(c.0.clone())).collect());
                                 }
