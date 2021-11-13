@@ -8,7 +8,7 @@ authors = [
     "Hannes de Jager <hdejager@bol.com>",
     "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
 ]
-edition = "2018"
+edition = "2021"
 license = "Apache-2.0"
 keywords = ["libunftp", "ftp", "ftps", "auth", "rest"]
 categories = ["network-programming"]
