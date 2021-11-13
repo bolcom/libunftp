@@ -42,12 +42,13 @@ md-5 = "0.9.1"
 moka = "0.6.1"
 prometheus = { version = "0.13.0", default-features = false }
 proxy-protocol = "0.3.0"
-rustls = "0.19.1"
+rustls = "0.20.0"
+rustls-pemfile = "0.2.1"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.0"
 thiserror = "1.0.30"
 tokio = { version = "1.13.0", features = ["macros", "rt", "net", "sync", "io-util", "time"] }
-tokio-rustls = { version = "0.22.0" }
+tokio-rustls = { version = "0.23.1" }
 tokio-util = { version = "0.6.9", features = ["codec"] }
 tracing = { version = "0.1.29", default-features = false }
 tracing-attributes = "0.1.18"
