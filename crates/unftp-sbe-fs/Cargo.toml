@@ -23,20 +23,20 @@ async-trait = "0.1.51"
 futures = { version = "0.3.17", default-features = false, features = ["std"] }
 libunftp = { version="0.18.1", path="../../"}
 path_abs = "0.5.1"
-tokio = { version = "1.12.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio = { version = "1.13.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.7"
 tracing = { version = "0.1.28", default-features = false }
 tracing-attributes = "0.1.16"
 
 [dev-dependencies]
-async_ftp = "5.0.0"
+async_ftp = "6.0.0"
 clap = "2.33.3"
 more-asserts = "0.2.1"
-pretty_assertions = "0.7.2"
+pretty_assertions = "1.0.0"
 pretty_env_logger = "0.4.0"
 slog-async = "2.7.0"
 slog-term = "2.8.0"
 tempfile = "3.2.0"
-tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"]}
-tracing-subscriber = "0.2.24"
+tokio = { version = "1.13.0", features = ["macros", "rt-multi-thread"]}
+tracing-subscriber = "0.3.1"
 getrandom = "0.2"

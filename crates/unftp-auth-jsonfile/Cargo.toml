@@ -26,13 +26,13 @@ iprange = "0.6.4"
 libunftp = { version="0.18.1", path="../../"}
 ring = "0.16.20"
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = { version = "1.0.68" }
-tokio = { version = "1.12.0", features = ["rt", "time"]}
+serde_json = { version = "1.0.70" }
+tokio = { version = "1.13.0", features = ["rt", "time"]}
 tracing = { version = "0.1.28", default-features = false }
 tracing-attributes = "0.1.16"
 valid = "0.3.1"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.12.0", features = ["macros"]}
+tokio = { version = "1.13.0", features = ["macros"]}
 unftp-sbe-fs = { version="0.2", path="../unftp-sbe-fs"}
