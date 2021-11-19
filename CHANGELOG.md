@@ -1,5 +1,14 @@
 # Changelog
 
+## 2021-09-25 libunftp 0.18.2
+
+_tag: libunftp-0.18.2_
+
+- [#386](https://github.com/bolcom/libunftp/issues/386) Implemented graceful shutdown through the Server.shutdown_indicator method.
+- Upgraded to rustls v0.20.0
+- Upgraded other minor dependency versions
+- Testing improvements
+
 ## 2021-09-25 libunftp 0.18.1
 
 _tag: libunftp-0.18.1_
