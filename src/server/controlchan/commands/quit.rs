@@ -42,7 +42,7 @@ where
         let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         // Let the control loop know it can exit.
-        if let Err(send_res) = tx.send(ControlChanMsg::Quit).await {
+        if let Err(send_res) = tx.send(ControlChanMsg::ExitControlLoop).await {
             slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))

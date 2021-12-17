@@ -12,15 +12,15 @@ use super::{
 };
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
+    notification::{nop::NopListener, DataListener, PresenceListener},
     options::{FtpsClientAuth, TlsFlags},
+    server::shutdown::Notifier,
     server::{
         proxy_protocol::{ProxyMode, ProxyProtocolSwitchboard},
         tls,
     },
     storage::{Metadata, StorageBackend},
 };
-
-use crate::server::shutdown::Notifier;
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
 use std::{fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
@@ -55,6 +55,8 @@ where
     storage: Arc<dyn (Fn() -> Storage) + Send + Sync>,
     greeting: &'static str,
     authenticator: Arc<dyn Authenticator<User>>,
+    data_listener: Arc<dyn DataListener>,
+    presence_listener: Arc<dyn PresenceListener>,
     passive_ports: Range<u16>,
     passive_host: PassiveHost,
     collect_metrics: bool,
@@ -99,6 +101,8 @@ where
             storage: Arc::from(sbe_generator),
             greeting: DEFAULT_GREETING,
             authenticator,
+            data_listener: Arc::new(NopListener {}),
+            presence_listener: Arc::new(NopListener {}),
             passive_ports: options::DEFAULT_PASSIVE_PORTS,
             passive_host: options::DEFAULT_PASSIVE_HOST,
             ftps_mode: FtpsConfig::Off,
@@ -297,6 +301,20 @@ where
     /// ```
     pub fn metrics(mut self) -> Self {
         self.collect_metrics = true;
+        self
+    }
+
+    /// Sets an [`DataListener`](crate::notification::DataListener) that will
+    /// be notified of data changes that happen in a user's session.
+    pub fn notify_data(mut self, listener: impl DataListener + 'static) -> Self {
+        self.data_listener = Arc::new(listener);
+        self
+    }
+
+    /// Sets an [`PresenceListener`](crate::notification::PresenceListener) that will
+    /// be notified of user logins and logouts
+    pub fn notify_presence(mut self, listener: impl PresenceListener + 'static) -> Self {
+        self.presence_listener = Arc::new(listener);
         self
     }
 
@@ -548,6 +566,8 @@ where
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
             site_md5: server.site_md5,
+            data_listener: server.data_listener.clone(),
+            presence_listener: server.presence_listener.clone(),
         }
     }
 }

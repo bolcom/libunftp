@@ -2,8 +2,6 @@ use async_ftp::{types::Result, FtpStream};
 use libunftp::options::FtpsRequired;
 use pretty_assertions::assert_eq;
 use std::fmt::Debug;
-use std::fs;
-use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::{str, time::Duration};
 use unftp_sbe_fs::ServerExt;

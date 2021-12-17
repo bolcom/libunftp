@@ -1,5 +1,6 @@
 //! Represents the chosen options that the libunftp user opted for.
 
+use crate::notification::{DataListener, PresenceListener};
 use crate::storage::Metadata;
 use crate::{
     auth::Authenticator,
@@ -29,6 +30,8 @@ where
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
     pub site_md5: SiteMd5,
+    pub data_listener: Arc<dyn DataListener>,
+    pub presence_listener: Arc<dyn PresenceListener>,
 }
 
 impl<Storage, User> From<&OptionsHolder<Storage, User>> for controlchan::LoopConfig<Storage, User>
@@ -51,6 +54,8 @@ where
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
             site_md5: server.site_md5,
+            data_listener: server.data_listener.clone(),
+            presence_listener: server.presence_listener.clone(),
         }
     }
 }

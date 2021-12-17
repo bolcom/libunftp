@@ -1,6 +1,7 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
 use super::session::SharedSession;
+use crate::server::session::TraceId;
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
@@ -45,13 +46,17 @@ pub enum ControlChanMsg {
     PermissionDenied,
     /// File not found
     NotFound,
-    /// Send the data to the client
-    SendData {
+    /// Data was successfully sent to the client during a GET
+    SentData {
+        /// The path as specified by the client
+        path: String,
         /// The number of bytes transferred
         bytes: u64,
     },
     /// We've written the data from the client to the StorageBackend
     WrittenData {
+        /// The path as specified by the client
+        path: String,
         /// The number of bytes transferred
         bytes: u64,
     },
@@ -70,24 +75,39 @@ pub enum ControlChanMsg {
     /// Successfully cwd
     CwdSuccess,
     /// File successfully deleted
-    DelSuccess,
+    DelFileSuccess {
+        /// The path as specified by the client
+        path: String,
+    },
+    /// File successfully deleted
+    RmDirSuccess {
+        /// The path as specified by the client
+        path: String,
+    },
+    /// File successfully deleted
+    RenameSuccess {
+        /// The old path as specified by the client
+        old_path: String,
+        /// The new path as specified by the client
+        new_path: String,
+    },
     /// Failed to delete file
     DelFail,
     /// Quit the client connection
-    Quit,
+    ExitControlLoop,
     /// Successfully created directory
-    MkdirSuccess(std::path::PathBuf),
+    MkDirSuccess { path: String },
     /// Failed to crate directory
     MkdirFail,
     /// Authentication successful
-    AuthSuccess,
+    AuthSuccess { username: String, trace_id: TraceId },
     /// Authentication failed
     AuthFailed,
     /// Sent to switch the control channel to TLS/SSL mode.
     SecureControlChannel,
     /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
     PlaintextControlChannel,
-    /// Errors comming from the storage
+    /// Errors coming from the storage backend
     StorageError(Error),
     /// Reply on the command channel
     CommandChannelReply(Reply),

@@ -54,7 +54,7 @@ where
             SessionState::WaitPass => {
                 let pass: &str = std::str::from_utf8(self.password.as_ref())?;
                 let pass: String = pass.to_string();
-                let user: String = match session.username.clone() {
+                let username: String = match session.username.clone() {
                     Some(v) => v,
                     None => {
                         slog::error!(logger, "NoneError for username. This shouldn't happen.");
@@ -74,13 +74,16 @@ where
                     certificate_chain: session.cert_chain.clone(),
                 };
                 tokio::spawn(async move {
-                    let msg = match auther.authenticate(&user, &creds).await {
+                    let msg = match auther.authenticate(&username, &creds).await {
                         Ok(user) => {
                             if user.account_enabled() {
                                 let mut session = session2clone.lock().await;
                                 slog::info!(logger, "User {} logged in", user);
                                 session.user = Arc::new(Some(user));
-                                ControlChanMsg::AuthSuccess
+                                ControlChanMsg::AuthSuccess {
+                                    username,
+                                    trace_id: session.trace_id,
+                                }
                             } else {
                                 slog::warn!(logger, "User {} authenticated but account is disabled", user);
                                 ControlChanMsg::AuthFailed
