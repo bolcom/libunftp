@@ -46,6 +46,7 @@
 //! ```
 pub mod auth;
 pub(crate) mod metrics;
+pub mod notification;
 pub(crate) mod server;
 pub mod storage;
 

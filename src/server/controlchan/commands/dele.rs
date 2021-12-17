@@ -45,13 +45,14 @@ where
         let storage = Arc::clone(&session.storage);
         let user = session.user.clone();
         let path = session.cwd.join(self.path.clone());
+        let path_str = path.to_string_lossy().to_string();
         let tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
             match storage.del((*user).as_ref().unwrap(), path).await {
                 Ok(_) => {
-                    if let Err(err) = tx_success.send(ControlChanMsg::DelSuccess).await {
+                    if let Err(err) = tx_success.send(ControlChanMsg::DelFileSuccess { path: path_str }).await {
                         slog::warn!(logger, "{}", err);
                     }
                 }

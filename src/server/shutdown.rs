@@ -55,6 +55,7 @@ impl Notifier {
 
 // Listener listens for shutdown notifications
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Listener {
     shutdown: bool,
     shutdown_rx: Option<broadcast::Receiver<()>>,

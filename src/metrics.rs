@@ -59,11 +59,11 @@ fn add_event_metric(event: &Event) {
             add_command_metric(cmd);
         }
         Event::InternalMsg(msg) => match msg {
-            ControlChanMsg::SendData { bytes } => {
+            ControlChanMsg::SentData { bytes, .. } => {
                 FTP_BACKEND_READ_BYTES.inc_by(*bytes);
                 FTP_BACKEND_READ_FILES.inc();
             }
-            ControlChanMsg::WrittenData { bytes } => {
+            ControlChanMsg::WrittenData { bytes, .. } => {
                 FTP_BACKEND_WRITE_BYTES.inc_by(*bytes);
                 FTP_BACKEND_WRITE_FILES.inc();
             }

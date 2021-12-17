@@ -1,5 +1,6 @@
 //! The RFC 959 Rename To (`RNTO`) command
 
+use crate::server::ControlChanMsg;
 use crate::storage::{Metadata, StorageBackend};
 use crate::{
     auth::UserDetail,
@@ -32,22 +33,37 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let mut session = args.session.lock().await;
+        let CommandContext {
+            logger,
+            session,
+            tx_control_chan,
+            ..
+        } = args;
+        let mut session = session.lock().await;
         let storage = Arc::clone(&session.storage);
-        let logger = args.logger;
-        let reply = match session.rename_from.take() {
+
+        let (from, to) = match session.rename_from.take() {
             Some(from) => {
                 let to = session.cwd.join(self.path.clone());
-                match storage.rename((*session.user).as_ref().unwrap(), from, to).await {
-                    Ok(_) => Reply::new(ReplyCode::FileActionOkay, "Renamed"),
-                    Err(err) => {
-                        slog::warn!(logger, "Error renaming: {:?}", err);
-                        Reply::new(ReplyCode::FileError, "Storage error while renaming")
-                    }
+                (from, to)
+            }
+            None => return Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
+        };
+        let user = (*session.user).as_ref().unwrap();
+        let old_path = from.to_string_lossy().to_string();
+        let new_path = to.to_string_lossy().to_string();
+        match storage.rename(user, from, to).await {
+            Ok(_) => {
+                if let Err(err) = tx_control_chan.send(ControlChanMsg::RenameSuccess { old_path, new_path }).await {
+                    slog::warn!(logger, "{}", err);
                 }
             }
-            None => Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first"),
-        };
-        Ok(reply)
+            Err(err) => {
+                if let Err(err) = tx_control_chan.send(ControlChanMsg::StorageError(err)).await {
+                    slog::warn!(logger, "{}", err);
+                }
+            }
+        }
+        Ok(Reply::none())
     }
 }

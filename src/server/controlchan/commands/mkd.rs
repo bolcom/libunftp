@@ -45,15 +45,15 @@ where
         let user = session.user.clone();
         let storage = Arc::clone(&session.storage);
         let path: PathBuf = session.cwd.join(self.path.clone());
-        let tx_success: Sender<ControlChanMsg> = args.tx_control_chan.clone();
-        let tx_fail: Sender<ControlChanMsg> = args.tx_control_chan.clone();
+        let path_str = path.to_string_lossy().to_string();
+        let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
             if let Err(err) = storage.mkd((*user).as_ref().unwrap(), &path).await {
-                if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::warn!(logger, "{}", err);
                 }
-            } else if let Err(err) = tx_success.send(ControlChanMsg::MkdirSuccess(path)).await {
+            } else if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
                 slog::warn!(logger, "{}", err);
             }
         });

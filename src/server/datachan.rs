@@ -94,6 +94,7 @@ where
 
     #[tracing_attributes::instrument]
     async fn exec_retr(self, path: String) {
+        let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
@@ -104,7 +105,13 @@ where
                 if let Err(err) = output.shutdown().await {
                     slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
                 }
-                if let Err(err) = tx_sending.send(ControlChanMsg::SendData { bytes: bytes_copied }).await {
+                if let Err(err) = tx_sending
+                    .send(ControlChanMsg::SentData {
+                        bytes: bytes_copied,
+                        path: path_copy,
+                    })
+                    .await
+                {
                     slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
                 }
             }
@@ -119,6 +126,7 @@ where
 
     #[tracing_attributes::instrument]
     async fn exec_stor(self, path: String) {
+        let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx_ok = self.control_msg_tx.clone();
         let tx_error = self.control_msg_tx.clone();
@@ -133,7 +141,7 @@ where
             .await;
         match put_result {
             Ok(bytes) => {
-                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes }).await {
+                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
                 }
             }

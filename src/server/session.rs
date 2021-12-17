@@ -17,7 +17,7 @@ use std::{
 use tokio::sync::mpsc::{Receiver, Sender};
 
 // TraceId is an identifier used to correlate logs statements together.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub struct TraceId(u64);
 
 impl TraceId {

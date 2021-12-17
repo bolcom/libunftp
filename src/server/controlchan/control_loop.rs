@@ -1,6 +1,9 @@
 use crate::{
     auth::{Authenticator, UserDetail},
     metrics::MetricsMiddleware,
+    notification::DataListener,
+    notification::PresenceListener,
+    server::shutdown,
     server::{
         chancomms::{ControlChanMsg, ProxyLoopSender},
         controlchan::{
@@ -13,6 +16,7 @@ use crate::{
             handler::{CommandContext, CommandHandler},
             log::LoggingMiddleware,
             middleware::ControlChanMiddleware,
+            notify::EventDispatcherMiddleware,
             Reply, ReplyCode,
         },
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
@@ -23,7 +27,6 @@ use crate::{
     storage::{ErrorKind, Metadata, StorageBackend},
 };
 
-use crate::server::shutdown;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::ServerConnection;
@@ -60,6 +63,8 @@ where
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
     pub site_md5: SiteMd5,
+    pub data_listener: Arc<dyn DataListener>,
+    pub presence_listener: Arc<dyn PresenceListener>,
 }
 
 /// Does TCP processing when an FTP client connects
@@ -88,6 +93,8 @@ where
         idle_session_timeout,
         logger,
         site_md5: sitemd5,
+        data_listener,
+        presence_listener,
         ..
     } = config;
 
@@ -118,6 +125,8 @@ where
         tx_proxy_loop: proxyloop_msg_tx,
         sitemd5,
     };
+
+    let event_chain = EventDispatcherMiddleware::new(data_listener, presence_listener, event_chain);
 
     let event_chain = AuthMiddleware {
         session: shared_session.clone(),
@@ -178,7 +187,7 @@ where
                     },
                     _ = shutdown.listen() => {
                         slog::info!(logger, "Shutting down control loop");
-                        incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::Quit)))
+                        incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
                         // TODO: Do we want to wait a bit for a data transfer to complete i.e. session.data_busy is true?
                     }
                 };
@@ -186,7 +195,8 @@ where
             };
             match incoming {
                 None => {} // Loop again
-                Some(Ok(Event::InternalMsg(ControlChanMsg::Quit))) => {
+                Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
+                    let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
                     slog::info!(logger, "Exiting control loop");
                     return;
                 }
@@ -315,7 +325,7 @@ where
         match msg {
             NotFound => Ok(Reply::new(ReplyCode::FileError, "File not found")),
             PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permision denied")),
-            SendData { .. } => {
+            SentData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
@@ -331,12 +341,10 @@ where
             UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
             DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
             DirectoryListFailure => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Failed to list the directory")),
-            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully cwd")),
-            DelSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "File successfully removed")),
+            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully changed working directory")),
+            DelFileSuccess { .. } | RmDirSuccess { .. } => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully removed")),
             DelFail => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
-            // The InternalMsg::Quit will never be reached, because we catch it in the task before
-            // this closure is called (because we have to close the connection).
-            Quit => Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!")),
+            ExitControlLoop => Ok(Reply::none()),
             SecureControlChannel => {
                 let mut session = self.session.lock().await;
                 session.cmd_tls = true;
@@ -347,9 +355,10 @@ where
                 session.cmd_tls = false;
                 Ok(Reply::none())
             }
-            MkdirSuccess(path) => Ok(Reply::new_with_string(ReplyCode::DirCreated, path.to_string_lossy().to_string())),
+            MkDirSuccess { path } => Ok(Reply::new_with_string(ReplyCode::DirCreated, path)),
             MkdirFail => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
-            AuthSuccess => {
+            RenameSuccess { .. } => Ok(Reply::new(ReplyCode::FileActionOkay, "Renamed")),
+            AuthSuccess { .. } => {
                 let mut session = self.session.lock().await;
                 session.state = WaitCmd;
                 Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))

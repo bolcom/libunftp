@@ -16,6 +16,7 @@ mod ftps;
 mod line_parser;
 mod log;
 mod middleware;
+mod notify;
 
 use command::Command;
 pub(crate) use control_loop::{spawn as spawn_loop, Config as LoopConfig};
