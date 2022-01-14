@@ -1,5 +1,13 @@
 # Changelog
 
+## 2022-01-21 libunftp 0.18.3
+
+_tag: libunftp-0.18.3_
+
+- [#394](https://github.com/bolcom/libunftp/pull/394) Implemented a new API (`Server.notify_data` and `Server.notify_presence`) 
+  to allow listening for file events.
+- Upgraded dependencies
+
 ## 2021-09-25 libunftp 0.18.2
 
 _tag: libunftp-0.18.2_
