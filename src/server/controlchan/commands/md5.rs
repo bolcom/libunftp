@@ -69,7 +69,7 @@ where
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                             ReplyCode::FileStatus,
-                            format!("{}    {}", md5, path.as_path().display().to_string()),
+                            format!("{}    {}", md5, path.as_path().display()),
                         )))
                         .await
                     {
