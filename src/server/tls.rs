@@ -156,7 +156,7 @@ struct TlsSessionCache {
 impl TlsSessionCache {
     /// Make a new TlsSessionCache.  `size` is the maximum
     /// number of stored sessions.
-    pub fn new(size: usize) -> Arc<TlsSessionCache> {
+    pub fn new(size: u64) -> Arc<TlsSessionCache> {
         debug_assert!(size > 0);
         Arc::new(TlsSessionCache {
             cache: moka::sync::CacheBuilder::new(size).time_to_idle(Duration::from_secs(5 * 60)).build(),

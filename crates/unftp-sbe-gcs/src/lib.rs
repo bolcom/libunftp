@@ -76,7 +76,7 @@ use hyper::{
     http::{header, Method, StatusCode, Uri},
     Body, Client, Request, Response,
 };
-use hyper_rustls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 use mime::APPLICATION_OCTET_STREAM;
@@ -132,7 +132,8 @@ impl CloudStorage {
         Str: Into<String>,
         AuthHow: Into<AuthMethod>,
     {
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = Client::builder().build(HttpsConnector::with_native_roots());
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> =
+            Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
         CloudStorage {
             client,
             auth: auth.into(),
