@@ -68,8 +68,7 @@ pub use ext::ServerExt;
 
 use async_trait::async_trait;
 use bytes::Buf;
-use futures::prelude::*;
-use futures::TryStreamExt;
+use futures::{prelude::*, TryStreamExt};
 use hyper::{
     body::aggregate,
     client::connect::{dns::GaiResolver, HttpConnector},
@@ -77,8 +76,10 @@ use hyper::{
     Body, Client, Request, Response,
 };
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use libunftp::auth::UserDetail;
-use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
+use libunftp::{
+    auth::UserDetail,
+    storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend},
+};
 use mime::APPLICATION_OCTET_STREAM;
 use object_metadata::ObjectMetadata;
 use options::AuthMethod;
@@ -87,7 +88,6 @@ use std::{
     fmt::Debug,
     path::{Path, PathBuf},
 };
-use tokio::io::{self, AsyncReadExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::ServiceAccountAuthenticator;
@@ -251,11 +251,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         W: tokio::io::AsyncWrite + Unpin + Sync + Send,
         P: AsRef<Path> + Send + Debug,
     {
-        let reader = self.get(user, path, 0).await?;
-        let mut reader = reader.take(start_pos);
-        tokio::io::copy(&mut reader, &mut io::sink()).await?;
-        let mut reader = reader.into_inner();
-
+        let mut reader = self.get(user, path, start_pos).await?;
         Ok(tokio::io::copy(&mut reader, output).await?)
     }
 
@@ -264,7 +260,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         &self,
         _user: &User,
         path: P,
-        _start_pos: u64,
+        start_pos: u64,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
@@ -273,6 +269,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .header(header::RANGE, format!("bytes={}-", start_pos))
             .method(Method::GET)
             .body(Body::empty())
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
