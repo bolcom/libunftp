@@ -1,5 +1,15 @@
 # Changelog
 
+## Upcoming
+
+- [#403](https://github.com/bolcom/libunftp/pull/403), [#404](https://github.com/bolcom/libunftp/pull/404) Improved logging: The username and file path are logged in 
+  separate fields in more places.
+- [#405](https://github.com/bolcom/libunftp/pull/405) Improved metrics: The `ftp_reply_total` and `ftp_error_total` 
+  counters now have new labels `event` and `event_type` to allow correlation with the event for which a reply is given 
+  or for which an error occurred.
+- [#402](https://github.com/bolcom/libunftp/pull/402) Allow `OPTS UTF8 ..` without needing to authenticate.
+- Upgraded dependencies
+
 ## 2022-01-21 libunftp 0.18.3
 
 _tag: libunftp-0.18.3_
