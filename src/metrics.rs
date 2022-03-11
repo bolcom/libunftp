@@ -24,11 +24,12 @@ where
         if self.collect_metrics {
             add_event_metric(&event);
         }
+        let (evt_type_label, evt_label) = event_to_labels(&event);
         let result: Result<Reply, ControlChanError> = self.next.handle(event).await;
         if self.collect_metrics {
             match &result {
-                Ok(reply) => add_reply_metric(reply),
-                Err(e) => add_error_metric(e.kind()),
+                Ok(reply) => add_reply_metric(reply, evt_type_label, evt_label),
+                Err(e) => add_error_metric(e.kind(), evt_type_label, evt_label),
             }
         }
         result
@@ -47,9 +48,14 @@ lazy_static! {
     static ref FTP_BACKEND_READ_FILES: IntCounter =
         register_int_counter!(opts!("ftp_backend_read_files", "Total number of files retrieved from the backend.")).unwrap();
     static ref FTP_COMMAND_TOTAL: IntCounterVec = register_int_counter_vec!("ftp_command_total", "Total number of commands received.", &["command"]).unwrap();
-    static ref FTP_REPLY_TOTAL: IntCounterVec =
-        register_int_counter_vec!("ftp_reply_total", "Total number of reply codes server sent to clients.", &["range"]).unwrap();
-    static ref FTP_ERROR_TOTAL: IntCounterVec = register_int_counter_vec!("ftp_error_total", "Total number of errors encountered.", &["type"]).unwrap();
+    static ref FTP_REPLY_TOTAL: IntCounterVec = register_int_counter_vec!(
+        "ftp_reply_total",
+        "Total number of reply codes server sent to clients.",
+        &["range", "event_type", "event"],
+    )
+    .unwrap();
+    static ref FTP_ERROR_TOTAL: IntCounterVec =
+        register_int_counter_vec!("ftp_error_total", "Total number of errors encountered.", &["type", "event_type", "event"]).unwrap();
 }
 
 /// Add a metric for an event.
@@ -82,29 +88,42 @@ pub fn dec_session() {
     FTP_SESSIONS.dec();
 }
 
-/// Add a metric for an FTP server error.
-fn add_error_metric(error: &ControlChanErrorKind) {
-    let error_str = error.to_string();
-    let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
-    FTP_ERROR_TOTAL.with_label_values(&[&label]).inc();
-}
-
 fn add_command_metric(cmd: &Command) {
-    let cmd_str = cmd.to_string();
-    let label = cmd_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
+    let label = command_to_label(cmd);
     FTP_COMMAND_TOTAL.with_label_values(&[&label]).inc();
 }
 
-/// Add a metric for a reply.
-fn add_reply_metric(reply: &Reply) {
+/// Error during command processing
+fn add_error_metric(error: &ControlChanErrorKind, evt_type_label: String, evt_label: String) {
+    let error_str = error.to_string();
+    let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
+    FTP_ERROR_TOTAL.with_label_values(&[&label, &evt_type_label, &evt_label]).inc();
+}
+
+/// Add a metric for an FTP reply.
+fn add_reply_metric(reply: &Reply, evt_type_label: String, evt_label: String) {
     match *reply {
         Reply::None => {}
-        Reply::CodeAndMsg { code, .. } => add_replycode_metric(code),
-        Reply::MultiLine { code, .. } => add_replycode_metric(code),
+        Reply::CodeAndMsg { code, .. } => add_replycode_metric(code, evt_type_label, evt_label),
+        Reply::MultiLine { code, .. } => add_replycode_metric(code, evt_type_label, evt_label),
     }
 }
 
-fn add_replycode_metric(code: ReplyCode) {
+fn add_replycode_metric(code: ReplyCode, evt_type_label: String, evt_label: String) {
     let range = format!("{}xx", code as u32 / 100 % 10);
-    FTP_REPLY_TOTAL.with_label_values(&[&range]).inc();
+    FTP_REPLY_TOTAL.with_label_values(&[&range, &evt_type_label, &evt_label]).inc();
+}
+
+fn event_to_labels(evt: &Event) -> (String, String) {
+    let (evt_type_str, evt_str) = match evt {
+        Event::Command(cmd) => ("command".into(), cmd.to_string()),
+        Event::InternalMsg(msg) => ("ctrl-chan-msg".into(), msg.to_string()),
+    };
+    let evt_name_str = evt_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
+    (evt_type_str, evt_name_str)
+}
+
+fn command_to_label(cmd: &Command) -> String {
+    let cmd_str = cmd.to_string();
+    cmd_str.split_whitespace().next().unwrap_or("unknown").to_lowercase()
 }
