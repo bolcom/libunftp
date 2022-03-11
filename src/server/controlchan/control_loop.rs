@@ -107,7 +107,7 @@ where
         .control_msg_tx(control_msg_tx.clone())
         .destination(destination);
 
-    let logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.source)));
+    let mut logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.source)));
 
     let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr()?;
@@ -235,6 +235,11 @@ where
                         let (sink, src) = cmd_and_reply_stream.split();
                         reply_sink = sink;
                         command_source = src;
+                    }
+
+                    if let Event::Command(Command::User { username }) = &event {
+                        let s: String = String::from_utf8_lossy(username).into();
+                        logger = logger.new(slog::o!("username" => s));
                     }
 
                     // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
