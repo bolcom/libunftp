@@ -1,6 +1,6 @@
 use crate::server::{
     controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
-    Event, Reply,
+    Command, Event, Reply,
 };
 
 use async_trait::async_trait;
@@ -22,6 +22,10 @@ where
 {
     async fn handle(&mut self, event: Event) -> Result<Reply, ControlChanError> {
         self.sequence_nr += 1;
+        if let Event::Command(Command::User { username }) = &event {
+            let s: String = String::from_utf8_lossy(username).into();
+            self.logger = self.logger.new(slog::o!("username" => s));
+        }
         slog::info!(self.logger, "Control channel event {:?}", event; "seq" => self.sequence_nr);
         let result = self.next.handle(event).await;
         match &result {
