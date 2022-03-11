@@ -38,6 +38,18 @@ pub enum DataChanCmd {
     },
 }
 
+impl DataChanCmd {
+    /// Returns the path the command pertains to
+    pub fn path(&self) -> Option<String> {
+        match self {
+            DataChanCmd::Retr { path, .. } => Some(path.clone()),
+            DataChanCmd::Stor { path, .. } => Some(path.clone()),
+            DataChanCmd::List { path, .. } => path.clone(),
+            DataChanCmd::Nlst { path, .. } => path.clone(),
+        }
+    }
+}
+
 /// Messages that can be sent to the control channel loop.
 #[derive(Debug)]
 #[allow(dead_code)]
