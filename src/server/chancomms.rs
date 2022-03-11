@@ -1,12 +1,13 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
 use super::session::SharedSession;
-use crate::server::session::TraceId;
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
+    server::session::TraceId,
     storage::{Error, StorageBackend},
 };
+use std::fmt;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 // Commands that can be send to the data channel / data loop.
@@ -123,6 +124,12 @@ pub enum ControlChanMsg {
     StorageError(Error),
     /// Reply on the command channel
     CommandChannelReply(Reply),
+}
+
+impl fmt::Display for ControlChanMsg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
