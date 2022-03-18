@@ -73,6 +73,9 @@ fn add_event_metric(event: &Event) {
                 FTP_BACKEND_WRITE_BYTES.inc_by(*bytes);
                 FTP_BACKEND_WRITE_FILES.inc();
             }
+            ControlChanMsg::AuthFailed => {
+                FTP_AUTH_FAILURES.inc();
+            }
             _ => {}
         },
     }
