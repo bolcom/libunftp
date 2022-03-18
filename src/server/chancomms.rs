@@ -79,8 +79,6 @@ pub enum ControlChanMsg {
     DataConnectionClosedAfterStor,
     /// Failed to write data to disk
     WriteFailed,
-    /// Unknown Error retrieving file
-    UnknownRetrieveError,
     /// Listed the directory successfully
     DirectorySuccessfullyListed,
     /// Failed to list the directory contents

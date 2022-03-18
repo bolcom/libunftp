@@ -172,8 +172,14 @@ where
                 let mut incoming = None;
                 let mut timeout_delay = Box::pin(tokio::time::sleep(idle_session_timeout));
                 tokio::select! {
-                    Some(cmd_result) = command_source.next() => {
-                        incoming = Some(cmd_result.map(Event::Command));
+                    cmd = command_source.next() => {
+                        match cmd {
+                            Some(cmd_result) => incoming = Some(cmd_result.map(Event::Command)),
+                            None => {
+                                slog::info!(logger, "Command stream ended.");
+                                incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
+                            }
+                        }
                     },
                     Some(msg) = control_msg_rx.recv() => {
                         incoming = Some(Ok(Event::InternalMsg(msg)));
@@ -244,18 +250,14 @@ where
 
                     // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
 
-                    match event_chain.handle(event).await {
-                        Err(e) => {
-                            slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", e);
-                            return;
-                        }
-                        Ok(reply) => {
-                            let result = reply_sink.send(reply).await;
-                            if result.is_err() {
-                                slog::warn!(logger, "Could not send reply to client");
-                                return;
-                            }
-                        }
+                    let handle_result = match event_chain.handle(event).await {
+                        Err(e) => Err(e),
+                        Ok(reply) => reply_sink.send(reply).await,
+                    };
+
+                    if let Err(chan_err) = handle_result {
+                        slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", chan_err);
+                        return;
                     }
                 }
                 Some(Err(e)) => {
@@ -343,7 +345,6 @@ where
                 Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
             }
             DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
-            UnknownRetrieveError => Ok(Reply::new(ReplyCode::TransientFileError, "Unknown Error")),
             DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
             DirectoryListFailure => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Failed to list the directory")),
             CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully changed working directory")),
