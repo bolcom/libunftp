@@ -73,23 +73,56 @@ where
                     source_ip: session.source.ip(),
                     certificate_chain: session.cert_chain.clone(),
                 };
+                let failedlogins = session.failedlogins.clone();
+                let source_ip = session.source.ip();
                 tokio::spawn(async move {
                     let msg = match auther.authenticate(&username, &creds).await {
                         Ok(user) => {
-                            if user.account_enabled() {
-                                let mut session = session2clone.lock().await;
-                                slog::info!(logger, "User {} logged in", user);
-                                session.user = Arc::new(Some(user));
-                                ControlChanMsg::AuthSuccess {
-                                    username,
-                                    trace_id: session.trace_id,
+                            let is_locked = match failedlogins {
+                                Some(failedlogins) => {
+                                    let result = failedlogins.success(source_ip, username.clone()).await;
+                                    if let Err(err) = result {
+                                        slog::warn!(
+                                            logger,
+                                            "Correct password was given but account is locked due to previous failed login attempts! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. Error: {:?})",
+                                            username,
+                                            err
+                                        );
+                                        true
+                                    } else {
+                                        false
+                                    }
                                 }
-                            } else {
-                                slog::warn!(logger, "User {} authenticated but account is disabled", user);
+                                None => false,
+                            };
+
+                            if is_locked {
                                 ControlChanMsg::AuthFailed
+                            } else {
+                                if user.account_enabled() {
+                                    let mut session = session2clone.lock().await;
+                                    slog::info!(logger, "User {} logged in", user);
+                                    session.user = Arc::new(Some(user));
+                                    ControlChanMsg::AuthSuccess {
+                                        username,
+                                        trace_id: session.trace_id,
+                                    }
+                                } else {
+                                    slog::warn!(logger, "User {} authenticated but account is disabled", user);
+                                    ControlChanMsg::AuthFailed
+                                }
                             }
                         }
-                        Err(_) => ControlChanMsg::AuthFailed,
+                        Err(_) => {
+                            if let Some(failedlogins) = failedlogins {
+                                let result = failedlogins.failed(source_ip, username.clone()).await;
+                                if let Err(err) = result {
+                                    slog::info!(logger, "Bad password but the account is already locked {} {:?}", username, err);
+                                }
+                            }
+
+                            ControlChanMsg::AuthFailed
+                        }
                     };
                     tokio::spawn(async move {
                         if let Err(err) = tx.send(msg).await {

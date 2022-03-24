@@ -19,6 +19,7 @@ use crate::{
             notify::EventDispatcherMiddleware,
             Reply, ReplyCode,
         },
+        failedlogins::FailedLoginsCache,
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
         session::SharedSession,
         tls::FtpsConfig,
@@ -75,6 +76,7 @@ pub async fn spawn<Storage, User>(
     destination: Option<SocketAddr>,
     proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
+    failedlogins: Option<Arc<Box<FailedLoginsCache>>>,
 ) -> Result<(), ControlChanError>
 where
     User: UserDetail + 'static,
@@ -105,7 +107,8 @@ where
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
-        .destination(destination);
+        .destination(destination)
+        .failedlogins(failedlogins);
 
     let mut logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.source)));
 

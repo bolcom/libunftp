@@ -6,6 +6,7 @@ pub mod options;
 
 use super::{
     controlchan,
+    failedlogins::FailedLoginsCache,
     ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
     shutdown,
     tls::FtpsConfig,
@@ -13,7 +14,7 @@ use super::{
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
     notification::{nop::NopListener, DataListener, PresenceListener},
-    options::{FtpsClientAuth, TlsFlags},
+    options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
     server::{
         proxy_protocol::{ProxyMode, ProxyProtocolSwitchboard},
@@ -71,6 +72,7 @@ where
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
+    failedlogins_policy: Option<FailedLoginsPolicy>,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -117,6 +119,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             shutdown: Box::pin(futures_util::future::pending()),
+            failedlogins_policy: Some(FailedLoginsPolicy::default()),
         }
     }
 
@@ -467,6 +470,27 @@ where
         self
     }
 
+    /// Enables a password guessing protection policy
+    ///
+    /// Policy used to temporarily lock an account, source IP or the
+    /// combination of both, after a certain number of failed login
+    /// attempts for a certain time.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use libunftp::options::FailedLoginsPolicy;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp").failedloginspolicy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new()));
+    /// ```
+    pub fn failedloginspolicy(mut self, failedloginspolicy_option: FailedLoginsPolicy) -> Self {
+        self.failedlogins_policy = Some(failedloginspolicy_option);
+        self
+    }
+
     /// Runs the main FTP process asynchronously. Should be started in a async runtime context.
     ///
     /// # Example
@@ -497,6 +521,15 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
+        let cache;
+        let failedlogins = match self.failedlogins_policy {
+            Some(ref policy) => {
+                cache = FailedLoginsCache::new(policy.clone());
+                Some(cache)
+            }
+            None => None,
+        };
+
         let listen_future = match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
@@ -506,6 +539,7 @@ where
                     options: (&self).into(),
                     proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
                     shutdown_topic: shutdown_notifier.clone(),
+                    failedlogins: failedlogins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -515,17 +549,35 @@ where
                     logger: self.logger.clone(),
                     options: (&self).into(),
                     shutdown_topic: shutdown_notifier.clone(),
+                    failedlogins: failedlogins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
-        tokio::select! {
-            result = listen_future => result,
-            opts = self.shutdown => {
-                slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
-                shutdown_notifier.notify().await;
-                Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
+        // There must be a better way to do this?!
+        if let Some(failedlogins) = failedlogins {
+            let sweeper = failedlogins.sweeper(self.logger.clone(), shutdown_notifier.clone());
+
+            tokio::select! {
+                result = listen_future => result,
+                _ = sweeper => {
+                    Ok(())
+                },
+                opts = self.shutdown => {
+                    slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
+                    shutdown_notifier.notify().await;
+                    Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
+                }
+            }
+        } else {
+            tokio::select! {
+                result = listen_future => result,
+                opts = self.shutdown => {
+                    slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
+                    shutdown_notifier.notify().await;
+                    Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
+                }
             }
         }
     }
