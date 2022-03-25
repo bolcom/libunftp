@@ -6,7 +6,7 @@ pub mod options;
 
 use super::{
     controlchan,
-    failedlogins::FailedLoginsCache,
+    failed_logins::FailedLoginsCache,
     ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
     shutdown,
     tls::FtpsConfig,
@@ -72,7 +72,7 @@ where
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
-    failedlogins_policy: Option<FailedLoginsPolicy>,
+    failed_logins_policy: Option<FailedLoginsPolicy>,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -119,7 +119,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             shutdown: Box::pin(futures_util::future::pending()),
-            failedlogins_policy: None,
+            failed_logins_policy: None,
         }
     }
 
@@ -491,10 +491,10 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").failedloginspolicy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new()));
+    /// let mut server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
     /// ```
-    pub fn failedloginspolicy(mut self, failedloginspolicy_option: FailedLoginsPolicy) -> Self {
-        self.failedlogins_policy = Some(failedloginspolicy_option);
+    pub fn failed_logins_policy(mut self, policy: FailedLoginsPolicy) -> Self {
+        self.failed_logins_policy = Some(policy);
         self
     }
 
@@ -528,7 +528,7 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
-        let failedlogins = match self.failedlogins_policy {
+        let failed_logins = match self.failed_logins_policy {
             Some(ref policy) => Some(FailedLoginsCache::new(policy.clone())),
             None => None,
         };
@@ -542,7 +542,7 @@ where
                     options: (&self).into(),
                     proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
                     shutdown_topic: shutdown_notifier.clone(),
-                    failedlogins: failedlogins.clone(),
+                    failed_logins: failed_logins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -552,15 +552,15 @@ where
                     logger: self.logger.clone(),
                     options: (&self).into(),
                     shutdown_topic: shutdown_notifier.clone(),
-                    failedlogins: failedlogins.clone(),
+                    failed_logins: failed_logins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
         // There must be a better way to do this?!
-        if let Some(failedlogins) = failedlogins {
-            let sweeper = failedlogins.sweeper(self.logger.clone(), shutdown_notifier.clone());
+        if let Some(failed_logins) = failed_logins {
+            let sweeper = failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone());
 
             tokio::select! {
                 result = listen_future => result,

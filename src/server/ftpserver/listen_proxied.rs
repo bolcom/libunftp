@@ -1,7 +1,7 @@
 //! Contains the code that listens to control and data connections on a single TCP port (proxy
 //! protocol mode).
 
-use crate::server::failedlogins::FailedLoginsCache;
+use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::{
     auth::UserDetail,
@@ -36,7 +36,7 @@ where
     pub options: OptionsHolder<Storage, User>,
     pub proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
-    pub failedlogins: Option<Arc<Box<FailedLoginsCache>>>,
+    pub failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
 }
 
 impl<Storage, User> ProxyProtocolListener<Storage, User>
@@ -80,7 +80,7 @@ where
                         let source = connection.source;
                         slog::info!(self.logger, "Connection from {:?} is a control connection", source);
                         let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
-                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failedlogins.clone()).await;
+                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
                         if result.is_err() {
                             slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                         }

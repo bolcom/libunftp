@@ -3,7 +3,7 @@
 mod chancomms;
 pub(crate) mod controlchan;
 mod datachan;
-mod failedlogins;
+mod failed_logins;
 pub(crate) mod ftpserver;
 mod password;
 mod proxy_protocol;

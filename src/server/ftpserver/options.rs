@@ -223,7 +223,7 @@ pub enum FailedLoginsPolicy {
     /// User plus source IP address locking
     SourceUserLock(FailedLoginsPenalty),
     /// Source IP locking
-    SourceLock(FailedLoginsPenalty),
+    SourceIPLock(FailedLoginsPenalty),
     /// Lock the user
     UserLock(FailedLoginsPenalty),
 }
@@ -246,10 +246,7 @@ pub struct FailedLoginsPenalty {
 
 impl Default for FailedLoginsPenalty {
     fn default() -> FailedLoginsPenalty {
-        FailedLoginsPenalty {
-            max_attempts: 3,
-            expires_after: Duration::from_secs(120),
-        }
+        FailedLoginsPenalty::new(3, Duration::from_secs(120))
     }
 }
 

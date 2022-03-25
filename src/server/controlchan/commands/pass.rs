@@ -10,7 +10,7 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
-use crate::server::failedlogins::FailedLoginsError;
+use crate::server::failed_logins::FailedLoginsError;
 use crate::{
     auth::UserDetail,
     server::{
@@ -76,14 +76,14 @@ where
                     source_ip: session.source.ip(),
                     certificate_chain: session.cert_chain.clone(),
                 };
-                let failedlogins = session.failedlogins.clone();
+                let failed_logins = session.failed_logins.clone();
                 let source_ip = session.source.ip();
                 tokio::spawn(async move {
                     let msg = match auther.authenticate(&username, &creds).await {
                         Ok(user) => {
-                            let is_locked = match failedlogins {
-                                Some(failedlogins) => {
-                                    let result = failedlogins.success(source_ip, username.clone()).await;
+                            let is_locked = match failed_logins {
+                                Some(failed_logins) => {
+                                    let result = failed_logins.success(source_ip, username.clone()).await;
                                     if let Err(err) = result {
                                         slog::warn!(
                                             logger,
@@ -118,8 +118,8 @@ where
                             }
                         }
                         Err(_) => {
-                            if let Some(failedlogins) = failedlogins {
-                                let result = failedlogins.failed(source_ip, username.clone()).await;
+                            if let Some(failed_logins) = failed_logins {
+                                let result = failed_logins.failed(source_ip, username.clone()).await;
                                 match result {
                                     Err(err) => {
                                         match err {

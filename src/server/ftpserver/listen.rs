@@ -1,7 +1,7 @@
 //! Contains the code that listens to control channel connections in a non-proxy protocol mode.
 
 use super::{chosen::OptionsHolder, ServerError};
-use crate::server::failedlogins::FailedLoginsCache;
+use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::{auth::UserDetail, server::controlchan, storage::StorageBackend};
 use std::net::SocketAddr;
@@ -19,7 +19,7 @@ where
     pub logger: slog::Logger,
     pub options: OptionsHolder<Storage, User>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
-    pub failedlogins: Option<Arc<Box<FailedLoginsCache>>>,
+    pub failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
 }
 
 impl<Storage, User> Listener<Storage, User>
@@ -34,7 +34,7 @@ where
             bind_address,
             options,
             shutdown_topic,
-            failedlogins,
+            failed_logins,
         } = self;
         let listener = TcpListener::bind(bind_address).await?;
         loop {
@@ -43,7 +43,7 @@ where
                 Ok((tcp_stream, socket_addr)) => {
                     slog::info!(logger, "Incoming control connection from {:?}", socket_addr);
                     let result =
-                        controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream, None, None, shutdown_listener, failedlogins.clone()).await;
+                        controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream, None, None, shutdown_listener, failed_logins.clone()).await;
                     if let Err(err) = result {
                         slog::error!(logger, "Could not spawn control channel loop for connection from {:?}: {:?}", socket_addr, err)
                     }
