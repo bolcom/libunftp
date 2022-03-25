@@ -483,15 +483,23 @@ where
     /// login attempt from that IP. Including login attempts for other
     /// users.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use libunftp::Server;
     /// use libunftp::options::FailedLoginsPolicy;
     /// use unftp_sbe_fs::ServerExt;
     ///
-    /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
+    /// // With default policy
+    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
+    ///
+    /// // Or choose a specific policy like based on source IP
+    /// let server = Server::with_fs("/tmp")
+    ///     .failed_logins_policy(FailedLoginsPolicy::SourceIPLock(FailedLoginsPenalty::default()));
+    ///
+    /// // Or override the lock penalty, by a maximum of 1 attempt and a 30 second lock penalty
+    /// let server = Server::with_fs("/tmp")
+    ///      .failed_logins_policy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new(1, Duration::from_secs(30))));
     /// ```
     pub fn failed_logins_policy(mut self, policy: FailedLoginsPolicy) -> Self {
         self.failed_logins_policy = Some(policy);

@@ -6,8 +6,8 @@ use slog::Logger;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{Duration, Instant};
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 struct FailedLoginsKey {
@@ -35,11 +35,6 @@ impl FailedLoginsEntry {
 
     fn touch(&mut self) {
         self.last_attempt_at = Instant::now();
-    }
-
-    #[allow(dead_code)]
-    fn attempts(&self) -> u32 {
-        self.attempts
     }
 }
 

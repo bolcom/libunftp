@@ -117,7 +117,12 @@ where
                                 }
                             }
                         }
-                        Err(_) => {
+                        Err(crate::auth::AuthenticationError::BadUser) => {
+                            slog::warn!(logger, "Login attempt for unknown user {}", username);
+                            ControlChanMsg::AuthFailed
+                        }
+                        Err(err) => {
+                            slog::warn!(logger, "Failed login attempt for user {}, reason={}", username, err);
                             if let Some(failed_logins) = failed_logins {
                                 let result = failed_logins.failed(source_ip, username.clone()).await;
                                 match result {
