@@ -230,8 +230,8 @@ pub enum FailedLoginsPolicy {
 
 impl FailedLoginsPenalty {
     /// Create a new FailedLoginsPenalty instance
-    pub fn new() -> FailedLoginsPenalty {
-        FailedLoginsPenalty::default()
+    pub fn new(max_attempts: u32, expires_after: Duration) -> FailedLoginsPenalty {
+        FailedLoginsPenalty { max_attempts, expires_after }
     }
 }
 
@@ -255,6 +255,6 @@ impl Default for FailedLoginsPenalty {
 
 impl Default for FailedLoginsPolicy {
     fn default() -> FailedLoginsPolicy {
-        FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new())
+        FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::default())
     }
 }

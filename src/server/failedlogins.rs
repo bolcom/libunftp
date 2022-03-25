@@ -102,7 +102,7 @@ impl FailedLoginsCache {
         let key = self.getkey(ip, user);
         let entry = map.get(&key);
         // Let's first check, whether this client has any recent failed logins
-        match entry {
+        let attempts = match entry {
             Some(entry) => {
                 let mut entry = entry.lock().await;
                 // If expired, reset to first failed login attempt
@@ -112,19 +112,24 @@ impl FailedLoginsCache {
                     entry.attempts += 1;
                 }
                 entry.touch();
-                if entry.attempts == self.penalty.max_attempts {
-                    return Err(FailedLoginsError::MaxFailuresReached);
-                } else if entry.attempts > self.penalty.max_attempts {
-                    return Err(FailedLoginsError::AlreadyLocked);
-                }
+                entry.attempts
             }
             None => {
                 drop(map);
                 let mut map = self.failedlogins.write().await;
-                map.insert(key, FailedLoginsEntry::new());
+                let entry = FailedLoginsEntry::new();
+                map.insert(key, entry);
+                1 // first failed login attempt
             }
+        };
+
+        if attempts == self.penalty.max_attempts {
+            Err(FailedLoginsError::MaxFailuresReached)
+        } else if attempts > self.penalty.max_attempts {
+            Err(FailedLoginsError::AlreadyLocked)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     /// Upon successful login: throws an error if the account is still locked out, otherwise deletes the cached entry
