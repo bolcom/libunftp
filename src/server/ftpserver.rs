@@ -536,10 +536,7 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
-        let failed_logins = match self.failed_logins_policy {
-            Some(ref policy) => Some(FailedLoginsCache::new(policy.clone())),
-            None => None,
-        };
+        let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
         let listen_future = match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => Box::pin(
