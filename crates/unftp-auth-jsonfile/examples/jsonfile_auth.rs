@@ -1,3 +1,4 @@
+use libunftp::options::{FailedLoginsPenalty, FailedLoginsPolicy};
 use std::sync::Arc;
 use unftp_auth_jsonfile::JsonFileAuthenticator;
 use unftp_sbe_fs::ServerExt;
@@ -8,7 +9,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let authenticator = JsonFileAuthenticator::from_file(String::from("credentials.json"))?;
 
     let addr = "127.0.0.1:2121";
-    let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator));
+    let server = libunftp::Server::with_fs(std::env::temp_dir())
+        .authenticator(Arc::new(authenticator))
+        .failedloginspolicy(FailedLoginsPolicy::SourceLock(FailedLoginsPenalty::new()));
+    //        .failedloginspolicy(FailedLoginsPolicy::default());
 
     println!("Starting ftp server on {}", addr);
     let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();

@@ -241,14 +241,14 @@ pub struct FailedLoginsPenalty {
     /// The maximum number of consecutive failed login attempts before the account gets locked
     pub(crate) max_attempts: u32,
     /// The expiration time since the last failed login attempt that the account gets unlocked
-    pub(crate) expiration_time: Duration,
+    pub(crate) expires_after: Duration,
 }
 
 impl Default for FailedLoginsPenalty {
     fn default() -> FailedLoginsPenalty {
         FailedLoginsPenalty {
             max_attempts: 3,
-            expiration_time: Duration::from_secs(120),
+            expires_after: Duration::from_secs(120),
         }
     }
 }

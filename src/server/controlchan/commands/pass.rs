@@ -10,6 +10,7 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
+use crate::server::failedlogins::FailedLoginsError;
 use crate::{
     auth::UserDetail,
     server::{
@@ -26,7 +27,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
+use tokio::time::sleep;
 
 #[derive(Debug)]
 pub struct Pass {
@@ -84,7 +87,7 @@ where
                                     if let Err(err) = result {
                                         slog::warn!(
                                             logger,
-                                            "Correct password was given but account is locked due to previous failed login attempts! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. Error: {:?})",
+                                            "User authenticated but currently locked out due to previous failed login attempts according to the policy! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. Error: {:?})",
                                             username,
                                             err
                                         );
@@ -97,6 +100,7 @@ where
                             };
 
                             if is_locked {
+                                sleep(Duration::from_millis(1500)).await;
                                 ControlChanMsg::AuthFailed
                             } else {
                                 if user.account_enabled() {
@@ -116,8 +120,31 @@ where
                         Err(_) => {
                             if let Some(failedlogins) = failedlogins {
                                 let result = failedlogins.failed(source_ip, username.clone()).await;
-                                if let Err(err) = result {
-                                    slog::info!(logger, "Bad password but the account is already locked {} {:?}", username, err);
+                                match result {
+                                    Err(err) => {
+                                        match err {
+                                            FailedLoginsError::MaxFailuresReached => {
+                                                slog::warn!(
+                                                    logger,
+                                                    "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, Error={:?})",
+                                                    username,
+                                                    source_ip,
+                                                    err
+                                                );
+                                            }
+                                            FailedLoginsError::AlreadyLocked => {
+                                                slog::info!(
+                                                    logger,
+                                                    "Another bad login attempt but the locking policy is already active (Username={}, IP={}, Error={:?})",
+                                                    username,
+                                                    source_ip,
+                                                    err
+                                                );
+                                            }
+                                        }
+                                        sleep(Duration::from_millis(1500)).await;
+                                    }
+                                    _ => {}
                                 }
                             }
 

@@ -476,6 +476,13 @@ where
     /// combination of both, after a certain number of failed login
     /// attempts for a certain time.
     ///
+    /// There are different policies to choose from. Such as to lock
+    /// baseds on the combination of source IP + username or only
+    /// username or IP. For example, if you choose IP based locking,
+    /// multiple successive failed login attempts will lock out any
+    /// login attempt from that IP. Including login attempts for other
+    /// users.
+    ///
     /// # Example
     ///
     /// ```rust

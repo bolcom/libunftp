@@ -11,8 +11,8 @@ use tokio::time::{Duration, Instant};
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 struct FailedLoginsKey {
-    ip: IpAddr,
-    username: String,
+    ip: Option<IpAddr>,
+    username: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +46,6 @@ impl FailedLoginsEntry {
 /// Temporarily remembers failed logins
 #[derive(Debug)]
 pub struct FailedLoginsCache {
-    //    #[allow(dead_code)]
     policy: FailedLoginsPolicy,
     penalty: FailedLoginsPenalty,
     failedlogins: Arc<RwLock<HashMap<FailedLoginsKey, Mutex<FailedLoginsEntry>>>>,
@@ -54,7 +53,10 @@ pub struct FailedLoginsCache {
 
 #[derive(Debug)]
 pub enum FailedLoginsError {
-    TemporarilyLockedOut,
+    // With this failed login attempt the lockout threshold has been reached
+    MaxFailuresReached,
+    // The account is already locked out from previous failed attempts
+    AlreadyLocked,
 }
 
 impl FailedLoginsCache {
@@ -73,48 +75,63 @@ impl FailedLoginsCache {
     }
 
     fn is_expired(&self, time_elapsed: Duration) -> bool {
-        time_elapsed > self.penalty.expiration_time
+        time_elapsed > self.penalty.expires_after
     }
 
     fn is_locked(&self, attempts: u32) -> bool {
         attempts >= self.penalty.max_attempts
     }
 
+    fn getkey(&self, ip: IpAddr, user: String) -> FailedLoginsKey {
+        return match self.policy {
+            FailedLoginsPolicy::SourceUserLock(_) => FailedLoginsKey {
+                ip: Some(ip),
+                username: Some(user),
+            },
+            FailedLoginsPolicy::SourceLock(_) => FailedLoginsKey { ip: Some(ip), username: None },
+            FailedLoginsPolicy::UserLock(_) => FailedLoginsKey {
+                ip: None,
+                username: Some(user),
+            },
+        };
+    }
+
     /// Upon failed login: increments failed attempts counter, returns error if account is locked out
     pub async fn failed(&self, ip: IpAddr, user: String) -> Result<(), FailedLoginsError> {
         let map = self.failedlogins.read().await;
-        let entry = map.get(&FailedLoginsKey { ip, username: user.clone() });
+        let key = self.getkey(ip, user);
+        let entry = map.get(&key);
         // Let's first check, whether this client has any recent failed logins
         match entry {
             Some(entry) => {
                 let mut entry = entry.lock().await;
-                // If expired, reset
+                // If expired, reset to first failed login attempt
                 if self.is_expired(entry.time_elapsed()) {
                     entry.attempts = 1;
                 } else {
-                    // Increase the failed login attempts counter
                     entry.attempts += 1;
                 }
                 entry.touch();
-                // Keep tabs on it, initially.
-                if self.is_locked(entry.attempts) {
-                    return Err(FailedLoginsError::TemporarilyLockedOut);
+                if entry.attempts == self.penalty.max_attempts {
+                    return Err(FailedLoginsError::MaxFailuresReached);
+                } else if entry.attempts > self.penalty.max_attempts {
+                    return Err(FailedLoginsError::AlreadyLocked);
                 }
             }
             None => {
                 drop(map);
                 let mut map = self.failedlogins.write().await;
-                map.insert(FailedLoginsKey { ip, username: user.clone() }, FailedLoginsEntry::new());
+                map.insert(key, FailedLoginsEntry::new());
             }
         }
         Ok(())
     }
 
     /// Upon successful login: throws an error if the account is still locked out, otherwise deletes the cached entry
-    #[allow(dead_code)]
     pub async fn success(&self, ip: IpAddr, user: String) -> Result<(), FailedLoginsError> {
         let map = self.failedlogins.read().await;
-        let entry = map.get(&FailedLoginsKey { ip, username: user.clone() });
+        let key = self.getkey(ip, user);
+        let entry = map.get(&key);
         // if there's an existing entry, we need to check if allowed to log in
         let (is_expired, is_locked) = if let Some(entry) = entry {
             let entry = entry.lock().await;
@@ -127,10 +144,10 @@ impl FailedLoginsCache {
         drop(map);
 
         return match (is_expired, is_locked) {
-            (false, true) => Err(FailedLoginsError::TemporarilyLockedOut),
+            (false, true) => Err(FailedLoginsError::AlreadyLocked),
             (_, _) => {
                 let mut map = self.failedlogins.write().await;
-                map.remove(&FailedLoginsKey { ip, username: user });
+                map.remove(&key);
                 Ok(())
             }
         };
@@ -149,7 +166,7 @@ impl FailedLoginsCache {
                     let mut expired_entries: Vec<FailedLoginsKey> = Vec::new();
                     for (key, entry) in map.iter() {
                         let entry = entry.lock().await;
-                        slog::debug!(logger, "Checking expired entry: {:?} {:?} {:?}", key, entry.time_elapsed(), self.penalty.expiration_time);
+                        slog::debug!(logger, "Checking expired entry: key={:?} attempts={} elapsed={:?} policy={:?}", key, entry.attempts, entry.time_elapsed(), self.policy);
                         if self.is_expired(entry.time_elapsed()) {
                             expired_entries.push(key.clone());
                         }
