@@ -119,7 +119,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             shutdown: Box::pin(futures_util::future::pending()),
-            failedlogins_policy: Some(FailedLoginsPolicy::default()),
+            failedlogins_policy: None,
         }
     }
 
