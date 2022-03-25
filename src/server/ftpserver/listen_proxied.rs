@@ -36,7 +36,7 @@ where
     pub options: OptionsHolder<Storage, User>,
     pub proxy_protocol_switchboard: Option<ProxyProtocolSwitchboard<Storage, User>>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
-    pub failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
+    pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
 
 impl<Storage, User> ProxyProtocolListener<Storage, User>

@@ -19,7 +19,7 @@ where
     pub logger: slog::Logger,
     pub options: OptionsHolder<Storage, User>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
-    pub failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
+    pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
 
 impl<Storage, User> Listener<Storage, User>

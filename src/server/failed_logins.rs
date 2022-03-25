@@ -55,18 +55,18 @@ pub enum FailedLoginsError {
 }
 
 impl FailedLoginsCache {
-    pub fn new(failed_logins_policy: FailedLoginsPolicy) -> Arc<Box<FailedLoginsCache>> {
+    pub fn new(failed_logins_policy: FailedLoginsPolicy) -> Arc<FailedLoginsCache> {
         let penalty = match failed_logins_policy {
             FailedLoginsPolicy::SourceIPLock(ref x) => x.clone(),
             FailedLoginsPolicy::SourceUserLock(ref x) => x.clone(),
             FailedLoginsPolicy::UserLock(ref x) => x.clone(),
         };
 
-        Arc::new(Box::new(FailedLoginsCache {
+        Arc::new(FailedLoginsCache {
             policy: failed_logins_policy,
             penalty,
             failed_logins: Arc::new(RwLock::new(HashMap::new())),
-        }))
+        })
     }
 
     fn is_expired(&self, time_elapsed: Duration) -> bool {
@@ -78,7 +78,7 @@ impl FailedLoginsCache {
     }
 
     fn getkey(&self, ip: IpAddr, user: String) -> FailedLoginsKey {
-        return match self.policy {
+        match self.policy {
             FailedLoginsPolicy::SourceUserLock(_) => FailedLoginsKey {
                 ip: Some(ip),
                 username: Some(user),
@@ -88,7 +88,7 @@ impl FailedLoginsCache {
                 ip: None,
                 username: Some(user),
             },
-        };
+        }
     }
 
     /// Upon failed login: increments failed attempts counter, returns error if account is locked out
@@ -118,12 +118,10 @@ impl FailedLoginsCache {
             }
         };
 
-        if attempts == self.penalty.max_attempts {
-            Err(FailedLoginsError::MaxFailuresReached)
-        } else if attempts > self.penalty.max_attempts {
-            Err(FailedLoginsError::AlreadyLocked)
-        } else {
-            Ok(())
+        match attempts {
+            a if a == self.penalty.max_attempts => Err(FailedLoginsError::MaxFailuresReached),
+            a if a > self.penalty.max_attempts => Err(FailedLoginsError::AlreadyLocked),
+            _ => Ok(()),
         }
     }
 

@@ -76,7 +76,7 @@ pub async fn spawn<Storage, User>(
     destination: Option<SocketAddr>,
     proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
-    failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
+    failed_logins: Option<Arc<FailedLoginsCache>>,
 ) -> Result<(), ControlChanError>
 where
     User: UserDetail + 'static,

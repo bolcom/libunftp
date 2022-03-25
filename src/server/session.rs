@@ -103,7 +103,7 @@ where
     // The client certificate chain if it was received.
     pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
     // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
-    pub failed_logins: Option<Arc<Box<FailedLoginsCache>>>,
+    pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -162,7 +162,7 @@ where
         self
     }
 
-    pub fn failed_logins(mut self, failed_logins: Option<Arc<Box<FailedLoginsCache>>>) -> Self {
+    pub fn failed_logins(mut self, failed_logins: Option<Arc<FailedLoginsCache>>) -> Self {
         self.failed_logins = failed_logins;
         self
     }

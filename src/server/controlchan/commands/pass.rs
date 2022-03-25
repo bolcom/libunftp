@@ -102,19 +102,17 @@ where
                             if is_locked {
                                 sleep(Duration::from_millis(1500)).await;
                                 ControlChanMsg::AuthFailed
-                            } else {
-                                if user.account_enabled() {
-                                    let mut session = session2clone.lock().await;
-                                    slog::info!(logger, "User {} logged in", user);
-                                    session.user = Arc::new(Some(user));
-                                    ControlChanMsg::AuthSuccess {
-                                        username,
-                                        trace_id: session.trace_id,
-                                    }
-                                } else {
-                                    slog::warn!(logger, "User {} authenticated but account is disabled", user);
-                                    ControlChanMsg::AuthFailed
+                            } else if user.account_enabled() {
+                                let mut session = session2clone.lock().await;
+                                slog::info!(logger, "User {} logged in", user);
+                                session.user = Arc::new(Some(user));
+                                ControlChanMsg::AuthSuccess {
+                                    username,
+                                    trace_id: session.trace_id,
                                 }
+                            } else {
+                                slog::warn!(logger, "User {} authenticated but account is disabled", user);
+                                ControlChanMsg::AuthFailed
                             }
                         }
                         Err(crate::auth::AuthenticationError::BadUser) => {
@@ -125,31 +123,27 @@ where
                             slog::warn!(logger, "Failed login attempt for user {}, reason={}", username, err);
                             if let Some(failed_logins) = failed_logins {
                                 let result = failed_logins.failed(source_ip, username.clone()).await;
-                                match result {
-                                    Err(err) => {
-                                        match err {
-                                            FailedLoginsError::MaxFailuresReached => {
-                                                slog::warn!(
-                                                    logger,
-                                                    "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, Error={:?})",
-                                                    username,
-                                                    source_ip,
-                                                    err
-                                                );
-                                            }
-                                            FailedLoginsError::AlreadyLocked => {
-                                                slog::info!(
-                                                    logger,
-                                                    "Another bad login attempt but the locking policy is already active (Username={}, IP={}, Error={:?})",
-                                                    username,
-                                                    source_ip,
-                                                    err
-                                                );
-                                            }
+                                if let Err(err) = result {
+                                    match err {
+                                        FailedLoginsError::MaxFailuresReached => {
+                                            slog::warn!(
+                                                logger,
+                                                "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, Error={:?})",
+                                                username,
+                                                source_ip,
+                                                err
+                                            );
                                         }
-                                        sleep(Duration::from_millis(1500)).await;
+                                        FailedLoginsError::AlreadyLocked => {
+                                            slog::info!(
+                                                logger,
+                                                "Another bad login attempt but the locking policy is already active (Username={}, IP={}, Error={:?})",
+                                                username,
+                                                source_ip,
+                                                err
+                                            );
+                                        }
                                     }
-                                    _ => {}
                                 }
                             }
 

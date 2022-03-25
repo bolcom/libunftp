@@ -477,17 +477,19 @@ where
     /// attempts for a certain time.
     ///
     /// There are different policies to choose from. Such as to lock
-    /// baseds on the combination of source IP + username or only
+    /// based on the combination of source IP + username or only
     /// username or IP. For example, if you choose IP based locking,
-    /// multiple successive failed login attempts will lock out any
-    /// login attempt from that IP. Including login attempts for other
-    /// users.
+    /// multiple successive failed login attempts will block any login
+    /// attempt from that IP for a defined period, including login
+    /// attempts for other users.
+    ///
+    /// The default policy is the combination of source IP + username.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// use libunftp::options::FailedLoginsPolicy;
+    /// use libunftp::options::{FailedLoginsPenalty,FailedLoginsPolicy};
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // With default policy
@@ -497,7 +499,9 @@ where
     /// let server = Server::with_fs("/tmp")
     ///     .failed_logins_policy(FailedLoginsPolicy::SourceIPLock(FailedLoginsPenalty::default()));
     ///
-    /// // Or override the lock penalty, by a maximum of 1 attempt and a 30 second lock penalty
+    /// // Or override the lock penalty, for instance to set it to a
+    /// // maximum of 1 attempt and a 30 second lock penalty
+    /// use std::time::Duration;
     /// let server = Server::with_fs("/tmp")
     ///      .failed_logins_policy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new(1, Duration::from_secs(30))));
     /// ```
@@ -654,6 +658,7 @@ where
             .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }
 }
