@@ -528,12 +528,8 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
-        let cache;
         let failedlogins = match self.failedlogins_policy {
-            Some(ref policy) => {
-                cache = FailedLoginsCache::new(policy.clone());
-                Some(cache)
-            }
+            Some(ref policy) => Some(FailedLoginsCache::new(policy.clone())),
             None => None,
         };
 
