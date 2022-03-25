@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use lazy_static::*;
 use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
+use libunftp::options::{FailedLoginsPenalty, FailedLoginsPolicy};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use unftp_sbe_fs::ServerExt;
@@ -13,7 +14,8 @@ pub async fn run_with_auth() {
     let addr = "127.0.0.1:2150";
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .authenticator(Arc::new(TestAuthenticator {}))
-        .greeting("Welcome test");
+        .greeting("Welcome test")
+        .failed_logins_policy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new(3, std::time::Duration::new(5, 0))));
     server.listen(addr).await.unwrap();
 }
 
@@ -51,14 +53,14 @@ pub struct TestAuthenticator;
 impl Authenticator<DefaultUser> for TestAuthenticator {
     async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
         return match (username, &creds.password) {
-            ("test", Some(pwd)) => {
+            ("test" | "testpol", Some(pwd)) => {
                 if pwd == "test" {
                     Ok(DefaultUser {})
                 } else {
                     Err(AuthenticationError::BadPassword)
                 }
             }
-            ("test", None) => Err(AuthenticationError::BadPassword),
+            ("test" | "test2", None) => Err(AuthenticationError::BadPassword),
             _ => Err(AuthenticationError::BadUser),
         };
     }

@@ -2,6 +2,8 @@
 
 ## Upcoming
 
+- [#343](https://github.com/bolcom/libunftp/pull/343), anti - brute force password guessing feature, choose from different failed login attempts policies: deters
+  successive failed login attempts based on IP, username or the combination of both
 - [#403](https://github.com/bolcom/libunftp/pull/403), [#404](https://github.com/bolcom/libunftp/pull/404) Improved logging: The username and file path are logged in 
   separate fields in more places.
 - [#405](https://github.com/bolcom/libunftp/pull/405) Improved metrics: The `ftp_reply_total` and `ftp_error_total` 
