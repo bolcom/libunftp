@@ -472,18 +472,25 @@ where
 
     /// Enables a password guessing protection policy
     ///
-    /// Policy used to temporarily lock an account, source IP or the
+    /// Policy used to temporarily block an account, source IP or the
     /// combination of both, after a certain number of failed login
     /// attempts for a certain time.
     ///
     /// There are different policies to choose from. Such as to lock
     /// based on the combination of source IP + username or only
-    /// username or IP. For example, if you choose IP based locking,
+    /// username or IP. For example, if you choose IP based blocking,
     /// multiple successive failed login attempts will block any login
     /// attempt from that IP for a defined period, including login
     /// attempts for other users.
     ///
-    /// The default policy is the combination of source IP + username.
+    /// The default policy is to block on the combination of source IP
+    /// and username. This policy affects only this specific
+    /// IP+username combination, and does not block the user logging
+    /// in from elsewhere.
+    ///
+    /// It is also possible to override the default 'Penalty', which
+    /// defines how many failed login attempts before applying the
+    /// policy, and after what time the block expires.
     ///
     /// # Examples
     ///
@@ -567,29 +574,20 @@ where
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
-        // There must be a better way to do this?!
-        if let Some(failed_logins) = failed_logins {
-            let sweeper = failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone());
-
-            tokio::select! {
-                result = listen_future => result,
-                _ = sweeper => {
-                    Ok(())
-                },
-                opts = self.shutdown => {
-                    slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
-                    shutdown_notifier.notify().await;
-                    Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
-                }
-            }
+        let sweeper_fut = if let Some(ref failed_logins) = failed_logins {
+            Box::pin(failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone())) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
         } else {
-            tokio::select! {
-                result = listen_future => result,
-                opts = self.shutdown => {
-                    slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
-                    shutdown_notifier.notify().await;
-                    Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
-                }
+            Box::pin(futures_util::future::pending()) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
+        };
+        tokio::select! {
+            result = listen_future => result,
+            _ = sweeper_fut => {
+                Ok(())
+            },
+            opts = self.shutdown => {
+                slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
+                shutdown_notifier.notify().await;
+                Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
             }
         }
     }

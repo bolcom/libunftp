@@ -10,7 +10,7 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
-use crate::server::failed_logins::FailedLoginsError;
+use crate::server::failed_logins::LockState;
 use crate::{
     auth::UserDetail,
     server::{
@@ -84,12 +84,12 @@ where
                             let is_locked = match failed_logins {
                                 Some(failed_logins) => {
                                     let result = failed_logins.success(source_ip, username.clone()).await;
-                                    if let Err(err) = result {
+                                    if let Some(state) = result {
                                         slog::warn!(
                                             logger,
-                                            "User authenticated but currently locked out due to previous failed login attempts according to the policy! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. Error: {:?})",
+                                            "User authenticated but currently locked out due to previous failed login attempts according to the policy! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. state={:?})",
                                             username,
-                                            err
+                                            state
                                         );
                                         true
                                     } else {
@@ -123,24 +123,24 @@ where
                             slog::warn!(logger, "Failed login attempt for user {}, reason={}", username, err);
                             if let Some(failed_logins) = failed_logins {
                                 let result = failed_logins.failed(source_ip, username.clone()).await;
-                                if let Err(err) = result {
-                                    match err {
-                                        FailedLoginsError::MaxFailuresReached => {
+                                if let Some(state) = result {
+                                    match state {
+                                        LockState::MaxFailuresReached => {
                                             slog::warn!(
                                                 logger,
-                                                "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, Error={:?})",
+                                                "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, LockState={:?})",
                                                 username,
                                                 source_ip,
-                                                err
+                                                state
                                             );
                                         }
-                                        FailedLoginsError::AlreadyLocked => {
+                                        LockState::AlreadyLocked => {
                                             slog::info!(
                                                 logger,
-                                                "Another bad login attempt but the locking policy is already active (Username={}, IP={}, Error={:?})",
+                                                "Another bad login attempt but the locking policy is already active (Username={}, IP={}, LockState={:?})",
                                                 username,
                                                 source_ip,
-                                                err
+                                                state
                                             );
                                         }
                                     }

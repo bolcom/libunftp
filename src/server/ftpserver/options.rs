@@ -220,12 +220,12 @@ impl Default for Shutdown {
 #[derive(Debug, Clone)]
 /// Variants for failed logins protection policy
 pub enum FailedLoginsPolicy {
-    /// User plus source IP address locking
-    SourceUserLock(FailedLoginsPenalty),
-    /// Source IP locking
-    SourceIPLock(FailedLoginsPenalty),
-    /// Lock the user
-    UserLock(FailedLoginsPenalty),
+    /// User plus source IP address blocking
+    BlockUserAndIP(FailedLoginsPenalty),
+    /// Block a source IP regardless of user
+    BlockIP(FailedLoginsPenalty),
+    /// Block the user regardless of source IP
+    BlockUser(FailedLoginsPenalty),
 }
 
 impl FailedLoginsPenalty {
@@ -252,6 +252,6 @@ impl Default for FailedLoginsPenalty {
 
 impl Default for FailedLoginsPolicy {
     fn default() -> FailedLoginsPolicy {
-        FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::default())
+        FailedLoginsPolicy::BlockUserAndIP(FailedLoginsPenalty::default())
     }
 }

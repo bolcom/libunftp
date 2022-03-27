@@ -15,7 +15,7 @@ pub async fn run_with_auth() {
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .authenticator(Arc::new(TestAuthenticator {}))
         .greeting("Welcome test")
-        .failed_logins_policy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new(3, std::time::Duration::new(5, 0))));
+        .failed_logins_policy(FailedLoginsPolicy::BlockUserAndIP(FailedLoginsPenalty::new(3, std::time::Duration::new(5, 0))));
     server.listen(addr).await.unwrap();
 }
 

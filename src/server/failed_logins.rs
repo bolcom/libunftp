@@ -47,7 +47,7 @@ pub struct FailedLoginsCache {
 }
 
 #[derive(Debug)]
-pub enum FailedLoginsError {
+pub enum LockState {
     // With this failed login attempt the lockout threshold has been reached
     MaxFailuresReached,
     // The account is already locked out from previous failed attempts
@@ -55,15 +55,15 @@ pub enum FailedLoginsError {
 }
 
 impl FailedLoginsCache {
-    pub fn new(failed_logins_policy: FailedLoginsPolicy) -> Arc<FailedLoginsCache> {
-        let penalty = match failed_logins_policy {
-            FailedLoginsPolicy::SourceIPLock(ref x) => x.clone(),
-            FailedLoginsPolicy::SourceUserLock(ref x) => x.clone(),
-            FailedLoginsPolicy::UserLock(ref x) => x.clone(),
+    pub fn new(policy: FailedLoginsPolicy) -> Arc<FailedLoginsCache> {
+        let penalty = match policy {
+            FailedLoginsPolicy::BlockIP(ref x) => x.clone(),
+            FailedLoginsPolicy::BlockUserAndIP(ref x) => x.clone(),
+            FailedLoginsPolicy::BlockUser(ref x) => x.clone(),
         };
 
         Arc::new(FailedLoginsCache {
-            policy: failed_logins_policy,
+            policy,
             penalty,
             failed_logins: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -79,20 +79,20 @@ impl FailedLoginsCache {
 
     fn getkey(&self, ip: IpAddr, user: String) -> FailedLoginsKey {
         match self.policy {
-            FailedLoginsPolicy::SourceUserLock(_) => FailedLoginsKey {
+            FailedLoginsPolicy::BlockUserAndIP(_) => FailedLoginsKey {
                 ip: Some(ip),
                 username: Some(user),
             },
-            FailedLoginsPolicy::SourceIPLock(_) => FailedLoginsKey { ip: Some(ip), username: None },
-            FailedLoginsPolicy::UserLock(_) => FailedLoginsKey {
+            FailedLoginsPolicy::BlockIP(_) => FailedLoginsKey { ip: Some(ip), username: None },
+            FailedLoginsPolicy::BlockUser(_) => FailedLoginsKey {
                 ip: None,
                 username: Some(user),
             },
         }
     }
 
-    /// Upon failed login: increments failed attempts counter, returns error if account is locked out
-    pub async fn failed(&self, ip: IpAddr, user: String) -> Result<(), FailedLoginsError> {
+    /// Upon failed login: increments failed attempts counter, returns the lock status if account is locked out
+    pub async fn failed(&self, ip: IpAddr, user: String) -> Option<LockState> {
         let map = self.failed_logins.read().await;
         let key = self.getkey(ip, user);
         let entry = map.get(&key);
@@ -119,14 +119,14 @@ impl FailedLoginsCache {
         };
 
         match attempts {
-            a if a == self.penalty.max_attempts => Err(FailedLoginsError::MaxFailuresReached),
-            a if a > self.penalty.max_attempts => Err(FailedLoginsError::AlreadyLocked),
-            _ => Ok(()),
+            a if a == self.penalty.max_attempts => Some(LockState::MaxFailuresReached),
+            a if a > self.penalty.max_attempts => Some(LockState::AlreadyLocked),
+            _ => None,
         }
     }
 
     /// Upon successful login: throws an error if the account is still locked out, otherwise deletes the cached entry
-    pub async fn success(&self, ip: IpAddr, user: String) -> Result<(), FailedLoginsError> {
+    pub async fn success(&self, ip: IpAddr, user: String) -> Option<LockState> {
         let map = self.failed_logins.read().await;
         let key = self.getkey(ip, user);
         let entry = map.get(&key);
@@ -136,17 +136,17 @@ impl FailedLoginsCache {
             (self.is_expired(entry.time_elapsed()), self.is_locked(entry.attempts))
         } else {
             // there is no entry, nothing to administer
-            return Ok(());
+            return None;
         };
 
         drop(map);
 
         return match (is_expired, is_locked) {
-            (false, true) => Err(FailedLoginsError::AlreadyLocked),
+            (false, true) => Some(LockState::AlreadyLocked),
             (_, _) => {
                 let mut map = self.failed_logins.write().await;
                 map.remove(&key);
-                Ok(())
+                None
             }
         };
     }
