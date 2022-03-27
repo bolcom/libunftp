@@ -6,6 +6,7 @@ pub mod options;
 
 use super::{
     controlchan,
+    failed_logins::FailedLoginsCache,
     ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
     shutdown,
     tls::FtpsConfig,
@@ -13,7 +14,7 @@ use super::{
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
     notification::{nop::NopListener, DataListener, PresenceListener},
-    options::{FtpsClientAuth, TlsFlags},
+    options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
     server::{
         proxy_protocol::{ProxyMode, ProxyProtocolSwitchboard},
@@ -71,6 +72,7 @@ where
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
+    failed_logins_policy: Option<FailedLoginsPolicy>,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -117,6 +119,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             shutdown: Box::pin(futures_util::future::pending()),
+            failed_logins_policy: None,
         }
     }
 
@@ -467,6 +470,49 @@ where
         self
     }
 
+    /// Enables a password guessing protection policy
+    ///
+    /// Policy used to temporarily block an account, source IP or the
+    /// combination of both, after a certain number of failed login
+    /// attempts for a certain time.
+    ///
+    /// There are different policies to choose from. Such as to lock
+    /// based on the combination of source IP + username or only
+    /// username or IP. For example, if you choose IP based blocking,
+    /// multiple successive failed login attempts will block any login
+    /// attempt from that IP for a defined period, including login
+    /// attempts for other users.
+    ///
+    /// The default policy is to block on the combination of source IP
+    /// and username. This policy affects only this specific
+    /// IP+username combination, and does not block the user logging
+    /// in from elsewhere.
+    ///
+    /// It is also possible to override the default 'Penalty', which
+    /// defines how many failed login attempts before applying the
+    /// policy, and after what time the block expires.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use libunftp::options::{FailedLoginsPenalty,FailedLoginsPolicy};
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // With default policy
+    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
+    ///
+    /// // Or choose a specific policy like based on source IP and
+    /// // longer block (maximum 3 attempts, 5 minutes, IP based
+    /// // blocking)
+    /// use std::time::Duration;
+    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::new(3, Duration::from_secs(300), FailedLoginsBlock::IP));
+    /// ```
+    pub fn failed_logins_policy(mut self, policy: FailedLoginsPolicy) -> Self {
+        self.failed_logins_policy = Some(policy);
+        self
+    }
+
     /// Runs the main FTP process asynchronously. Should be started in a async runtime context.
     ///
     /// # Example
@@ -497,6 +543,8 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
+        let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
+
         let listen_future = match self.proxy_protocol_mode {
             ProxyMode::On { external_control_port } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
@@ -506,6 +554,7 @@ where
                     options: (&self).into(),
                     proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
                     shutdown_topic: shutdown_notifier.clone(),
+                    failed_logins: failed_logins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -515,13 +564,22 @@ where
                     logger: self.logger.clone(),
                     options: (&self).into(),
                     shutdown_topic: shutdown_notifier.clone(),
+                    failed_logins: failed_logins.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
+        let sweeper_fut = if let Some(ref failed_logins) = failed_logins {
+            Box::pin(failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone())) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
+        } else {
+            Box::pin(futures_util::future::pending()) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
+        };
         tokio::select! {
             result = listen_future => result,
+            _ = sweeper_fut => {
+                Ok(())
+            },
             opts = self.shutdown => {
                 slog::debug!(logger, "Shutting down within {:?}", opts.grace_period);
                 shutdown_notifier.notify().await;
@@ -594,6 +652,7 @@ where
             .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }
 }

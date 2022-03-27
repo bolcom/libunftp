@@ -216,3 +216,42 @@ impl Default for Shutdown {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+/// Variants for failed logins protection policy
+pub enum FailedLoginsBlock {
+    /// User plus source IP address blocking
+    UserAndIP,
+    /// Block a source IP regardless of user
+    IP,
+    /// Block the user regardless of source IP
+    User,
+}
+
+impl FailedLoginsPolicy {
+    /// Create a new FailedLoginsPenalty instance
+    pub fn new(max_attempts: u32, expires_after: Duration, block_by: FailedLoginsBlock) -> FailedLoginsPolicy {
+        FailedLoginsPolicy {
+            max_attempts,
+            expires_after,
+            block_by,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Describes the exact penalty
+pub struct FailedLoginsPolicy {
+    /// The maximum number of consecutive failed login attempts before the account gets locked
+    pub(crate) max_attempts: u32,
+    /// The expiration time since the last failed login attempt that the account gets unlocked
+    pub(crate) expires_after: Duration,
+    // The variant in which this is blocked
+    pub(crate) block_by: FailedLoginsBlock,
+}
+
+impl Default for FailedLoginsPolicy {
+    fn default() -> FailedLoginsPolicy {
+        FailedLoginsPolicy::new(3, Duration::from_secs(120), FailedLoginsBlock::UserAndIP)
+    }
+}

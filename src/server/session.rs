@@ -4,6 +4,7 @@
 use super::{chancomms::ControlChanMsg, tls::FtpsConfig};
 use crate::auth::UserDetail;
 use crate::server::chancomms::DataChanCmd;
+use crate::server::failed_logins::FailedLoginsCache;
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
@@ -101,6 +102,8 @@ where
     pub data_busy: bool,
     // The client certificate chain if it was received.
     pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
+    // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
+    pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -132,6 +135,7 @@ where
             start_pos: 0,
             data_busy: false,
             cert_chain: None,
+            failed_logins: None,
         }
     }
 
@@ -155,6 +159,11 @@ where
 
     pub fn destination(mut self, destination: Option<SocketAddr>) -> Self {
         self.destination = destination;
+        self
+    }
+
+    pub fn failed_logins(mut self, failed_logins: Option<Arc<FailedLoginsCache>>) -> Self {
+        self.failed_logins = failed_logins;
         self
     }
 }
