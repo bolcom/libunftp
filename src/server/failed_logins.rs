@@ -1,5 +1,4 @@
-use crate::options::FailedLoginsPenalty;
-use crate::options::FailedLoginsPolicy;
+use crate::options::{FailedLoginsBlock, FailedLoginsPolicy};
 
 use super::shutdown;
 use slog::Logger;
@@ -42,7 +41,6 @@ impl FailedLoginsEntry {
 #[derive(Debug)]
 pub struct FailedLoginsCache {
     policy: FailedLoginsPolicy,
-    penalty: FailedLoginsPenalty,
     failed_logins: Arc<RwLock<HashMap<FailedLoginsKey, Mutex<FailedLoginsEntry>>>>,
 }
 
@@ -56,35 +54,28 @@ pub enum LockState {
 
 impl FailedLoginsCache {
     pub fn new(policy: FailedLoginsPolicy) -> Arc<FailedLoginsCache> {
-        let penalty = match policy {
-            FailedLoginsPolicy::BlockIP(ref x) => x.clone(),
-            FailedLoginsPolicy::BlockUserAndIP(ref x) => x.clone(),
-            FailedLoginsPolicy::BlockUser(ref x) => x.clone(),
-        };
-
         Arc::new(FailedLoginsCache {
             policy,
-            penalty,
             failed_logins: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
     fn is_expired(&self, time_elapsed: Duration) -> bool {
-        time_elapsed > self.penalty.expires_after
+        time_elapsed > self.policy.expires_after
     }
 
     fn is_locked(&self, attempts: u32) -> bool {
-        attempts >= self.penalty.max_attempts
+        attempts >= self.policy.max_attempts
     }
 
     fn getkey(&self, ip: IpAddr, user: String) -> FailedLoginsKey {
-        match self.policy {
-            FailedLoginsPolicy::BlockUserAndIP(_) => FailedLoginsKey {
+        match self.policy.block_by {
+            FailedLoginsBlock::UserAndIP => FailedLoginsKey {
                 ip: Some(ip),
                 username: Some(user),
             },
-            FailedLoginsPolicy::BlockIP(_) => FailedLoginsKey { ip: Some(ip), username: None },
-            FailedLoginsPolicy::BlockUser(_) => FailedLoginsKey {
+            FailedLoginsBlock::IP => FailedLoginsKey { ip: Some(ip), username: None },
+            FailedLoginsBlock::User => FailedLoginsKey {
                 ip: None,
                 username: Some(user),
             },
@@ -119,8 +110,8 @@ impl FailedLoginsCache {
         };
 
         match attempts {
-            a if a == self.penalty.max_attempts => Some(LockState::MaxFailuresReached),
-            a if a > self.penalty.max_attempts => Some(LockState::AlreadyLocked),
+            a if a == self.policy.max_attempts => Some(LockState::MaxFailuresReached),
+            a if a > self.policy.max_attempts => Some(LockState::AlreadyLocked),
             _ => None,
         }
     }

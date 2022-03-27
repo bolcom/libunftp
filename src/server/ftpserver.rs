@@ -502,15 +502,11 @@ where
     /// // With default policy
     /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
     ///
-    /// // Or choose a specific policy like based on source IP
-    /// let server = Server::with_fs("/tmp")
-    ///     .failed_logins_policy(FailedLoginsPolicy::SourceIPLock(FailedLoginsPenalty::default()));
-    ///
-    /// // Or override the lock penalty, for instance to set it to a
-    /// // maximum of 1 attempt and a 30 second lock penalty
+    /// // Or choose a specific policy like based on source IP and
+    /// // longer block (maximum 3 attempts, 5 minutes, IP based
+    /// // blocking)
     /// use std::time::Duration;
-    /// let server = Server::with_fs("/tmp")
-    ///      .failed_logins_policy(FailedLoginsPolicy::SourceUserLock(FailedLoginsPenalty::new(1, Duration::from_secs(30))));
+    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::new(3, Duration::from_secs(300), FailedLoginsBlock::IP));
     /// ```
     pub fn failed_logins_policy(mut self, policy: FailedLoginsPolicy) -> Self {
         self.failed_logins_policy = Some(policy);

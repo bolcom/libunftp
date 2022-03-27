@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use lazy_static::*;
 use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
-use libunftp::options::{FailedLoginsPenalty, FailedLoginsPolicy};
+use libunftp::options::{FailedLoginsBlock, FailedLoginsPolicy};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use unftp_sbe_fs::ServerExt;
@@ -15,7 +15,7 @@ pub async fn run_with_auth() {
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .authenticator(Arc::new(TestAuthenticator {}))
         .greeting("Welcome test")
-        .failed_logins_policy(FailedLoginsPolicy::BlockUserAndIP(FailedLoginsPenalty::new(3, std::time::Duration::new(5, 0))));
+        .failed_logins_policy(FailedLoginsPolicy::new(3, std::time::Duration::new(5, 0), FailedLoginsBlock::User));
     server.listen(addr).await.unwrap();
 }
 
