@@ -126,7 +126,7 @@ impl FailedLoginsCache {
             let entry = entry.lock().await;
             (self.is_expired(entry.time_elapsed()), self.is_locked(entry.attempts))
         } else {
-            // there is no entry, nothing to administer
+            // there is no entry, nothing to administrate
             return None;
         };
 
