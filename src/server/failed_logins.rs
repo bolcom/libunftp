@@ -116,7 +116,7 @@ impl FailedLoginsCache {
         }
     }
 
-    /// Upon successful login: throws an error if the account is still locked out, otherwise deletes the cached entry
+    /// Upon successful login: returns a status if the account is (still) locked out, otherwise deletes the cached entry and returns no status
     pub async fn success(&self, ip: IpAddr, user: String) -> Option<LockState> {
         let map = self.failed_logins.read().await;
         let key = self.getkey(ip, user);
