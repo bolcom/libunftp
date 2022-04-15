@@ -496,7 +496,7 @@ where
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// use libunftp::options::{FailedLoginsPenalty,FailedLoginsPolicy};
+    /// use libunftp::options::{FailedLoginsPolicy,FailedLoginsBlock};
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // With default policy

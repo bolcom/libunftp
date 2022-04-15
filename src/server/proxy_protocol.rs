@@ -47,6 +47,9 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
     let (mut read_half, _) = tcp_stream.split();
     let mut i = 0;
 
+    // TODO: We mute the clippy warning now but perhaps the 'read' invocations below should be changed
+    //       to read_exact
+    #[allow(clippy::unused_io_amount)]
     loop {
         let n = read_half.peek(&mut pbuf).await.unwrap();
         match pbuf.iter().position(|b| *b == b'\n') {

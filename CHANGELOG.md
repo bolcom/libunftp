@@ -1,6 +1,8 @@
 # Changelog
 
-## Upcoming
+## 2022-01-21 libunftp 0.18.4
+
+_tag: libunftp-0.18.4_
 
 - [#343](https://github.com/bolcom/libunftp/pull/343), anti - brute force password guessing feature, choose from different failed login attempts policies: deters
   successive failed login attempts based on IP, username or the combination of both
