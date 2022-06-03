@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use std::{error::Error, path::PathBuf, result::Result};
 use tracing::Level;
 
@@ -19,12 +19,12 @@ const FAKE_GCS_BASE_URL: &str = "fake-gcs-base-url";
 pub async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt().with_max_level(Level::TRACE).init();
 
-    let matches = App::new("Example for using libunftp with Google Cloud Storage backend with optionally enabling TLS")
+    let matches = Command::new("Example for using libunftp with Google Cloud Storage backend with optionally enabling TLS")
         .about("An FTP server that uses Google Cloud Storage as a backend")
         .author("The bol.com unFTP team")
         .arg(
-            Arg::with_name(BUCKET_NAME)
-                .short("b")
+            Arg::new(BUCKET_NAME)
+                .short('b')
                 .long(BUCKET_NAME)
                 .value_name("BUCKET_NAME")
                 .env("LIBUNFTP_BUCKET_NAME")
@@ -32,8 +32,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .required(true),
         )
         .arg(
-            Arg::with_name(SERVICE_ACCOUNT_KEY)
-                .short("s")
+            Arg::new(SERVICE_ACCOUNT_KEY)
+                .short('s')
                 .long(SERVICE_ACCOUNT_KEY)
                 .value_name("SERVICE_ACCOUNT_KEY")
                 .env("LIBUNFTP_SERVICE_ACCOUNT_KEY")
@@ -41,8 +41,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .required(true),
         )
         .arg(
-            Arg::with_name(FAKE_GCS_BASE_URL)
-                .short("u")
+            Arg::new(FAKE_GCS_BASE_URL)
+                .short('u')
                 .long(FAKE_GCS_BASE_URL)
                 .value_name("GCS_BASE_URL")
                 .env("LIBUNFTP_FAKE_GCS_BASE_URL")
@@ -50,8 +50,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .required(false),
         )
         .arg(
-            Arg::with_name(FTPS_CERTS_FILE)
-                .short("c")
+            Arg::new(FTPS_CERTS_FILE)
+                .short('c')
                 .long(FTPS_CERTS_FILE)
                 .value_name("FTPS_CERTS_FILE")
                 .env("LIBUNFTP_FTPS_CERTS_FILE")
@@ -59,8 +59,8 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
                 .requires(FTPS_KEY_FILE),
         )
         .arg(
-            Arg::with_name(FTPS_KEY_FILE)
-                .short("p")
+            Arg::new(FTPS_KEY_FILE)
+                .short('p')
                 .long(FTPS_KEY_FILE)
                 .value_name("FTPS_KEY_FILE")
                 .env("LIBUNFTP_FTPS_KEY_FILE")
