@@ -41,7 +41,7 @@ lazy_static = "1.4.0"
 md-5 = "0.10.1"
 moka = "0.8.2"
 prometheus = { version = "0.13.0", default-features = false }
-proxy-protocol = "0.3.0"
+proxy-protocol = "0.5.0"
 rustls = "0.20.4"
 rustls-pemfile = "1.0.0"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }

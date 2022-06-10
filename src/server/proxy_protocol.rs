@@ -1,8 +1,8 @@
 use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
-use proxy_protocol::{version1::ProxyAddressFamily, ProxyHeader};
-use std::net::SocketAddr;
+use proxy_protocol::{parse, version1::ProxyAddresses, ProxyHeader};
+use std::net::{SocketAddr, SocketAddrV4};
 use std::{collections::HashMap, net::IpAddr, ops::Range};
 use tokio::io::AsyncReadExt;
 
@@ -67,7 +67,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
                 }
 
                 let mut phb = Bytes::copy_from_slice(&rbuf[..=i + pos]);
-                let proxyhdr = match ProxyHeader::decode(&mut phb) {
+                let proxyhdr = match parse(&mut phb) {
                     Ok(h) => h,
                     Err(_) => return Err(ProxyError::DecodeError),
                 };
@@ -96,22 +96,14 @@ pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) 
     };
     match proxyhdr {
         ProxyHeader::Version1 {
-            family,
-            source,
-            source_port,
-            destination,
-            destination_port,
-            ..
-        } => {
-            if family == ProxyAddressFamily::IPv4 {
-                Ok(ConnectionTuple {
-                    source: SocketAddr::new(source, source_port),
-                    destination: SocketAddr::new(destination, destination_port),
-                })
-            } else {
-                Err(ProxyError::IPv4Required)
-            }
-        }
+            addresses: ProxyAddresses::Ipv4 { source, destination },
+        } => Ok(ConnectionTuple {
+            source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
+            destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
+        }),
+        ProxyHeader::Version1 {
+            addresses: ProxyAddresses::Ipv6 { .. },
+        } => Err(ProxyError::IPv4Required),
         _ => Err(ProxyError::UnsupportedVersion),
     }
 }
@@ -226,9 +218,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::ProxyError;
-    use proxy_protocol::version1::ProxyAddressFamily;
-    use proxy_protocol::ProxyHeader;
-    use std::net::{IpAddr::V4, Ipv4Addr};
+    use proxy_protocol::{version1::ProxyAddresses, ProxyHeader};
+    use std::net::SocketAddrV4;
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;
     use tokio::time::sleep;
@@ -265,11 +256,12 @@ mod tests {
         assert_eq!(
             res.0.unwrap(),
             ProxyHeader::Version1 {
-                family: ProxyAddressFamily::IPv4,
-                source: V4(Ipv4Addr::new(255, 255, 255, 255)),
-                destination: V4(Ipv4Addr::new(255, 255, 255, 255)),
-                source_port: 65535,
-                destination_port: 65535
+                addresses: {
+                    ProxyAddresses::Ipv4 {
+                        source: SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 65535),
+                        destination: SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 65535),
+                    }
+                }
             }
         );
     }
@@ -308,11 +300,12 @@ mod tests {
         assert_eq!(
             res.0.unwrap(),
             Ok(ProxyHeader::Version1 {
-                family: ProxyAddressFamily::IPv4,
-                source: V4(Ipv4Addr::new(255, 255, 255, 255)),
-                destination: V4(Ipv4Addr::new(255, 255, 255, 255)),
-                source_port: 65535,
-                destination_port: 65535
+                addresses: {
+                    ProxyAddresses::Ipv4 {
+                        source: SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 65535),
+                        destination: SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 65535),
+                    }
+                }
             })
         );
     }
