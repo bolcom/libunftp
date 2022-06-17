@@ -168,10 +168,10 @@ where
             }
 
             match &params[..] {
-                b"UTF8 ON" => Command::Opts {
+                b"UTF8 ON" | b"utf8 on" => Command::Opts {
                     option: Opt::Utf8 { on: true },
                 },
-                b"UTF8 OFF" => Command::Opts {
+                b"UTF8 OFF" | b"utf8 off" => Command::Opts {
                     option: Opt::Utf8 { on: false },
                 },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
