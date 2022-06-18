@@ -28,9 +28,15 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let session = args.session.lock().await;
         // TODO: properly escape double quotes in `cwd`
-        Ok(Reply::new_with_string(
-            ReplyCode::DirCreated,
-            format!("\"{}\"", session.cwd.as_path().display()),
-        ))
+
+        let result = format!("\"{}\"", session.cwd.as_path().display());
+
+        // On Windows systems, the path will be formatted with Windows style separators ('\')
+        // Most FTP clients expect normal UNIX separators ('/'), and they have trouble handling
+        // Windows style separators, so if we are on a Windows host, we replace the separators here.
+        #[cfg(windows)]
+        let result = result.replace(std::path::MAIN_SEPARATOR, "/");
+
+        Ok(Reply::new_with_string(ReplyCode::DirCreated, result))
     }
 }
