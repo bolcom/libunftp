@@ -219,7 +219,7 @@ where
 mod tests {
     use super::ProxyError;
     use proxy_protocol::{version1::ProxyAddresses, ProxyHeader};
-    use std::net::{SocketAddrV4, Ipv4Addr};
+    use std::net::{Ipv4Addr, SocketAddrV4};
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;
     use tokio::time::sleep;

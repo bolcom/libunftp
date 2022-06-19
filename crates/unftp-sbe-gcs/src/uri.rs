@@ -29,8 +29,11 @@ impl GcsUri {
         if !prefix.is_empty() && !prefix.ends_with("%2F") {
             prefix.push_str("%2F");
         }
+        // includeTrailingDelimiter makes our prefix ('subdirs') end up in the items[] as objects
+        // We need this to get access to the 'updated' field
+        // See the docs at https://cloud.google.com/storage/docs/json_api/v1/objects/list
         make_uri(format!(
-            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&prefix={}",
+            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&prefix={}",
             self.base_url,
             self.bucket,
             "kind,prefixes,items(id,name,size,updated)", // limit the fields
@@ -147,8 +150,7 @@ mod tests {
             },
         ];
 
-        let s =
-            "https://storage.googleapis.com/storage/v1/b/the-bucket/o?prettyPrint=false&fields=kind,prefixes,items(id,name,size,updated)&delimiter=/&prefix";
+        let s = "https://storage.googleapis.com/storage/v1/b/the-bucket/o?prettyPrint=false&fields=kind,prefixes,items(id,name,size,updated)&delimiter=/&includeTrailingDelimiter=true&prefix";
 
         for test in tests.iter() {
             let uri = GcsUri::new("https://storage.googleapis.com".to_string(), "the-bucket".to_string(), PathBuf::from(test.root));
