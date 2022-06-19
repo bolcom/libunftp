@@ -4,6 +4,7 @@ use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{de, Deserialize};
 use std::fmt::Display;
 use std::str::FromStr;
+use std::time::SystemTime;
 use std::{iter::Extend, path::PathBuf};
 
 #[derive(Deserialize, Debug)]
@@ -37,23 +38,51 @@ where
 
 impl ResponseBody {
     pub(crate) fn list(self) -> Result<Vec<Fileinfo<PathBuf, ObjectMetadata>>, Error> {
-        let files: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.items.map_or(Ok(vec![]), move |items: Vec<Item>| {
-            items
-                .iter()
-                .filter(|item: &&Item| !item.name.ends_with('/'))
-                .map(move |item: &Item| item.to_file_info())
-                .collect()
-        })?;
-        let dirs: Vec<Fileinfo<PathBuf, ObjectMetadata>> = self.prefixes.map_or(Ok(vec![]), |prefixes: Vec<String>| {
+        // The GCS API returns items[] (objects) including the 'directories' (because of includeTrailingDelimiter=true; see API)
+        // We want this, because we need the metadata of these directories too (e.g. timestamp)
+        // But the side behavior is that _the prefix itself_ is also included in items[] (yet, not in prefixes[]),
+        // We don't want to return the prefix to the client, so we need to filter this one out
+        // (E.g.: otherwise listing /level1/ would include 'level1/' also in its listing)
+        // We filter this by returning only prefixes that exist in prefixes[]
+        // See https://cloud.google.com/storage/docs/json_api/v1/objects/list
+        let items: Vec<Fileinfo<PathBuf, ObjectMetadata>> = match &self.items {
+            Some(items) => match &self.prefixes {
+                Some(p) => items
+                    .iter()
+                    .filter(|item: &&Item| !item.name.ends_with('/') || p.contains(&item.name))
+                    .map(|item: &Item| item.to_file_info().unwrap())
+                    .collect(),
+                None => items
+                    .iter()
+                    .filter(|item: &&Item| !item.name.ends_with('/'))
+                    .map(|item: &Item| item.to_file_info().unwrap())
+                    .collect(),
+            },
+            None => vec![],
+        };
+
+        // Files that weren't created through Google Console / Google Storage may exist in any prefix, and there may not be any 'prefix' object.
+        // For instance, one could create an object 'subdir/subdir/file', and there won't be a 'subdir/' and 'subdir/subdir/' object.
+        // So, we need to support those cases as well.
+        // We don't have any metadata on these 'directories' though.
+        let prefixes_without_object = self.prefixes.map_or(vec![], |prefixes: Vec<String>| {
             prefixes
                 .iter()
-                .filter(|prefix| *prefix != "//")
-                .map(|prefix| prefix_to_file_info(prefix))
+                .filter(|prefix| self.items.as_ref().map_or(true, |it: &Vec<Item>| !it.iter().any(|i| i.name == **prefix)))
+                .map(|prefix| Fileinfo {
+                    path: prefix.into(),
+                    metadata: ObjectMetadata {
+                        last_updated: SystemTime::now(),
+                        is_file: false,
+                        size: 0,
+                    },
+                })
                 .collect()
-        })?;
+        });
+
         let result: &mut Vec<Fileinfo<PathBuf, ObjectMetadata>> = &mut vec![];
-        result.extend(dirs);
-        result.extend(files);
+        result.extend(prefixes_without_object);
+        result.extend(items);
         Ok(result.to_vec())
     }
 }
@@ -62,7 +91,7 @@ impl Item {
     pub(crate) fn to_metadata(&self) -> Result<ObjectMetadata, Error> {
         Ok(ObjectMetadata {
             size: self.size,
-            last_updated: Some(self.updated.into()),
+            last_updated: self.updated.into(),
             is_file: !self.name.ends_with('/'),
         })
     }
@@ -78,17 +107,6 @@ impl Item {
         let md5 = base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
         Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
     }
-}
-
-pub(crate) fn prefix_to_file_info(prefix: &str) -> Result<Fileinfo<PathBuf, ObjectMetadata>, Error> {
-    Ok(Fileinfo {
-        path: prefix.into(),
-        metadata: ObjectMetadata {
-            last_updated: None,
-            is_file: false,
-            size: 0,
-        },
-    })
 }
 
 #[cfg(test)]
