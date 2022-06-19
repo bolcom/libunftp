@@ -1,13 +1,13 @@
 //! The Metadata for the CloudStorage
 
+use libunftp::storage::Error;
 use libunftp::storage::Metadata;
-use libunftp::storage::{Error, ErrorKind};
 use std::time::SystemTime;
 
 /// The struct that implements the Metadata trait for the CloudStorage
 #[derive(Clone, Debug)]
 pub struct ObjectMetadata {
-    pub(crate) last_updated: Option<SystemTime>,
+    pub(crate) last_updated: SystemTime,
     pub(crate) is_file: bool,
     pub(crate) size: u64,
 }
@@ -35,10 +35,7 @@ impl Metadata for ObjectMetadata {
 
     /// Returns the last modified time of the path.
     fn modified(&self) -> Result<SystemTime, Error> {
-        match self.last_updated {
-            Some(timestamp) => Ok(timestamp),
-            None => Err(Error::from(ErrorKind::PermanentFileNotAvailable)),
-        }
+        Ok(self.last_updated)
     }
 
     /// Returns the `gid` of the file.

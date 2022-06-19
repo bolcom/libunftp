@@ -161,6 +161,22 @@ async fn file_sizes() {
     .await;
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn creating_file_in_subdir_creates_that_subdir() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        ftp_stream.login("anonymous", "").await.unwrap();
+
+        let content = b"Hello from this test!\n";
+        let mut reader = Cursor::new(content);
+
+        ftp_stream.put("this_subdir_must_be_visible/greeting.txt", &mut reader).await.unwrap();
+        let list_in = ftp_stream.list(None).await.unwrap();
+        assert!(list_in.iter().any(|list| list.contains("this_subdir_must_be_visible")));
+    })
+    .await;
+}
+
 async fn run_test(test: impl Future<Output = ()>) {
     let mut child = DOCKER.lock().await;
 
