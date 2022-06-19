@@ -108,6 +108,28 @@ async fn creating_directory_with_file_in_it() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn deleting_empty_directory_succeeds() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        ftp_stream.login("anonymous", "").await.unwrap();
+        ftp_stream.mkdir("deleting_empty_directory_succeeds").await.unwrap();
+        ftp_stream.cwd("deleting_empty_directory_succeeds").await.unwrap();
+
+        ftp_stream.cdup().await.unwrap();
+        let list_out = ftp_stream.list(None).await.unwrap();
+        assert_ge!(list_out.len(), 1);
+
+        let result = ftp_stream.rmdir("deleting_empty_directory_succeeds").await;
+        assert!(result.is_ok());
+
+        let list_out = ftp_stream.list(None).await.unwrap();
+        // directory no longer exists
+        assert_ge!(list_out.len(), 0);
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn deleting_directory_fails_if_contains_file() {
     run_test(async {
         let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
@@ -124,10 +146,9 @@ async fn deleting_directory_fails_if_contains_file() {
         ftp_stream.cdup().await.unwrap();
         let result = ftp_stream.rmdir("deleting_directory_fails_if_contains_file").await;
         assert!(result.is_err());
-        // FIXME: #383 Fix 'rmdir' for GCS backend
         assert_eq!(
             result.unwrap_err().to_string(),
-            "FTP InvalidResponse: Expected code [250], got response: 502 Command not implemented\r\n"
+            "FTP InvalidResponse: Expected code [250], got response: 550 Directory not empty\r\n"
         );
 
         let list_out = ftp_stream.list(None).await.unwrap();

@@ -55,6 +55,19 @@ pub enum ErrorKind {
     /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
     /// make sense for it to be retried. For example in the case where file access is denied.
+    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
+    /// The storage back-end implementation should return this if a error occurred where it doesn't
+    /// make sense for it to be retried. For example in the case where a file is busy.
+    #[display(fmt = "550 Permanent directory not available")]
+    PermanentDirectoryNotAvailable,
+    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
+    /// The storage back-end implementation should return this if a error occurred where it doesn't
+    /// make sense for it to be retried. For example in the case where file access is denied.
+    #[display(fmt = "550 The directory is not empty")]
+    PermanentDirectoryNotEmpty,
+    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
+    /// The storage back-end implementation should return this if a error occurred where it doesn't
+    /// make sense for it to be retried. For example in the case where file access is denied.
     #[display(fmt = "550 Permission denied")]
     PermissionDenied,
     /// Error that will cause an FTP reply code of 451 to be returned to the FTP client. Its means

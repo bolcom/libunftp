@@ -11,6 +11,7 @@ use std::{iter::Extend, path::PathBuf};
 pub(crate) struct ResponseBody {
     items: Option<Vec<Item>>,
     prefixes: Option<Vec<String>>,
+    next_page_token: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -84,6 +85,24 @@ impl ResponseBody {
         result.extend(prefixes_without_object);
         result.extend(items);
         Ok(result.to_vec())
+    }
+
+    pub fn dir_exists(&self) -> bool {
+        self.items.is_some() || self.prefixes.is_some()
+    }
+
+    pub fn dir_empty(&self) -> bool {
+        // The directory is not empty if:
+        // - nextPageToken is set (this indicates more than 1 entry, while we're using maxResults=2)
+        // - prefixes is non empty (there are subdirs)
+        // - there is more than 1 object within the prefix
+        // - there is at least 1 object that is a file (does not end with /)
+        match (self.next_page_token.as_ref(), self.prefixes.as_ref(), self.items.as_ref()) {
+            (Some(_), _, _) => false,
+            (_, Some(_), _) => false,
+            (_, _, Some(items)) => items.len() == 1 && items[0].name.ends_with('/'),
+            (_, _, _) => false,
+        }
     }
 }
 
