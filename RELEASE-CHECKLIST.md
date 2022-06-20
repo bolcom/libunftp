@@ -1,6 +1,8 @@
 # Release Checklist
 
-* Update minor versions dependencies. Perhaps this oneliner is useful in addition to `cargo upgrades`: `cat Cargo.toml | sed -n '33,56p' | awk '{ print $1 }' | xargs -L1 cargo search --limit=1`
+* Update minor versions dependencies. Install [cargo-edit](https://crates.io/crates/cargo-edit) and run `cargo upgrade`.
+  You can also use `cargo upgrades` to just check what is outstanding or this oneliner:
+  `cat Cargo.toml | sed -n '33,56p' | awk '{ print $1 }' | xargs -L1 cargo search --limit=1`
 * Update Cargo.toml with the new version number
 * Search for the old version number to find references to it in documentation and update those occurrences.
 * Run `make pr-prep`, ensuring everything is green
