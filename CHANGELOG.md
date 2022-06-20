@@ -1,5 +1,13 @@
 # Changelog
 
+## Upcoming
+
+- [#415](https://github.com/bolcom/libunftp/pull/415) Support directory timestamps in GCS.
+- [#414](https://github.com/bolcom/libunftp/pull/414) Fix display issues for Windows clients.
+- [#413](https://github.com/bolcom/libunftp/pull/413) Fixed issue where the `OPTS UTF8` command was not handled correctly
+  as seen with the FTP client included in Windows Explorer.
+- Upgraded dependencies
+
 ## 2022-01-21 libunftp 0.18.4
 
 _tag: libunftp-0.18.4_

@@ -84,7 +84,7 @@ pub enum Command {
     },
     Allo {
         // The `ALLO` command can actually have an optional argument, but since we regard `ALLO`
-        // as noop, we won't even parse it.
+    // as noop, we won't even parse it.
     },
     Abor,
     Stou,
