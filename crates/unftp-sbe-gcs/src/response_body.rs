@@ -87,11 +87,11 @@ impl ResponseBody {
         Ok(result.to_vec())
     }
 
-    pub fn dir_exists(&self) -> bool {
+    pub(crate) fn dir_exists(&self) -> bool {
         self.items.is_some() || self.prefixes.is_some()
     }
 
-    pub fn dir_empty(&self) -> bool {
+    pub(crate) fn dir_empty(&self) -> bool {
         // The directory is not empty if:
         // - nextPageToken is set (this indicates more than 1 entry, while we're using maxResults=2)
         // - prefixes is non empty (there are subdirs)

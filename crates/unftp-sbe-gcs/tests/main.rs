@@ -75,7 +75,9 @@ async fn newly_created_dir_is_empty() {
         ftp_stream.mkdir("newly_created_dir_is_empty").await.unwrap();
         ftp_stream.cwd("newly_created_dir_is_empty").await.unwrap();
         let list = ftp_stream.list(None).await.unwrap();
-        assert_eq!(list.len(), 0)
+        assert_eq!(list.len(), 0);
+        ftp_stream.cdup().await.unwrap();
+        ftp_stream.rmdir("newly_created_dir_is_empty").await.unwrap();
     })
     .await;
 }
@@ -102,7 +104,12 @@ async fn creating_directory_with_file_in_it() {
         ftp_stream.cdup().await.unwrap();
         let list_out = ftp_stream.list(None).await.unwrap();
         assert_ge!(list_out.len(), 1);
-        assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")))
+        assert!(list_out.iter().any(|t| t.ends_with("creating_directory_with_file_in_it")));
+
+        let result = ftp_stream.rm("creating_directory_with_file_in_it/greeting.txt").await;
+        assert!(result.is_ok());
+
+        ftp_stream.rmdir("creating_directory_with_file_in_it").await.unwrap();
     })
     .await;
 }
@@ -125,6 +132,35 @@ async fn deleting_empty_directory_succeeds() {
         let list_out = ftp_stream.list(None).await.unwrap();
         // directory no longer exists
         assert_ge!(list_out.len(), 0);
+    })
+    .await;
+}
+
+// In GCS a "directory" gets virtually created by placing a file at a certain path
+// This code tests if the behavior works as expected (including its GCS quirks)
+#[tokio::test(flavor = "current_thread")]
+async fn can_change_into_virtual_directory() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        ftp_stream.login("anonymous", "").await.unwrap();
+
+        let content = b"Hello from this test!\n";
+        ftp_stream.put("subdir/subsubdir/greeting.txt", &mut Cursor::new(content)).await.unwrap();
+        let list_in = ftp_stream.list(None).await.unwrap();
+        assert_eq!(list_in.len(), 1);
+        assert!(list_in[0].ends_with(" subdir"));
+
+        ftp_stream.cwd("subdir").await.unwrap();
+
+        let result = ftp_stream.cdup().await;
+        assert!(result.is_ok());
+
+        let result = ftp_stream.rm("subdir/subsubdir/greeting.txt").await;
+        assert!(result.is_ok());
+
+        // it is expected that the subdir/subsubdir/ is removed
+        let list_out = ftp_stream.list(None).await.unwrap();
+        assert_eq!(list_out.len(), 0);
     })
     .await;
 }
@@ -153,7 +189,10 @@ async fn deleting_directory_fails_if_contains_file() {
 
         let list_out = ftp_stream.list(None).await.unwrap();
         assert_ge!(list_out.len(), 1);
-        assert!(list_out.iter().any(|t| t.ends_with("deleting_directory_fails_if_contains_file")))
+        assert!(list_out.iter().any(|t| t.ends_with("deleting_directory_fails_if_contains_file")));
+
+        ftp_stream.rm("deleting_directory_fails_if_contains_file/greeting.txt").await.unwrap();
+        ftp_stream.rmdir("deleting_directory_fails_if_contains_file").await.unwrap();
     })
     .await;
 }
@@ -178,6 +217,14 @@ async fn file_sizes() {
             // "coincidentally", file name matches file size
             assert_eq!(vec[4], vec[8]);
         });
+
+        // clean up
+        ftp_stream.rm("10 bytes").await.unwrap();
+        ftp_stream.rm("12 bytes").await.unwrap();
+        ftp_stream.rm("17 bytes").await.unwrap();
+
+        ftp_stream.cdup().await.unwrap();
+        ftp_stream.rmdir("file_sizes").await.unwrap();
     })
     .await;
 }
@@ -194,6 +241,8 @@ async fn creating_file_in_subdir_creates_that_subdir() {
         ftp_stream.put("this_subdir_must_be_visible/greeting.txt", &mut reader).await.unwrap();
         let list_in = ftp_stream.list(None).await.unwrap();
         assert!(list_in.iter().any(|list| list.contains("this_subdir_must_be_visible")));
+
+        ftp_stream.rm("this_subdir_must_be_visible/greeting.txt").await.unwrap();
     })
     .await;
 }
