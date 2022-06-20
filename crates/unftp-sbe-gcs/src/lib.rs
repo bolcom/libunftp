@@ -359,15 +359,71 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     }
 
     #[tracing_attributes::instrument]
-    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
-        // TODO: implement this
-        Err(Error::from(ErrorKind::CommandNotImplemented))
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
+        // first call is only to figure out if the directory is actually empty or not
+        let uri: Uri = self.uris.dir_empty(&path)?;
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let token = self.get_token().await?;
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))
+            .await?;
+        let body = unpack_response(response).await?;
+        let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))?;
+
+        if !response.dir_exists() {
+            Err(Error::from(ErrorKind::PermanentDirectoryNotAvailable))
+        } else if !response.dir_empty() {
+            Err(Error::from(ErrorKind::PermanentDirectoryNotEmpty))
+        } else {
+            let uri: Uri = self.uris.rmd(path)?;
+            let request: Request<Body> = Request::builder()
+                .uri(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .method(Method::DELETE)
+                .body(Body::empty())
+                .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))?;
+            let response: Response<Body> = client
+                .request(request)
+                .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))
+                .await?;
+            unpack_response(response).await?;
+
+            Ok(())
+        }
     }
 
     #[tracing_attributes::instrument]
-    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, _path: P) -> Result<(), Error> {
-        // TODO: Do we want to check here if the path is a directory?
-        Ok(())
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
+        let uri: Uri = self.uris.dir_empty(&path)?;
+        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+
+        let token = self.get_token().await?;
+        let request: Request<Body> = Request::builder()
+            .uri(uri)
+            .header(header::AUTHORIZATION, format!("Bearer {}", token))
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))?;
+        let response: Response<Body> = client
+            .request(request)
+            .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))
+            .await?;
+        let body = unpack_response(response).await?;
+        let response: ResponseBody = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e))?;
+
+        if !response.dir_exists() {
+            Err(Error::from(ErrorKind::PermanentDirectoryNotAvailable))
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -385,6 +385,8 @@ where
                 ErrorKind::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
                 ErrorKind::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
                 ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
+                ErrorKind::PermanentDirectoryNotAvailable => Ok(Reply::new(ReplyCode::FileError, "Directory not found")),
+                ErrorKind::PermanentDirectoryNotEmpty => Ok(Reply::new(ReplyCode::FileError, "Directory not empty")),
                 ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
                 ErrorKind::CommandNotImplemented => Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command not implemented")),
             },

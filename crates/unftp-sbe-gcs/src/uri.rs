@@ -69,6 +69,31 @@ impl GcsUri {
         ))
     }
 
+    pub fn rmd<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
+        let mut prefix = self.path_str(path)?;
+        if !prefix.is_empty() && !prefix.ends_with("%2F") {
+            prefix.push_str("%2F");
+        }
+
+        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, prefix))
+    }
+
+    pub fn dir_empty<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
+        let mut prefix = self.path_str(path)?;
+        if !prefix.is_empty() && !prefix.ends_with("%2F") {
+            prefix.push_str("%2F");
+        }
+
+        // URI specially crafted to determine whether a directory (prefix) is empty
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&maxResults=2&prefix={}",
+            self.base_url,
+            self.bucket,
+            "prefixes,items(id,name,size,updated),nextPageToken", // nextPageToken helps detect whether the directory is empty
+            prefix
+        ))
+    }
+
     fn path_str<P: AsRef<Path>>(&self, path: P) -> Result<String, Error> {
         let path = path.as_ref();
         let relative_path = path.strip_prefix("/").unwrap_or(path);
