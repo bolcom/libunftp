@@ -1,10 +1,10 @@
 # Changelog
 
-## Upcoming
+## 2022-06-24 libunftp 0.18.5
 
-- [#416](https://github.com/bolcom/libunftp/pull/416) Support for RMD and CWD in GCS.
-- [#415](https://github.com/bolcom/libunftp/pull/415) Support directory timestamps in GCS.
-- [#414](https://github.com/bolcom/libunftp/pull/414) Fix display issues for Windows clients.
+_tag: libunftp-0.18.5_
+
+- [#414](https://github.com/bolcom/libunftp/pull/414) Fixed path display issues for Windows clients.
 - [#413](https://github.com/bolcom/libunftp/pull/413) Fixed issue where the `OPTS UTF8` command was not handled correctly
   as seen with the FTP client included in Windows Explorer.
 - Upgraded dependencies

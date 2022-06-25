@@ -25,7 +25,7 @@ chrono = { version = "0.4.19", default-features = false, features = ["std", "ser
 futures = { version = "0.3.21", default-features = false, features = ["std"] }
 hyper = { version = "0.14.19", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.23.0"
-libunftp = { version="0.18.4", path="../../"}
+libunftp = { version="0.18.5", path="../../"}
 mime = "0.3.16"
 percent-encoding = "2.1.0"
 serde = { version = "1.0.137", features = ["derive"] }
