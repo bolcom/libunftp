@@ -1,6 +1,25 @@
 # Changelog
 
-## 2022-06-24 libunftp 0.18.5
+## 2022-06-25 Release of all crates
+
+### unftp-auth-gcs v0.2.1
+
+_tag: unftp-auth-jsonfile-0.2.1_
+
+- [#416](https://github.com/bolcom/libunftp/pull/416) GCS support for `RMD`. Plus `CWD` now checks target directory existence
+- [#415](https://github.com/bolcom/libunftp/pull/415) Support directory timestamps in GCS. To resolve issues with some UI FTP clients, such as Cyberduck
+
+### unftp-auth-* v0.2.1
+
+- compiled unftp-auth-pam against libunftp v0.18.5
+- compiled unftp-auth-rest against libunftp v0.18.5
+
+### unftp-sbe-* v0.2.1
+
+- compiled unftp-sbe-fs against libunftp v0.18.5
+- compiled unftp-sbe-gcs against libunftp v0.18.5
+
+### 2022-06-24 libunftp 0.18.5
 
 _tag: libunftp-0.18.5_
 
