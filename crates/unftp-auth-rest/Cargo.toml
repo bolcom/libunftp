@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-rest"
-version = "0.2.0"
+version = "0.2.1"
 description = "An authenticator back-end for libunftp that consumes an HTTP API to authenticate"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -34,4 +34,4 @@ tracing-attributes = "0.1.21"
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
 tokio = { version = "1.19.2", features = ["macros"] }
-unftp-sbe-fs = { version="0.2", path="../unftp-sbe-fs"}
+unftp-sbe-fs = { version="0.2.1", path="../unftp-sbe-fs"}
