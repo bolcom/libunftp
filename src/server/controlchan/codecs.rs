@@ -62,7 +62,7 @@ impl Encoder<Reply> for FtpCodec {
 
                 // Lines starting with a digit should be indented
                 for it in lines.iter_mut() {
-                    if it.chars().next().unwrap().is_digit(10) {
+                    if it.chars().next().unwrap().is_ascii_digit() {
                         it.insert(0, ' ');
                     }
                 }
