@@ -19,19 +19,19 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.56"
-hyper = { version = "0.14.19", features = ["client", "runtime", "stream", "http1"] }
+hyper = { version = "0.14.20", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.23.0"
 libunftp = { version="0.18.5", path="../../"}
 percent-encoding = "2.1.0"
-regex = "1.5.6"
-serde = { version = "1.0.137", features = ["derive"] }
-serde_json = "1.0.81"
-tokio = { version = "1.19.2", features = ["rt", "net", "sync", "io-util", "time"] }
+regex = "1.6.0"
+serde = { version = "1.0.140", features = ["derive"] }
+serde_json = "1.0.82"
+tokio = { version = "1.20.0", features = ["rt", "net", "sync", "io-util", "time"] }
 tracing = { version = "0.1.35", default-features = false }
-tracing-attributes = "0.1.21"
+tracing-attributes = "0.1.22"
 
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.19.2", features = ["macros"] }
+tokio = { version = "1.20.0", features = ["macros"] }
 unftp-sbe-fs = { version="0.2.1", path="../unftp-sbe-fs"}

@@ -22,10 +22,10 @@ readme = "README.md"
 async-trait = "0.1.56"
 libunftp = { version="0.18.5", path="../../"}
 tracing = { version = "0.1.35", default-features = false }
-tracing-attributes = "0.1.21"
+tracing-attributes = "0.1.22"
 
 [target.'cfg(target_family = "unix")'.dependencies]
 pam-auth = { package = "pam", version = "0.7.0" }
 
 [dev-dependencies]
-tokio = { version = "1.19.2", features = ["macros"] }
+tokio = { version = "1.20.0", features = ["macros"] }
