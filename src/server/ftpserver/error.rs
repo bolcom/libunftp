@@ -23,7 +23,7 @@ impl ServerError {
     }
 }
 
-impl From<std::net::AddrParseError> for ServerError {
+impl From<AddrParseError> for ServerError {
     fn from(e: AddrParseError) -> Self {
         ServerError::new("could not parse address", e)
     }
@@ -32,6 +32,12 @@ impl From<std::net::AddrParseError> for ServerError {
 impl From<std::io::Error> for ServerError {
     fn from(e: std::io::Error) -> Self {
         ServerError::new("io error", e)
+    }
+}
+
+impl From<super::tls::ConfigError> for ServerError {
+    fn from(e: super::tls::ConfigError) -> Self {
+        ServerError::new(format!("error with TLS configuration: {}", e), e)
     }
 }
 
