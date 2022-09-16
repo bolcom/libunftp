@@ -159,7 +159,7 @@ impl From<bool> for FtpsClientAuth {
 
 /// The options for [Server.sitemd5](crate::Server::sitemd5).
 /// Allow MD5 either to be used by all, logged in users only or no one.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SiteMd5 {
     /// Enabled for all users, including anonymous
     All,

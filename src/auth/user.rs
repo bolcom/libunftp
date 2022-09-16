@@ -21,7 +21,7 @@ pub trait UserDetail: Send + Sync + Display + Debug {
 /// DefaultUser is a default implementation of the `UserDetail` trait that doesn't hold any user
 /// information. Having a default implementation like this allows for quicker prototyping with
 /// libunftp because otherwise the library user would have to implement the `UserDetail` trait first.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DefaultUser;
 
 impl UserDetail for DefaultUser {}

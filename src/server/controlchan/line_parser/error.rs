@@ -5,7 +5,7 @@ use thiserror::Error;
 /// The error type returned by the [Command::parse] method.
 ///
 /// [Command::parse]: ./enum.Command.html#method.parse
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 #[error("parse error: {kind}")]
 pub struct ParseError {
     kind: ParseErrorKind,

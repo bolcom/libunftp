@@ -11,13 +11,13 @@ use std::fmt;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 // Commands that can be send to the data channel / data loop.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum DataChanMsg {
     ExternalCommand(DataChanCmd),
     Abort,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum DataChanCmd {
     Retr {
         /// The path to the file the client would like to retrieve.

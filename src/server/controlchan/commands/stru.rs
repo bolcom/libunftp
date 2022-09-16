@@ -29,7 +29,7 @@ use async_trait::async_trait;
 /// support the command itself for legacy reasons, but will only support the `File` structure.
 // Unfortunately Rust doesn't support anonymous enums for now, so we'll have to do with explicit
 // command parameter enums for the commands that take mutually exclusive parameters.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StruParam {
     /// "Regular" file structure.
     File,

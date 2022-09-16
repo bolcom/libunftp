@@ -20,7 +20,7 @@ use async_trait::async_trait;
 
 /// The parameters that can be given to the `OPTS` command, specifying the option the client wants
 /// to set.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Opt {
     /// The client wants us to enable UTF-8 encoding for file paths and such.
     Utf8 { on: bool },

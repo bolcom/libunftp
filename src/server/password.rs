@@ -2,7 +2,7 @@ use bytes::Bytes;
 use std::convert;
 use std::fmt;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Password {
     bytes: Bytes,
 }

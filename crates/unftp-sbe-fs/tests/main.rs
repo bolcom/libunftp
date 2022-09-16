@@ -423,11 +423,11 @@ async fn rename() {
     let mut ftp_stream = FtpStream::connect(addr).await.expect("Failed to connect");
 
     // Make sure we fail if we're not logged in
-    ensure_login_required(ftp_stream.rename(&from_filename, &to_filename).await);
+    ensure_login_required(ftp_stream.rename(from_filename, to_filename).await);
 
     // Do the renaming
     ftp_stream.login("some", "user").await.unwrap();
-    ftp_stream.rename(&from_filename, &to_filename).await.expect("Failed to rename");
+    ftp_stream.rename(from_filename, to_filename).await.expect("Failed to rename");
 
     // Give the OS some time to actually rename the thingy.
     std::thread::sleep(std::time::Duration::from_millis(100));
