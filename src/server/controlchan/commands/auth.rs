@@ -19,7 +19,7 @@ use crate::{
 use async_trait::async_trait;
 
 // The parameter that can be given to the `AUTH` command.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AuthParam {
     Ssl,
     Tls,

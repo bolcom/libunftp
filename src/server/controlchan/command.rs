@@ -6,7 +6,7 @@ use crate::server::{
 use bytes::Bytes;
 use std::{fmt, path::PathBuf};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Command {
     User {
         /// The bytes making up the actual username.

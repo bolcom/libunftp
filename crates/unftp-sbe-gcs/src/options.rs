@@ -6,7 +6,7 @@ use yup_oauth2::ServiceAccountKey;
 
 /// Used with [`CloudStorage::new`](super::CloudStorage::new()) to specify how the storage back-end
 /// will authenticate with Google Cloud Storage.
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum AuthMethod {
     /// Used for testing purposes only
     None,

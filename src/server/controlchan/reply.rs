@@ -1,5 +1,5 @@
 /// A reply to the FTP client
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reply {
     None,
     CodeAndMsg { code: ReplyCode, msg: String },
@@ -37,7 +37,7 @@ pub enum Reply {
 // - 421 if the server is about to close the connection;
 // - 500, 501, 502, or 504 for unacceptable syntax; or
 // - 530 if permission is denied.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 #[allow(dead_code)]
 pub enum ReplyCode {

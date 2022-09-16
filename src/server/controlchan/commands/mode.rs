@@ -26,7 +26,7 @@ use async_trait::async_trait;
 /// The parameter that can be given to the `MODE` command. The `MODE` command is obsolete, and we
 /// only support the `Stream` mode. We still have to support the command itself for compatibility
 /// reasons, though.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ModeParam {
     /// Data is sent in a continuous stream of bytes.
     Stream,

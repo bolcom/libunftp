@@ -132,14 +132,14 @@ impl FailedLoginsCache {
 
         drop(map);
 
-        return match (is_expired, is_locked) {
+        match (is_expired, is_locked) {
             (false, true) => Some(LockState::AlreadyLocked),
             (_, _) => {
                 let mut map = self.failed_logins.write().await;
                 map.remove(&key);
                 None
             }
-        };
+        }
     }
 
     /// Periodically sweeps expired failed login entries from the HashMap

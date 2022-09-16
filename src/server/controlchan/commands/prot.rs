@@ -12,7 +12,7 @@ use crate::{
 use async_trait::async_trait;
 
 // The parameter that can be given to the `PROT` command.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ProtParam {
     // 'C' - Clear - neither Integrity nor Privacy
     Clear,

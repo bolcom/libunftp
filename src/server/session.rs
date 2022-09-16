@@ -37,7 +37,7 @@ impl std::fmt::Display for TraceId {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum SessionState {
     New,
     WaitPass,
