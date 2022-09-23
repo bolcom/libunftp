@@ -1,6 +1,6 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
-use super::session::SharedSession;
+use super::{proxy_protocol::ConnectionTuple, session::SharedSession};
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
@@ -8,7 +8,10 @@ use crate::{
     storage::{Error, StorageBackend},
 };
 use std::fmt;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::{
+    net::TcpStream,
+    sync::mpsc::{Receiver, Sender},
+};
 
 // Commands that can be send to the data channel / data loop.
 #[derive(PartialEq, Eq, Debug)]
@@ -140,6 +143,7 @@ where
 {
     /// Command to assign a data port to a session
     AssignDataPortCommand(SharedSession<Storage, User>),
+    ProxyHeaderReceived(ConnectionTuple, TcpStream),
 }
 
 pub type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;

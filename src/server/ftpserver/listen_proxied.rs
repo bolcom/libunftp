@@ -61,44 +61,40 @@ where
 
                 Ok((tcp_stream, _socket_addr)) = listener.accept() => {
                     let socket_addr = tcp_stream.peer_addr();
-                    let mut tcp_stream = tcp_stream;
 
                     slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
-                    let connection = match get_peer_from_proxy_header(&mut tcp_stream).await {
-                        Ok(v) => v,
-                        Err(e) => {
-                            slog::warn!(self.logger, "proxy protocol decode error: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    // Based on the proxy protocol header, and the configured control port number,
-                    // we differentiate between connections for the control channel,
-                    // and connections for the data channel.
-                    let destination_port = connection.destination.port();
-                    if destination_port == self.external_control_port {
-                        let source = connection.source;
-                        slog::info!(self.logger, "Connection from {:?} is a control connection", source);
-                        let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
-                        let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
-                        if result.is_err() {
-                            slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
-                        }
-                    } else {
-                        // handle incoming data connections
-                        slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.options.passive_ports, destination_port);
-                        if !self.options.passive_ports.contains(&destination_port) {
-                            slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.options.passive_ports);
-                            tcp_stream.shutdown().await.unwrap();
-                            continue;
-                        }
-                        self.dispatch_data_connection(tcp_stream, connection).await;
-                    }
+                    get_peer_from_proxy_header(self.logger.clone(), tcp_stream, proxyloop_msg_tx.clone()).await;
                 },
                 Some(msg) = proxyloop_msg_rx.recv() => {
                     match msg {
                         ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
                             self.select_and_register_passive_port(session_arc).await;
+                        },
+                        ProxyLoopMsg::ProxyHeaderReceived (connection, mut tcp_stream) => {
+                            let socket_addr = tcp_stream.peer_addr();
+                            // Based on the proxy protocol header, and the configured control port number,
+                            // we differentiate between connections for the control channel,
+                            // and connections for the data channel.
+                            let destination_port = connection.destination.port();
+                            if destination_port == self.external_control_port {
+                                let source = connection.source;
+                                slog::info!(self.logger, "Connection from {:?} is a control connection", source);
+                                let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
+                                let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
+                                if result.is_err() {
+                                    slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                                }
+                            } else {
+                                // handle incoming data connections
+                                slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.options.passive_ports, destination_port);
+                                if !self.options.passive_ports.contains(&destination_port) {
+                                    slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.options.passive_ports);
+                                    tcp_stream.shutdown().await.unwrap();
+                                    continue;
+                                }
+                                self.dispatch_data_connection(tcp_stream, connection).await;
+                            }
+
                         },
                     }
                 },
