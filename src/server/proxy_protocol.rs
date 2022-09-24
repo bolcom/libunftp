@@ -1,4 +1,6 @@
+use super::chancomms::ProxyLoopSender;
 use super::session::SharedSession;
+use crate::server::chancomms::ProxyLoopMsg;
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use proxy_protocol::{parse, version1::ProxyAddresses, ProxyHeader};
@@ -86,26 +88,43 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
     }
 }
 
-#[tracing_attributes::instrument]
-pub async fn get_peer_from_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ConnectionTuple, ProxyError> {
-    let proxyhdr = match read_proxy_header(tcp_stream).await {
-        Ok(v) => v,
-        Err(e) => {
-            return Err(e);
+//#[tracing_attributes::instrument]
+pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
+where
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+{
+    tokio::spawn(async move {
+        match read_proxy_header(&mut tcp_stream).await {
+            Ok(ProxyHeader::Version1 {
+                addresses: ProxyAddresses::Ipv4 { source, destination },
+            }) => {
+                if let Err(e) = tx
+                    .send(ProxyLoopMsg::ProxyHeaderReceived(
+                        ConnectionTuple {
+                            source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
+                            destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
+                        },
+                        tcp_stream,
+                    ))
+                    .await
+                {
+                    slog::warn!(logger, "proxy protocol unable to send to channel: {:?}", e)
+                };
+            }
+            Ok(ProxyHeader::Version1 {
+                addresses: ProxyAddresses::Ipv6 { .. },
+            }) => {
+                slog::warn!(logger, "proxy protocol decode error: {:?}", ProxyError::IPv4Required);
+            }
+            Ok(_) => {
+                slog::warn!(logger, "proxy protocol decode error: {:?}", ProxyError::UnsupportedVersion);
+            }
+            Err(e) => {
+                slog::warn!(logger, "proxy protocol read error: {:?}", e);
+            }
         }
-    };
-    match proxyhdr {
-        ProxyHeader::Version1 {
-            addresses: ProxyAddresses::Ipv4 { source, destination },
-        } => Ok(ConnectionTuple {
-            source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
-            destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
-        }),
-        ProxyHeader::Version1 {
-            addresses: ProxyAddresses::Ipv6 { .. },
-        } => Err(ProxyError::IPv4Required),
-        _ => Err(ProxyError::UnsupportedVersion),
-    }
+    });
 }
 
 /// Constructs a hash key based on the source ip and the destination port

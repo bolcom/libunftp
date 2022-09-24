@@ -1,5 +1,9 @@
 # Changelog
 
+## Upcoming
+
+- [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes issue [#208](https://github.com/bolcom/libunftp/issues/208)
+
 ## 2022-06-25 Release of all crates
 
 ### unftp-auth-gcs v0.2.1
