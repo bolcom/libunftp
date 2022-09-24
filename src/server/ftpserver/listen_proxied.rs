@@ -10,7 +10,7 @@ use crate::{
         controlchan,
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,
-        proxy_protocol::{get_peer_from_proxy_header, ConnectionTuple, ProxyProtocolSwitchboard},
+        proxy_protocol::{spawn_proxy_header_parsing, ConnectionTuple, ProxyProtocolSwitchboard},
         session::SharedSession,
         ControlChanMsg, Reply,
     },
@@ -63,13 +63,10 @@ where
                     let socket_addr = tcp_stream.peer_addr();
 
                     slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
-                    get_peer_from_proxy_header(self.logger.clone(), tcp_stream, proxyloop_msg_tx.clone()).await;
+                    spawn_proxy_header_parsing(self.logger.clone(), tcp_stream, proxyloop_msg_tx.clone());
                 },
                 Some(msg) = proxyloop_msg_rx.recv() => {
                     match msg {
-                        ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
-                            self.select_and_register_passive_port(session_arc).await;
-                        },
                         ProxyLoopMsg::ProxyHeaderReceived (connection, mut tcp_stream) => {
                             let socket_addr = tcp_stream.peer_addr();
                             // Based on the proxy protocol header, and the configured control port number,
@@ -94,7 +91,9 @@ where
                                 }
                                 self.dispatch_data_connection(tcp_stream, connection).await;
                             }
-
+                        },
+                        ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
+                            self.select_and_register_passive_port(session_arc).await;
                         },
                     }
                 },

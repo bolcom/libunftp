@@ -89,7 +89,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
 }
 
 //#[tracing_attributes::instrument]
-pub async fn get_peer_from_proxy_header<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
+pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,

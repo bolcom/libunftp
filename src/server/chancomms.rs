@@ -141,9 +141,10 @@ where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
+    /// Upon receiving the header, the connection and tcp stream are passed back to the proxy loop
+    ProxyHeaderReceived(ConnectionTuple, TcpStream),
     /// Command to assign a data port to a session
     AssignDataPortCommand(SharedSession<Storage, User>),
-    ProxyHeaderReceived(ConnectionTuple, TcpStream),
 }
 
 pub type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;
