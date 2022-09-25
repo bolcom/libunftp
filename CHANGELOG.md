@@ -3,6 +3,8 @@
 ## Upcoming
 
 - [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes issue [#208](https://github.com/bolcom/libunftp/issues/208)
+- [#428](https://github.com/bolcom/libunftp/pull/428) Support Elliptic Curve Private Keys
+- Upgraded dependencies
 
 ## 2022-06-25 Release of all crates
 
