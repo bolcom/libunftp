@@ -1,6 +1,6 @@
 # Changelog
 
-## Upcoming
+### 2022-09-25 libunftp 0.18.6
 
 - [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes issue [#208](https://github.com/bolcom/libunftp/issues/208)
 - [#428](https://github.com/bolcom/libunftp/pull/428) Support Elliptic Curve Private Keys

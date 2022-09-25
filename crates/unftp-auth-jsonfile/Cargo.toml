@@ -23,7 +23,7 @@ base64 = "0.13.0"
 bytes = "1.2.1"
 ipnet = "2.5.0"
 iprange = "0.6.7"
-libunftp = { version="0.18.5", path="../../"}
+libunftp = { version="0.18.6", path="../../"}
 ring = "0.16.20"
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"

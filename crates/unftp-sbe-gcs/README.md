@@ -14,7 +14,7 @@ Add the needed dependencies to Cargo.toml:
 
  ```toml
  [dependencies]
- libunftp = "0.18.5"
+ libunftp = "0.18.6"
  unftp-sbe-gcs = "0.2.1"
  tokio = { version = "1", features = ["full"] }
  ```

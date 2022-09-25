@@ -1,6 +1,6 @@
 # Release Checklist
 
-* Update minor versions dependencies. Install [cargo-edit](https://crates.io/crates/cargo-edit) and run `cargo upgrade`.
+* Update minor versions dependencies. Install [cargo-edit](https://crates.io/crates/cargo-edit) and run `cargo upgrade --workspace`.
   You can also use `cargo upgrades` to just check what is outstanding or this oneliner:
   `cat Cargo.toml | sed -n '33,56p' | awk '{ print $1 }' | xargs -L1 cargo search --limit=1`
 * Update Cargo.toml with the new version number
