@@ -88,7 +88,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
     }
 }
 
-//#[tracing_attributes::instrument]
+#[tracing_attributes::instrument]
 pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
 where
     User: UserDetail + 'static,
@@ -218,8 +218,8 @@ where
 
             let port = random_u32 % rng_length as u32 + self.port_range.start as u32;
             let session = session_arc.lock().await;
-            if session.destination.is_some() {
-                let hash = construct_proxy_hash_key(&session.source.ip(), port as u16);
+            if let Some(destination) = session.destination {
+                let hash = construct_proxy_hash_key(&destination.ip(), port as u16);
 
                 match &self.try_and_claim(hash.clone(), session_arc.clone()) {
                     Ok(_) => return Ok(port as u16),
