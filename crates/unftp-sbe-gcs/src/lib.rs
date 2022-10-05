@@ -62,7 +62,7 @@ pub mod object_metadata;
 pub mod options;
 mod response_body;
 mod uri;
-mod workflow_identity;
+mod workload_identity;
 
 pub use ext::ServerExt;
 
@@ -154,7 +154,7 @@ impl CloudStorage {
                     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
                     .await
             }
-            AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
+            AuthMethod::WorkloadIdentity(service) => workload_identity::request_token(service.clone(), self.client.clone())
                 .await
                 .map(|t| t.access_token),
             AuthMethod::None => Ok("unftp_test".to_string()),
