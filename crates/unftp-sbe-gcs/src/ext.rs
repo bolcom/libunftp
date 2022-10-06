@@ -1,4 +1,4 @@
-use crate::options::AuthMethod;
+use crate::auth::AuthMethod;
 use crate::CloudStorage;
 use libunftp::auth::DefaultUser;
 use libunftp::Server;
@@ -12,7 +12,7 @@ pub trait ServerExt {
     ///
     /// ```rust
     /// use libunftp::Server;
-    /// use unftp_sbe_gcs::{ServerExt, options::AuthMethod};
+    /// use unftp_sbe_gcs::{ServerExt, auth::AuthMethod};
     /// use std::path::PathBuf;
     ///
     /// let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None));

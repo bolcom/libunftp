@@ -21,7 +21,7 @@
 //!
 //! ```no_run
 //! use libunftp::Server;
-//! use unftp_sbe_gcs::{ServerExt, options::AuthMethod};
+//! use unftp_sbe_gcs::{ServerExt, auth::AuthMethod};
 //! use std::path::PathBuf;
 //!
 //! #[tokio::main]
@@ -39,7 +39,7 @@
 //!
 //! ```no_run
 //! use libunftp::Server;
-//! use unftp_sbe_gcs::{CloudStorage, options::AuthMethod};
+//! use unftp_sbe_gcs::{CloudStorage, auth::AuthMethod};
 //! use std::path::PathBuf;
 //!
 //! #[tokio::main]
@@ -57,9 +57,9 @@
 
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
+pub mod auth;
 mod ext;
 pub mod object_metadata;
-pub mod options;
 mod response_body;
 mod uri;
 mod workload_identity;
@@ -67,6 +67,7 @@ mod workload_identity;
 pub use ext::ServerExt;
 
 use async_trait::async_trait;
+use auth::AuthMethod;
 use bytes::Buf;
 use futures::{prelude::*, TryStreamExt};
 use hyper::{
@@ -82,7 +83,6 @@ use libunftp::{
 };
 use mime::APPLICATION_OCTET_STREAM;
 use object_metadata::ObjectMetadata;
-use options::AuthMethod;
 use response_body::{Item, ResponseBody};
 use std::{
     fmt::Debug,

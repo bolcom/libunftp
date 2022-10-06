@@ -2,11 +2,11 @@
 // See https://github.com/mechiru/gcemeta/blob/master/src/metadata.rs
 // See https://github.com/mechiru/gouth/blob/master/gouth/src/source/metadata.rs
 
-use hyper::client::connect::dns::GaiResolver;
-use hyper::client::HttpConnector;
+use crate::auth::{Token, TokenProvider};
+use async_trait::async_trait;
+use hyper::client::connect::Connect;
 use hyper::http::header;
 use hyper::{Body, Client, Method, Request, Response};
-use hyper_rustls::HttpsConnector;
 use libunftp::storage::{Error, ErrorKind};
 
 // Environment variable specifying the GCE metadata hostname.
@@ -22,30 +22,61 @@ const METADATA_HOST: &str = "metadata.google.internal";
 // `github.com/bolcom/libunftp v{package_version}`
 const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
 
-// TODO: MAP to useful error type
-pub(super) async fn request_token(service: Option<String>, client: Client<HttpsConnector<HttpConnector<GaiResolver>>>) -> Result<TokenResponse, Error> {
-    // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
-    let suffix = format!("instance/service-accounts/{}/token", service.unwrap_or_else(|| "default".to_string()));
-    //let host = env::var(METADATA_HOST_VAR).unwrap_or_else(|_| METADATA_IP.into());
-    let host = METADATA_HOST;
-    let uri = format!("http://{}/computeMetadata/v1/{}", host, suffix);
+#[derive(Clone)]
+pub struct WorkloadIdentity {
+    service: String,
+}
 
-    let request = Request::builder()
-        .uri(uri)
-        .header("Metadata-Flavor", "Google")
-        .header(header::USER_AGENT, USER_AGENT)
-        .method(Method::GET)
-        .body(Body::empty())
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+impl WorkloadIdentity {
+    fn new(service: String) -> Self {
+        Self { service }
+    }
+}
 
-    let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+impl Default for WorkloadIdentity {
+    fn default() -> Self {
+        Self {
+            service: "default".to_string(),
+        }
+    }
+}
 
-    let body_bytes = hyper::body::to_bytes(response.into_body())
-        .await
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+#[async_trait]
+impl TokenProvider for WorkloadIdentity {
+    // TODO: MAP to useful error type
+    async fn get_token<C>(&self, client: Client<C>) -> Result<Token, Error>
+    where
+        C: Sync + Send + Clone + Connect,
+    {
+        // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+        let host = METADATA_HOST;
+        let uri = format!("http://{}/computeMetadata/v1/instance/service-accounts/{}/token", host, self.service);
 
-    let unmarshall_result: serde_json::Result<TokenResponse> = serde_json::from_slice(body_bytes.to_vec().as_slice());
-    unmarshall_result.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+        let now = time::OffsetDateTime::now_utc();
+        let request = Request::builder()
+            .uri(uri)
+            .header("Metadata-Flavor", "Google")
+            .header(header::USER_AGENT, USER_AGENT)
+            .method(Method::GET)
+            .body(Body::empty())
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let body_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let token: serde_json::Result<TokenResponse> = serde_json::from_slice(body_bytes.to_vec().as_slice());
+        let token = token.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+
+        let expiry_deadline = now.saturating_add(time::Duration::seconds(token.expires_in));
+
+        Ok(Token {
+            access_token: token.access_token,
+            expires_at: Some(expiry_deadline),
+        })
+    }
 }
 
 // Example:
@@ -61,5 +92,5 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
 pub(super) struct TokenResponse {
     pub(super) token_type: String,
     pub(super) access_token: String,
-    pub(super) expires_in: u64,
+    pub(super) expires_in: i64,
 }

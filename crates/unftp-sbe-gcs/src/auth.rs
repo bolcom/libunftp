@@ -1,8 +1,25 @@
 //! Contains code pertaining to initialization options for the [`Cloud Storage Backend`](super::CloudStorage)
 
+use async_trait::async_trait;
 use core::fmt;
+use hyper::client::connect::Connect;
+use hyper::Client;
+use libunftp::storage::Error;
 use std::{convert::TryFrom, path::PathBuf};
+use time::OffsetDateTime;
 use yup_oauth2::ServiceAccountKey;
+
+pub struct Token {
+    access_token: String,
+    expires_at: Option<OffsetDateTime>,
+}
+
+#[async_trait]
+pub trait TokenProvider {
+    async fn get_token<C>(&self, client: Client<C>) -> Result<Token, Error>
+    where
+        C: Sync + Send + Clone + Connect;
+}
 
 /// Used with [`CloudStorage::new`](super::CloudStorage::new()) to specify how the storage back-end
 /// will authenticate with Google Cloud Storage.
@@ -28,7 +45,9 @@ impl From<Vec<u8>> for AuthMethod {
 impl TryFrom<PathBuf> for AuthMethod {
     type Error = std::io::Error;
 
-    fn try_from(service_account_key_file: PathBuf) -> Result<Self, Self::Error> {
+    fn try_from(
+        service_account_key_file: PathBuf,
+    ) -> Result<Self, Self::Error> {
         match std::fs::read(service_account_key_file) {
             Err(e) => Err(e),
             Ok(v) => Ok(v.into()),
@@ -39,7 +58,9 @@ impl TryFrom<PathBuf> for AuthMethod {
 impl TryFrom<Option<PathBuf>> for AuthMethod {
     type Error = std::io::Error;
 
-    fn try_from(service_account_key_file: Option<PathBuf>) -> Result<Self, Self::Error> {
+    fn try_from(
+        service_account_key_file: Option<PathBuf>,
+    ) -> Result<Self, Self::Error> {
         match service_account_key_file {
             Some(p) => AuthMethod::try_from(p),
             None => Ok(AuthMethod::WorkloadIdentity(None)),
@@ -48,14 +69,23 @@ impl TryFrom<Option<PathBuf>> for AuthMethod {
 }
 
 impl AuthMethod {
-    pub(super) fn to_service_account_key(&self) -> std::io::Result<ServiceAccountKey> {
+    pub(super) fn to_service_account_key(
+        &self,
+    ) -> std::io::Result<ServiceAccountKey> {
         match self {
             AuthMethod::WorkloadIdentity(_) | AuthMethod::None => {
-                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "service account key not chosen as option",
+                ))
             }
-            AuthMethod::ServiceAccountKey(key) => {
-                serde_json::from_slice(key).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad service account key: {}", e)))
-            }
+            AuthMethod::ServiceAccountKey(key) => serde_json::from_slice(key)
+                .map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("bad service account key: {}", e),
+                    )
+                }),
         }
     }
 }
@@ -63,9 +93,15 @@ impl AuthMethod {
 impl fmt::Display for AuthMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthMethod::WorkloadIdentity(None) => write!(f, "Workload Identity"),
-            AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "Workload Identity with service account {}", s),
-            AuthMethod::ServiceAccountKey(_) => write!(f, "Service Account Key"),
+            AuthMethod::WorkloadIdentity(None) => {
+                write!(f, "Workload Identity")
+            }
+            AuthMethod::WorkloadIdentity(Some(s)) => {
+                write!(f, "Workload Identity with service account {}", s)
+            }
+            AuthMethod::ServiceAccountKey(_) => {
+                write!(f, "Service Account Key")
+            }
             AuthMethod::None => write!(f, "None"),
         }
     }
@@ -74,9 +110,15 @@ impl fmt::Display for AuthMethod {
 impl fmt::Debug for AuthMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthMethod::WorkloadIdentity(None) => write!(f, "WorkloadIdentity(None)"),
-            AuthMethod::WorkloadIdentity(Some(s)) => write!(f, "WorkloadIdentity(Some({}))", s),
-            AuthMethod::ServiceAccountKey(_) => write!(f, "ServiceAccountKey(*******)"),
+            AuthMethod::WorkloadIdentity(None) => {
+                write!(f, "WorkloadIdentity(None)")
+            }
+            AuthMethod::WorkloadIdentity(Some(s)) => {
+                write!(f, "WorkloadIdentity(Some({}))", s)
+            }
+            AuthMethod::ServiceAccountKey(_) => {
+                write!(f, "ServiceAccountKey(*******)")
+            }
             AuthMethod::None => write!(f, "None"),
         }
     }
