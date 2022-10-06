@@ -50,7 +50,10 @@ where
 
         // this callback is used by all sessions, basically only to
         // request for a passive listening port.
-        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (ProxyLoopSender<Storage, User>, ProxyLoopReceiver<Storage, User>) = channel(1);
+        let (proxyloop_msg_tx, mut proxyloop_msg_rx): (
+            ProxyLoopSender<Storage, User>,
+            ProxyLoopReceiver<Storage, User>,
+        ) = channel(1);
 
         loop {
             // The 'proxy loop' handles two kinds of events:
@@ -105,9 +108,16 @@ where
     // that requested this data channel connection in the proxy
     // protocol switchboard hashmap, and then calls the
     // spawn_data_processing function with the tcp_stream
-    async fn dispatch_data_connection(&mut self, mut tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+    async fn dispatch_data_connection(
+        &mut self,
+        mut tcp_stream: tokio::net::TcpStream,
+        connection: ConnectionTuple,
+    ) {
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-            match switchboard.get_session_by_incoming_data_connection(&connection).await {
+            match switchboard
+                .get_session_by_incoming_data_connection(&connection)
+                .await
+            {
                 Some(session) => {
                     spawn_processing(self.logger.clone(), session, tcp_stream).await;
                     switchboard.unregister(&connection);
@@ -120,8 +130,14 @@ where
         }
     }
 
-    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<Storage, User>) {
-        slog::info!(self.logger, "Received internal message to allocate data port");
+    async fn select_and_register_passive_port(
+        &mut self,
+        session_arc: SharedSession<Storage, User>,
+    ) {
+        slog::info!(
+            self.logger,
+            "Received internal message to allocate data port"
+        );
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
         // 3. put expiry time in the LIFO list
@@ -129,7 +145,10 @@ where
 
         let mut reserved_port: u16 = 0;
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-            let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
+            let port = switchboard
+                .reserve_next_free_port(session_arc.clone())
+                .await
+                .unwrap();
             slog::info!(self.logger, "Reserving data port: {:?}", port);
             reserved_port = port
         }
@@ -140,12 +159,19 @@ where
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.options.passive_host.clone(), &destination_ip, reserved_port).await;
+            let reply: Reply = super::controlchan::commands::make_pasv_reply(
+                self.options.passive_host.clone(),
+                &destination_ip,
+                reserved_port,
+            )
+            .await;
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
                 let tx = tx.clone();
-                tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
+                tx.send(ControlChanMsg::CommandChannelReply(reply))
+                    .await
+                    .unwrap();
             }
         }
     }

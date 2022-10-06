@@ -51,9 +51,15 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
+                Ok(Reply::new(
+                    ReplyCode::FileStatusOkay,
+                    "Sending directory list",
+                ))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                "No data connection established",
+            )),
         }
     }
 }

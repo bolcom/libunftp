@@ -98,7 +98,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Self::Metadata> {
+    async fn metadata<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &User,
+        path: P,
+    ) -> Result<Self::Metadata> {
         let full_path = self.full_path(path).await?;
 
         let fs_meta = tokio::fs::symlink_metadata(full_path)
@@ -109,7 +113,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn list<P>(&self, _user: &User, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
+    async fn list<P>(
+        &self,
+        _user: &User,
+        path: P,
+    ) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         P: AsRef<Path> + Send + Debug,
         <Self as StorageBackend<User>>::Metadata: Metadata,
@@ -128,14 +136,22 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
             let relpath: PathBuf = std::path::PathBuf::from(relpath);
             let metadata = tokio::fs::symlink_metadata(dir_entry.path()).await?;
             let meta: Self::Metadata = Meta { inner: metadata };
-            fis.push(Fileinfo { path: relpath, metadata: meta })
+            fis.push(Fileinfo {
+                path: relpath,
+                metadata: meta,
+            })
         }
 
         Ok(fis)
     }
 
     //#[tracing_attributes::instrument]
-    async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
+    async fn get<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &User,
+        path: P,
+        start_pos: u64,
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         use tokio::io::AsyncSeekExt;
 
         let full_path = self.full_path(path).await?;
@@ -144,7 +160,8 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
             file.seek(std::io::SeekFrom::Start(start_pos)).await?;
         }
 
-        Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
+        Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file))
+            as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
     }
 
     async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
@@ -163,7 +180,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
             self.root.join(path)
         };
 
-        let mut file = tokio::fs::OpenOptions::new().write(true).create(true).open(full_path).await?;
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(full_path)
+            .await?;
         file.set_len(start_pos).await?;
         file.seek(std::io::SeekFrom::Start(start_pos)).await?;
 
@@ -177,13 +198,17 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     #[tracing_attributes::instrument]
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
         let full_path = self.full_path(path).await?;
-        tokio::fs::remove_file(full_path).await.map_err(|error: std::io::Error| error.into())
+        tokio::fs::remove_file(full_path)
+            .await
+            .map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
         let full_path = self.full_path(path).await?;
-        tokio::fs::remove_dir(full_path).await.map_err(|error: std::io::Error| error.into())
+        tokio::fs::remove_dir(full_path)
+            .await
+            .map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
@@ -194,7 +219,12 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &User, from: P, to: P) -> Result<()> {
+    async fn rename<P: AsRef<Path> + Send + Debug>(
+        &self,
+        _user: &User,
+        from: P,
+        to: P,
+    ) -> Result<()> {
         let from = self.full_path(from).await?;
         let to = self.full_path(to).await?;
 
@@ -220,7 +250,10 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     #[tracing_attributes::instrument]
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
         let full_path = self.full_path(path).await?;
-        tokio::fs::read_dir(full_path).await.map_err(|error: std::io::Error| error.into()).map(|_| ())
+        tokio::fs::read_dir(full_path)
+            .await
+            .map_err(|error: std::io::Error| error.into())
+            .map(|_| ())
     }
 }
 

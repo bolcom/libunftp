@@ -45,10 +45,18 @@ where
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        _args: CommandContext<Storage, User>,
+    ) -> Result<Reply, ControlChanError> {
         match &self.option {
-            Opt::Utf8 { on: true } => Ok(Reply::new(ReplyCode::CommandOkay, "Always in UTF-8 mode.")),
-            Opt::Utf8 { on: false } => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Non UTF-8 mode not supported")),
+            Opt::Utf8 { on: true } => {
+                Ok(Reply::new(ReplyCode::CommandOkay, "Always in UTF-8 mode."))
+            }
+            Opt::Utf8 { on: false } => Ok(Reply::new(
+                ReplyCode::CommandNotImplementedForParameter,
+                "Non UTF-8 mode not supported",
+            )),
         }
     }
 }

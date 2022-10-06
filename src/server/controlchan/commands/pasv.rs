@@ -39,10 +39,16 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
+    async fn try_port_range(
+        local_addr: SocketAddr,
+        passive_ports: Range<u16>,
+    ) -> io::Result<TcpListener> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
 
-        let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
+        let mut listener: io::Result<TcpListener> = Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Bind retries cannot be 0",
+        ));
 
         for _ in 1..BIND_RETRIES {
             let random_u32 = {
@@ -52,7 +58,8 @@ impl Pasv {
             };
 
             let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
-            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
+            listener =
+                TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
             if listener.is_ok() {
                 break;
             }
@@ -64,8 +71,11 @@ impl Pasv {
     // modifies the session by adding channels that are used to communicate with the data connection
     // processing loop.
     #[tracing_attributes::instrument]
-    async fn setup_inter_loop_comms<S, U>(&self, session: SharedSession<S, U>, control_loop_tx: Sender<ControlChanMsg>)
-    where
+    async fn setup_inter_loop_comms<S, U>(
+        &self,
+        session: SharedSession<S, U>,
+        control_loop_tx: Sender<ControlChanMsg>,
+    ) where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
@@ -84,7 +94,10 @@ impl Pasv {
     // For non-proxy mode we choose a data port here and start listening on it while letting the control
     // channel know (via method return) what the address is that the client should connect to.
     #[tracing_attributes::instrument]
-    async fn handle_nonproxy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_nonproxy_mode<S, U>(
+        &self,
+        args: CommandContext<S, U>,
+    ) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
@@ -102,7 +115,10 @@ impl Pasv {
         let conn_addr = match args.local_addr {
             std::net::SocketAddr::V4(addr) => addr,
             std::net::SocketAddr::V6(_) => {
-                slog::error!(logger, "local address is ipv6! we only listen on ipv4, so this shouldn't happen");
+                slog::error!(
+                    logger,
+                    "local address is ipv6! we only listen on ipv4, so this shouldn't happen"
+                );
                 return Err(ControlChanErrorKind::InternalServerError.into());
             }
         };
@@ -110,7 +126,12 @@ impl Pasv {
         let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
 
         let listener = match listener {
-            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            Err(_) => {
+                return Ok(Reply::new(
+                    ReplyCode::CantOpenDataConnection,
+                    "No data connection established",
+                ))
+            }
             Ok(l) => l,
         };
 
@@ -138,14 +159,21 @@ impl Pasv {
     // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
     // should choose a data port and check for connections on it.
     #[tracing_attributes::instrument]
-    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_proxy_mode<S, U>(
+        &self,
+        args: CommandContext<S, U>,
+        tx: ProxyLoopSender<S, U>,
+    ) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
-        self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan).await;
-        tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
+        self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan)
+            .await;
+        tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone()))
+            .await
+            .unwrap();
         Ok(Reply::None)
     }
 }
@@ -174,12 +202,27 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
         PassiveHost::Ip(ip) => ip.octets(),
         PassiveHost::FromConnection => conn_ip.octets(),
         PassiveHost::Dns(ref dns_name) => {
-            let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
+            let x = dns_name
+                .split(':')
+                .take(1)
+                .map(|s| format!("{}:2121", s))
+                .next()
+                .unwrap();
             match tokio::net::lookup_host(x).await {
-                Err(_) => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                Err(_) => {
+                    return Reply::new_with_string(
+                        ReplyCode::CantOpenDataConnection,
+                        format!("Could not resolve DNS address '{}'", dns_name),
+                    )
+                }
                 Ok(mut ip_iter) => loop {
                     match ip_iter.next() {
-                        None => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                        None => {
+                            return Reply::new_with_string(
+                                ReplyCode::CantOpenDataConnection,
+                                format!("Could not resolve DNS address '{}'", dns_name),
+                            )
+                        }
                         Some(SocketAddr::V4(ip)) => break ip.ip().octets(),
                         Some(SocketAddr::V6(_)) => continue,
                     }
@@ -189,6 +232,9 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
     };
     Reply::new_with_string(
         ReplyCode::EnteringPassiveMode,
-        format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
+        format!(
+            "Entering Passive Mode ({},{},{},{},{},{})",
+            octets[0], octets[1], octets[2], octets[3], p1, p2
+        ),
     )
 }

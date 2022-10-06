@@ -26,7 +26,10 @@ where
     Storager::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, args: CommandContext<Storager, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        args: CommandContext<Storager, User>,
+    ) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let uuid: String = Uuid::new_v4().to_string();
         let filename: &Path = std::path::Path::new(&uuid);
@@ -39,9 +42,15 @@ where
                         slog::warn!(logger, "sending command failed. {}", err);
                     }
                 });
-                Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
+                Ok(Reply::new_with_string(
+                    ReplyCode::FileStatusOkay,
+                    filename.to_string_lossy().to_string(),
+                ))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                "No data connection established",
+            )),
         }
     }
 }

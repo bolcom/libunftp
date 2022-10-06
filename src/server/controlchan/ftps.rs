@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use crate::{
     auth::UserDetail,
     server::{
-        controlchan::error::ControlChanError, controlchan::middleware::ControlChanMiddleware, ftpserver::options::FtpsRequired, session::SharedSession,
-        Command, ControlChanErrorKind, Event, Reply, ReplyCode,
+        controlchan::error::ControlChanError, controlchan::middleware::ControlChanMiddleware,
+        ftpserver::options::FtpsRequired, session::SharedSession, Command, ControlChanErrorKind,
+        Event, Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -23,7 +24,8 @@ where
 }
 
 #[async_trait]
-impl<Storage, User, Next> ControlChanMiddleware for FtpsControlChanEnforcerMiddleware<Storage, User, Next>
+impl<Storage, User, Next> ControlChanMiddleware
+    for FtpsControlChanEnforcerMiddleware<Storage, User, Next>
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -34,7 +36,10 @@ where
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
-                Event::Command(Command::Ccc) => Ok(Reply::new(ReplyCode::FtpsRequired, "Cannot downgrade connection, TLS enforced.")),
+                Event::Command(Command::Ccc) => Ok(Reply::new(
+                    ReplyCode::FtpsRequired,
+                    "Cannot downgrade connection, TLS enforced.",
+                )),
                 Event::Command(Command::User { .. }) | Event::Command(Command::Pass { .. }) => {
                     let is_tls = async {
                         let session = self.session.lock().await;
@@ -43,7 +48,10 @@ where
                     .await;
                     match is_tls {
                         true => self.next.handle(event).await,
-                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel")),
+                        false => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            "A TLS connection is required on the control channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,
@@ -58,9 +66,14 @@ where
                     (true, event) => self.next.handle(event).await,
                     (false, Event::Command(Command::User { username })) => {
                         if is_anonymous_user(&username[..])? {
-                            self.next.handle(Event::Command(Command::User { username })).await
+                            self.next
+                                .handle(Event::Command(Command::User { username }))
+                                .await
                         } else {
-                            Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                            Ok(Reply::new(
+                                ReplyCode::FtpsRequired,
+                                "A TLS connection is required on the control channel",
+                            ))
                         }
                     }
                     (false, Event::Command(Command::Pass { password })) => {
@@ -71,9 +84,14 @@ where
                             }
                             Some(username) => {
                                 if is_anonymous_user(username)? {
-                                    self.next.handle(Event::Command(Command::Pass { password })).await
+                                    self.next
+                                        .handle(Event::Command(Command::Pass { password }))
+                                        .await
                                 } else {
-                                    Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the control channel"))
+                                    Ok(Reply::new(
+                                        ReplyCode::FtpsRequired,
+                                        "A TLS connection is required on the control channel",
+                                    ))
                                 }
                             }
                         }
@@ -99,7 +117,8 @@ where
 }
 
 #[async_trait]
-impl<Storage, User, Next> ControlChanMiddleware for FtpsDataChanEnforcerMiddleware<Storage, User, Next>
+impl<Storage, User, Next> ControlChanMiddleware
+    for FtpsDataChanEnforcerMiddleware<Storage, User, Next>
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -118,7 +137,10 @@ where
                     .await;
                     match is_tls {
                         true => self.next.handle(event).await,
-                        false => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                        false => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            "A TLS connection is required on the data channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,
@@ -131,11 +153,15 @@ where
                     }
                     .await;
 
-                    let username: String = username_opt.ok_or_else(|| ControlChanError::new(ControlChanErrorKind::IllegalState))?;
+                    let username: String = username_opt
+                        .ok_or_else(|| ControlChanError::new(ControlChanErrorKind::IllegalState))?;
                     let is_anonymous = is_anonymous_user(username)?;
                     match (is_tls, is_anonymous) {
                         (true, _) | (false, true) => self.next.handle(event).await,
-                        _ => Ok(Reply::new(ReplyCode::FtpsRequired, "A TLS connection is required on the data channel")),
+                        _ => Ok(Reply::new(
+                            ReplyCode::FtpsRequired,
+                            "A TLS connection is required on the data channel",
+                        )),
                     }
                 }
                 _ => self.next.handle(event).await,

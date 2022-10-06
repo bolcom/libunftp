@@ -22,7 +22,9 @@ pub trait ControlChanMiddleware: Send + Sync {
 #[async_trait]
 impl<Function> ControlChanMiddleware for Function
 where
-    Function: Send + Sync + Fn(Event) -> Pin<Box<dyn Future<Output = Result<Reply, ControlChanError>> + Send>>,
+    Function: Send
+        + Sync
+        + Fn(Event) -> Pin<Box<dyn Future<Output = Result<Reply, ControlChanError>> + Send>>,
 {
     async fn handle(&mut self, e: Event) -> Result<Reply, ControlChanError> {
         (self)(e).await

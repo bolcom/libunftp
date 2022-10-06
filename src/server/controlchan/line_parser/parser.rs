@@ -39,7 +39,11 @@ where
         "SYST" => Command::Syst,
         "STAT" => {
             let params = parse_to_eol(cmd_params)?;
-            let path = if !params.is_empty() { Some(params) } else { None };
+            let path = if !params.is_empty() {
+                Some(params)
+            } else {
+                None
+            };
             Command::Stat { path }
         }
         "TYPE" => {
@@ -53,9 +57,15 @@ where
                 return Err(ParseErrorKind::InvalidCommand.into());
             }
             match params.first() {
-                Some(b'F') => Command::Stru { structure: StruParam::File },
-                Some(b'R') => Command::Stru { structure: StruParam::Record },
-                Some(b'P') => Command::Stru { structure: StruParam::Page },
+                Some(b'F') => Command::Stru {
+                    structure: StruParam::File,
+                },
+                Some(b'R') => Command::Stru {
+                    structure: StruParam::Record,
+                },
+                Some(b'P') => Command::Stru {
+                    structure: StruParam::Page,
+                },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
             }
         }
@@ -65,9 +75,15 @@ where
                 return Err(ParseErrorKind::InvalidCommand.into());
             }
             match params.first() {
-                Some(b'S') => Command::Mode { mode: ModeParam::Stream },
-                Some(b'B') => Command::Mode { mode: ModeParam::Block },
-                Some(b'C') => Command::Mode { mode: ModeParam::Compressed },
+                Some(b'S') => Command::Mode {
+                    mode: ModeParam::Stream,
+                },
+                Some(b'B') => Command::Mode {
+                    mode: ModeParam::Block,
+                },
+                Some(b'C') => Command::Mode {
+                    mode: ModeParam::Compressed,
+                },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
             }
         }
@@ -101,7 +117,9 @@ where
             }
             let path = String::from_utf8_lossy(&path);
             // TODO: Can we do this without allocation?
-            Command::Retr { path: path.to_string() }
+            Command::Retr {
+                path: path.to_string(),
+            }
         }
         "STOR" => {
             let path = parse_to_eol(cmd_params)?;
@@ -110,7 +128,9 @@ where
             }
             // TODO:: Can we do this without allocation?
             let path = String::from_utf8_lossy(&path);
-            Command::Stor { path: path.to_string() }
+            Command::Stor {
+                path: path.to_string(),
+            }
         }
         "LIST" => {
             let line = parse_to_eol(cmd_params)?;
@@ -120,7 +140,10 @@ where
                 .map(|s| String::from_utf8_lossy(s).to_string())
                 .next();
             // Note that currently we just throw arguments away.
-            Command::List { options: None, path }
+            Command::List {
+                options: None,
+                path,
+            }
         }
         "NLST" => {
             let path = parse_to_eol(cmd_params)?;
@@ -254,8 +277,12 @@ where
                 return Err(ParseErrorKind::InvalidCommand.into());
             }
             match str::from_utf8(&params)?.to_string().to_uppercase().as_str() {
-                "TLS" => Command::Auth { protocol: AuthParam::Tls },
-                "SSL" => Command::Auth { protocol: AuthParam::Ssl },
+                "TLS" => Command::Auth {
+                    protocol: AuthParam::Tls,
+                },
+                "SSL" => Command::Auth {
+                    protocol: AuthParam::Ssl,
+                },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
             }
         }
@@ -281,12 +308,18 @@ where
                 return Err(ParseErrorKind::InvalidCommand.into());
             }
             match params.first() {
-                Some(b'C') => Command::Prot { param: ProtParam::Clear },
-                Some(b'S') => Command::Prot { param: ProtParam::Safe },
+                Some(b'C') => Command::Prot {
+                    param: ProtParam::Clear,
+                },
+                Some(b'S') => Command::Prot {
+                    param: ProtParam::Safe,
+                },
                 Some(b'E') => Command::Prot {
                     param: ProtParam::Confidential,
                 },
-                Some(b'P') => Command::Prot { param: ProtParam::Private },
+                Some(b'P') => Command::Prot {
+                    param: ProtParam::Private,
+                },
                 _ => return Err(ParseErrorKind::InvalidCommand.into()),
             }
         }

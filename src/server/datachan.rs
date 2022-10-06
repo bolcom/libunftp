@@ -44,7 +44,8 @@ where
     async fn execute(mut self, session_arc: SharedSession<Storage, User>) {
         let mut data_cmd_rx = self.data_cmd_rx.take().unwrap();
         let mut data_abort_rx = self.data_abort_rx.take().unwrap();
-        let mut timeout_delay = Box::pin(tokio::time::sleep(std::time::Duration::from_secs(5 * 60)));
+        let mut timeout_delay =
+            Box::pin(tokio::time::sleep(std::time::Duration::from_secs(5 * 60)));
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.recv() => {
@@ -100,11 +101,23 @@ where
         let tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let get_result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
+        let get_result = self
+            .storage
+            .get_into(
+                (*self.user).as_ref().unwrap(),
+                path,
+                self.start_pos,
+                &mut output,
+            )
+            .await;
         match get_result {
             Ok(bytes_copied) => {
                 if let Err(err) = output.shutdown().await {
-                    slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
+                    slog::warn!(
+                        self.logger,
+                        "Could not shutdown output stream after RETR: {}",
+                        err
+                    );
                 }
                 if let Err(err) = tx_sending
                     .send(ControlChanMsg::SentData {
@@ -113,13 +126,21 @@ where
                     })
                     .await
                 {
-                    slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
+                    slog::error!(
+                        self.logger,
+                        "Could not notify control channel of successful RETR: {}",
+                        err
+                    );
                 }
             }
             Err(err) => {
                 slog::warn!(self.logger, "Error copying streams during RETR: {}", err);
                 if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
-                    slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
+                    slog::warn!(
+                        self.logger,
+                        "Could not notify control channel of error with RETR: {}",
+                        err
+                    );
                 }
             }
         }
@@ -142,13 +163,27 @@ where
             .await;
         match put_result {
             Ok(bytes) => {
-                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
-                    slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
+                if let Err(err) = tx_ok
+                    .send(ControlChanMsg::WrittenData {
+                        bytes,
+                        path: path_copy,
+                    })
+                    .await
+                {
+                    slog::error!(
+                        self.logger,
+                        "Could not notify control channel of successful STOR: {}",
+                        err
+                    );
                 }
             }
             Err(err) => {
                 if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
-                    slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
+                    slog::error!(
+                        self.logger,
+                        "Could not notify control channel of error with STOR: {}",
+                        err
+                    );
                 }
             }
         }
@@ -168,7 +203,11 @@ where
         };
         let tx_ok = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let result = match self.storage.list_fmt((*self.user).as_ref().unwrap(), path).await {
+        let result = match self
+            .storage
+            .list_fmt((*self.user).as_ref().unwrap(), path)
+            .await
+        {
             Ok(cursor) => {
                 slog::debug!(self.logger, "Copying future for List");
                 let mut input = cursor;
@@ -188,10 +227,18 @@ where
         match result {
             Ok(msg) => {
                 if let Err(err) = output.shutdown().await {
-                    slog::warn!(self.logger, "Could not shutdown output stream during LIST: {}", err);
+                    slog::warn!(
+                        self.logger,
+                        "Could not shutdown output stream during LIST: {}",
+                        err
+                    );
                 }
                 if let Err(err) = tx_ok.send(msg).await {
-                    slog::error!(self.logger, "Could not notify control channel of LIST result: {}", err);
+                    slog::error!(
+                        self.logger,
+                        "Could not notify control channel of LIST result: {}",
+                        err
+                    );
                 }
             }
             Err(err) => slog::warn!(self.logger, "Failed to send reply to LIST: {}", err),
@@ -206,33 +253,67 @@ where
         };
         let tx_ok = self.control_msg_tx.clone();
         let tx_error = self.control_msg_tx.clone();
-        match self.storage.nlst((*self.user).as_ref().unwrap(), path).await {
+        match self
+            .storage
+            .nlst((*self.user).as_ref().unwrap(), path)
+            .await
+        {
             Ok(mut input) => {
                 let mut output = Self::writer(self.socket, self.ftps_mode).await;
                 match tokio::io::copy(&mut input, &mut output).await {
                     Ok(_) => {
                         if let Err(err) = output.shutdown().await {
-                            slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
+                            slog::warn!(
+                                self.logger,
+                                "Could not shutdown output stream during NLIST: {}",
+                                err
+                            );
                         }
-                        if let Err(err) = tx_ok.send(ControlChanMsg::DirectorySuccessfullyListed).await {
-                            slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
+                        if let Err(err) = tx_ok
+                            .send(ControlChanMsg::DirectorySuccessfullyListed)
+                            .await
+                        {
+                            slog::error!(
+                                self.logger,
+                                "Could not notify control channel of successful NLIST: {}",
+                                err
+                            );
                         }
                     }
-                    Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
+                    Err(err) => slog::warn!(
+                        self.logger,
+                        "Could not copy from storage implementation during NLST: {}",
+                        err
+                    ),
                 }
             }
             Err(e) => {
-                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
-                    slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
+                if let Err(err) = tx_error
+                    .send(ControlChanMsg::StorageError(Error::new(
+                        ErrorKind::LocalError,
+                        e,
+                    )))
+                    .await
+                {
+                    slog::warn!(
+                        self.logger,
+                        "Could not notify control channel of error with NLIST: {}",
+                        err
+                    );
                 }
             }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn writer(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
+    async fn writer(
+        socket: tokio::net::TcpStream,
+        ftps_mode: FtpsConfig,
+    ) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
         match ftps_mode {
-            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
+            FtpsConfig::Off => {
+                Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>
+            }
             FtpsConfig::Building { .. } => panic!("Illegal state"),
             FtpsConfig::On { tls_config } => {
                 let io = async move {
@@ -246,9 +327,14 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn reader(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
+    async fn reader(
+        socket: tokio::net::TcpStream,
+        ftps_mode: FtpsConfig,
+    ) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
         match ftps_mode {
-            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
+            FtpsConfig::Off => {
+                Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>
+            }
             FtpsConfig::Building { .. } => panic!("Illegal state"),
             FtpsConfig::On { tls_config } => {
                 let io = async move {
@@ -270,8 +356,11 @@ where
 /// session_arc: the user session that is also shared with the control channel.
 /// socket: the data socket we'll be working with.
 #[tracing_attributes::instrument]
-pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, mut socket: tokio::net::TcpStream)
-where
+pub async fn spawn_processing<Storage, User>(
+    logger: slog::Logger,
+    session_arc: SharedSession<Storage, User>,
+    mut socket: tokio::net::TcpStream,
+) where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
     User: UserDetail + 'static,
@@ -306,35 +395,56 @@ where
                 }
             }
             Err(err) => {
-                slog::error!(logger, "Couldn't determine data channel address.\n{:?}", err);
+                slog::error!(
+                    logger,
+                    "Couldn't determine data channel address.\n{:?}",
+                    err
+                );
                 return;
             }
         }
 
-        let username = session.username.as_ref().cloned().unwrap_or_else(|| String::from("unknown"));
+        let username = session
+            .username
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| String::from("unknown"));
         let logger = logger.new(slog::o!("username" => username));
         let control_msg_tx: Sender<ControlChanMsg> = match session.control_msg_tx {
             Some(ref tx) => tx.clone(),
             None => {
-                slog::error!(logger, "Control loop message sender expected to be set up. Aborting data loop.");
+                slog::error!(
+                    logger,
+                    "Control loop message sender expected to be set up. Aborting data loop."
+                );
                 return;
             }
         };
         let data_cmd_rx = match session.data_cmd_rx.take() {
             Some(rx) => rx,
             None => {
-                slog::error!(logger, "Data loop command receiver expected to be set up. Aborting data loop.");
+                slog::error!(
+                    logger,
+                    "Data loop command receiver expected to be set up. Aborting data loop."
+                );
                 return;
             }
         };
         let data_abort_rx = match session.data_abort_rx.take() {
             Some(rx) => rx,
             None => {
-                slog::error!(logger, "Data loop abort receiver expected to be set up. Aborting data loop.");
+                slog::error!(
+                    logger,
+                    "Data loop abort receiver expected to be set up. Aborting data loop."
+                );
                 return;
             }
         };
-        let ftps_mode = if session.data_tls { session.ftps_config.clone() } else { FtpsConfig::Off };
+        let ftps_mode = if session.data_tls {
+            session.ftps_config.clone()
+        } else {
+            FtpsConfig::Off
+        };
         let command_executor = DataCommandExecutor {
             user: session.user.clone(),
             socket,

@@ -61,7 +61,10 @@ where
                     Some(v) => v,
                     None => {
                         slog::error!(logger, "NoneError for username. This shouldn't happen.");
-                        return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                        return Ok(Reply::new(
+                            ReplyCode::NotLoggedIn,
+                            "Please open a new connection to re-authenticate",
+                        ));
                     }
                 };
                 let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
@@ -83,7 +86,8 @@ where
                         Ok(user) => {
                             let is_locked = match failed_logins {
                                 Some(failed_logins) => {
-                                    let result = failed_logins.success(source_ip, username.clone()).await;
+                                    let result =
+                                        failed_logins.success(source_ip, username.clone()).await;
                                     if let Some(state) = result {
                                         slog::warn!(
                                             logger,
@@ -111,7 +115,11 @@ where
                                     trace_id: session.trace_id,
                                 }
                             } else {
-                                slog::warn!(logger, "User {} authenticated but account is disabled", user);
+                                slog::warn!(
+                                    logger,
+                                    "User {} authenticated but account is disabled",
+                                    user
+                                );
                                 ControlChanMsg::AuthFailed
                             }
                         }
@@ -120,9 +128,15 @@ where
                             ControlChanMsg::AuthFailed
                         }
                         Err(err) => {
-                            slog::warn!(logger, "Failed login attempt for user {}, reason={}", username, err);
+                            slog::warn!(
+                                logger,
+                                "Failed login attempt for user {}, reason={}",
+                                username,
+                                err
+                            );
                             if let Some(failed_logins) = failed_logins {
-                                let result = failed_logins.failed(source_ip, username.clone()).await;
+                                let result =
+                                    failed_logins.failed(source_ip, username.clone()).await;
                                 if let Some(state) = result {
                                     match state {
                                         LockState::MaxFailuresReached => {
@@ -158,8 +172,14 @@ where
                 });
                 Ok(Reply::none())
             }
-            SessionState::New => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please supply a username first")),
-            _ => Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate")),
+            SessionState::New => Ok(Reply::new(
+                ReplyCode::BadCommandSequence,
+                "Please supply a username first",
+            )),
+            _ => Ok(Reply::new(
+                ReplyCode::NotLoggedIn,
+                "Please open a new connection to re-authenticate",
+            )),
         }
     }
 }

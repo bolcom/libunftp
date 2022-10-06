@@ -54,10 +54,19 @@ where
                         slog::warn!(logger, "{}", err);
                     }
                 });
-                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
+                Ok(Reply::new(
+                    ReplyCode::AuthOkayNoDataNeeded,
+                    "Upgrading to TLS",
+                ))
             }
-            (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
-            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+            (true, AuthParam::Ssl) => Ok(Reply::new(
+                ReplyCode::CommandNotImplementedForParameter,
+                "Auth SSL not implemented",
+            )),
+            (false, _) => Ok(Reply::new(
+                ReplyCode::CommandNotImplemented,
+                "TLS/SSL not configured",
+            )),
         }
     }
 }

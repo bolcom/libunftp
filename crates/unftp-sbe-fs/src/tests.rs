@@ -20,7 +20,9 @@ fn fs_stat() {
     let fs = Filesystem::new(&root);
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
-    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
     let filename = path.file_name().unwrap();
     let my_meta = rt.block_on(fs.metadata(&DefaultUser {}, filename)).unwrap();
 
@@ -45,7 +47,9 @@ fn fs_list() {
     let fs = Filesystem::new(&root.path());
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
-    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
     let my_list = rt.block_on(fs.list(&DefaultUser {}, "/")).unwrap();
 
     assert_eq!(my_list.len(), 1);
@@ -54,9 +58,15 @@ fn fs_list() {
     assert_eq!(my_fileinfo.path, relpath);
     assert_eq!(my_fileinfo.metadata.is_dir(), meta.is_dir());
     assert_eq!(my_fileinfo.metadata.is_file(), meta.is_file());
-    assert_eq!(my_fileinfo.metadata.is_symlink(), meta.file_type().is_symlink());
+    assert_eq!(
+        my_fileinfo.metadata.is_symlink(),
+        meta.file_type().is_symlink()
+    );
     assert_eq!(my_fileinfo.metadata.len(), meta.len());
-    assert_eq!(my_fileinfo.metadata.modified().unwrap(), meta.modified().unwrap());
+    assert_eq!(
+        my_fileinfo.metadata.modified().unwrap(),
+        meta.modified().unwrap()
+    );
 }
 
 #[test]
@@ -70,7 +80,9 @@ fn fs_list_fmt() {
     // Create a filesystem StorageBackend with our root dir
     let fs = Filesystem::new(&root.path());
 
-    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
     let my_list = rt.block_on(fs.list_fmt(&DefaultUser {}, "/")).unwrap();
 
     let my_list = std::string::String::from_utf8(my_list.into_inner()).unwrap();
@@ -164,8 +176,14 @@ fn fileinfo_fmt() {
         metadata: meta,
     };
     let my_format = format!("{}", fileinfo);
-    let basename = std::path::Path::new(&dir).file_name().unwrap().to_string_lossy();
-    let format = format!("-rwxr-xr-x            1            0            0              5 Jan 01 00:00 {}", basename);
+    let basename = std::path::Path::new(&dir)
+        .file_name()
+        .unwrap()
+        .to_string_lossy();
+    let format = format!(
+        "-rwxr-xr-x            1            0            0              5 Jan 01 00:00 {}",
+        basename
+    );
     assert_eq!(my_format, format);
 }
 
@@ -179,7 +197,8 @@ fn fs_mkd() {
     // to completion
     let rt = Runtime::new().unwrap();
 
-    rt.block_on(fs.mkd(&DefaultUser {}, new_dir_name)).expect("Failed to mkd");
+    rt.block_on(fs.mkd(&DefaultUser {}, new_dir_name))
+        .expect("Failed to mkd");
 
     let full_path = root.join(new_dir_name);
     let metadata = std::fs::symlink_metadata(full_path).unwrap();
@@ -202,7 +221,9 @@ fn fs_rename_file() {
     assert!(r.is_ok());
 
     let new_full_path = root.join(new_filename);
-    assert!(std::fs::metadata(new_full_path).expect("new filename not found").is_file());
+    assert!(std::fs::metadata(new_full_path)
+        .expect("new filename not found")
+        .is_file());
 
     let old_full_path = root.join(old_filename);
     std::fs::symlink_metadata(old_full_path).expect_err("Old filename should not exists anymore");
@@ -224,7 +245,9 @@ fn fs_rename_dir() {
     assert!(r.is_ok());
 
     let new_full_path = root.join(new_dir);
-    assert!(std::fs::metadata(new_full_path).expect("new directory not found").is_dir());
+    assert!(std::fs::metadata(new_full_path)
+        .expect("new directory not found")
+        .is_dir());
 
     let old_full_path = root.join(old_dir);
     std::fs::symlink_metadata(old_full_path).expect_err("Old directory should not exists anymore");
@@ -245,7 +268,9 @@ fn fs_md5() {
     file.write(DATA.as_bytes()).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
-    let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
 
     let my_md5 = rt.block_on(fs.md5(&DefaultUser {}, filename)).unwrap();
 

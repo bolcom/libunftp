@@ -7,7 +7,9 @@ pub mod options;
 use super::{
     controlchan,
     failed_logins::FailedLoginsCache,
-    ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
+    ftpserver::{
+        error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5,
+    },
     shutdown,
     tls::FtpsConfig,
 };
@@ -24,7 +26,10 @@ use crate::{
 };
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::{fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc,
+    time::Duration,
+};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -98,7 +103,10 @@ where
     /// [`Server`]: struct.Server.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
+    pub fn with_authenticator(
+        sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>,
+        authenticator: Arc<dyn Authenticator<User> + Send + Sync>,
+    ) -> Self {
         Server {
             storage: Arc::from(sbe_generator),
             greeting: DEFAULT_GREETING,
@@ -138,7 +146,10 @@ where
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
-    pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
+    pub fn authenticator(
+        mut self,
+        authenticator: Arc<dyn Authenticator<User> + Send + Sync>,
+    ) -> Self {
         self.authenticator = authenticator;
         self
     }
@@ -283,7 +294,9 @@ where
 
     /// Sets the structured logger ([slog](https://crates.io/crates/slog)::Logger) to use
     pub fn logger<L: Into<Option<slog::Logger>>>(mut self, logger: L) -> Self {
-        self.logger = logger.into().unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
+        self.logger = logger
+            .into()
+            .unwrap_or_else(|| slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()));
         self
     }
 
@@ -530,11 +543,23 @@ where
     /// ```
     ///
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(mut self, bind_address: T) -> std::result::Result<(), ServerError> {
+    pub async fn listen<T: Into<String> + Debug>(
+        mut self,
+        bind_address: T,
+    ) -> std::result::Result<(), ServerError> {
         self.ftps_mode = match self.ftps_mode {
             FtpsConfig::Off => FtpsConfig::Off,
-            FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
-                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags, self.ftps_client_auth, self.ftps_trust_store.clone())?,
+            FtpsConfig::Building {
+                certs_file,
+                key_file,
+            } => FtpsConfig::On {
+                tls_config: tls::new_config(
+                    certs_file,
+                    key_file,
+                    self.ftps_tls_flags,
+                    self.ftps_client_auth,
+                    self.ftps_trust_store.clone(),
+                )?,
             },
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
@@ -543,21 +568,30 @@ where
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
 
-        let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
+        let failed_logins = self
+            .failed_logins_policy
+            .as_ref()
+            .map(|policy| FailedLoginsCache::new(policy.clone()));
 
         let listen_future = match self.proxy_protocol_mode {
-            ProxyMode::On { external_control_port } => Box::pin(
+            ProxyMode::On {
+                external_control_port,
+            } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
                     bind_address,
                     external_control_port,
                     logger: self.logger.clone(),
                     options: (&self).into(),
-                    proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
+                    proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(
+                        self.logger.clone(),
+                        self.passive_ports.clone(),
+                    )),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                 }
                 .listen(),
-            ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            )
+                as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
             ProxyMode::Off => Box::pin(
                 listen::Listener {
                     bind_address,
@@ -567,13 +601,16 @@ where
                     failed_logins: failed_logins.clone(),
                 }
                 .listen(),
-            ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            )
+                as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
         };
 
         let sweeper_fut = if let Some(ref failed_logins) = failed_logins {
-            Box::pin(failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone())) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
+            Box::pin(failed_logins.sweeper(self.logger.clone(), shutdown_notifier.clone()))
+                as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
         } else {
-            Box::pin(futures_util::future::pending()) as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
+            Box::pin(futures_util::future::pending())
+                as Pin<Box<dyn futures_util::Future<Output = ()> + Send>>
         };
         tokio::select! {
             result = listen_future => result,
@@ -589,7 +626,11 @@ where
     }
 
     // Waits for sub-components to shut down gracefully or aborts if the grace period expires
-    async fn shutdown_linger(logger: slog::Logger, shutdown_notifier: Arc<Notifier>, grace_period: Duration) -> std::result::Result<(), ServerError> {
+    async fn shutdown_linger(
+        logger: slog::Logger,
+        shutdown_notifier: Arc<Notifier>,
+        grace_period: Duration,
+    ) -> std::result::Result<(), ServerError> {
         let timeout = Box::pin(tokio::time::sleep(grace_period));
         tokio::select! {
             _ = shutdown_notifier.linger() => {
@@ -646,7 +687,10 @@ where
             .field("passive_host", &self.passive_host)
             .field("ftps_client_auth", &self.ftps_client_auth)
             .field("ftps_mode", &self.ftps_mode)
-            .field("ftps_required_control_chan", &self.ftps_required_control_chan)
+            .field(
+                "ftps_required_control_chan",
+                &self.ftps_required_control_chan,
+            )
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("ftps_trust_store", &self.ftps_trust_store)

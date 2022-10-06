@@ -1,4 +1,6 @@
-use crate::notification::event::{DataEvent, DataListener, EventMeta, PresenceEvent, PresenceListener};
+use crate::notification::event::{
+    DataEvent, DataListener, EventMeta, PresenceEvent, PresenceListener,
+};
 
 use async_trait::async_trait;
 

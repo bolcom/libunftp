@@ -32,7 +32,11 @@ impl<Next> EventDispatcherMiddleware<Next>
 where
     Next: ControlChanMiddleware,
 {
-    pub fn new(data_listener: Arc<dyn DataListener>, presence_listener: Arc<dyn PresenceListener>, next: Next) -> Self {
+    pub fn new(
+        data_listener: Arc<dyn DataListener>,
+        presence_listener: Arc<dyn PresenceListener>,
+        next: Next,
+    ) -> Self {
         EventDispatcherMiddleware {
             data_listener,
             presence_listener,
@@ -69,13 +73,23 @@ where
                     path: String::from(path),
                     bytes: *bytes,
                 }),
-                ControlChanMsg::RmDirSuccess { path } => Some(notification::DataEvent::RemovedDir { path: String::from(path) }),
-                ControlChanMsg::DelFileSuccess { path } => Some(notification::DataEvent::Deleted { path: String::from(path) }),
-                ControlChanMsg::MkDirSuccess { path } => Some(notification::DataEvent::MadeDir { path: String::from(path) }),
-                ControlChanMsg::RenameSuccess { old_path, new_path } => Some(notification::DataEvent::Renamed {
-                    from: old_path.clone(),
-                    to: new_path.clone(),
+                ControlChanMsg::RmDirSuccess { path } => {
+                    Some(notification::DataEvent::RemovedDir {
+                        path: String::from(path),
+                    })
+                }
+                ControlChanMsg::DelFileSuccess { path } => Some(notification::DataEvent::Deleted {
+                    path: String::from(path),
                 }),
+                ControlChanMsg::MkDirSuccess { path } => Some(notification::DataEvent::MadeDir {
+                    path: String::from(path),
+                }),
+                ControlChanMsg::RenameSuccess { old_path, new_path } => {
+                    Some(notification::DataEvent::Renamed {
+                        from: old_path.clone(),
+                        to: new_path.clone(),
+                    })
+                }
                 _ => None,
             };
             (data_event, presence_event)
@@ -94,7 +108,11 @@ where
                 };
                 match events {
                     (Some(event), None) => self.data_listener.receive_data_event(event, m).await,
-                    (None, Some(event)) => self.presence_listener.receive_presence_event(event, m).await,
+                    (None, Some(event)) => {
+                        self.presence_listener
+                            .receive_presence_event(event, m)
+                            .await
+                    }
                     _ => {}
                 }
             }

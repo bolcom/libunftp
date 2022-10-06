@@ -1,8 +1,12 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
 use rustls::{
-    server::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, StoresServerSessions},
+    server::{
+        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+        NoServerSessionStorage, StoresServerSessions,
+    },
     version::{TLS12, TLS13},
-    Certificate, NoKeyLog, PrivateKey, RootCertStore, ServerConfig, SupportedProtocolVersion, Ticketer,
+    Certificate, NoKeyLog, PrivateKey, RootCertStore, ServerConfig, SupportedProtocolVersion,
+    Ticketer,
 };
 use std::{
     fmt::{self, Display, Formatter},
@@ -19,8 +23,13 @@ use tokio_rustls::webpki;
 #[derive(Clone)]
 pub enum FtpsConfig {
     Off,
-    Building { certs_file: PathBuf, key_file: PathBuf },
-    On { tls_config: Arc<ServerConfig> },
+    Building {
+        certs_file: PathBuf,
+        key_file: PathBuf,
+    },
+    On {
+        tls_config: Arc<ServerConfig>,
+    },
 }
 
 impl fmt::Debug for FtpsConfig {
@@ -127,13 +136,15 @@ fn root_cert_store<P: AsRef<Path>>(trust_pem: P) -> Result<RootCertStore, Config
 fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<Certificate>, ConfigError> {
     let certfile: File = File::open(filename)?;
     let mut reader: BufReader<File> = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader).map_err(ConfigError::Load).map(|v| {
-        let mut res = Vec::with_capacity(v.len());
-        for e in v {
-            res.push(Certificate(e));
-        }
-        res
-    })
+    rustls_pemfile::certs(&mut reader)
+        .map_err(ConfigError::Load)
+        .map(|v| {
+            let mut res = Vec::with_capacity(v.len());
+            for e in v {
+                res.push(Certificate(e));
+            }
+            res
+        })
 }
 
 fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKey, ConfigError> {
@@ -167,7 +178,9 @@ impl TlsSessionCache {
     pub fn new(size: u64) -> Arc<TlsSessionCache> {
         debug_assert!(size > 0);
         Arc::new(TlsSessionCache {
-            cache: moka::sync::CacheBuilder::new(size).time_to_idle(Duration::from_secs(5 * 60)).build(),
+            cache: moka::sync::CacheBuilder::new(size)
+                .time_to_idle(Duration::from_secs(5 * 60))
+                .build(),
         })
     }
 }

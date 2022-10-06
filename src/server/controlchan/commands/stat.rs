@@ -89,14 +89,23 @@ where
                     match storage.list_vec((*user).as_ref().unwrap(), path).await {
                         Ok(lines) => {
                             if let Err(err) = tx_success
-                                .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(ReplyCode::CommandOkay, lines)))
+                                .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(
+                                    ReplyCode::CommandOkay,
+                                    lines,
+                                )))
                                 .await
                             {
                                 slog::warn!(logger, "{}", err);
                             }
                         }
                         Err(e) => {
-                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
+                            if let Err(err) = tx_fail
+                                .send(ControlChanMsg::StorageError(Error::new(
+                                    ErrorKind::LocalError,
+                                    e,
+                                )))
+                                .await
+                            {
                                 slog::warn!(logger, "{}", err);
                             }
                         }

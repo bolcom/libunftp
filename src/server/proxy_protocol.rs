@@ -16,7 +16,9 @@ pub enum ProxyMode {
 
 impl From<u16> for ProxyMode {
     fn from(port: u16) -> Self {
-        ProxyMode::On { external_control_port: port }
+        ProxyMode::On {
+            external_control_port: port,
+        }
     }
 }
 
@@ -43,7 +45,9 @@ impl ConnectionTuple {
 }
 
 #[tracing_attributes::instrument]
-async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
+async fn read_proxy_header(
+    tcp_stream: &mut tokio::net::TcpStream,
+) -> Result<ProxyHeader, ProxyError> {
     let mut pbuf = vec![0; 108];
     let mut rbuf = vec![0; 108];
     let (mut read_half, _) = tcp_stream.split();
@@ -89,21 +93,31 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
 }
 
 #[tracing_attributes::instrument]
-pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
-where
+pub fn spawn_proxy_header_parsing<Storage, User>(
+    logger: slog::Logger,
+    mut tcp_stream: tokio::net::TcpStream,
+    tx: ProxyLoopSender<Storage, User>,
+) where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
 {
     tokio::spawn(async move {
         match read_proxy_header(&mut tcp_stream).await {
             Ok(ProxyHeader::Version1 {
-                addresses: ProxyAddresses::Ipv4 { source, destination },
+                addresses:
+                    ProxyAddresses::Ipv4 {
+                        source,
+                        destination,
+                    },
             }) => {
                 if let Err(e) = tx
                     .send(ProxyLoopMsg::ProxyHeaderReceived(
                         ConnectionTuple {
                             source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
-                            destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
+                            destination: SocketAddr::V4(SocketAddrV4::new(
+                                *destination.ip(),
+                                destination.port(),
+                            )),
                         },
                         tcp_stream,
                     ))
@@ -115,10 +129,18 @@ where
             Ok(ProxyHeader::Version1 {
                 addresses: ProxyAddresses::Ipv6 { .. },
             }) => {
-                slog::warn!(logger, "proxy protocol decode error: {:?}", ProxyError::IPv4Required);
+                slog::warn!(
+                    logger,
+                    "proxy protocol decode error: {:?}",
+                    ProxyError::IPv4Required
+                );
             }
             Ok(_) => {
-                slog::warn!(logger, "proxy protocol decode error: {:?}", ProxyError::UnsupportedVersion);
+                slog::warn!(
+                    logger,
+                    "proxy protocol decode error: {:?}",
+                    ProxyError::UnsupportedVersion
+                );
             }
             Err(e) => {
                 slog::warn!(logger, "proxy protocol read error: {:?}", e);
@@ -167,12 +189,19 @@ where
         }
     }
 
-    fn try_and_claim(&mut self, hash: String, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
+    fn try_and_claim(
+        &mut self,
+        hash: String,
+        session_arc: SharedSession<S, U>,
+    ) -> Result<(), ProxyProtocolError> {
         match self.switchboard.get(&hash) {
             Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
             None => match self.switchboard.insert(hash, Some(session_arc)) {
                 Some(_) => {
-                    slog::warn!(self.logger, "This is a data race condition. This shouldn't happen");
+                    slog::warn!(
+                        self.logger,
+                        "This is a data race condition. This shouldn't happen"
+                    );
                     // just return Ok anyway however
                     Ok(())
                 }
@@ -192,7 +221,10 @@ where
     }
 
     #[tracing_attributes::instrument]
-    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
+    pub async fn get_session_by_incoming_data_connection(
+        &mut self,
+        connection: &ConnectionTuple,
+    ) -> Option<SharedSession<S, U>> {
         let hash = connection.key();
 
         match self.switchboard.get(&hash) {
@@ -205,14 +237,18 @@ where
     /// but initialize it to None
     // TODO: set a TTL on the hashmap entries
     #[tracing_attributes::instrument]
-    pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
+    pub async fn reserve_next_free_port(
+        &mut self,
+        session_arc: SharedSession<S, U>,
+    ) -> Result<u16, ProxyProtocolError> {
         let rng_length = self.port_range.end - self.port_range.start;
 
         // change this to a "shuffle" method later on, to make sure we tried all available ports
         for _ in 1..10 {
             let random_u32 = {
                 let mut data = [0; 4];
-                getrandom::getrandom(&mut data).expect("Error generating random free port to reserve");
+                getrandom::getrandom(&mut data)
+                    .expect("Error generating random free port to reserve");
                 u32::from_ne_bytes(data)
             };
 
@@ -248,7 +284,9 @@ mod tests {
     }
 
     async fn connect_client(port: u16) -> tokio::net::TcpStream {
-        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.unwrap()
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+            .await
+            .unwrap()
     }
 
     async fn get_connected_tcp_streams() -> (tokio::net::TcpStream, tokio::net::TcpStream) {
@@ -291,7 +329,9 @@ mod tests {
 
         let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
         let client = tokio::spawn(async move {
-            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\n".as_ref()).await.unwrap();
+            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535\n".as_ref())
+                .await
+                .unwrap();
             c.shutdown().await.unwrap();
         });
 
@@ -308,7 +348,9 @@ mod tests {
 
         let server = tokio::spawn(async move { super::read_proxy_header(&mut s).await });
         let client = tokio::spawn(async move {
-            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535".as_ref()).await.unwrap();
+            c.write_all("PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535".as_ref())
+                .await
+                .unwrap();
             sleep(Duration::from_millis(100)).await;
             c.write_all("\r\n".as_ref()).await.unwrap();
             c.shutdown().await.unwrap();

@@ -52,7 +52,10 @@ where
         tokio::spawn(async move {
             match storage.del((*user).as_ref().unwrap(), path).await {
                 Ok(_) => {
-                    if let Err(err) = tx_success.send(ControlChanMsg::DelFileSuccess { path: path_str }).await {
+                    if let Err(err) = tx_success
+                        .send(ControlChanMsg::DelFileSuccess { path: path_str })
+                        .await
+                    {
                         slog::warn!(logger, "{}", err);
                     }
                 }

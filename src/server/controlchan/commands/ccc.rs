@@ -19,7 +19,10 @@ where
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        _args: CommandContext<Storage, User>,
+    ) -> Result<Reply, ControlChanError> {
         // let mut tx: Sender<InternalMsg> = args.tx.clone();
         // let session = args.session.lock().await;
         // let logger = args.logger;
@@ -33,6 +36,9 @@ where
         // } else {
         //     Ok(Reply::new(ReplyCode::Resp533, "control channel already in plaintext mode"))
         // }
-        Ok(Reply::new(ReplyCode::CommandNotImplemented, "CCC not implemented"))
+        Ok(Reply::new(
+            ReplyCode::CommandNotImplemented,
+            "CCC not implemented",
+        ))
     }
 }

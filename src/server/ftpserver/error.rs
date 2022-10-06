@@ -15,7 +15,10 @@ pub struct ServerError {
 }
 
 impl ServerError {
-    fn new<E: std::error::Error + Send + Sync + 'static>(msg: impl Into<String>, source: E) -> ServerError {
+    fn new<E: std::error::Error + Send + Sync + 'static>(
+        msg: impl Into<String>,
+        source: E,
+    ) -> ServerError {
         ServerError {
             msg: msg.into(),
             source: Box::new(source),

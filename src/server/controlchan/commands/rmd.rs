@@ -50,12 +50,22 @@ where
             slog::warn!(logger, "Failed to delete directory: {}", err);
             let r = tx.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {
-                slog::warn!(logger, "Could not send internal message to notify of RMD error: {}", e);
+                slog::warn!(
+                    logger,
+                    "Could not send internal message to notify of RMD error: {}",
+                    e
+                );
             }
         } else {
-            let r = tx.send(ControlChanMsg::RmDirSuccess { path: path_str }).await;
+            let r = tx
+                .send(ControlChanMsg::RmDirSuccess { path: path_str })
+                .await;
             if let Err(e) = r {
-                slog::warn!(logger, "Could not send internal message to notify of RMD success: {}", e);
+                slog::warn!(
+                    logger,
+                    "Could not send internal message to notify of RMD success: {}",
+                    e
+                );
             }
         }
         Ok(Reply::none())

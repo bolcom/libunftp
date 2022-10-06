@@ -230,7 +230,11 @@ pub enum FailedLoginsBlock {
 
 impl FailedLoginsPolicy {
     /// Create a new FailedLoginsPenalty instance
-    pub fn new(max_attempts: u32, expires_after: Duration, block_by: FailedLoginsBlock) -> FailedLoginsPolicy {
+    pub fn new(
+        max_attempts: u32,
+        expires_after: Duration,
+        block_by: FailedLoginsBlock,
+    ) -> FailedLoginsPolicy {
         FailedLoginsPolicy {
             max_attempts,
             expires_after,

@@ -40,7 +40,10 @@ where
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        _args: CommandContext<Storage, User>,
+    ) -> Result<Reply, ControlChanError> {
         // ALLO is obsolete and we'll just ignore it.
         Ok(Reply::new(ReplyCode::CommandOkayNotImplemented, "Ignored"))
     }

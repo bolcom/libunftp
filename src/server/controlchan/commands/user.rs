@@ -68,7 +68,10 @@ where
                 session.state = SessionState::WaitPass;
                 Ok(Reply::new(ReplyCode::NeedPassword, "Password Required"))
             }
-            _ => Ok(Reply::new(ReplyCode::BadCommandSequence, "Please create a new connection to switch user")),
+            _ => Ok(Reply::new(
+                ReplyCode::BadCommandSequence,
+                "Please create a new connection to switch user",
+            )),
         }
     }
 }
@@ -76,7 +79,9 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::auth::{AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, UserDetail};
+    use crate::auth::{
+        AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, UserDetail,
+    };
     use crate::server::controlchan::handler::CommandHandler;
     use crate::server::session::SharedSession;
     use crate::server::{Command, ControlChanMsg, Reply, ReplyCode, Session, SessionState};
@@ -103,7 +108,11 @@ mod tests {
     #[async_trait]
     #[allow(unused)]
     impl Authenticator<DefaultUser> for Auth {
-        async fn authenticate(&self, username: &str, creds: &Credentials) -> std::result::Result<DefaultUser, AuthenticationError> {
+        async fn authenticate(
+            &self,
+            username: &str,
+            creds: &Credentials,
+        ) -> std::result::Result<DefaultUser, AuthenticationError> {
             if self.auth_ok {
                 Ok(DefaultUser {})
             } else {
@@ -157,22 +166,38 @@ mod tests {
     impl StorageBackend<DefaultUser> for Vfs {
         type Metadata = Meta;
 
-        async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<Self::Metadata> {
+        async fn metadata<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<Self::Metadata> {
             todo!()
         }
 
-        async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
+        async fn list<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
         where
             <Self as StorageBackend<DefaultUser>>::Metadata: Metadata,
         {
             todo!()
         }
 
-        async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P, start_pos: u64) -> Result<Box<dyn AsyncRead + Send + Sync + Unpin>> {
+        async fn get<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+            start_pos: u64,
+        ) -> Result<Box<dyn AsyncRead + Send + Sync + Unpin>> {
             todo!()
         }
 
-        async fn put<P: AsRef<Path> + Send + Debug, R: AsyncRead + Send + Sync + Unpin + 'static>(
+        async fn put<
+            P: AsRef<Path> + Send + Debug,
+            R: AsyncRead + Send + Sync + Unpin + 'static,
+        >(
             &self,
             user: &DefaultUser,
             input: R,
@@ -182,23 +207,44 @@ mod tests {
             todo!()
         }
 
-        async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
+        async fn del<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<()> {
             todo!()
         }
 
-        async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
+        async fn mkd<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<()> {
             todo!()
         }
 
-        async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, from: P, to: P) -> Result<()> {
+        async fn rename<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            from: P,
+            to: P,
+        ) -> Result<()> {
             todo!()
         }
 
-        async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
+        async fn rmd<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<()> {
             todo!()
         }
 
-        async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &DefaultUser, path: P) -> Result<()> {
+        async fn cwd<P: AsRef<Path> + Send + Debug>(
+            &self,
+            user: &DefaultUser,
+            path: P,
+        ) -> Result<()> {
             todo!()
         }
     }
@@ -218,7 +264,10 @@ mod tests {
         Storage::Metadata: Metadata + Sync,
         User: UserDetail + 'static,
     {
-        fn test(session_arc: SharedSession<Storage, User>, auther: Arc<dyn Authenticator<User>>) -> super::CommandContext<Storage, User> {
+        fn test(
+            session_arc: SharedSession<Storage, User>,
+            auther: Arc<dyn Authenticator<User>>,
+        ) -> super::CommandContext<Storage, User> {
             let (tx, _) = mpsc::channel::<ControlChanMsg>(1);
             super::CommandContext {
                 parsed_command: Command::User {
@@ -262,8 +311,16 @@ mod tests {
             }),
         );
         let reply = user_cmd.handle(ctx).await.unwrap();
-        assert_eq!(reply.matches_code(test.expected_reply), true, "Reply code must match");
-        assert_eq!(session_arc.lock().await.state, test.expected_state, "Next state must match");
+        assert_eq!(
+            reply.matches_code(test.expected_reply),
+            true,
+            "Reply code must match"
+        );
+        assert_eq!(
+            session_arc.lock().await.state,
+            test.expected_state,
+            "Next state must match"
+        );
     }
 
     #[tokio::test]

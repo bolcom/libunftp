@@ -102,7 +102,8 @@ where
 
     let tls_configured = matches!(ftps_config, FtpsConfig::On { .. });
     let storage_features = storage.supported_features();
-    let (control_msg_tx, mut control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
+    let (control_msg_tx, mut control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) =
+        channel(1);
     let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
@@ -160,10 +161,13 @@ where
     };
 
     let codec = FtpCodec::new();
-    let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FtpCodec> = codec.framed(Box::new(tcp_stream));
+    let cmd_and_reply_stream: Framed<Box<dyn AsyncReadAsyncWriteSendUnpin>, FtpCodec> =
+        codec.framed(Box::new(tcp_stream));
     let (mut reply_sink, mut command_source) = cmd_and_reply_stream.split();
 
-    reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
+    reply_sink
+        .send(Reply::new(ReplyCode::ServiceReady, config.greeting))
+        .await?;
     reply_sink.flush().await?;
 
     tokio::spawn(async move {
@@ -205,7 +209,9 @@ where
             match incoming {
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
-                    let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
+                    let _ = event_chain
+                        .handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop))
+                        .await;
                     slog::info!(logger, "Exiting control loop");
                     return;
                 }
@@ -228,12 +234,21 @@ where
                                 let s: &ServerConnection = stream.get_ref().1;
                                 if let Some(certs) = s.peer_certificates() {
                                     let mut session = shared_session.lock().await;
-                                    session.cert_chain = Some(certs.iter().map(|c| crate::auth::ClientCert(c.0.clone())).collect());
+                                    session.cert_chain = Some(
+                                        certs
+                                            .iter()
+                                            .map(|c| crate::auth::ClientCert(c.0.clone()))
+                                            .collect(),
+                                    );
                                 }
                                 Box::new(stream)
                             }
                             Err(err) => {
-                                slog::warn!(logger, "Closing control channel. Could not upgrade to TLS: {}", err);
+                                slog::warn!(
+                                    logger,
+                                    "Closing control channel. Could not upgrade to TLS: {}",
+                                    err
+                                );
                                 return;
                             }
                         };
@@ -259,12 +274,17 @@ where
                     };
 
                     if let Err(chan_err) = handle_result {
-                        slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", chan_err);
+                        slog::warn!(
+                            logger,
+                            "Event handler chain error: {:?}. Closing control connection",
+                            chan_err
+                        );
                         return;
                     }
                 }
                 Some(Err(e)) => {
-                    let (reply, close_connection) = handle_control_channel_error::<Storage, User>(logger.clone(), e);
+                    let (reply, close_connection) =
+                        handle_control_channel_error::<Storage, User>(logger.clone(), e);
                     let result = reply_sink.send(reply).await;
                     if result.is_err() {
                         slog::warn!(logger, "Could not send error reply to client");
@@ -282,7 +302,10 @@ where
 }
 
 // gets the reply to be sent to the client and tells if the connection should be closed.
-fn handle_control_channel_error<Storage, User>(logger: slog::Logger, error: ControlChanError) -> (Reply, bool)
+fn handle_control_channel_error<Storage, User>(
+    logger: slog::Logger,
+    error: ControlChanError,
+) -> (Reply, bool)
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -290,14 +313,32 @@ where
 {
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
-        ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),
-        ControlChanErrorKind::Utf8Error => (Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"), true),
-        ControlChanErrorKind::InvalidCommand => (Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"), false),
-        ControlChanErrorKind::ControlChannelTimeout => (
-            Reply::new(ReplyCode::ClosingControlConnection, "Session timed out. Closing control connection"),
+        ControlChanErrorKind::UnknownCommand { .. } => (
+            Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"),
+            false,
+        ),
+        ControlChanErrorKind::Utf8Error => (
+            Reply::new(ReplyCode::CommandSyntaxError, "Invalid UTF8 in command"),
             true,
         ),
-        _ => (Reply::new(ReplyCode::LocalError, "Unknown internal server error, please try again later"), true),
+        ControlChanErrorKind::InvalidCommand => (
+            Reply::new(ReplyCode::ParameterSyntaxError, "Invalid Parameter"),
+            false,
+        ),
+        ControlChanErrorKind::ControlChannelTimeout => (
+            Reply::new(
+                ReplyCode::ClosingControlConnection,
+                "Session timed out. Closing control connection",
+            ),
+            true,
+        ),
+        _ => (
+            Reply::new(
+                ReplyCode::LocalError,
+                "Unknown internal server error, please try again later",
+            ),
+            true,
+        ),
     }
 }
 
@@ -338,21 +379,51 @@ where
             SentData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, "Successfully sent"))
+                Ok(Reply::new(
+                    ReplyCode::ClosingDataConnection,
+                    "Successfully sent",
+                ))
             }
-            WriteFailed => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to write file")),
-            ConnectionReset => Ok(Reply::new(ReplyCode::ConnectionClosed, "Datachannel unexpectedly closed")),
+            WriteFailed => Ok(Reply::new(
+                ReplyCode::TransientFileError,
+                "Failed to write file",
+            )),
+            ConnectionReset => Ok(Reply::new(
+                ReplyCode::ConnectionClosed,
+                "Datachannel unexpectedly closed",
+            )),
             WrittenData { .. } => {
                 let mut session = self.session.lock().await;
                 session.start_pos = 0;
-                Ok(Reply::new(ReplyCode::ClosingDataConnection, "File successfully written"))
+                Ok(Reply::new(
+                    ReplyCode::ClosingDataConnection,
+                    "File successfully written",
+                ))
             }
-            DataConnectionClosedAfterStor => Ok(Reply::new(ReplyCode::FileActionOkay, "unFTP holds your data for you")),
-            DirectorySuccessfullyListed => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Listed the directory")),
-            DirectoryListFailure => Ok(Reply::new(ReplyCode::ClosingDataConnection, "Failed to list the directory")),
-            CwdSuccess => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully changed working directory")),
-            DelFileSuccess { .. } | RmDirSuccess { .. } => Ok(Reply::new(ReplyCode::FileActionOkay, "Successfully removed")),
-            DelFail => Ok(Reply::new(ReplyCode::TransientFileError, "Failed to delete the file")),
+            DataConnectionClosedAfterStor => Ok(Reply::new(
+                ReplyCode::FileActionOkay,
+                "unFTP holds your data for you",
+            )),
+            DirectorySuccessfullyListed => Ok(Reply::new(
+                ReplyCode::ClosingDataConnection,
+                "Listed the directory",
+            )),
+            DirectoryListFailure => Ok(Reply::new(
+                ReplyCode::ClosingDataConnection,
+                "Failed to list the directory",
+            )),
+            CwdSuccess => Ok(Reply::new(
+                ReplyCode::FileActionOkay,
+                "Successfully changed working directory",
+            )),
+            DelFileSuccess { .. } | RmDirSuccess { .. } => Ok(Reply::new(
+                ReplyCode::FileActionOkay,
+                "Successfully removed",
+            )),
+            DelFail => Ok(Reply::new(
+                ReplyCode::TransientFileError,
+                "Failed to delete the file",
+            )),
             ExitControlLoop => Ok(Reply::none()),
             SecureControlChannel => {
                 let mut session = self.session.lock().await;
@@ -365,12 +436,18 @@ where
                 Ok(Reply::none())
             }
             MkDirSuccess { path } => Ok(Reply::new_with_string(ReplyCode::DirCreated, path)),
-            MkdirFail => Ok(Reply::new(ReplyCode::FileError, "Failed to create directory")),
+            MkdirFail => Ok(Reply::new(
+                ReplyCode::FileError,
+                "Failed to create directory",
+            )),
             RenameSuccess { .. } => Ok(Reply::new(ReplyCode::FileActionOkay, "Renamed")),
             AuthSuccess { .. } => {
                 let mut session = self.session.lock().await;
                 session.state = WaitCmd;
-                Ok(Reply::new(ReplyCode::UserLoggedIn, "User logged in, proceed"))
+                Ok(Reply::new(
+                    ReplyCode::UserLoggedIn,
+                    "User logged in, proceed",
+                ))
             }
             AuthFailed => {
                 let mut session = self.session.lock().await;
@@ -378,17 +455,40 @@ where
                 Ok(Reply::new(ReplyCode::NotLoggedIn, "Authentication failed"))
             }
             StorageError(error_type) => match error_type.kind() {
-                ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(ReplyCode::ExceededStorageAllocation, "Exceeded storage allocation")),
-                ErrorKind::FileNameNotAllowedError => Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed")),
-                ErrorKind::InsufficientStorageSpaceError => Ok(Reply::new(ReplyCode::OutOfSpace, "Insufficient storage space")),
+                ErrorKind::ExceededStorageAllocationError => Ok(Reply::new(
+                    ReplyCode::ExceededStorageAllocation,
+                    "Exceeded storage allocation",
+                )),
+                ErrorKind::FileNameNotAllowedError => {
+                    Ok(Reply::new(ReplyCode::BadFileName, "File name not allowed"))
+                }
+                ErrorKind::InsufficientStorageSpaceError => Ok(Reply::new(
+                    ReplyCode::OutOfSpace,
+                    "Insufficient storage space",
+                )),
                 ErrorKind::LocalError => Ok(Reply::new(ReplyCode::LocalError, "Local error")),
-                ErrorKind::PageTypeUnknown => Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown")),
-                ErrorKind::TransientFileNotAvailable => Ok(Reply::new(ReplyCode::TransientFileError, "File not found")),
-                ErrorKind::PermanentFileNotAvailable => Ok(Reply::new(ReplyCode::FileError, "File not found")),
-                ErrorKind::PermanentDirectoryNotAvailable => Ok(Reply::new(ReplyCode::FileError, "Directory not found")),
-                ErrorKind::PermanentDirectoryNotEmpty => Ok(Reply::new(ReplyCode::FileError, "Directory not empty")),
-                ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
-                ErrorKind::CommandNotImplemented => Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command not implemented")),
+                ErrorKind::PageTypeUnknown => {
+                    Ok(Reply::new(ReplyCode::PageTypeUnknown, "Page type unknown"))
+                }
+                ErrorKind::TransientFileNotAvailable => {
+                    Ok(Reply::new(ReplyCode::TransientFileError, "File not found"))
+                }
+                ErrorKind::PermanentFileNotAvailable => {
+                    Ok(Reply::new(ReplyCode::FileError, "File not found"))
+                }
+                ErrorKind::PermanentDirectoryNotAvailable => {
+                    Ok(Reply::new(ReplyCode::FileError, "Directory not found"))
+                }
+                ErrorKind::PermanentDirectoryNotEmpty => {
+                    Ok(Reply::new(ReplyCode::FileError, "Directory not empty"))
+                }
+                ErrorKind::PermissionDenied => {
+                    Ok(Reply::new(ReplyCode::FileError, "Permission denied"))
+                }
+                ErrorKind::CommandNotImplemented => Ok(Reply::new(
+                    ReplyCode::CommandNotImplemented,
+                    "Command not implemented",
+                )),
             },
             CommandChannelReply(reply) => Ok(reply),
         }
@@ -450,7 +550,12 @@ where
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
-            Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
+            Command::Other { .. } => {
+                return Ok(Reply::new(
+                    ReplyCode::CommandSyntaxError,
+                    "Command not implemented",
+                ))
+            }
         };
 
         handler.handle(args).await

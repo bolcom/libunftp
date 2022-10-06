@@ -23,9 +23,15 @@ const METADATA_HOST: &str = "metadata.google.internal";
 const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
 
 // TODO: MAP to useful error type
-pub(super) async fn request_token(service: Option<String>, client: Client<HttpsConnector<HttpConnector<GaiResolver>>>) -> Result<TokenResponse, Error> {
+pub(super) async fn request_token(
+    service: Option<String>,
+    client: Client<HttpsConnector<HttpConnector<GaiResolver>>>,
+) -> Result<TokenResponse, Error> {
     // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
-    let suffix = format!("instance/service-accounts/{}/token", service.unwrap_or_else(|| "default".to_string()));
+    let suffix = format!(
+        "instance/service-accounts/{}/token",
+        service.unwrap_or_else(|| "default".to_string())
+    );
     //let host = env::var(METADATA_HOST_VAR).unwrap_or_else(|_| METADATA_IP.into());
     let host = METADATA_HOST;
     let uri = format!("http://{}/computeMetadata/v1/{}", host, suffix);
@@ -38,13 +44,17 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
         .body(Body::empty())
         .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
-    let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+    let response: Response<Body> = client
+        .request(request)
+        .await
+        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
     let body_bytes = hyper::body::to_bytes(response.into_body())
         .await
         .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
-    let unmarshall_result: serde_json::Result<TokenResponse> = serde_json::from_slice(body_bytes.to_vec().as_slice());
+    let unmarshall_result: serde_json::Result<TokenResponse> =
+        serde_json::from_slice(body_bytes.to_vec().as_slice());
     unmarshall_result.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
 }
 

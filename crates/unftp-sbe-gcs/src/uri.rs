@@ -17,11 +17,20 @@ impl GcsUri {
         } else {
             root
         };
-        Self { base_url, bucket, root }
+        Self {
+            base_url,
+            bucket,
+            root,
+        }
     }
 
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path)?
+        ))
     }
 
     pub fn list<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -42,7 +51,12 @@ impl GcsUri {
     }
 
     pub fn get<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}?alt=media", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}?alt=media",
+            self.base_url,
+            self.bucket,
+            self.path_str(path)?
+        ))
     }
 
     pub fn put<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -56,7 +70,12 @@ impl GcsUri {
     }
 
     pub fn delete<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path)?
+        ))
     }
 
     pub fn mkd<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -75,7 +94,10 @@ impl GcsUri {
             prefix.push_str("%2F");
         }
 
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, prefix))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url, self.bucket, prefix
+        ))
     }
 
     pub fn dir_empty<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
@@ -107,7 +129,8 @@ impl GcsUri {
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
-    Uri::from_maybe_shared(path_and_query).map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
+    Uri::from_maybe_shared(path_and_query)
+        .map_err(|_| Error::from(ErrorKind::FileNameNotAllowedError))
 }
 
 #[cfg(test)]
@@ -178,8 +201,15 @@ mod tests {
         let s = "https://storage.googleapis.com/storage/v1/b/the-bucket/o?prettyPrint=false&fields=kind,prefixes,items(id,name,size,updated)&delimiter=/&includeTrailingDelimiter=true&prefix";
 
         for test in tests.iter() {
-            let uri = GcsUri::new("https://storage.googleapis.com".to_string(), "the-bucket".to_string(), PathBuf::from(test.root));
-            assert_eq!(format!("{}={}", s, test.expected_prefix), uri.list(test.sub).unwrap().to_string());
+            let uri = GcsUri::new(
+                "https://storage.googleapis.com".to_string(),
+                "the-bucket".to_string(),
+                PathBuf::from(test.root),
+            );
+            assert_eq!(
+                format!("{}={}", s, test.expected_prefix),
+                uri.list(test.sub).unwrap().to_string()
+            );
         }
     }
 }

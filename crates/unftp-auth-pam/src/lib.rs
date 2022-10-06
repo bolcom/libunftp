@@ -29,15 +29,24 @@ impl PamAuthenticator {
 impl Authenticator<DefaultUser> for PamAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(
+        &self,
+        username: &str,
+        creds: &Credentials,
+    ) -> Result<DefaultUser, AuthenticationError> {
         let username = username.to_string();
-        let password = creds.password.as_ref().ok_or(AuthenticationError::BadPassword)?;
+        let password = creds
+            .password
+            .as_ref()
+            .ok_or(AuthenticationError::BadPassword)?;
         let service = self.service.clone();
 
-        let mut auth = pam_auth::Authenticator::with_password(&service).map_err(|e| AuthenticationError::with_source("pam error", e))?;
+        let mut auth = pam_auth::Authenticator::with_password(&service)
+            .map_err(|e| AuthenticationError::with_source("pam error", e))?;
 
         auth.get_handler().set_credentials(&username, password);
-        auth.authenticate().map_err(|e| AuthenticationError::with_source("pam error", e))?;
+        auth.authenticate()
+            .map_err(|e| AuthenticationError::with_source("pam error", e))?;
         Ok(DefaultUser {})
     }
 }

@@ -53,7 +53,10 @@ where
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::warn!(logger, "{}", err);
                 }
-            } else if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
+            } else if let Err(err) = tx
+                .send(ControlChanMsg::MkDirSuccess { path: path_str })
+                .await
+            {
                 slog::warn!(logger, "{}", err);
             }
         });

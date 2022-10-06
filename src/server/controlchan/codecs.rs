@@ -58,7 +58,11 @@ impl Encoder<Reply> for FtpCodec {
             }
             Reply::MultiLine { code, mut lines } => {
                 // Get the last line since it needs to be preceded by the response code.
-                let last_line = if let Some(x) = lines.pop() { x } else { String::from("") };
+                let last_line = if let Some(x) = lines.pop() {
+                    x
+                } else {
+                    String::from("")
+                };
 
                 // Lines starting with a digit should be indented
                 for it in lines.iter_mut() {
@@ -69,7 +73,14 @@ impl Encoder<Reply> for FtpCodec {
                 if lines.is_empty() {
                     writeln!(buffer, "{} {}\r", code as u32, last_line)?;
                 } else {
-                    write!(buffer, "{}-{}\r\n{} {}\r\n", code as u32, lines.join("\r\n"), code as u32, last_line)?;
+                    write!(
+                        buffer,
+                        "{}-{}\r\n{} {}\r\n",
+                        code as u32,
+                        lines.join("\r\n"),
+                        code as u32,
+                        last_line
+                    )?;
                 }
             }
         }

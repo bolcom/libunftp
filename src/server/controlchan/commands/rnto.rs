@@ -47,19 +47,30 @@ where
                 let to = session.cwd.join(self.path.clone());
                 (from, to)
             }
-            None => return Ok(Reply::new(ReplyCode::TransientFileError, "Please tell me what file you want to rename first")),
+            None => {
+                return Ok(Reply::new(
+                    ReplyCode::TransientFileError,
+                    "Please tell me what file you want to rename first",
+                ))
+            }
         };
         let user = (*session.user).as_ref().unwrap();
         let old_path = from.to_string_lossy().to_string();
         let new_path = to.to_string_lossy().to_string();
         match storage.rename(user, from, to).await {
             Ok(_) => {
-                if let Err(err) = tx_control_chan.send(ControlChanMsg::RenameSuccess { old_path, new_path }).await {
+                if let Err(err) = tx_control_chan
+                    .send(ControlChanMsg::RenameSuccess { old_path, new_path })
+                    .await
+                {
                     slog::warn!(logger, "{}", err);
                 }
             }
             Err(err) => {
-                if let Err(err) = tx_control_chan.send(ControlChanMsg::StorageError(err)).await {
+                if let Err(err) = tx_control_chan
+                    .send(ControlChanMsg::StorageError(err))
+                    .await
+                {
                     slog::warn!(logger, "{}", err);
                 }
             }

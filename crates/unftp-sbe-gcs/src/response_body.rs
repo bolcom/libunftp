@@ -69,7 +69,11 @@ impl ResponseBody {
         let prefixes_without_object = self.prefixes.map_or(vec![], |prefixes: Vec<String>| {
             prefixes
                 .iter()
-                .filter(|prefix| self.items.as_ref().map_or(true, |it: &Vec<Item>| !it.iter().any(|i| i.name == **prefix)))
+                .filter(|prefix| {
+                    self.items.as_ref().map_or(true, |it: &Vec<Item>| {
+                        !it.iter().any(|i| i.name == **prefix)
+                    })
+                })
                 .map(|prefix| Fileinfo {
                     path: prefix.into(),
                     metadata: ObjectMetadata {
@@ -97,7 +101,11 @@ impl ResponseBody {
         // - prefixes is non empty (there are subdirs)
         // - there is more than 1 object within the prefix
         // - there is at least 1 object that is a file (does not end with /)
-        match (self.next_page_token.as_ref(), self.prefixes.as_ref(), self.items.as_ref()) {
+        match (
+            self.next_page_token.as_ref(),
+            self.prefixes.as_ref(),
+            self.items.as_ref(),
+        ) {
             (Some(_), _, _) => false,
             (_, Some(_), _) => false,
             (_, _, Some(items)) => items.len() == 1 && items[0].name.ends_with('/'),
@@ -123,7 +131,8 @@ impl Item {
     }
 
     pub(crate) fn to_md5(&self) -> Result<String, Error> {
-        let md5 = base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        let md5 =
+            base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
         Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
     }
 }
@@ -154,7 +163,8 @@ mod test {
 
     #[test]
     fn to_metadata_parse_error() {
-        let response: serde_json::error::Result<Item> = serde_json::from_str(r#"{"name":"", "updated":"2020-09-01T12:13:14Z", "size":8}"#);
+        let response: serde_json::error::Result<Item> =
+            serde_json::from_str(r#"{"name":"", "updated":"2020-09-01T12:13:14Z", "size":8}"#);
         assert_eq!(response.err().unwrap().is_data(), true);
     }
 }

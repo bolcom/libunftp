@@ -55,9 +55,15 @@ where
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        _args: CommandContext<Storage, User>,
+    ) -> Result<Reply, ControlChanError> {
         match &self.params {
-            ModeParam::Stream => Ok(Reply::new(ReplyCode::CommandOkay, "Using Stream transfer mode")),
+            ModeParam::Stream => Ok(Reply::new(
+                ReplyCode::CommandOkay,
+                "Using Stream transfer mode",
+            )),
             _ => Ok(Reply::new(
                 ReplyCode::CommandNotImplementedForParameter,
                 "Only Stream transfer mode is supported",

@@ -46,7 +46,9 @@ pub struct Builder {
 impl Builder {
     ///
     pub fn new() -> Builder {
-        Builder { ..Default::default() }
+        Builder {
+            ..Default::default()
+        }
     }
 
     /// Specifies the placeholder string in the rest of the fields that would be replaced by the username
@@ -119,9 +121,17 @@ impl RestAuthenticator {
 impl Authenticator<DefaultUser> for RestAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(
+        &self,
+        username: &str,
+        creds: &Credentials,
+    ) -> Result<DefaultUser, AuthenticationError> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
-        let password = creds.password.as_ref().ok_or(AuthenticationError::BadPassword)?.as_ref();
+        let password = creds
+            .password
+            .as_ref()
+            .ok_or(AuthenticationError::BadPassword)?
+            .as_ref();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
 
@@ -141,19 +151,22 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             .header("Content-type", "application/json")
             .uri(url)
             .body(Body::from(body))
-            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
+            .map_err(|e| {
+                AuthenticationError::with_source("rest authenticator http client error", e)
+            })?;
 
         let client = Client::new();
 
-        let resp = client
-            .request(req)
-            .await
-            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
-        let body_bytes = hyper::body::to_bytes(resp.into_body())
-            .await
-            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
+        let resp = client.request(req).await.map_err(|e| {
+            AuthenticationError::with_source("rest authenticator http client error", e)
+        })?;
+        let body_bytes = hyper::body::to_bytes(resp.into_body()).await.map_err(|e| {
+            AuthenticationError::with_source("rest authenticator http client error", e)
+        })?;
 
-        let body: Value = serde_json::from_slice(&body_bytes).map_err(|e| AuthenticationError::with_source("rest authenticator unmarshalling error", e))?;
+        let body: Value = serde_json::from_slice(&body_bytes).map_err(|e| {
+            AuthenticationError::with_source("rest authenticator unmarshalling error", e)
+        })?;
         let parsed = match body.pointer(&selector) {
             Some(parsed) => parsed.to_string(),
             None => json!(null).to_string(),

@@ -1,4 +1,3 @@
-max_width = 160
 reorder_imports = true
 edition = "2021"
 tab_spaces = 4

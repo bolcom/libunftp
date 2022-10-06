@@ -74,7 +74,10 @@ impl FailedLoginsCache {
                 ip: Some(ip),
                 username: Some(user),
             },
-            FailedLoginsBlock::IP => FailedLoginsKey { ip: Some(ip), username: None },
+            FailedLoginsBlock::IP => FailedLoginsKey {
+                ip: Some(ip),
+                username: None,
+            },
             FailedLoginsBlock::User => FailedLoginsKey {
                 ip: None,
                 username: Some(user),
@@ -124,7 +127,10 @@ impl FailedLoginsCache {
         // if there's an existing entry, we need to check if allowed to log in
         let (is_expired, is_locked) = if let Some(entry) = entry {
             let entry = entry.lock().await;
-            (self.is_expired(entry.time_elapsed()), self.is_locked(entry.attempts))
+            (
+                self.is_expired(entry.time_elapsed()),
+                self.is_locked(entry.attempts),
+            )
         } else {
             // there is no entry, nothing to administrate
             return None;

@@ -47,20 +47,32 @@ where
             SiteMd5::Accounts => match &session.username {
                 Some(u) => {
                     if u == "anonymous" || u == "ftp" {
-                        return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+                        return Ok(Reply::new(
+                            ReplyCode::CommandNotImplemented,
+                            "Command is not available.",
+                        ));
                     }
                 }
                 None => {
                     slog::error!(logger, "NoneError for username. This shouldn't happen.");
-                    return Ok(Reply::new(ReplyCode::NotLoggedIn, "Please open a new connection to re-authenticate"));
+                    return Ok(Reply::new(
+                        ReplyCode::NotLoggedIn,
+                        "Please open a new connection to re-authenticate",
+                    ));
                 }
             },
             SiteMd5::None => {
-                return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command is not available."));
+                return Ok(Reply::new(
+                    ReplyCode::CommandNotImplemented,
+                    "Command is not available.",
+                ));
             }
         }
         if args.storage_features & FEATURE_SITEMD5 == 0 {
-            return Ok(Reply::new(ReplyCode::CommandNotImplemented, "Not supported by the selected storage back-end."));
+            return Ok(Reply::new(
+                ReplyCode::CommandNotImplemented,
+                "Not supported by the selected storage back-end.",
+            ));
         }
 
         tokio::spawn(async move {

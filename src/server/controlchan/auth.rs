@@ -43,7 +43,9 @@ where
             | Event::Command(Command::Pbsz { .. })
             | Event::Command(Command::Feat)
             | Event::Command(Command::Noop)
-            | Event::Command(Command::Opts { option: Opt::Utf8 { .. } })
+            | Event::Command(Command::Opts {
+                option: Opt::Utf8 { .. },
+            })
             | Event::Command(Command::Quit) => self.next.handle(event).await,
             _ => {
                 let session_state = async {

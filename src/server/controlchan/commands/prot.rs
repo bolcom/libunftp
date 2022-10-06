@@ -48,15 +48,27 @@ where
             (true, ProtParam::Clear) => {
                 let mut session = args.session.lock().await;
                 session.data_tls = false;
-                Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Switching data channel to plaintext"))
+                Ok(Reply::new(
+                    ReplyCode::CommandOkay,
+                    "PROT OK. Switching data channel to plaintext",
+                ))
             }
             (true, ProtParam::Private) => {
                 let mut session = args.session.lock().await;
                 session.data_tls = true;
-                Ok(Reply::new(ReplyCode::CommandOkay, "PROT OK. Securing data channel"))
+                Ok(Reply::new(
+                    ReplyCode::CommandOkay,
+                    "PROT OK. Securing data channel",
+                ))
             }
-            (true, _) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "PROT S/E not implemented")),
-            (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
+            (true, _) => Ok(Reply::new(
+                ReplyCode::CommandNotImplementedForParameter,
+                "PROT S/E not implemented",
+            )),
+            (false, _) => Ok(Reply::new(
+                ReplyCode::CommandNotImplemented,
+                "TLS/SSL not configured",
+            )),
         }
     }
 }

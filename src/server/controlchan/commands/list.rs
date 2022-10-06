@@ -47,12 +47,22 @@ where
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        slog::warn!(logger, "could not notify data channel to respond with LIST. {}", err);
+                        slog::warn!(
+                            logger,
+                            "could not notify data channel to respond with LIST. {}",
+                            err
+                        );
                     }
                 });
-                Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
+                Ok(Reply::new(
+                    ReplyCode::FileStatusOkay,
+                    "Sending directory list",
+                ))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => Ok(Reply::new(
+                ReplyCode::CantOpenDataConnection,
+                "No data connection established",
+            )),
         }
     }
 }

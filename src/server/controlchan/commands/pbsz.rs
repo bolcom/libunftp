@@ -31,7 +31,10 @@ where
     Storage::Metadata: Metadata,
 {
     #[tracing_attributes::instrument]
-    async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
+    async fn handle(
+        &self,
+        _args: CommandContext<Storage, User>,
+    ) -> Result<Reply, ControlChanError> {
         Ok(Reply::new(ReplyCode::CommandOkay, "OK"))
     }
 }

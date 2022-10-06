@@ -49,17 +49,28 @@ where
         let tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
 
-        if let Err(err) = storage.cwd((*session.user).as_ref().unwrap(), path.clone()).await {
+        if let Err(err) = storage
+            .cwd((*session.user).as_ref().unwrap(), path.clone())
+            .await
+        {
             slog::warn!(logger, "Failed to cwd directory: {}", err);
             let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {
-                slog::warn!(logger, "Could not send internal message to notify of CWD error: {}", e);
+                slog::warn!(
+                    logger,
+                    "Could not send internal message to notify of CWD error: {}",
+                    e
+                );
             }
         } else {
             let r = tx_success.send(ControlChanMsg::CwdSuccess).await;
             session.cwd.push(path);
             if let Err(e) = r {
-                slog::warn!(logger, "Could not send internal message to notify of CWD success: {}", e);
+                slog::warn!(
+                    logger,
+                    "Could not send internal message to notify of CWD success: {}",
+                    e
+                );
             }
         }
 

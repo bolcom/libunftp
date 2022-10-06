@@ -51,7 +51,8 @@ where
                     let modification_time = match metadata.modified() {
                         Ok(v) => Some(v),
                         Err(err) => {
-                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
+                            if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await
+                            {
                                 slog::warn!(logger, "{}", err);
                             };
                             None
@@ -62,7 +63,9 @@ where
                         if let Err(err) = tx_success
                             .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                                 ReplyCode::FileStatus,
-                                DateTime::<Utc>::from(mtime).format(RFC3659_TIME).to_string(),
+                                DateTime::<Utc>::from(mtime)
+                                    .format(RFC3659_TIME)
+                                    .to_string(),
                             )))
                             .await
                         {
