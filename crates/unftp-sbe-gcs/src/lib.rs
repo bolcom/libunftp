@@ -61,6 +61,7 @@ pub mod auth;
 mod ext;
 pub mod object_metadata;
 mod response_body;
+mod service_account;
 mod uri;
 mod workload_identity;
 
@@ -98,7 +99,8 @@ use yup_oauth2::ServiceAccountAuthenticator;
 pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>,
-    auth: AuthMethod,
+
+    token_provider: Box<dyn auth::TokenProvider>,
 }
 
 impl CloudStorage {
@@ -134,9 +136,17 @@ impl CloudStorage {
     {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> =
             Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
+
+        let token_provider = match auth.into() {
+            AuthMethod::None => auth::NoopTokenProvider,
+            AuthMethod::WorkloadIdentity(None) => workload_identity::WorkloadIdentity::new(client.clone()),
+            AuthMethod::WorkloadIdentity(Some(service)) => workload_identity::WorkloadIdentity::with_service_name(service),
+            AuthMethod::ServiceAccountKey(key) => service_account::Authenticator::new(client.clone(), key),
+        };
+
         CloudStorage {
             client,
-            auth: auth.into(),
+            token_provider: Box::new(token_provider),
             uris: GcsUri::new(base_url.into(), bucket.into(), root),
         }
     }
@@ -144,21 +154,7 @@ impl CloudStorage {
     // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it in `CloudStorage`.
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
-        match &self.auth {
-            AuthMethod::ServiceAccountKey(_) => {
-                let key = self.auth.to_service_account_key()?;
-                let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client.clone()).build().await?;
-
-                auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
-                    .map_ok(|t| t.as_str().to_string())
-                    .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
-                    .await
-            }
-            AuthMethod::WorkloadIdentity(service) => workload_identity::request_token(service.clone(), self.client.clone())
-                .await
-                .map(|t| t.access_token),
-            AuthMethod::None => Ok("unftp_test".to_string()),
-        }
+        self.token_provider.get_token().await.map(|tok| tok.access_token)
     }
 }
 

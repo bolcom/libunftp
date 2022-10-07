@@ -4,6 +4,7 @@
 
 use crate::auth::{Token, TokenProvider};
 use async_trait::async_trait;
+use core::fmt;
 use hyper::client::connect::Connect;
 use hyper::http::header;
 use hyper::{Body, Client, Method, Request, Response};
@@ -23,31 +24,29 @@ const METADATA_HOST: &str = "metadata.google.internal";
 const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
 
 #[derive(Clone)]
-pub struct WorkloadIdentity {
+pub struct WorkloadIdentity<C> {
     service: String,
+
+    client: Client<C>,
 }
 
-impl WorkloadIdentity {
-    fn new(service: String) -> Self {
-        Self { service }
+impl<C> WorkloadIdentity<C> {
+    fn with_service_name(client: Client<C>, service: String) -> Self {
+        Self { client, service }
     }
-}
 
-impl Default for WorkloadIdentity {
-    fn default() -> Self {
-        Self {
-            service: "default".to_string(),
-        }
+    fn new(client: Client<C>) -> Self {
+        Self::with_service_name(client, "default".to_string())
     }
 }
 
 #[async_trait]
-impl TokenProvider for WorkloadIdentity {
+impl<C> TokenProvider for WorkloadIdentity<C>
+where
+    C: Sync + Send + Clone + Connect,
+{
     // TODO: MAP to useful error type
-    async fn get_token<C>(&self, client: Client<C>) -> Result<Token, Error>
-    where
-        C: Sync + Send + Clone + Connect,
-    {
+    async fn get_token(&self) -> Result<Token, Error> {
         // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
         let host = METADATA_HOST;
         let uri = format!("http://{}/computeMetadata/v1/instance/service-accounts/{}/token", host, self.service);
@@ -61,7 +60,11 @@ impl TokenProvider for WorkloadIdentity {
             .body(Body::empty())
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
-        let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Response<Body> = self
+            .client
+            .request(request)
+            .await
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
         let body_bytes = hyper::body::to_bytes(response.into_body())
             .await
@@ -76,6 +79,22 @@ impl TokenProvider for WorkloadIdentity {
             access_token: token.access_token,
             expires_at: Some(expiry_deadline),
         })
+    }
+}
+
+impl<C> fmt::Display for WorkloadIdentity<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.service == "default" {
+            write!(f, "Workload Identity")
+        } else {
+            write!(f, "Workload Identity with service account {}", self.service)
+        }
+    }
+}
+
+impl<C> fmt::Debug for WorkloadIdentity<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WorkloadIdentity({})", self.service)
     }
 }
 

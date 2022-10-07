@@ -2,8 +2,6 @@
 
 use async_trait::async_trait;
 use core::fmt;
-use hyper::client::connect::Connect;
-use hyper::Client;
 use libunftp::storage::Error;
 use std::{convert::TryFrom, path::PathBuf};
 use time::OffsetDateTime;
@@ -15,10 +13,21 @@ pub struct Token {
 }
 
 #[async_trait]
-pub trait TokenProvider {
-    async fn get_token<C>(&self, client: Client<C>) -> Result<Token, Error>
-    where
-        C: Sync + Send + Clone + Connect;
+pub trait TokenProvider: Sync + Send + Clone {
+    async fn get_token(&self) -> Result<Token, Error>;
+}
+
+#[derive(Clone)]
+pub(super) struct NoopTokenProvider;
+
+#[async_trait]
+impl TokenProvider for NoopTokenProvider {
+    async fn get_token(&self) -> Result<Token, Error> {
+        Ok(Token {
+            access_token: "unftp_test".to_string(),
+            expires_at: None,
+        })
+    }
 }
 
 /// Used with [`CloudStorage::new`](super::CloudStorage::new()) to specify how the storage back-end
@@ -45,9 +54,7 @@ impl From<Vec<u8>> for AuthMethod {
 impl TryFrom<PathBuf> for AuthMethod {
     type Error = std::io::Error;
 
-    fn try_from(
-        service_account_key_file: PathBuf,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(service_account_key_file: PathBuf) -> Result<Self, Self::Error> {
         match std::fs::read(service_account_key_file) {
             Err(e) => Err(e),
             Ok(v) => Ok(v.into()),
@@ -58,9 +65,7 @@ impl TryFrom<PathBuf> for AuthMethod {
 impl TryFrom<Option<PathBuf>> for AuthMethod {
     type Error = std::io::Error;
 
-    fn try_from(
-        service_account_key_file: Option<PathBuf>,
-    ) -> Result<Self, Self::Error> {
+    fn try_from(service_account_key_file: Option<PathBuf>) -> Result<Self, Self::Error> {
         match service_account_key_file {
             Some(p) => AuthMethod::try_from(p),
             None => Ok(AuthMethod::WorkloadIdentity(None)),
@@ -69,23 +74,14 @@ impl TryFrom<Option<PathBuf>> for AuthMethod {
 }
 
 impl AuthMethod {
-    pub(super) fn to_service_account_key(
-        &self,
-    ) -> std::io::Result<ServiceAccountKey> {
+    pub(super) fn to_service_account_key(&self) -> std::io::Result<ServiceAccountKey> {
         match self {
             AuthMethod::WorkloadIdentity(_) | AuthMethod::None => {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "service account key not chosen as option",
-                ))
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "service account key not chosen as option"))
             }
-            AuthMethod::ServiceAccountKey(key) => serde_json::from_slice(key)
-                .map_err(|e| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("bad service account key: {}", e),
-                    )
-                }),
+            AuthMethod::ServiceAccountKey(key) => {
+                serde_json::from_slice(key).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad service account key: {}", e)))
+            }
         }
     }
 }
