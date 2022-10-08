@@ -13,11 +13,11 @@ pub struct Token {
 }
 
 #[async_trait]
-pub trait TokenProvider: Sync + Send + Clone {
+pub trait TokenProvider: Sync + Send {
     async fn get_token(&self) -> Result<Token, Error>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct NoopTokenProvider;
 
 #[async_trait]

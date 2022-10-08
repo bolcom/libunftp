@@ -91,7 +91,6 @@ use std::{
 };
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
-use yup_oauth2::ServiceAccountAuthenticator;
 
 /// A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud storage from Google.
 /// cloned for each controlchan!
@@ -151,7 +150,9 @@ impl CloudStorage {
         }
     }
 
-    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it in `CloudStorage`.
+    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the
+    // token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it
+    // in `CloudStorage`.
     #[tracing_attributes::instrument]
     async fn get_token(&self) -> Result<String, Error> {
         self.token_provider.get_token().await.map(|tok| tok.access_token)
