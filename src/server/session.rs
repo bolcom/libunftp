@@ -18,7 +18,7 @@ use std::{
 use tokio::sync::mpsc::{Receiver, Sender};
 
 // TraceId is an identifier used to correlate logs statements together.
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub struct TraceId(u64);
 
 impl TraceId {
@@ -32,6 +32,12 @@ impl TraceId {
 }
 
 impl std::fmt::Display for TraceId {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{:#x}", self.0)
+    }
+}
+
+impl std::fmt::Debug for TraceId {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
     }
