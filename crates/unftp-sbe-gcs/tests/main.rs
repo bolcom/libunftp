@@ -16,7 +16,7 @@ use std::{
     time::Duration,
 };
 use tokio::{macros::support::Future, sync::Mutex};
-use unftp_sbe_gcs::options::AuthMethod;
+use unftp_sbe_gcs::auth::AuthMethod;
 
 /*
 FIXME: this is just MVP tests. need to add:
