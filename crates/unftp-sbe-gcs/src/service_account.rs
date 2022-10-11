@@ -29,12 +29,18 @@ where
     C::Error: Into<Box<dyn std::error::Error + Sync + std::marker::Send + 'static>>,
 {
     pub fn new(client: Client<C>, key: Key) -> Result<Self, Error> {
-        // Spinning up a new runtime is not so nice, but only has to happen once
-        let rt = tokio::runtime::Builder::new_current_thread().enable_io().build()?;
-        let future_auth = yup_oauth2::ServiceAccountAuthenticator::builder(key.0).hyper_client(client.clone()).build();
-        let auth = rt.block_on(future_auth)?;
+        let handle = tokio::runtime::Handle::current();
 
-        Ok(Self { inner_auth: auth })
+        // Since we're not using yup_oauth2's disk storage, we don't actually do any blocking here.
+        let inner_auth = handle.block_on(async move {
+            yup_oauth2::ServiceAccountAuthenticator::builder(key.0)
+                .hyper_client(client.clone())
+                .build()
+                .await
+                .unwrap()
+        });
+
+        Ok(Self { inner_auth })
     }
 }
 
