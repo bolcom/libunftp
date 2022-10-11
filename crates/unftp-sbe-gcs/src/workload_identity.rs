@@ -30,12 +30,18 @@ pub struct WorkloadIdentity<C> {
     client: Client<C>,
 }
 
-impl<C> WorkloadIdentity<C> {
-    fn with_service_name(client: Client<C>, service: String) -> Self {
-        Self { client, service }
+impl<C> WorkloadIdentity<C>
+where
+    C: Clone,
+{
+    pub fn with_service_name(client: Client<C>, service: String) -> Self {
+        Self {
+            client: client.clone(),
+            service,
+        }
     }
 
-    fn new(client: Client<C>) -> Self {
+    pub fn new(client: Client<C>) -> Self {
         Self::with_service_name(client, "default".to_string())
     }
 }
@@ -43,7 +49,7 @@ impl<C> WorkloadIdentity<C> {
 #[async_trait]
 impl<C> TokenProvider for WorkloadIdentity<C>
 where
-    C: Sync + Send + Clone + Connect,
+    C: Sync + Send + Clone + Connect + 'static,
 {
     // TODO: MAP to useful error type
     async fn get_token(&self) -> Result<Token, Error> {

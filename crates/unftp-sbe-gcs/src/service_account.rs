@@ -1,47 +1,53 @@
 use crate::auth::{Token, TokenProvider};
 use async_trait::async_trait;
-use hyper::client::connect::Connect;
-use hyper::service::Service;
-use hyper::{Client, Uri};
+use hyper::client::HttpConnector;
+use hyper::Client;
+use hyper_rustls::HttpsConnector;
 use libunftp::storage::{Error, ErrorKind};
 use yup_oauth2;
 
 #[derive(Clone, Debug)]
-struct Key(yup_oauth2::ServiceAccountKey);
+pub struct Key(yup_oauth2::ServiceAccountKey);
 
-#[derive(Clone, Debug)]
-pub struct Authenticator<C> {
-    client: Client<C>,
-    key: Key,
+impl From<yup_oauth2::ServiceAccountKey> for Key {
+    fn from(inner: yup_oauth2::ServiceAccountKey) -> Self {
+        Key(inner)
+    }
 }
 
-impl<C> Authenticator<C>
-where
-    C: Sync + Send + Clone + Connect,
-{
-    pub fn new(client: Client<C>, key: Key) -> Self {
-        Self { client: client.clone(), key }
+#[derive(Clone)]
+pub struct Authenticator {
+    inner_auth: yup_oauth2::authenticator::Authenticator<HttpsConnector<HttpConnector>>,
+}
+
+impl Authenticator {
+    pub fn new(client: Client<HttpsConnector<HttpConnector>>, key: Key) -> Result<Self, Error> {
+        // Spinning up a new runtime is not so nice, but only has to happen once
+        let rt = tokio::runtime::Builder::new_current_thread().enable_io().build()?;
+        let auth = rt.block_on(yup_oauth2::ServiceAccountAuthenticator::builder(key.0).hyper_client(client.clone()).build())?;
+
+        Ok(Self { inner_auth: auth })
+    }
+}
+
+impl std::fmt::Debug for Authenticator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Authenticator")
     }
 }
 
 #[async_trait]
-impl<C> TokenProvider for Authenticator<C>
-where
-    C: Sync + Send + Clone + Connect,
-{
+impl TokenProvider for Authenticator {
     async fn get_token(&self) -> Result<Token, Error> {
-        let inner_auth = yup_oauth2::ServiceAccountAuthenticator::builder(self.key.0)
-            .hyper_client(self.client.clone())
-            .build()
-            .await?;
-        let token = inner_auth
+        let token = self
+            .inner_auth
             .token(&["https://www.googleapis.com/auth/devstorage.read_write"])
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
-            .await?;
+            .await
+            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
         Ok(Token {
-            access_token: token.access_token,
-            expires_at: token.expires_at,
+            access_token: token.as_str().to_string(),
+            expires_at: token.expiration_time(),
         })
     }
 }

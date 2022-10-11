@@ -136,16 +136,19 @@ impl CloudStorage {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> =
             Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
 
-        let token_provider = match auth.into() {
-            AuthMethod::None => auth::NoopTokenProvider,
-            AuthMethod::WorkloadIdentity(None) => workload_identity::WorkloadIdentity::new(client.clone()),
-            AuthMethod::WorkloadIdentity(Some(service)) => workload_identity::WorkloadIdentity::with_service_name(service),
-            AuthMethod::ServiceAccountKey(key) => service_account::Authenticator::new(client.clone(), key),
+        let token_provider: Box<dyn auth::TokenProvider> = match auth.into() {
+            AuthMethod::None => Box::new(auth::NoopTokenProvider),
+            AuthMethod::WorkloadIdentity(None) => Box::new(workload_identity::WorkloadIdentity::new(client.clone())),
+            AuthMethod::WorkloadIdentity(Some(service)) => Box::new(workload_identity::WorkloadIdentity::with_service_name(client.clone(), service)),
+            auth @ AuthMethod::ServiceAccountKey(_) => {
+                let key = auth.to_service_account_key().unwrap();
+                Box::new(service_account::Authenticator::new(client.clone(), key.into()).unwrap())
+            }
         };
 
         CloudStorage {
             client,
-            token_provider: Box::new(token_provider),
+            token_provider,
             uris: GcsUri::new(base_url.into(), bucket.into(), root),
         }
     }

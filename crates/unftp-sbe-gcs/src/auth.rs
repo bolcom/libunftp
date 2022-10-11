@@ -7,14 +7,42 @@ use std::{convert::TryFrom, path::PathBuf};
 use time::OffsetDateTime;
 use yup_oauth2::ServiceAccountKey;
 
+/// Token represents an OAuth2 access token
 pub struct Token {
-    access_token: String,
-    expires_at: Option<OffsetDateTime>,
+    /// access_token is the value of the access token
+    pub access_token: String,
+
+    /// expires_at is the time when this token will expire. A None value means that the token is to
+    /// be considered expired.
+    pub expires_at: Option<OffsetDateTime>,
 }
 
 #[async_trait]
-pub trait TokenProvider: Sync + Send {
+/// TokenProvider defines the contract for getting OAuth2 tokens.
+pub trait TokenProvider: Sync + Send + TokenProviderClone + std::fmt::Debug {
+    /// get_token gets the OAuth2 access token from an auth server.
     async fn get_token(&self) -> Result<Token, Error>;
+}
+
+/// TokenProviderClone allows a boxed TokenProvider to be cloned.
+pub trait TokenProviderClone {
+    /// clone_box clones the boxed TokenProvider.
+    fn clone_box(&self) -> Box<dyn TokenProvider>;
+}
+
+impl<T> TokenProviderClone for T
+where
+    T: 'static + TokenProvider + Clone,
+{
+    fn clone_box(&self) -> Box<dyn TokenProvider> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn TokenProvider> {
+    fn clone(&self) -> Box<dyn TokenProvider> {
+        self.clone_box()
+    }
 }
 
 #[derive(Clone, Debug)]
