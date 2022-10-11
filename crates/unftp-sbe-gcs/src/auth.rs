@@ -1,4 +1,4 @@
-//! Contains code pertaining to initialization options for the [`Cloud Storage Backend`](super::CloudStorage)
+//! Contains code pertaining to authorization for the [`Cloud Storage Backend`](super::CloudStorage)
 
 use async_trait::async_trait;
 use core::fmt;
