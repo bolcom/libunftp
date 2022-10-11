@@ -24,7 +24,8 @@ impl Authenticator {
     pub fn new(client: Client<HttpsConnector<HttpConnector>>, key: Key) -> Result<Self, Error> {
         // Spinning up a new runtime is not so nice, but only has to happen once
         let rt = tokio::runtime::Builder::new_current_thread().enable_io().build()?;
-        let auth = rt.block_on(yup_oauth2::ServiceAccountAuthenticator::builder(key.0).hyper_client(client.clone()).build())?;
+        let future_auth = yup_oauth2::ServiceAccountAuthenticator::builder(key.0).hyper_client(client.clone()).build();
+        let auth = rt.block_on(future_auth)?;
 
         Ok(Self { inner_auth: auth })
     }
