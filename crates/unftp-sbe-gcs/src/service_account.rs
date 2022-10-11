@@ -1,9 +1,9 @@
 use crate::auth::{Token, TokenProvider};
 use async_trait::async_trait;
-use hyper::client::HttpConnector;
-use hyper::Client;
-use hyper_rustls::HttpsConnector;
+use hyper::service::Service;
+use hyper::{Client, Uri};
 use libunftp::storage::{Error, ErrorKind};
+use tokio::io::{AsyncRead, AsyncWrite};
 use yup_oauth2;
 
 #[derive(Clone, Debug)]
@@ -16,12 +16,18 @@ impl From<yup_oauth2::ServiceAccountKey> for Key {
 }
 
 #[derive(Clone)]
-pub struct Authenticator {
-    inner_auth: yup_oauth2::authenticator::Authenticator<HttpsConnector<HttpConnector>>,
+pub struct Authenticator<C> {
+    inner_auth: yup_oauth2::authenticator::Authenticator<C>,
 }
 
-impl Authenticator {
-    pub fn new(client: Client<HttpsConnector<HttpConnector>>, key: Key) -> Result<Self, Error> {
+impl<C> Authenticator<C>
+where
+    C: Clone + Send + Sync + Service<Uri> + 'static,
+    C::Response: hyper::client::connect::Connection + AsyncRead + AsyncWrite + Send + Unpin,
+    C::Future: Send + Unpin,
+    C::Error: Into<Box<dyn std::error::Error + Sync + std::marker::Send + 'static>>,
+{
+    pub fn new(client: Client<C>, key: Key) -> Result<Self, Error> {
         // Spinning up a new runtime is not so nice, but only has to happen once
         let rt = tokio::runtime::Builder::new_current_thread().enable_io().build()?;
         let future_auth = yup_oauth2::ServiceAccountAuthenticator::builder(key.0).hyper_client(client.clone()).build();
@@ -31,14 +37,20 @@ impl Authenticator {
     }
 }
 
-impl std::fmt::Debug for Authenticator {
+impl<C> std::fmt::Debug for Authenticator<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Authenticator")
     }
 }
 
 #[async_trait]
-impl TokenProvider for Authenticator {
+impl<C> TokenProvider for Authenticator<C>
+where
+    C: Clone + Send + Sync + Service<Uri> + 'static,
+    C::Response: hyper::client::connect::Connection + AsyncRead + AsyncWrite + Send + Unpin,
+    C::Future: Send + Unpin,
+    C::Error: Into<Box<dyn std::error::Error + Sync + std::marker::Send + 'static>>,
+{
     async fn get_token(&self) -> Result<Token, Error> {
         let token = self
             .inner_auth
