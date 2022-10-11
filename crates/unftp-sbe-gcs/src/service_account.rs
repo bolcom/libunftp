@@ -1,5 +1,6 @@
 use crate::auth::{Token, TokenProvider};
 use async_trait::async_trait;
+use hyper::client::connect::Connection;
 use hyper::service::Service;
 use hyper::{Client, Uri};
 use libunftp::storage::{Error, ErrorKind};
@@ -23,7 +24,7 @@ pub struct Authenticator<C> {
 impl<C> Authenticator<C>
 where
     C: Clone + Send + Sync + Service<Uri> + 'static,
-    C::Response: hyper::client::connect::Connection + AsyncRead + AsyncWrite + Send + Unpin,
+    C::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin,
     C::Future: Send + Unpin,
     C::Error: Into<Box<dyn std::error::Error + Sync + std::marker::Send + 'static>>,
 {
@@ -47,7 +48,7 @@ impl<C> std::fmt::Debug for Authenticator<C> {
 impl<C> TokenProvider for Authenticator<C>
 where
     C: Clone + Send + Sync + Service<Uri> + 'static,
-    C::Response: hyper::client::connect::Connection + AsyncRead + AsyncWrite + Send + Unpin,
+    C::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin,
     C::Future: Send + Unpin,
     C::Error: Into<Box<dyn std::error::Error + Sync + std::marker::Send + 'static>>,
 {
@@ -62,5 +63,36 @@ where
             access_token: token.as_str().to_string(),
             expires_at: token.expiration_time(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hyper::client::HttpConnector;
+    use yup_oauth2::ServiceAccountKey;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn get_token() {
+        let client = Client::builder().build(HttpConnector::new());
+        let key = Key(ServiceAccountKey {
+            key_type: None,
+            project_id: None,
+            private_key_id: None,
+            private_key: "".to_string(),
+            client_email: "".to_string(),
+            client_id: None,
+            auth_uri: None,
+            token_uri: "".to_string(),
+            auth_provider_x509_cert_url: None,
+            client_x509_cert_url: None,
+        });
+
+        let authenticator = Authenticator::new(client, key).expect("expected authenticator to be instantiated");
+
+        let token = authenticator.get_token().await.unwrap();
+        assert_eq!(token.access_token, "".to_string());
+        assert_eq!(token.expires_at, None);
     }
 }
