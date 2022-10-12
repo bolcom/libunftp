@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 use yup_oauth2::ServiceAccountKey;
 
 /// Token represents an OAuth2 access token
+#[derive(Debug)]
 pub struct Token {
     /// access_token is the value of the access token
     pub access_token: String,

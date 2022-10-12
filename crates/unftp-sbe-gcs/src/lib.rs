@@ -142,7 +142,7 @@ impl CloudStorage {
             AuthMethod::WorkloadIdentity(Some(service)) => Box::new(workload_identity::WorkloadIdentity::with_service_name(client.clone(), service)),
             auth @ AuthMethod::ServiceAccountKey(_) => {
                 let key = auth.to_service_account_key().unwrap();
-                Box::new(service_account::Authenticator::new(client.clone(), key.into()).unwrap())
+                Box::new(service_account::Authenticator::new(client.clone(), key.into()))
             }
         };
 
