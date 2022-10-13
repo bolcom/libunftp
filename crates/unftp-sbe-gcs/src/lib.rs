@@ -158,12 +158,10 @@ impl CloudStorage {
         }
 
         let token = self.fetch_token().await?;
-        {
-            let mut cache = self.cached_token.write().unwrap();
-            let cached = cache.insert(token);
+        let mut cache = self.cached_token.write().unwrap();
+        let cached = cache.insert(token);
 
-            Ok(cached.value.clone())
-        }
+        Ok(cached.value.clone())
     }
 
     async fn fetch_token(&self) -> Result<Token, Error> {
