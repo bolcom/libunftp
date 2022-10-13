@@ -199,9 +199,9 @@ impl Token {
         self.expires_at
             .map(|expires_at| {
                 let now = time::OffsetDateTime::now_utc();
-                let safety_margin = time::Duration::seconds(5);
+                const SAFETY_MARGIN: time::Duration = time::Duration::seconds(5);
 
-                expires_at > (now - safety_margin)
+                expires_at > (now - SAFETY_MARGIN)
             })
             .unwrap_or(false)
     }
