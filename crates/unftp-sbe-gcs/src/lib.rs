@@ -62,7 +62,7 @@ pub mod object_metadata;
 pub mod options;
 mod response_body;
 mod uri;
-mod workflow_identity;
+mod workload_identity;
 
 pub use ext::ServerExt;
 
@@ -177,7 +177,7 @@ impl CloudStorage {
                     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
                     .await
             }
-            AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone()).await.map(|t| t.into()),
+            AuthMethod::WorkloadIdentity(service) => workload_identity::request_token(service.clone(), self.client.clone()).await.map(|t| t.into()),
             AuthMethod::None => Ok(Token {
                 value: "unftp_test".to_string(),
                 expires_at: None,
@@ -214,8 +214,8 @@ impl From<yup_oauth2::AccessToken> for Token {
     }
 }
 
-impl From<workflow_identity::TokenResponse> for Token {
-    fn from(wfi: workflow_identity::TokenResponse) -> Self {
+impl From<workload_identity::TokenResponse> for Token {
+    fn from(wfi: workload_identity::TokenResponse) -> Self {
         let now = time::OffsetDateTime::now_utc();
         let expires_in = time::Duration::seconds(wfi.expires_in.try_into().unwrap_or(0));
 
