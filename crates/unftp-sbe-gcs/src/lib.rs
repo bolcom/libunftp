@@ -87,7 +87,7 @@ use response_body::{Item, ResponseBody};
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
@@ -101,7 +101,7 @@ pub struct CloudStorage {
     client: Client<HttpsConnector<HttpConnector>>,
     auth: AuthMethod,
 
-    cached_token: Arc<Mutex<Option<Token>>>,
+    cached_token: Arc<RwLock<Option<Token>>>,
 }
 
 impl CloudStorage {
@@ -146,12 +146,24 @@ impl CloudStorage {
         }
     }
 
-    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the
-    // token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it
-    // in `CloudStorage`.
     #[tracing_attributes::instrument]
     async fn get_token_value(&self) -> Result<String, Error> {
-        self.get_token().await.map(|tok| tok.value)
+        {
+            let cache = self.cached_token.read().unwrap();
+            if let Some(token) = &*cache {
+                if !token.expired() {
+                    return Ok(token.value.clone());
+                }
+            }
+        }
+
+        let token = self.get_token().await?;
+        {
+            let mut cache = self.cached_token.write().unwrap();
+            let cached = cache.insert(token);
+
+            Ok(cached.value.clone())
+        }
     }
 
     async fn get_token(&self) -> Result<Token, Error> {
@@ -197,8 +209,9 @@ impl Token {
         self.expires_at
             .map(|expires_at| {
                 let now = time::OffsetDateTime::now_utc();
+                let safety_margin = time::Duration::seconds(5);
 
-                expires_at < now
+                expires_at < (now - safety_margin)
             })
             .unwrap_or(true)
     }
