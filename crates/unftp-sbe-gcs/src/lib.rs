@@ -151,7 +151,7 @@ impl CloudStorage {
         {
             let cache = self.cached_token.read().unwrap();
             if let Some(token) = &*cache {
-                if !token.expired() {
+                if token.active() {
                     return Ok(token.value.clone());
                 }
             }
@@ -193,15 +193,17 @@ struct Token {
 }
 
 impl Token {
-    fn expired(&self) -> bool {
+    /// active yields true when the token is present and has not expired. In all other cases, it
+    /// returns false.
+    fn active(&self) -> bool {
         self.expires_at
             .map(|expires_at| {
                 let now = time::OffsetDateTime::now_utc();
                 let safety_margin = time::Duration::seconds(5);
 
-                expires_at < (now - safety_margin)
+                expires_at > (now - safety_margin)
             })
-            .unwrap_or(true)
+            .unwrap_or(false)
     }
 }
 
