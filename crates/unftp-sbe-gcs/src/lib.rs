@@ -87,6 +87,7 @@ use response_body::{Item, ResponseBody};
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
@@ -99,6 +100,8 @@ pub struct CloudStorage {
     uris: GcsUri,
     client: Client<HttpsConnector<HttpConnector>>,
     auth: AuthMethod,
+
+    cached_token: Arc<Mutex<Option<Token>>>,
 }
 
 impl CloudStorage {
@@ -134,31 +137,70 @@ impl CloudStorage {
     {
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> =
             Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
-        CloudStorage {
+        Self {
             client,
             auth: auth.into(),
             uris: GcsUri::new(base_url.into(), bucket.into(), root),
+
+            cached_token: Default::default(),
         }
     }
 
-    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it in `CloudStorage`.
+    // TODO: Cache the token. For `ServiceAccountKey`, the oauth client would already cache the
+    // token - we just need to move it to `CloudStorage`. For `WorkloadIdentity`, we can cache it
+    // in `CloudStorage`.
     #[tracing_attributes::instrument]
-    async fn get_token(&self) -> Result<String, Error> {
+    async fn get_token_value(&self) -> Result<String, Error> {
+        self.get_token().await.map(|tok| tok.value)
+    }
+
+    async fn get_token(&self) -> Result<Token, Error> {
         match &self.auth {
             AuthMethod::ServiceAccountKey(_) => {
                 let key = self.auth.to_service_account_key()?;
                 let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client.clone()).build().await?;
 
                 auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
-                    .map_ok(|t| t.as_str().to_string())
+                    .map_ok(|t| Token {
+                        value: t.as_str().to_string(),
+                        expires_at: t.expiration_time(),
+                    })
                     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
                     .await
             }
-            AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone())
-                .await
-                .map(|t| t.access_token),
-            AuthMethod::None => Ok("unftp_test".to_string()),
+            AuthMethod::WorkloadIdentity(service) => {
+                let now = time::OffsetDateTime::now_utc();
+                workflow_identity::request_token(service.clone(), self.client.clone()).await.map(|t| {
+                    let expires_in = time::Duration::seconds(t.expires_in.try_into().unwrap_or(0));
+                    Token {
+                        value: t.access_token,
+                        expires_at: Some(now + expires_in),
+                    }
+                })
+            }
+            AuthMethod::None => Ok(Token {
+                value: "unftp_test".to_string(),
+                expires_at: None,
+            }),
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Token {
+    value: String,
+    expires_at: Option<time::OffsetDateTime>,
+}
+
+impl Token {
+    fn expired(&self) -> bool {
+        self.expires_at
+            .map(|expires_at| {
+                let now = time::OffsetDateTime::now_utc();
+
+                expires_at < now
+            })
+            .unwrap_or(true)
     }
 }
 
@@ -176,7 +218,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -203,7 +245,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -231,7 +273,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
 
         let request: Request<Body> = Request::builder()
             .uri(uri)
@@ -265,7 +307,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let uri: Uri = self.uris.get(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -299,7 +341,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let reader = tokio::io::BufReader::with_capacity(4096, bytes);
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -320,7 +362,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let uri: Uri = self.uris.delete(path)?;
 
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -338,7 +380,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let uri: Uri = self.uris.mkd(path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -364,7 +406,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let uri: Uri = self.uris.dir_empty(&path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
@@ -405,7 +447,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         let uri: Uri = self.uris.dir_empty(&path)?;
         let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
 
-        let token = self.get_token().await?;
+        let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
             .header(header::AUTHORIZATION, format!("Bearer {}", token))
