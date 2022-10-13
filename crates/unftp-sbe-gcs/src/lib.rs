@@ -157,7 +157,7 @@ impl CloudStorage {
             }
         }
 
-        let token = self.get_token().await?;
+        let token = self.fetch_token().await?;
         {
             let mut cache = self.cached_token.write().unwrap();
             let cached = cache.insert(token);
@@ -166,30 +166,18 @@ impl CloudStorage {
         }
     }
 
-    async fn get_token(&self) -> Result<Token, Error> {
+    async fn fetch_token(&self) -> Result<Token, Error> {
         match &self.auth {
             AuthMethod::ServiceAccountKey(_) => {
                 let key = self.auth.to_service_account_key()?;
                 let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client.clone()).build().await?;
 
                 auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
-                    .map_ok(|t| Token {
-                        value: t.as_str().to_string(),
-                        expires_at: t.expiration_time(),
-                    })
+                    .map_ok(|t| t.into())
                     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
                     .await
             }
-            AuthMethod::WorkloadIdentity(service) => {
-                let now = time::OffsetDateTime::now_utc();
-                workflow_identity::request_token(service.clone(), self.client.clone()).await.map(|t| {
-                    let expires_in = time::Duration::seconds(t.expires_in.try_into().unwrap_or(0));
-                    Token {
-                        value: t.access_token,
-                        expires_at: Some(now + expires_in),
-                    }
-                })
-            }
+            AuthMethod::WorkloadIdentity(service) => workflow_identity::request_token(service.clone(), self.client.clone()).await.map(|t| t.into()),
             AuthMethod::None => Ok(Token {
                 value: "unftp_test".to_string(),
                 expires_at: None,
@@ -214,6 +202,27 @@ impl Token {
                 expires_at < (now - safety_margin)
             })
             .unwrap_or(true)
+    }
+}
+
+impl From<yup_oauth2::AccessToken> for Token {
+    fn from(yup: yup_oauth2::AccessToken) -> Self {
+        Self {
+            value: yup.as_str().to_string(),
+            expires_at: yup.expiration_time(),
+        }
+    }
+}
+
+impl From<workflow_identity::TokenResponse> for Token {
+    fn from(wfi: workflow_identity::TokenResponse) -> Self {
+        let now = time::OffsetDateTime::now_utc();
+        let expires_in = time::Duration::seconds(wfi.expires_in.try_into().unwrap_or(0));
+
+        Self {
+            value: wfi.access_token,
+            expires_at: Some(now + expires_in),
+        }
     }
 }
 
