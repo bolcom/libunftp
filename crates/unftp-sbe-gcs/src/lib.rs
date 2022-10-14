@@ -87,8 +87,9 @@ use response_body::{Item, ResponseBody};
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
+use tokio::sync::RwLock;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::ServiceAccountAuthenticator;
@@ -149,7 +150,7 @@ impl CloudStorage {
     #[tracing_attributes::instrument]
     async fn get_token_value(&self) -> Result<String, Error> {
         {
-            let cache = self.cached_token.read().unwrap();
+            let cache = self.cached_token.read().await;
             if let Some(token) = &*cache {
                 if token.active() {
                     return Ok(token.value.clone());
@@ -158,7 +159,7 @@ impl CloudStorage {
         }
 
         let token = self.fetch_token().await?;
-        let mut cache = self.cached_token.write().unwrap();
+        let mut cache = self.cached_token.write().await;
         let cached = cache.insert(token);
 
         Ok(cached.value.clone())
