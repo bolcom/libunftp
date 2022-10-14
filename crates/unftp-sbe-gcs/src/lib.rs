@@ -207,21 +207,21 @@ impl Token {
 }
 
 impl From<yup_oauth2::AccessToken> for Token {
-    fn from(from_token: yup_oauth2::AccessToken) -> Self {
+    fn from(source: yup_oauth2::AccessToken) -> Self {
         Self {
-            value: from_token.as_str().to_string(),
-            expires_at: from_token.expiration_time(),
+            value: source.as_str().to_string(),
+            expires_at: source.expiration_time(),
         }
     }
 }
 
 impl From<workload_identity::TokenResponse> for Token {
-    fn from(from_token: workload_identity::TokenResponse) -> Self {
+    fn from(source: workload_identity::TokenResponse) -> Self {
         let now = time::OffsetDateTime::now_utc();
-        let expires_in = time::Duration::seconds(from_token.expires_in.try_into().unwrap_or(0));
+        let expires_in = time::Duration::seconds(source.expires_in.try_into().unwrap_or(0));
 
         Self {
-            value: from_token.access_token,
+            value: source.access_token,
             expires_at: Some(now + expires_in),
         }
     }
