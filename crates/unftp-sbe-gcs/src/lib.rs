@@ -187,7 +187,7 @@ impl CachedToken {
     // get returns a token if it's available and not expired, and None otherwise.
     async fn get(&self) -> Option<Token> {
         let cache = self.inner.read().await;
-        cache.as_ref().map(|token| if token.active() { Some(token.clone()) } else { None }).flatten()
+        cache.as_ref().and_then(|token| token.get_if_active())
     }
 
     async fn set(&self, token: Token) {
@@ -214,6 +214,14 @@ impl Token {
                 expires_at > (now - SAFETY_MARGIN)
             })
             .unwrap_or(false)
+    }
+
+    fn get_if_active(&self) -> Option<Token> {
+        if self.active() {
+            Some(self.clone())
+        } else {
+            None
+        }
     }
 }
 
