@@ -102,7 +102,7 @@ pub struct CloudStorage {
     client: Client<HttpsConnector<HttpConnector>>,
     auth: AuthMethod,
 
-    cached_token: Arc<RwLock<Option<Token>>>,
+    cached_token: CachedToken,
 }
 
 impl CloudStorage {
@@ -149,20 +149,13 @@ impl CloudStorage {
 
     #[tracing_attributes::instrument]
     async fn get_token_value(&self) -> Result<String, Error> {
-        {
-            let cache = self.cached_token.read().await;
-            if let Some(token) = &*cache {
-                if token.active() {
-                    return Ok(token.value.clone());
-                }
-            }
+        if let Some(token) = self.cached_token.get().await {
+            return Ok(token.value);
         }
 
         let token = self.fetch_token().await?;
-        let mut cache = self.cached_token.write().await;
-        let cached = cache.insert(token);
-
-        Ok(cached.value.clone())
+        self.cached_token.set(token.clone()).await;
+        Ok(token.value)
     }
 
     async fn fetch_token(&self) -> Result<Token, Error> {
@@ -185,7 +178,25 @@ impl CloudStorage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
+struct CachedToken {
+    inner: Arc<RwLock<Option<Token>>>,
+}
+
+impl CachedToken {
+    // get returns a token if it's available and not expired, and None otherwise.
+    async fn get(&self) -> Option<Token> {
+        let cache = self.inner.read().await;
+        cache.as_ref().map(|token| if token.active() { Some(token.clone()) } else { None }).flatten()
+    }
+
+    async fn set(&self, token: Token) {
+        let mut cache = self.inner.write().await;
+        *cache = Some(token);
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Token {
     value: String,
     expires_at: Option<time::OffsetDateTime>,
@@ -515,4 +526,47 @@ fn result_based_on_http_status<T>(status: StatusCode, ok_val: T) -> Result<T, Er
         return Err(Error::from(err_kind));
     }
     Ok(ok_val)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cached_token() {
+        let cache: CachedToken = Default::default();
+
+        assert_eq!(cache.get().await, None);
+
+        cache
+            .set(Token {
+                value: "the_value".to_string(),
+                expires_at: None,
+            })
+            .await;
+        assert_eq!(cache.get().await, None);
+
+        cache
+            .set(Token {
+                value: "the_value".to_string(),
+                expires_at: Some(time::OffsetDateTime::now_utc() - time::Duration::seconds(10)),
+            })
+            .await;
+        assert_eq!(cache.get().await, None);
+
+        let in_future = Some(time::OffsetDateTime::now_utc() + time::Duration::seconds(10));
+        cache
+            .set(Token {
+                value: "the_value".to_string(),
+                expires_at: in_future.clone(),
+            })
+            .await;
+        assert_eq!(
+            cache.get().await,
+            Some(Token {
+                value: "the_value".to_string(),
+                expires_at: in_future,
+            }),
+        );
+    }
 }
