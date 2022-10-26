@@ -127,8 +127,10 @@ impl Pasv {
             // We cannot await this since we first need to let the client know where to connect :-)
             tokio::spawn(async move {
                 // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
-                if let Ok(Ok((socket, _socket_addr))) = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
-                    datachan::spawn_processing(logger, session, socket).await
+                match tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
+                    Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(logger, session, socket).await,
+                    Ok(Err(e)) => slog::error!(logger, "Error waiting for data connection: {}", e),
+                    Err(_) => slog::warn!(logger, "Client did not connect to data port in time"),
                 }
             });
         }
