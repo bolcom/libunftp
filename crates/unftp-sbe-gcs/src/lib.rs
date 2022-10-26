@@ -12,7 +12,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.18.6"
+//! libunftp = "0.18.7"
 //! unftp-sbe-gcs = "0.2.1"
 //! tokio = { version = "1", features = ["full"] }
 //! ```

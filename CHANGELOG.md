@@ -1,5 +1,12 @@
 # Changelog
 
+### 2022-10-26 libunftp 0.18.7
+
+- [#430](https://github.com/bolcom/libunftp/pull/430) Fix issue with proxy protocol hash construction
+- [#432](https://github.com/bolcom/libunftp/pull/432) Show Trace ID as hex in debug output
+- [#434](https://github.com/bolcom/libunftp/issues/434) Time out if client doesn't connect on data port after PASV
+- Upgraded dependencies
+
 ### 2022-09-25 libunftp 0.18.6
 
 - [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes issue [#208](https://github.com/bolcom/libunftp/issues/208)
