@@ -23,8 +23,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::net::Ipv4Addr;
 use std::{io, net::SocketAddr, ops::Range};
+use std::{net::Ipv4Addr, time::Duration};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -126,8 +126,9 @@ impl Pasv {
             // Open the data connection in a new task and process it.
             // We cannot await this since we first need to let the client know where to connect :-)
             tokio::spawn(async move {
-                if let Ok((socket, _socket_addr)) = listener.accept().await {
-                    datachan::spawn_processing(logger, session, socket).await;
+                // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
+                if let Ok(Ok((socket, _socket_addr))) = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
+                    datachan::spawn_processing(logger, session, socket).await
                 }
             });
         }
