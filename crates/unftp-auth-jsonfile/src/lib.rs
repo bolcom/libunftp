@@ -146,6 +146,7 @@
 
 use async_trait::async_trait;
 use bytes::Bytes;
+use flate2::read::GzDecoder;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
 use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
@@ -154,6 +155,7 @@ use ring::{
     pbkdf2::{verify, PBKDF2_HMAC_SHA256},
 };
 use serde::Deserialize;
+use std::io::prelude::*;
 use std::{collections::HashMap, convert::TryInto, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
 use valid::{constraint::Length, Validate};
@@ -210,7 +212,22 @@ struct UserCreds {
 impl JsonFileAuthenticator {
     /// Initialize a new [`JsonFileAuthenticator`] from file.
     pub fn from_file<P: AsRef<Path>>(filename: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let json: String = fs::read_to_string(filename)?;
+        let mut f = fs::File::open(&filename)?;
+        let mut magic: [u8; 3] = [0; 3];
+        let n = f.read(&mut magic[..])?;
+        let is_gz = n > 2 && magic[0] == 0x1F && magic[1] == 0x8B && magic[2] == 0x8;
+
+        let json: String = match is_gz {
+            true => {
+                f.rewind()?;
+                let mut s = String::new();
+                let mut d = GzDecoder::new(f);
+                d.read_to_string(&mut s)?;
+                s
+            }
+            false => fs::read_to_string(&filename)?,
+        };
+
         Self::from_json(json)
     }
 
