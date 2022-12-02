@@ -31,6 +31,7 @@ tokio = { version = "1.21.2", features = ["rt", "time"] }
 tracing = { version = "0.1.37", default-features = false }
 tracing-attributes = "0.1.23"
 valid = "0.3.1"
+flate2 = "1.0"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"

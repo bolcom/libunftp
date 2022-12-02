@@ -1,5 +1,11 @@
 # Changelog
 
+## Upcoming
+
+### 2022-12-01 unftp-auth-jsonfile v0.2.2
+
+- [#441](https://github.com/bolcom/libunftp/issues/441) JsonFile authenticator: support gzipped and base64-encoded file
+
 ### 2022-10-26 libunftp 0.18.7
 
 - [#430](https://github.com/bolcom/libunftp/pull/430) Fix issue with proxy protocol hash construction
