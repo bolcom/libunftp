@@ -2,7 +2,7 @@
 
 ## Upcoming
 
-### 2022-12-1 unftp-auth-jsonfile v0.2.2
+### 2022-12-01 unftp-auth-jsonfile v0.2.2
 
 - [#441](https://github.com/bolcom/libunftp/issues/441) JsonFile authenticator: support gzipped and base64-encoded file
 
