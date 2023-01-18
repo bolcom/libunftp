@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-pam"
-version = "0.2.1"
+version = "0.2.2"
 description = "An authenticator back-end for libunftp that authenticates against PAM"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -19,8 +19,8 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-p
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.58"
-libunftp = { version="0.18.7", path="../../"}
+async-trait = "0.1.61"
+libunftp = { version="0.18.8", path="../../"}
 tracing = { version = "0.1.37", default-features = false }
 tracing-attributes = "0.1.23"
 
@@ -28,4 +28,4 @@ tracing-attributes = "0.1.23"
 pam-auth = { package = "pam", version = "0.7.0" }
 
 [dev-dependencies]
-tokio = { version = "1.21.2", features = ["macros"] }
+tokio = { version = "1.24.2", features = ["macros"] }

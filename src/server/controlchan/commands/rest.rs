@@ -43,6 +43,6 @@ where
         let mut session = args.session.lock().await;
         session.start_pos = self.offset;
         let msg = format!("Restarting at {}. Now send STORE or RETRIEVE.", self.offset);
-        Ok(Reply::new(ReplyCode::FileActionPending, &*msg))
+        Ok(Reply::new(ReplyCode::FileActionPending, &msg))
     }
 }
