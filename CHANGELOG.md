@@ -1,5 +1,24 @@
 # Changelog
 
+## 2023-01-25 Release of all crates
+
+### libunftp 0.18.8
+
+_tag: libunftp-0.18.8_
+
+- Upgraded dependencies
+
+### unftp-sbe-gcs v0.2.2
+
+- [#384](https://github.com/bolcom/libunftp/issues/384) Implemented caching of the access token for GCS
+- Upgraded dependencies
+- compiled against libunftp v0.18.8
+
+### unftp-auth-jsonfile v0.3.1, unftp-auth-{rest,pam} v0.2.2
+
+- Upgraded dependencies
+- compiled against libunftp v0.18.8
+
 ### 2022-12-07 unftp-auth-jsonfile v0.3.0
 
 - [#441](https://github.com/bolcom/libunftp/issues/441) JsonFile authenticator: support gzipped and base64-encoded file

@@ -30,7 +30,7 @@ where
         let mut session = args.session.lock().await;
         let uuid: String = Uuid::new_v4().to_string();
         let filename: &Path = std::path::Path::new(&uuid);
-        let path: String = session.cwd.join(&filename).to_string_lossy().to_string();
+        let path: String = session.cwd.join(filename).to_string_lossy().to_string();
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(tx) => {
