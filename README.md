@@ -2,7 +2,7 @@
 
 [![Crate Version](https://img.shields.io/crates/v/libunftp.svg)](https://crates.io/crates/libunftp)
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
-[![Build Status](https://travis-ci.org/bolcom/libunftp.svg)](https://travis-ci.org/bolcom/libunftp)
+[![Build Status](https://github.com/bolcom/libunftp/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/bolcom/libunftp/actions/workflows/rust.yml)
 [![Crate License](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)  
 
