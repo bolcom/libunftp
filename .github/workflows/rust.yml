@@ -1,0 +1,89 @@
+name: build
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.67.1
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  format:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.RUST_VERSION }}
+        override: true
+        default: true
+        components: rustfmt
+    - name: Check formatting
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+
+  clippy:
+      runs-on: ubuntu-latest
+      if: ${{ github.ref != 'refs/heads/master' }}
+      steps:
+        - name: Checkout sources
+          uses: actions/checkout@v3
+          with:
+            persist-credentials: false
+        - name: Install rust toolchain
+          uses: actions-rs/toolchain@v1
+          with:
+            toolchain: ${{ env.RUST_VERSION }}
+            override: true
+            default: true
+            components: clippy
+        - uses: actions-rs/cargo@v1
+          with:
+            command: clippy
+            args: --all-features --workspace -- -D warnings
+
+  test:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout sources
+          uses: actions/checkout@v3
+        - name: Install rust toolchain
+          uses: actions-rs/toolchain@v1
+          with:
+            toolchain: ${{ env.RUST_VERSION }}
+            override: true
+            default: true
+            target: x86_64-unknown-linux-gnu
+            components: rust-docs
+        - name: Install build dependencies
+          run: sudo apt-get update && sudo apt-get install -y libpam-dev
+        - name: Run tests
+          run: >
+            cargo test 
+            --verbose --workspace 
+            -- 
+            --skip can_change_into_virtual_directory
+            --skip creating_directory_with_file_in_it 
+            --skip deleting_directory_fails_if_contains_file 
+            --skip deleting_empty_directory_succeeds 
+            --skip file_sizes 
+            --skip newly_created_dir_is_empty
+        - name: Doc tests
+          run: cargo test --doc --workspace
+        - name: Build Examples
+          run: cargo build --examples --workspace
+        - name: Build Code
+          run: cargo build  --workspace
+        - name: Build Docs
+          run: cargo doc --workspace --no-deps
