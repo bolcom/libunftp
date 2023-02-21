@@ -63,6 +63,7 @@ pub mod options;
 mod response_body;
 mod uri;
 mod workload_identity;
+mod client;
 
 pub use ext::ServerExt;
 
@@ -71,7 +72,7 @@ use bytes::Buf;
 use futures::{prelude::*, TryStreamExt};
 use hyper::{
     body::aggregate,
-    client::connect::{dns::GaiResolver, HttpConnector},
+    client::connect::{HttpConnector},
     http::{header, Method, StatusCode, Uri},
     Body, Client, Request, Response,
 };
@@ -94,12 +95,14 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 use uri::GcsUri;
 use yup_oauth2::ServiceAccountAuthenticator;
 
+type HttpClient = Client<HttpsConnector<HttpConnector>>;
+
 /// A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud storage from Google.
 /// cloned for each controlchan!
 #[derive(Clone, Debug)]
 pub struct CloudStorage {
     uris: GcsUri,
-    client: Client<HttpsConnector<HttpConnector>>,
+    client: HttpClient,
     auth: AuthMethod,
 
     cached_token: CachedToken,
@@ -136,7 +139,7 @@ impl CloudStorage {
         Str: Into<String>,
         AuthHow: Into<AuthMethod>,
     {
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> =
+        let client: HttpClient =
             Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
         Self {
             client,
@@ -258,7 +261,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Self::Metadata, Error> {
         let uri: Uri = self.uris.metadata(path)?;
 
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
@@ -285,7 +288,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     {
         let uri: Uri = self.uris.metadata(path)?;
 
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
@@ -313,7 +316,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     {
         let uri: Uri = self.uris.list(path)?;
 
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
 
@@ -347,7 +350,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         start_pos: u64,
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
         let uri: Uri = self.uris.get(path)?;
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
@@ -379,7 +382,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     ) -> Result<u64, Error> {
         let uri: Uri = self.uris.put(path)?;
 
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let reader = tokio::io::BufReader::with_capacity(4096, bytes);
 
@@ -403,7 +406,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.delete(path)?;
 
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
             .uri(uri)
@@ -420,7 +423,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     #[tracing_attributes::instrument]
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.mkd(path)?;
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
@@ -446,7 +449,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         // first call is only to figure out if the directory is actually empty or not
         let uri: Uri = self.uris.dir_empty(&path)?;
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
@@ -487,7 +490,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     #[tracing_attributes::instrument]
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<(), Error> {
         let uri: Uri = self.uris.dir_empty(&path)?;
-        let client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> = self.client.clone();
+        let client: HttpClient = self.client.clone();
 
         let token = self.get_token_value().await?;
         let request: Request<Body> = Request::builder()
