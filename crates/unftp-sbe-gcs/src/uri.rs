@@ -21,14 +21,15 @@ impl GcsUri {
     }
 
     pub fn metadata<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::AsIs)?
+        ))
     }
 
     pub fn list<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        let mut prefix = self.path_str(path)?;
-        if !prefix.is_empty() && !prefix.ends_with("%2F") {
-            prefix.push_str("%2F");
-        }
         // includeTrailingDelimiter makes our prefix ('subdirs') end up in the items[] as objects
         // We need this to get access to the 'updated' field
         // See the docs at https://cloud.google.com/storage/docs/json_api/v1/objects/list
@@ -37,73 +38,97 @@ impl GcsUri {
             self.base_url,
             self.bucket,
             "kind,prefixes,items(id,name,size,updated)", // limit the fields
-            prefix
+            self.path_str(path, TrailingSlash::Ensure)?,
         ))
     }
 
     pub fn get<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}?alt=media", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}?alt=media",
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::AsIs)?
+        ))
     }
 
     pub fn put<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        let path = self.path_str(path)?;
-        let path = path.trim_end_matches("%2F");
-
         make_uri(format!(
             "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
-            self.base_url, self.bucket, path
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::Trim)?,
         ))
     }
 
     pub fn delete<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, self.path_str(path)?))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::Trim)?
+        ))
     }
 
     pub fn mkd<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        let path = self.path_str(path)?;
-        let path = path.trim_end_matches("%2F");
-
         make_uri(format!(
-            "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}/",
-            self.base_url, self.bucket, path
+            "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::Ensure)?,
         ))
     }
 
     pub fn rmd<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        let mut prefix = self.path_str(path)?;
-        if !prefix.is_empty() && !prefix.ends_with("%2F") {
-            prefix.push_str("%2F");
-        }
-
-        make_uri(format!("{}/storage/v1/b/{}/o/{}", self.base_url, self.bucket, prefix))
+        make_uri(format!(
+            "{}/storage/v1/b/{}/o/{}",
+            self.base_url,
+            self.bucket,
+            self.path_str(path, TrailingSlash::Ensure)?,
+        ))
     }
 
     pub fn dir_empty<P: AsRef<Path>>(&self, path: P) -> Result<Uri, Error> {
-        let mut prefix = self.path_str(path)?;
-        if !prefix.is_empty() && !prefix.ends_with("%2F") {
-            prefix.push_str("%2F");
-        }
-
         // URI specially crafted to determine whether a directory (prefix) is empty
         make_uri(format!(
             "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&maxResults=2&prefix={}",
             self.base_url,
             self.bucket,
             "prefixes,items(id,name,size,updated),nextPageToken", // nextPageToken helps detect whether the directory is empty
-            prefix
+            self.path_str(path, TrailingSlash::Ensure)?,
         ))
     }
 
-    fn path_str<P: AsRef<Path>>(&self, path: P) -> Result<String, Error> {
+    fn path_str<P: AsRef<Path>>(&self, path: P, trailing_slash: TrailingSlash) -> Result<String, Error> {
+        const SLASH_URLENCODED: &'static str = "%2F";
+
         let path = path.as_ref();
         let relative_path = path.strip_prefix("/").unwrap_or(path);
         if let Some(path) = self.root.join(relative_path).to_str() {
-            let result_path = utf8_percent_encode(path, NON_ALPHANUMERIC).collect::<String>();
+            let mut result_path = utf8_percent_encode(path, NON_ALPHANUMERIC).collect::<String>();
+
+            match trailing_slash {
+                TrailingSlash::Trim => {
+                    result_path = result_path.trim_end_matches(SLASH_URLENCODED).to_string();
+                }
+                TrailingSlash::Ensure => {
+                    if !result_path.ends_with(SLASH_URLENCODED) {
+                        result_path.push_str(SLASH_URLENCODED);
+                    }
+                }
+                TrailingSlash::AsIs => { /* no-op */ }
+            }
+
             Ok(result_path)
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
         }
     }
+}
+
+enum TrailingSlash {
+    Trim,
+    Ensure,
+    AsIs,
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
