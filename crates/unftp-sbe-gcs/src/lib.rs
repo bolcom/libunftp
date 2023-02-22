@@ -63,7 +63,6 @@ pub mod options;
 mod response_body;
 mod uri;
 mod workload_identity;
-mod client;
 
 pub use ext::ServerExt;
 
@@ -71,8 +70,8 @@ use async_trait::async_trait;
 use bytes::Buf;
 use futures::{prelude::*, TryStreamExt};
 use hyper::{
-    body::aggregate,
-    client::connect::{HttpConnector},
+    body,
+    client::connect::HttpConnector,
     http::{header, Method, StatusCode, Uri},
     Body, Client, Request, Response,
 };
@@ -139,8 +138,7 @@ impl CloudStorage {
         Str: Into<String>,
         AuthHow: Into<AuthMethod>,
     {
-        let client: HttpClient =
-            Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
+        let client: HttpClient = Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
         Self {
             client,
             auth: auth.into(),
@@ -275,9 +273,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let body = unpack_response(response).await?;
 
-        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
         response.to_metadata()
     }
@@ -302,9 +298,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 
         let body = unpack_response(response).await?;
 
-        let body_str: &str = std::str::from_utf8(body.chunk()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
-
-        let response: Item = serde_json::from_str(body_str).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        let response: Item = serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
         Ok(response.to_md5()?)
     }
@@ -517,7 +511,9 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
 #[tracing_attributes::instrument]
 async fn unpack_response(response: Response<Body>) -> Result<impl Buf, Error> {
     let status: StatusCode = response.status();
-    let body = aggregate(response).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e)).await?;
+    let body = body::aggregate(response)
+        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+        .await?;
     result_based_on_http_status(status, body)
 }
 
