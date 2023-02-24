@@ -28,16 +28,16 @@ type HttpClient = Client<HttpsConnector<HttpConnector>>;
 #[derive(Clone, Debug)]
 pub(crate) struct GcsClient {
     base_url: String,
-    bucket: String,
+    bucket_name: String,
     root: PathBuf,
 
     http: HttpClient,
 
-    tokens: TokenManager,
+    tokens: TokenSource,
 }
 
 impl GcsClient {
-    pub fn new<A: Into<AuthMethod>>(base_url: String, bucket: String, root: PathBuf, auth: A) -> Self {
+    pub fn new<A: Into<AuthMethod>>(base_url: String, bucket_name: String, root: PathBuf, auth: A) -> Self {
         let root = if root.has_root() {
             root.strip_prefix("/").unwrap().to_path_buf()
         } else {
@@ -46,11 +46,11 @@ impl GcsClient {
 
         let http = Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
 
-        let token_manager = TokenManager::new(auth, http.clone());
+        let token_manager = TokenSource::new(auth, http.clone());
 
         Self {
             base_url,
-            bucket,
+            bucket_name,
             root,
             http,
             tokens: token_manager,
@@ -61,7 +61,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o/{}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::AsIs)?
         ))?;
 
@@ -75,7 +75,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&prefix={}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             "kind,prefixes,items(id,name,size,updated)", // limit the fields
             self.path_str(path, TrailingSlash::Ensure)?,
         ))?;
@@ -87,7 +87,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o/{}?alt=media",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::AsIs)?
         ))?;
 
@@ -109,7 +109,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::Trim)?,
         ))?;
 
@@ -126,7 +126,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o/{}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::Trim)?
         ))?;
 
@@ -139,7 +139,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::Ensure)?,
         ))?;
 
@@ -162,7 +162,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o/{}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             self.path_str(path, TrailingSlash::Ensure)?,
         ))?;
 
@@ -178,7 +178,7 @@ impl GcsClient {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&maxResults=2&prefix={}",
             self.base_url,
-            self.bucket,
+            self.bucket_name,
             "prefixes,items(id,name,size,updated),nextPageToken", // nextPageToken helps detect whether the directory is empty
             self.path_str(path, TrailingSlash::Ensure)?,
         ))?;
@@ -301,15 +301,15 @@ fn make_uri(path_and_query: String) -> Result<Uri, Error> {
 }
 
 #[derive(Clone, Debug)]
-struct TokenManager {
+struct TokenSource {
     cached_token: CachedToken,
     auth: AuthMethod,
     http: HttpClient,
 }
 
-impl TokenManager {
+impl TokenSource {
     fn new<A: Into<AuthMethod>>(auth: A, http: HttpClient) -> Self {
-        TokenManager {
+        TokenSource {
             cached_token: Default::default(),
             auth: auth.into(),
             http,
