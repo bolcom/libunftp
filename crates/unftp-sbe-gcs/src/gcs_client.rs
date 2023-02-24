@@ -187,7 +187,7 @@ impl GcsClient {
     }
 
     fn path_str<P: AsRef<Path>>(&self, path: P, trailing_slash: TrailingSlash) -> Result<String, Error> {
-        const SLASH_URLENCODED: &'static str = "%2F";
+        const SLASH_URLENCODED: &str = "%2F";
 
         let path = path.as_ref();
         let relative_path = path.strip_prefix("/").unwrap_or(path);
@@ -219,7 +219,7 @@ impl GcsClient {
         let token = self.tokens.token().await?;
         let mut request = Request::builder().uri(uri).header(header::AUTHORIZATION, format!("Bearer {}", token));
 
-        for (hk, hv) in headers.as_ref() {
+        for (hk, hv) in headers {
             request = request.header(*hk, *hv);
         }
 
