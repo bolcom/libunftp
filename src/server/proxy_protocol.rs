@@ -176,18 +176,6 @@ impl From<&ProxyConnection> for ProxyHashKey {
     }
 }
 
-impl ToString for ProxyHashKey {
-    fn to_string(&self) -> String {
-        let s = self.source.to_string();
-        let p = self.port.to_string();
-        let mut result = String::with_capacity(s.len() + p.len() + 1);
-        result.push_str(&s);
-        result.push('.');
-        result.push_str(&p);
-        result
-    }
-}
-
 /// Connect clients to the right data channel
 #[derive(Debug)]
 pub struct ProxyProtocolSwitchboard<S, U>
@@ -195,7 +183,7 @@ where
     S: StorageBackend<U>,
     U: UserDetail,
 {
-    switchboard: DashMap<String, Option<SharedSession<S, U>>>,
+    switchboard: DashMap<ProxyHashKey, Option<SharedSession<S, U>>>,
     port_range: Range<u16>,
     logger: slog::Logger,
 }
@@ -222,9 +210,9 @@ where
         }
     }
 
-    pub async fn try_and_claim(&mut self, hash: &ProxyHashKey, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
+    pub async fn try_and_claim(&mut self, hash: ProxyHashKey, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
         // Atomically insert the key and value into the switchboard hashmap
-        match self.switchboard.entry(hash.to_string()) {
+        match self.switchboard.entry(hash) {
             Entry::Occupied(_) => Err(ProxyProtocolError::EntryNotAvailable),
             Entry::Vacant(entry) => {
                 entry.insert(Some(session_arc));
@@ -241,7 +229,7 @@ where
     }
     /// Unregister by hash
     pub fn unregister_hash(&mut self, hash: &ProxyHashKey) {
-        if self.switchboard.remove(&hash.to_string()).is_none() {
+        if self.switchboard.remove(hash).is_none() {
             slog::warn!(self.logger, "Entry already removed? hash: {:?}", hash);
         }
     }
@@ -250,7 +238,7 @@ where
     pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ProxyConnection) -> Option<SharedSession<S, U>> {
         let hash: ProxyHashKey = connection.into();
 
-        match self.switchboard.get(&hash.to_string()) {
+        match self.switchboard.get(&hash) {
             Some(session) => session.clone(),
             None => None,
         }
@@ -280,7 +268,7 @@ where
             if let Some(proxy_control_connection) = session.proxy_control {
                 let hash = ProxyHashKey::new(proxy_control_connection.source.ip(), port);
 
-                match &self.try_and_claim(&hash, session_arc.clone()).await {
+                match &self.try_and_claim(hash.clone(), session_arc.clone()).await {
                     Ok(_) => {
                         // Remove and disassociate existing passive channels
                         if let Some(active_datachan_hash) = &session.proxy_active_datachan {
