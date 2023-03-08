@@ -5,7 +5,7 @@ use crate::{
     notification::PresenceListener,
     server::shutdown,
     server::{
-        chancomms::{ControlChanMsg, ProxyLoopSender},
+        chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
             auth::AuthMiddleware,
             codecs::FtpCodec,
@@ -21,6 +21,7 @@ use crate::{
         },
         failed_logins::FailedLoginsCache,
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
+        proxy_protocol::ProxyConnection,
         session::SharedSession,
         tls::FtpsConfig,
         Event, Session, SessionState,
@@ -73,7 +74,7 @@ where
 pub async fn spawn<Storage, User>(
     config: Config<Storage, User>,
     tcp_stream: TcpStream,
-    destination: Option<SocketAddr>,
+    proxy_connection: Option<ProxyConnection>,
     proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
     failed_logins: Option<Arc<FailedLoginsCache>>,
@@ -107,10 +108,12 @@ where
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
-        .destination(destination)
+        .proxy_connection(proxy_connection)
         .failed_logins(failed_logins);
 
-    let mut logger = logger.new(slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.source)));
+    let mut logger = logger.new(
+        slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.proxy_control.map(|p| p.source).unwrap_or(session.source))),
+    );
 
     let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
     let local_addr = tcp_stream.local_addr()?;
@@ -125,7 +128,7 @@ where
         tx_control_chan: control_msg_tx,
         local_addr,
         storage_features,
-        tx_proxy_loop: proxyloop_msg_tx,
+        tx_proxy_loop: proxyloop_msg_tx.clone(),
         sitemd5,
     };
 
@@ -206,6 +209,10 @@ where
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
                     let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
+                    let shared_session = shared_session.clone();
+                    if let Some(tx) = proxyloop_msg_tx {
+                        tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session)).await.unwrap();
+                    };
                     slog::info!(logger, "Exiting control loop");
                     return;
                 }

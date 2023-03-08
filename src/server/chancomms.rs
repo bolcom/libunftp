@@ -1,6 +1,6 @@
 //! Contains code pertaining to the communication between the data and control channels.
 
-use super::{proxy_protocol::ConnectionTuple, session::SharedSession};
+use super::{proxy_protocol::ProxyConnection, session::SharedSession};
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
@@ -142,9 +142,11 @@ where
     User: UserDetail,
 {
     /// Upon receiving the header, the connection and tcp stream are passed back to the proxy loop
-    ProxyHeaderReceived(ConnectionTuple, TcpStream),
+    ProxyHeaderReceived(ProxyConnection, TcpStream),
     /// Command to assign a data port to a session
     AssignDataPortCommand(SharedSession<Storage, User>),
+    /// Command to clean up an active data channel (used when exiting the control loop)
+    CloseDataPortCommand(SharedSession<Storage, User>),
 }
 
 pub type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;

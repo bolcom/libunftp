@@ -10,7 +10,7 @@ use crate::{
         controlchan,
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,
-        proxy_protocol::{spawn_proxy_header_parsing, ConnectionTuple, ProxyProtocolSwitchboard},
+        proxy_protocol::{spawn_proxy_header_parsing, ProxyConnection, ProxyProtocolSwitchboard},
         session::SharedSession,
         ControlChanMsg, Reply,
     },
@@ -74,16 +74,15 @@ where
                             // and connections for the data channel.
                             let destination_port = connection.destination.port();
                             if destination_port == self.external_control_port {
-                                let source = connection.source;
-                                slog::info!(self.logger, "Connection from {:?} is a control connection", source);
+                                slog::info!(self.logger, "Incoming control connection: {:?} ({:?})(control port: {:?})", connection, socket_addr, self.external_control_port);
                                 let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
-                                let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(source), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
+                                let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
                                 if result.is_err() {
                                     slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
                                 }
                             } else {
                                 // handle incoming data connections
-                                slog::info!(self.logger, "Connection from {:?} is a data connection: {:?}, {}", socket_addr, self.options.passive_ports, destination_port);
+                                slog::info!(self.logger, "Incoming data connection: {:?} ({:?}) (range: {:?})", connection, socket_addr, self.options.passive_ports);
                                 if !self.options.passive_ports.contains(&destination_port) {
                                     slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.options.passive_ports);
                                     tcp_stream.shutdown().await.unwrap();
@@ -95,6 +94,16 @@ where
                         ProxyLoopMsg::AssignDataPortCommand (session_arc) => {
                             self.select_and_register_passive_port(session_arc).await;
                         },
+                        // This is sent from the control loop when it exits, so that the port is freed
+                        ProxyLoopMsg::CloseDataPortCommand (session_arc) => {
+                            if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
+                                let session = session_arc.lock().await;
+                                if let Some(active_datachan) = &session.proxy_active_datachan {
+                                    slog::info!(self.logger, "Unregistering active data channel port because the control channel is closing {:?}", active_datachan);
+                                    switchboard.unregister_hash(active_datachan);
+                                }
+                            }
+                        },
                     }
                 },
             };
@@ -105,12 +114,12 @@ where
     // that requested this data channel connection in the proxy
     // protocol switchboard hashmap, and then calls the
     // spawn_data_processing function with the tcp_stream
-    async fn dispatch_data_connection(&mut self, mut tcp_stream: tokio::net::TcpStream, connection: ConnectionTuple) {
+    async fn dispatch_data_connection(&mut self, mut tcp_stream: tokio::net::TcpStream, connection: ProxyConnection) {
         if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
             match switchboard.get_session_by_incoming_data_connection(&connection).await {
                 Some(session) => {
                     spawn_processing(self.logger.clone(), session, tcp_stream).await;
-                    switchboard.unregister(&connection);
+                    switchboard.unregister_this(&connection);
                 }
                 None => {
                     slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
@@ -134,8 +143,8 @@ where
             reserved_port = port
         }
         let session = session_arc.lock().await;
-        if let Some(destination) = session.destination {
-            let destination_ip = match destination.ip() {
+        if let Some(proxy_connection) = session.proxy_control {
+            let destination_ip = match proxy_connection.destination.ip() {
                 IpAddr::V4(ip) => ip,
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
