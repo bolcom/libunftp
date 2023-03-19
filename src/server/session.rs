@@ -85,7 +85,7 @@ where
     // The socket address of the client on the control channel
     pub source: SocketAddr,
     // The control connection over the proxy protocol
-    pub proxy_control: Option<ProxyConnection>,
+    pub(crate) proxy_control: Option<ProxyConnection>,
     // Points to the hashkey of the data connection
     pub(crate) proxy_active_datachan: Option<ProxyHashKey>,
     // Current working directory
@@ -167,7 +167,7 @@ where
         self
     }
 
-    pub fn proxy_connection(mut self, proxy_connection: Option<ProxyConnection>) -> Self {
+    pub(crate) fn proxy_connection(mut self, proxy_connection: Option<ProxyConnection>) -> Self {
         self.proxy_control = proxy_connection;
         self
     }

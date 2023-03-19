@@ -71,7 +71,7 @@ where
 
 /// Does TCP processing when an FTP client connects
 #[tracing_attributes::instrument]
-pub async fn spawn<Storage, User>(
+pub(crate) async fn spawn<Storage, User>(
     config: Config<Storage, User>,
     tcp_stream: TcpStream,
     proxy_connection: Option<ProxyConnection>,

@@ -1,17 +1,18 @@
-use super::chancomms::ProxyLoopSender;
-use super::session::SharedSession;
-use crate::server::chancomms::ProxyLoopMsg;
+use super::{
+    chancomms::{ProxyLoopMsg, ProxyLoopSender},
+    session::SharedSession,
+};
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use dashmap::{mapref::entry::Entry, DashMap};
 use proxy_protocol::{parse, version1::ProxyAddresses, ParseError, ProxyHeader};
-use std::net::{SocketAddr, SocketAddrV4};
-use std::{net::IpAddr, ops::Range};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4};
+use std::ops::Range;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 
 #[derive(Clone, Copy, Debug)]
-pub enum ProxyMode {
+pub(super) enum ProxyMode {
     Off,
     On { external_control_port: u16 },
 }
@@ -24,7 +25,7 @@ impl From<u16> for ProxyMode {
 
 #[derive(Error, Debug)]
 #[error("Proxy Protocol Error")]
-pub enum ProxyError {
+pub(self) enum ProxyError {
     #[error("header doesn't end with CRLF")]
     CrlfError,
     #[error("header size is incorrect")]
@@ -48,7 +49,7 @@ impl PartialEq for ProxyError {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct ProxyConnection {
+pub(crate) struct ProxyConnection {
     pub source: SocketAddr,
     pub destination: SocketAddr,
 }
@@ -62,16 +63,8 @@ pub struct ProxyConnection {
 /// If the header size is invalid, or the header does not end with a CR-LF sequence, the function returns a `ProxyError`
 /// with the reason for the failure. If there is a problem reading from the TCP stream, the function returns a `ProxyError::ReadError`.
 /// If the header cannot be parsed, the function returns a `ProxyError::DecodeError`.
-///
-/// # Arguments
-///
-/// * `tcp_stream` - The TCP stream to read the header from.
-///
-/// # Returns
-///
-/// A `Result` containing either a `ProxyHeader` struct or a `ProxyError` indicating the reason for the failure.
 #[tracing_attributes::instrument]
-async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
+pub(self) async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
     // Create two vectors to hold the data read from the TCP stream
     let mut pbuf = vec![0; 108]; // peek buffer
     let mut rbuf = vec![0; 108]; // read buffer
@@ -118,8 +111,10 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
     }
 }
 
+/// Takes a tcp stream and reads the proxy protocol header
+/// Sends the extracted proxy connection information (source ip+port, destination ip+port) to the proxy loop
 #[tracing_attributes::instrument]
-pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
+pub(super) fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -157,9 +152,11 @@ where
     });
 }
 
-/// The key is constructed out of the external source IP of the client and the passive listening port that has been reserved
+/// Identifies a passive listening port entry in the ProxyProtocolSwitchboard that is connected to a specific
+/// client. The key is constructed out of the external source IP of the client and the passive listening port that has
+/// been reserved
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct ProxyHashKey {
+pub(crate) struct ProxyHashKey {
     source: IpAddr,
     port: u16,
 }
@@ -178,7 +175,7 @@ impl From<&ProxyConnection> for ProxyHashKey {
 
 /// Connect clients to the right data channel
 #[derive(Debug)]
-pub struct ProxyProtocolSwitchboard<S, U>
+pub(super) struct ProxyProtocolSwitchboard<S, U>
 where
     S: StorageBackend<U>,
     U: UserDetail,
@@ -189,7 +186,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum ProxyProtocolError {
+pub(super) enum ProxyProtocolError {
     // SwitchBoardNotInitialized,
     EntryNotAvailable,
     // EntryCreationFailed,
@@ -227,6 +224,7 @@ where
 
         self.unregister_hash(&hash)
     }
+
     /// Unregister by hash
     pub fn unregister_hash(&mut self, hash: &ProxyHashKey) {
         if self.switchboard.remove(hash).is_none() {
@@ -288,7 +286,6 @@ where
             }
         }
 
-        // out of tries
         slog::warn!(self.logger, "Out of tries reserving next free port!");
         Err(ProxyProtocolError::MaxRetriesError)
     }

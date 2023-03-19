@@ -25,7 +25,7 @@ use tokio::{io::AsyncWriteExt, sync::mpsc::channel};
 
 // ProxyProtocolListener binds to a single port and assumes connections multiplexed by the
 // [proxy protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/)
-pub struct ProxyProtocolListener<Storage, User>
+pub(super) struct ProxyProtocolListener<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
