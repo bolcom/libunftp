@@ -261,7 +261,7 @@ where
         // The search starts at randomized_initial_port.
         // If a port is already claimed, the loop continues to the next port until an available port is found.
         // The function returns the first available port it finds or an error if no ports are available.
-        for i in 0..range_size + 1 {
+        for i in 0..=range_size  {
             let port = self.port_range.start + ((randomized_initial_port + i) % range_size);
             slog::debug!(self.logger, "Trying if port {} is available", port);
             let mut session = session_arc.lock().await;
