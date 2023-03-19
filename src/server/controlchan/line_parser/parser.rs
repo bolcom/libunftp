@@ -195,7 +195,7 @@ where
             let path = String::from_utf8_lossy(&path).to_string();
             Command::Rmd { path }
         }
-        "QUIT" => {
+        "QUIT" | "BYE" => {
             let params = parse_to_eol(cmd_params)?;
             if !params.is_empty() {
                 return Err(ParseErrorKind::InvalidCommand.into());

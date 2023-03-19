@@ -330,6 +330,15 @@ fn parse_quit() {
 }
 
 #[test]
+fn parse_bye() {
+    let input = "BYE\r\n";
+    assert_eq!(parse(input), Ok(Command::Quit));
+
+    let input = "BYE BYE\r\n";
+    assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
+}
+
+#[test]
 fn parse_mkd() {
     let input = "MKD\r\n";
     assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
