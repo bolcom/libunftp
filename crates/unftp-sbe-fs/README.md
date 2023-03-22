@@ -52,7 +52,7 @@ lftp -p 2121 localhost
 For more help refer to:
 
 - the [examples](./examples) directory.
-- the [API Documentation](https://docs.rs/libunftp).
+- the [API Documentation](https://docs.rs/unftp-sbe-fs/latest/unftp_sbe_fs/).
 - [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
 
 ## Getting help and staying informed
