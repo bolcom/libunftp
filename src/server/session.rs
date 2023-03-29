@@ -5,6 +5,7 @@ use super::{chancomms::ControlChanMsg, tls::FtpsConfig};
 use crate::auth::UserDetail;
 use crate::server::chancomms::DataChanCmd;
 use crate::server::failed_logins::FailedLoginsCache;
+use crate::server::proxy_protocol::{ProxyConnection, ProxyHashKey};
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
@@ -83,8 +84,10 @@ where
     pub control_msg_tx: Option<Sender<ControlChanMsg>>,
     // The socket address of the client on the control channel
     pub source: SocketAddr,
-    // The socket address of the proxy protocol destination
-    pub destination: Option<SocketAddr>,
+    // The control connection over the proxy protocol
+    pub(crate) proxy_control: Option<ProxyConnection>,
+    // Points to the hashkey of the data connection
+    pub(crate) proxy_active_datachan: Option<ProxyHashKey>,
     // Current working directory
     pub cwd: std::path::PathBuf,
     // After a RNFR command this will hold the source path used by the RNTO command.
@@ -130,7 +133,8 @@ where
             data_abort_rx: None,
             control_msg_tx: None,
             source,
-            destination: None,
+            proxy_control: None,
+            proxy_active_datachan: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
@@ -163,8 +167,8 @@ where
         self
     }
 
-    pub fn destination(mut self, destination: Option<SocketAddr>) -> Self {
-        self.destination = destination;
+    pub(crate) fn proxy_connection(mut self, proxy_connection: Option<ProxyConnection>) -> Self {
+        self.proxy_control = proxy_connection;
         self
     }
 

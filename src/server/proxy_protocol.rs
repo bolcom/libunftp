@@ -1,15 +1,18 @@
-use super::chancomms::ProxyLoopSender;
-use super::session::SharedSession;
-use crate::server::chancomms::ProxyLoopMsg;
+use super::{
+    chancomms::{ProxyLoopMsg, ProxyLoopSender},
+    session::SharedSession,
+};
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
-use proxy_protocol::{parse, version1::ProxyAddresses, ProxyHeader};
-use std::net::{SocketAddr, SocketAddrV4};
-use std::{collections::HashMap, net::IpAddr, ops::Range};
+use dashmap::{mapref::entry::Entry, DashMap};
+use proxy_protocol::{parse, version1::ProxyAddresses, ParseError, ProxyHeader};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4};
+use std::ops::Range;
+use thiserror::Error;
 use tokio::io::AsyncReadExt;
 
 #[derive(Clone, Copy, Debug)]
-pub enum ProxyMode {
+pub(super) enum ProxyMode {
     Off,
     On { external_control_port: u16 },
 }
@@ -20,76 +23,98 @@ impl From<u16> for ProxyMode {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum ProxyError {
+#[derive(Error, Debug)]
+#[error("Proxy Protocol Error")]
+pub(self) enum ProxyError {
+    #[error("header doesn't end with CRLF")]
     CrlfError,
+    #[error("header size is incorrect")]
     HeaderSize,
+    #[error("header does not match the supported proxy protocol v1")]
     NotProxyHdr,
-    DecodeError,
+    #[error("proxy protocol parse error")]
+    DecodeError(#[from] ParseError),
+    #[error("only IPv4 is supported")]
     IPv4Required,
+    #[error("unsupported proxy protocol version")]
     UnsupportedVersion,
+    #[error("error reading from stream")]
+    ReadError(#[from] std::io::Error),
+}
+
+impl PartialEq for ProxyError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct ConnectionTuple {
+pub(crate) struct ProxyConnection {
     pub source: SocketAddr,
     pub destination: SocketAddr,
 }
 
-impl ConnectionTuple {
-    pub fn key(&self) -> String {
-        format!("{}.{}", self.source.ip(), self.destination.port())
-    }
-}
-
+/// Read the PROXY protocol v1 header from the provided TCP stream.
+///
+/// This function reads the header until it finds a line ending with a CR-LF (carriage return and line feed) sequence.
+/// It then parses the header and returns the resulting `ProxyHeader` struct, which contains information about the connection's
+/// source and destination IP addresses, source and destination ports and protocol family.
+///
+/// If the header size is invalid, or the header does not end with a CR-LF sequence, the function returns a `ProxyError`
+/// with the reason for the failure. If there is a problem reading from the TCP stream, the function returns a `ProxyError::ReadError`.
+/// If the header cannot be parsed, the function returns a `ProxyError::DecodeError`.
 #[tracing_attributes::instrument]
-async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
-    let mut pbuf = vec![0; 108];
-    let mut rbuf = vec![0; 108];
-    let (mut read_half, _) = tcp_stream.split();
+pub(self) async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
+    // Create two vectors to hold the data read from the TCP stream
+    let mut pbuf = vec![0; 108]; // peek buffer
+    let mut rbuf = vec![0; 108]; // read buffer
+
     let mut i = 0;
 
-    // TODO: We mute the clippy warning now but perhaps the 'read' invocations below should be changed
-    //       to read_exact
-    #[allow(clippy::unused_io_amount)]
     loop {
-        let n = read_half.peek(&mut pbuf).await.unwrap();
+        // Peek at the next data in the stream and map the error to a `ProxyError`
+        let n = tcp_stream.peek(&mut pbuf).await.map_err(ProxyError::ReadError)?;
+
         match pbuf.iter().position(|b| *b == b'\n') {
+            // If a newline character is found, the proxy header should be complete
             Some(pos) => {
-                // invalid header size
+                // If the header size is invalid, return an error
                 if i + pos > rbuf.capacity() || i + pos < 13 {
                     return Err(ProxyError::HeaderSize);
                 }
 
-                read_half.read(&mut rbuf[i..=i + pos]).await.unwrap();
+                // Read the data from the stream into the read buffer and map the error to a `ProxyError`
+                tcp_stream.read(&mut rbuf[i..=i + pos]).await.map_err(ProxyError::ReadError)?;
 
-                // make sure the message ends with crlf or it will panic
+                // Make sure the message ends with a CR/LF (\r\n)
                 if rbuf[i + pos - 1] != 0x0d {
                     return Err(ProxyError::CrlfError);
                 }
 
+                // Create a byte array from the read buffer and parse it into a `ProxyHeader`
                 let mut phb = Bytes::copy_from_slice(&rbuf[..=i + pos]);
-                let proxyhdr = match parse(&mut phb) {
-                    Ok(h) => h,
-                    Err(_) => return Err(ProxyError::DecodeError),
-                };
+                let proxyhdr = parse(&mut phb).map_err(ProxyError::DecodeError)?;
 
                 return Ok(proxyhdr);
             }
+            // If no newline character is found yet
             None => {
+                // If the read buffer is full, return an error
                 if i + n > rbuf.capacity() {
                     return Err(ProxyError::NotProxyHdr);
                 }
 
-                read_half.read(&mut rbuf[i..i + n]).await.unwrap();
-                i += n;
+                // Read the data that's available from the stream into the read buffer and map the error to a `ProxyError`
+                i += tcp_stream.read(&mut rbuf[i..i + n]).await.map_err(ProxyError::ReadError)?;
             }
         }
     }
 }
 
+/// Takes a tcp stream and reads the proxy protocol header
+/// Sends the extracted proxy connection information (source ip+port, destination ip+port) to the proxy loop
 #[tracing_attributes::instrument]
-pub fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
+pub(super) fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -101,7 +126,7 @@ where
             }) => {
                 if let Err(e) = tx
                     .send(ProxyLoopMsg::ProxyHeaderReceived(
-                        ConnectionTuple {
+                        ProxyConnection {
                             source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
                             destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
                         },
@@ -127,26 +152,41 @@ where
     });
 }
 
-/// Constructs a hash key based on the source ip and the destination port
-/// in a straightforward consistent way
-pub fn construct_proxy_hash_key(source: &IpAddr, port: u16) -> String {
-    format!("{}.{}", source, port)
+/// Identifies a passive listening port entry in the ProxyProtocolSwitchboard that is connected to a specific
+/// client. The key is constructed out of the external source IP of the client and the passive listening port that has
+/// been reserved
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub(crate) struct ProxyHashKey {
+    source: IpAddr,
+    port: u16,
+}
+
+impl ProxyHashKey {
+    fn new(source: IpAddr, port: u16) -> Self {
+        ProxyHashKey { source, port }
+    }
+}
+
+impl From<&ProxyConnection> for ProxyHashKey {
+    fn from(connection: &ProxyConnection) -> Self {
+        ProxyHashKey::new(connection.source.ip(), connection.destination.port())
+    }
 }
 
 /// Connect clients to the right data channel
 #[derive(Debug)]
-pub struct ProxyProtocolSwitchboard<S, U>
+pub(super) struct ProxyProtocolSwitchboard<S, U>
 where
     S: StorageBackend<U>,
     U: UserDetail,
 {
-    switchboard: HashMap<String, Option<SharedSession<S, U>>>,
+    switchboard: DashMap<ProxyHashKey, Option<SharedSession<S, U>>>,
     port_range: Range<u16>,
     logger: slog::Logger,
 }
 
 #[derive(Debug)]
-pub enum ProxyProtocolError {
+pub(super) enum ProxyProtocolError {
     // SwitchBoardNotInitialized,
     EntryNotAvailable,
     // EntryCreationFailed,
@@ -159,7 +199,7 @@ where
     U: UserDetail + 'static,
 {
     pub fn new(logger: slog::Logger, passive_ports: Range<u16>) -> Self {
-        let board = HashMap::new();
+        let board = DashMap::new();
         Self {
             switchboard: board,
             port_range: passive_ports,
@@ -167,33 +207,34 @@ where
         }
     }
 
-    fn try_and_claim(&mut self, hash: String, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
-        match self.switchboard.get(&hash) {
-            Some(_) => Err(ProxyProtocolError::EntryNotAvailable),
-            None => match self.switchboard.insert(hash, Some(session_arc)) {
-                Some(_) => {
-                    slog::warn!(self.logger, "This is a data race condition. This shouldn't happen");
-                    // just return Ok anyway however
-                    Ok(())
-                }
-                None => Ok(()),
-            },
-        }
-    }
-
-    pub fn unregister(&mut self, connection: &ConnectionTuple) {
-        let hash = connection.key();
-        match self.switchboard.remove(&hash) {
-            Some(_) => (),
-            None => {
-                slog::warn!(self.logger, "Entry already removed?");
+    pub async fn try_and_claim(&mut self, hash: ProxyHashKey, session_arc: SharedSession<S, U>) -> Result<(), ProxyProtocolError> {
+        // Atomically insert the key and value into the switchboard hashmap
+        match self.switchboard.entry(hash) {
+            Entry::Occupied(_) => Err(ProxyProtocolError::EntryNotAvailable),
+            Entry::Vacant(entry) => {
+                entry.insert(Some(session_arc));
+                Ok(())
             }
         }
     }
 
+    /// Unregister this specific connection
+    pub fn unregister_this(&mut self, connection: &ProxyConnection) {
+        let hash = connection.into();
+
+        self.unregister_hash(&hash)
+    }
+
+    /// Unregister by hash
+    pub fn unregister_hash(&mut self, hash: &ProxyHashKey) {
+        if self.switchboard.remove(hash).is_none() {
+            slog::warn!(self.logger, "Entry already removed? hash: {:?}", hash);
+        }
+    }
+
     #[tracing_attributes::instrument]
-    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ConnectionTuple) -> Option<SharedSession<S, U>> {
-        let hash = connection.key();
+    pub async fn get_session_by_incoming_data_connection(&mut self, connection: &ProxyConnection) -> Option<SharedSession<S, U>> {
+        let hash: ProxyHashKey = connection.into();
 
         match self.switchboard.get(&hash) {
             Some(session) => session.clone(),
@@ -201,34 +242,50 @@ where
         }
     }
 
-    /// based on source ip of the client, select a free entry
-    /// but initialize it to None
-    // TODO: set a TTL on the hashmap entries
-    #[tracing_attributes::instrument]
+    /// Find the next available port within the specified range (inclusive of the upper limit).
+    /// The reserved port is associated with the source ip of the client and the associated session, using a hashmap
+    ///
+    //#[tracing_attributes::instrument]
     pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
-        let rng_length = self.port_range.end - self.port_range.start;
+        let range_size = self.port_range.end - self.port_range.start;
 
-        // change this to a "shuffle" method later on, to make sure we tried all available ports
-        for _ in 1..10 {
-            let random_u32 = {
-                let mut data = [0; 4];
-                getrandom::getrandom(&mut data).expect("Error generating random free port to reserve");
-                u32::from_ne_bytes(data)
-            };
+        let randomized_initial_port = {
+            let mut data = [0; 2];
+            getrandom::getrandom(&mut data).expect("Error generating random free port to reserve");
+            u16::from_ne_bytes(data)
+        };
 
-            let port = random_u32 % rng_length as u32 + self.port_range.start as u32;
-            let session = session_arc.lock().await;
-            if let Some(destination) = session.destination {
-                let hash = construct_proxy_hash_key(&destination.ip(), port as u16);
+        // Claims the next available listening port
+        // The search starts at randomized_initial_port.
+        // If a port is already claimed, the loop continues to the next port until an available port is found.
+        // The function returns the first available port it finds or an error if no ports are available.
+        let mut session = session_arc.lock().await;
+        for i in 0..=range_size {
+            let port = self.port_range.start + ((randomized_initial_port + i) % range_size);
+            slog::debug!(self.logger, "Trying if port {} is available", port);
+            if let Some(proxy_control_connection) = session.proxy_control {
+                let hash = ProxyHashKey::new(proxy_control_connection.source.ip(), port);
 
-                match &self.try_and_claim(hash.clone(), session_arc.clone()) {
-                    Ok(_) => return Ok(port as u16),
-                    Err(_) => continue,
+                match &self.try_and_claim(hash.clone(), session_arc.clone()).await {
+                    Ok(_) => {
+                        // Remove and disassociate existing passive channels
+                        if let Some(active_datachan_hash) = &session.proxy_active_datachan {
+                            slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_hash);
+                            self.unregister_hash(active_datachan_hash);
+                        }
+
+                        // Associate the new port to the session,
+                        session.proxy_active_datachan = Some(hash);
+                        return Ok(port);
+                    }
+                    Err(_) => {
+                        slog::debug!(self.logger, "Port entry is occupied (key: {:?}), trying to find a vacant one", &hash);
+                        continue;
+                    }
                 }
             }
         }
 
-        // out of tries
         slog::warn!(self.logger, "Out of tries reserving next free port!");
         Err(ProxyProtocolError::MaxRetriesError)
     }

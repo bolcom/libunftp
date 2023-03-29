@@ -284,14 +284,14 @@ where
 
         match socket.peer_addr() {
             Ok(datachan_addr) => {
-                let controlcahn_ip = session.source.ip();
-                if controlcahn_ip != datachan_addr.ip() {
+                let controlchan_ip = session.source.ip();
+                if controlchan_ip != datachan_addr.ip() {
                     if let Err(err) = socket.shutdown().await {
                         slog::error!(
                             logger,
                             "Couldn't close datachannel for IP ({}) that does not match the IP({}) of the control channel.\n{:?}",
                             datachan_addr.ip(),
-                            controlcahn_ip,
+                            controlchan_ip,
                             err
                         )
                     } else {
@@ -299,7 +299,7 @@ where
                             logger,
                             "Closing datachannel for IP ({}) that does not match the IP({}) of the control channel.",
                             datachan_addr.ip(),
-                            controlcahn_ip
+                            controlchan_ip
                         )
                     }
                     return;
