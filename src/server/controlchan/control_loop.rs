@@ -209,9 +209,8 @@ where
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
                     let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
-                    let shared_session = shared_session.clone();
                     if let Some(tx) = proxyloop_msg_tx {
-                        tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session)).await.unwrap();
+                        tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session.clone())).await.unwrap();
                     };
                     slog::info!(logger, "Exiting control loop");
                     return;
