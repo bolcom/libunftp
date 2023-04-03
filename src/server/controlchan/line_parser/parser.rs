@@ -87,6 +87,7 @@ where
             }
             Command::Pasv
         }
+        "EPSV" => Command::Epsv,
         "PORT" => {
             let params = parse_to_eol(cmd_params)?;
             if params.is_empty() {
