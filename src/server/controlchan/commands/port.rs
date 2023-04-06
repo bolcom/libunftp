@@ -108,7 +108,10 @@ impl Port {
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
-        todo!()
+        Ok(Reply::new(
+            ReplyCode::CommandNotImplemented,
+            "ACTIVE mode is not supported with Proxy - use PASSIVE instead",
+        ))
     }
 }
 
