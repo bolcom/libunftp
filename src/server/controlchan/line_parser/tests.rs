@@ -186,8 +186,8 @@ fn parse_port() {
     let input = "PORT\r\n";
     assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
 
-    let input = "PORT a1,a2,a3,a4,p1,p2\r\n";
-    assert_eq!(parse(input).unwrap(), Command::Port);
+    let input = "PORT 127,0,0,1,117,48\r\n";
+    assert_eq!(parse(input).unwrap(), Command::Port { addr: "127,0,0,1,117,48".to_string() });
 }
 
 #[test]
