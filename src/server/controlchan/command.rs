@@ -39,7 +39,10 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
-    Port,
+    Port {
+        /// The address to use to make an active connection to the client
+        addr: String,
+    },
     Retr {
         /// The path to the file the client would like to retrieve.
         path: String,
