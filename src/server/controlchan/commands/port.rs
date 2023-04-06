@@ -16,23 +16,24 @@
 // where h1 is the high order 8 bits of the internet host
 // address.
 
-use std::io;
-use std::net::{Ipv4Addr, SocketAddrV4};
 use crate::{
     auth::UserDetail,
     server::{
+        chancomms::{DataChanCmd, ProxyLoopSender},
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
             Reply, ReplyCode,
         },
-        chancomms::{DataChanCmd, ProxyLoopSender},
+        datachan,
         session::SharedSession,
-        ControlChanMsg, datachan
+        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
+use std::io;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
