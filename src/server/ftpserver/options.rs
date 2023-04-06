@@ -20,9 +20,10 @@ pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 
 /// The option to [Server.passive_host](crate::Server::passive_host). It allows the user to specify how the IP address
 /// communicated in the _PASV_ response is determined.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub enum PassiveHost {
     /// Use the IP address of the control connection
+    #[default]
     FromConnection,
     /// Advertise this specific IP address
     Ip(Ipv4Addr),
@@ -34,12 +35,6 @@ pub enum PassiveHost {
 }
 
 impl Eq for PassiveHost {}
-
-impl Default for PassiveHost {
-    fn default() -> Self {
-        PassiveHost::FromConnection
-    }
-}
 
 impl From<Ipv4Addr> for PassiveHost {
     fn from(ip: Ipv4Addr) -> Self {
@@ -125,10 +120,11 @@ impl Default for TlsFlags {
 
 /// The option to [Server.ftps_client_auth](crate::Server::ftps_client_auth). Tells if and how mutual TLS (client certificate
 /// authentication) should be handled.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub enum FtpsClientAuth {
     /// Mutual TLS is switched off and the server won't ask the client for a certificate in the TLS
     /// protocol. This is the default.
+    #[default]
     Off,
     /// Mutual TLS is on and whilst the server will request a certificate it will still proceed
     /// without one. If a certificate is sent by the client it will be validated against the
@@ -142,12 +138,6 @@ pub enum FtpsClientAuth {
 
 impl Eq for FtpsClientAuth {}
 
-impl Default for FtpsClientAuth {
-    fn default() -> FtpsClientAuth {
-        FtpsClientAuth::Off
-    }
-}
-
 impl From<bool> for FtpsClientAuth {
     fn from(on: bool) -> Self {
         match on {
@@ -159,20 +149,15 @@ impl From<bool> for FtpsClientAuth {
 
 /// The options for [Server.sitemd5](crate::Server::sitemd5).
 /// Allow MD5 either to be used by all, logged in users only or no one.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum SiteMd5 {
     /// Enabled for all users, including anonymous
     All,
+    #[default]
     /// Enabled for all non-anonymous users.
     Accounts,
     /// Disabled
     None, // would be nice to have a per-user setting also.
-}
-
-impl Default for SiteMd5 {
-    fn default() -> SiteMd5 {
-        SiteMd5::Accounts
-    }
 }
 
 /// Tells how graceful shutdown should happen. An instance of this struct should be returned from
