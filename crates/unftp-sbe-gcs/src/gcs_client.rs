@@ -515,7 +515,7 @@ mod tests {
         cache
             .set(Token {
                 value: "the_value".to_string(),
-                expires_at: in_future.clone(),
+                expires_at: in_future,
             })
             .await;
         assert_eq!(

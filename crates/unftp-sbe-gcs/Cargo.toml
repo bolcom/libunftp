@@ -18,29 +18,29 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gc
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.64"
+async-trait = "0.1.68"
 base64 = "0.13.1"
 bytes = "1.4.0"
-chrono = { version = "0.4.23", default-features = false, features = ["std", "serde"] }
-futures = { version = "0.3.26", default-features = false, features = ["std"] }
-hyper = { version = "0.14.24", features = ["client", "runtime", "stream", "http1"] }
+chrono = { version = "0.4.24", default-features = false, features = ["std", "serde"] }
+futures = { version = "0.3.28", default-features = false, features = ["std"] }
+hyper = { version = "0.14.26", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.23.2"
 libunftp = { version="0.18.8", path="../../"}
-mime = "0.3.16"
+mime = "0.3.17"
 percent-encoding = "2.2.0"
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.93"
-time = "0.3.19"
-tokio = { version = "1.25.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
-tokio-stream = "0.1.12"
-tokio-util = { version = "0.7.7", features = ["codec", "compat"] }
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+time = "0.3.21"
+tokio = { version = "1.28.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio-stream = "0.1.14"
+tokio-util = { version = "0.7.8", features = ["codec", "compat"] }
 tracing = { version = "0.1.37", default-features = false }
-tracing-attributes = "0.1.23"
+tracing-attributes = "0.1.24"
 yup-oauth2 = "7.0.1"
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-clap = { version = "3.2.23", features = ["env"] }
+clap = { version = "3.2.25", features = ["env"] }
 lazy_static = "1.4.0"
 more-asserts = "0.3.1"
 path_abs = "0.5.1"
@@ -50,6 +50,6 @@ slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_in
 slog-async = "2.7.0"
 slog-stdlog = "4.1.1"
 slog-term = "2.9.0"
-tempfile = "3.3.0"
-tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread"] }
-tracing-subscriber = "0.3.16"
+tempfile = "3.5.0"
+tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = "0.3.17"

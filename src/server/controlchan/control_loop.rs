@@ -270,7 +270,7 @@ where
                     }
                 }
                 Some(Err(e)) => {
-                    let (reply, close_connection) = handle_control_channel_error::<Storage, User>(logger.clone(), e);
+                    let (reply, close_connection) = handle_control_channel_error(logger.clone(), e);
                     let result = reply_sink.send(reply).await;
                     if result.is_err() {
                         slog::warn!(logger, "Could not send error reply to client");
@@ -288,12 +288,7 @@ where
 }
 
 // gets the reply to be sent to the client and tells if the connection should be closed.
-fn handle_control_channel_error<Storage, User>(logger: slog::Logger, error: ControlChanError) -> (Reply, bool)
-where
-    User: UserDetail + 'static,
-    Storage: StorageBackend<User> + 'static,
-    Storage::Metadata: Metadata,
-{
+fn handle_control_channel_error(logger: slog::Logger, error: ControlChanError) -> (Reply, bool) {
     slog::warn!(logger, "Control channel error: {:?}", error);
     match error.kind() {
         ControlChanErrorKind::UnknownCommand { .. } => (Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented"), false),

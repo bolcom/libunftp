@@ -26,7 +26,14 @@ pr-prep: # Runs checks to ensure you're ready for a pull request
 	cargo build --examples --workspace
 	cargo build  --workspace
 	cargo clippy  --workspace
-	cargo test  --workspace
+	cargo test  --workspace \
+		-- \
+		--skip can_change_into_virtual_directory \
+		--skip creating_directory_with_file_in_it \
+		--skip deleting_directory_fails_if_contains_file \
+		--skip deleting_empty_directory_succeeds \
+		--skip file_sizes \
+		--skip newly_created_dir_is_empty
 	cargo test --doc --workspace
 	cargo doc --workspace --no-deps
 

@@ -35,14 +35,14 @@ fn fs_stat() {
 fn fs_list() {
     // Create a temp directory and create some files in it
     let root = tempfile::tempdir().unwrap();
-    let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
+    let file = tempfile::NamedTempFile::new_in(root.path()).unwrap();
     let path = file.path();
-    let relpath = path.strip_prefix(&root.path()).unwrap();
+    let relpath = path.strip_prefix(root.path()).unwrap();
     let file = file.as_file();
     let meta = file.metadata().unwrap();
 
     // Create a filesystem StorageBackend with our root dir
-    let fs = Filesystem::new(&root.path());
+    let fs = Filesystem::new(root.path());
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
@@ -63,12 +63,12 @@ fn fs_list() {
 fn fs_list_fmt() {
     // Create a temp directory and create some files in it
     let root = tempfile::tempdir().unwrap();
-    let file = tempfile::NamedTempFile::new_in(&root.path()).unwrap();
+    let file = tempfile::NamedTempFile::new_in(root.path()).unwrap();
     let path = file.path();
-    let relpath = path.strip_prefix(&root.path()).unwrap();
+    let relpath = path.strip_prefix(root.path()).unwrap();
 
     // Create a filesystem StorageBackend with our root dir
-    let fs = Filesystem::new(&root.path());
+    let fs = Filesystem::new(root.path());
 
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
     let my_list = rt.block_on(fs.list_fmt(&DefaultUser {}, "/")).unwrap();
