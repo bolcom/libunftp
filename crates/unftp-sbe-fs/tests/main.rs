@@ -301,7 +301,7 @@ async fn cwd() {
     ftp_stream.login("hoi", "jij").await.unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).await.unwrap();
     let pwd = ftp_stream.pwd().await.unwrap();
-    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(basename));
 }
 
 #[tokio::test]
@@ -321,7 +321,7 @@ async fn cdup() {
     ftp_stream.login("hoi", "jij").await.unwrap();
     ftp_stream.cwd(basename.to_str().unwrap()).await.unwrap();
     let pwd = ftp_stream.pwd().await.unwrap();
-    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(&basename));
+    assert_eq!(std::path::Path::new(&pwd), std::path::Path::new("/").join(basename));
 
     ftp_stream.cdup().await.unwrap();
     let pwd = ftp_stream.pwd().await.unwrap();

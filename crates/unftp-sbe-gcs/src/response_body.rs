@@ -149,12 +149,12 @@ mod test {
         let metadata: ObjectMetadata = item.to_metadata().unwrap();
         assert_eq!(metadata.size, 50);
         assert_eq!(metadata.modified().unwrap(), sys_time);
-        assert_eq!(metadata.is_file, true);
+        assert!(metadata.is_file);
     }
 
     #[test]
     fn to_metadata_parse_error() {
         let response: serde_json::error::Result<Item> = serde_json::from_str(r#"{"name":"", "updated":"2020-09-01T12:13:14Z", "size":8}"#);
-        assert_eq!(response.err().unwrap().is_data(), true);
+        assert!(response.err().unwrap().is_data());
     }
 }
