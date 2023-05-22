@@ -1,6 +1,7 @@
 //! Represents the chosen options that the libunftp user opted for.
 
 use crate::notification::{DataListener, PresenceListener};
+use crate::options::ActivePassiveMode;
 use crate::storage::Metadata;
 use crate::{
     auth::Authenticator,
@@ -32,6 +33,7 @@ where
     pub site_md5: SiteMd5,
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
+    pub active_passive_mode: ActivePassiveMode,
 }
 
 impl<Storage, User> From<&OptionsHolder<Storage, User>> for controlchan::LoopConfig<Storage, User>
@@ -56,6 +58,7 @@ where
             site_md5: server.site_md5,
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
+            active_passive_mode: server.active_passive_mode,
         }
     }
 }

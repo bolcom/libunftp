@@ -45,7 +45,7 @@ mod tests {
     const SECRET: &str = "supersecret";
 
     #[test]
-    fn password_obsures_display() {
+    fn password_obscures_display() {
         assert_eq!("*******", format!("{}", password()));
     }
 

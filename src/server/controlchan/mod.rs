@@ -8,6 +8,7 @@ pub(crate) mod reply;
 
 pub(super) mod commands;
 
+mod active_passive;
 mod auth;
 mod codecs;
 mod control_loop;

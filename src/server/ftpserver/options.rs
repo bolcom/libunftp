@@ -240,3 +240,16 @@ impl Default for FailedLoginsPolicy {
         FailedLoginsPolicy::new(3, Duration::from_secs(120), FailedLoginsBlock::UserAndIP)
     }
 }
+
+/// The options for [Server.active_passive_mode](crate::Server::active_passive_mode).
+/// This allows to switch active / passive mode on or off.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum ActivePassiveMode {
+    /// Only passive mode is enabled
+    #[default]
+    PassiveOnly,
+    /// Only Active mode is enabled
+    ActiveOnly,
+    /// Both is enabled
+    ActiveAndPassive,
+}
