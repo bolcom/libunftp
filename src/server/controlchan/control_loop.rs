@@ -1,17 +1,18 @@
 use crate::{
     auth::{Authenticator, UserDetail},
     metrics::MetricsMiddleware,
-    notification::DataListener,
-    notification::PresenceListener,
-    server::shutdown,
+    notification::{DataListener, PresenceListener},
+    options::ActivePassiveMode,
     server::{
         chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
+            active_passive::ActivePassiveEnforcerMiddleware,
             auth::AuthMiddleware,
             codecs::FtpCodec,
             command::Command,
             commands,
-            error::{ControlChanError, ControlChanErrorKind},
+            error::ControlChanError,
+            error::ControlChanErrorKind,
             ftps::{FtpsControlChanEnforcerMiddleware, FtpsDataChanEnforcerMiddleware},
             handler::{CommandContext, CommandHandler},
             log::LoggingMiddleware,
@@ -23,12 +24,12 @@ use crate::{
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
         proxy_protocol::ProxyConnection,
         session::SharedSession,
+        shutdown,
         tls::FtpsConfig,
         Event, Session, SessionState,
     },
     storage::{ErrorKind, Metadata, StorageBackend},
 };
-
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::ServerConnection;
@@ -67,6 +68,7 @@ where
     pub site_md5: SiteMd5,
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
+    pub active_passive_mode: ActivePassiveMode,
 }
 
 /// Does TCP processing when an FTP client connects
@@ -98,6 +100,7 @@ where
         site_md5: sitemd5,
         data_listener,
         presence_listener,
+        active_passive_mode,
         ..
     } = config;
 
@@ -133,6 +136,11 @@ where
     };
 
     let event_chain = EventDispatcherMiddleware::new(data_listener, presence_listener, event_chain);
+
+    let event_chain = ActivePassiveEnforcerMiddleware {
+        mode: active_passive_mode,
+        next: event_chain,
+    };
 
     let event_chain = AuthMiddleware {
         session: shared_session.clone(),

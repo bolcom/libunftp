@@ -11,6 +11,7 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
+use crate::options::ActivePassiveMode;
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
     notification::{nop::NopListener, DataListener, PresenceListener},
@@ -73,6 +74,7 @@ where
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
     failed_logins_policy: Option<FailedLoginsPolicy>,
+    active_passive_mode: ActivePassiveMode,
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -120,6 +122,7 @@ where
             site_md5: SiteMd5::default(),
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
+            active_passive_mode: ActivePassiveMode::default(),
         }
     }
 
@@ -140,6 +143,26 @@ where
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
     pub fn authenticator(mut self, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         self.authenticator = authenticator;
+        self
+    }
+
+    /// Enables one or both of Active/Passive mode. In active mode the server connects to the client's
+    /// data port and in passive mode the client connects the the server's data port.
+    ///
+    /// Active mode is an older mode and considered less secure and is therefore disabled by default.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::options::ActivePassiveMode;
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .active_passive_mode(ActivePassiveMode::ActiveAndPassive);
+    /// ```
+    pub fn active_passive_mode<M: Into<ActivePassiveMode>>(mut self, mode: M) -> Self {
+        self.active_passive_mode = mode.into();
         self
     }
 
@@ -626,6 +649,7 @@ where
             site_md5: server.site_md5,
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
+            active_passive_mode: server.active_passive_mode,
         }
     }
 }
@@ -639,6 +663,7 @@ where
         f.debug_struct("Server")
             .field("authenticator", &self.authenticator)
             .field("collect_metrics", &self.collect_metrics)
+            .field("active_passive_mode", &self.active_passive_mode)
             .field("greeting", &self.greeting)
             .field("logger", &self.logger)
             .field("metrics", &self.collect_metrics)
