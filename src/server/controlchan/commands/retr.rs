@@ -11,7 +11,7 @@ use crate::{
         chancomms::DataChanCmd,
         controlchan::{
             command::Command,
-            error::{ControlChanError, ControlChanErrorKind},
+            error::ControlChanError,
             handler::{CommandContext, CommandHandler},
             Reply,
         },
@@ -48,7 +48,9 @@ where
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending data"))
             }
-            None => Err(ControlChanErrorKind::InternalServerError.into()),
+            None => {
+                Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
+            }
         }
     }
 }
