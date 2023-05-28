@@ -52,13 +52,14 @@ where
         tokio::spawn(async move {
             match storage.del((*user).as_ref().unwrap(), path).await {
                 Ok(_) => {
+                    slog::info!(logger, "DELE: Successfully removed file {:?}", path_str);
                     if let Err(err) = tx_success.send(ControlChanMsg::DelFileSuccess { path: path_str }).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "DELE: Could not send internal message to notify of DELE success: {}", err);
                     }
                 }
                 Err(err) => {
                     if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "DELE: Could not send internal message to notify of DELE error: {}", err);
                     }
                 }
             }

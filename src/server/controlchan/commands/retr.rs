@@ -34,21 +34,27 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: DataChanCmd = match args.parsed_command.clone() {
-            Command::Retr { path } => DataChanCmd::Retr { path },
-            _ => panic!("Programmer error, expected command to be RETR"),
+        let (cmd, path): (DataChanCmd, String) = match args.parsed_command.clone() {
+            Command::Retr { path } => {
+                let path_clone = path.clone();
+                (DataChanCmd::Retr { path }, path_clone)
+            }
+            _ => panic!("Programmer error, expected command to be LIST"),
         };
+
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "RETR: could not notify data channel to respond with RETR. {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending data"))
             }
             None => {
+                slog::warn!(logger, "RETR: no data connection established for RETRing {:?}", path);
+
                 Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
             }
         }

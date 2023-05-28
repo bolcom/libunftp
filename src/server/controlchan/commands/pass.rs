@@ -87,7 +87,7 @@ where
                                     if let Some(state) = result {
                                         slog::warn!(
                                             logger,
-                                            "User authenticated but currently locked out due to previous failed login attempts according to the policy! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. state={:?})",
+                                            "PASS: User authenticated but currently locked out due to previous failed login attempts according to the policy! (Username={}. Note: the account automatically unlocks after the configured period if no further failed login attempts occur. state={:?})",
                                             username,
                                             state
                                         );
@@ -104,23 +104,23 @@ where
                                 ControlChanMsg::AuthFailed
                             } else if user.account_enabled() {
                                 let mut session = session2clone.lock().await;
-                                slog::info!(logger, "User {} logged in", user);
+                                slog::info!(logger, "PASS: User {} logged in", user);
                                 session.user = Arc::new(Some(user));
                                 ControlChanMsg::AuthSuccess {
                                     username,
                                     trace_id: session.trace_id,
                                 }
                             } else {
-                                slog::warn!(logger, "User {} authenticated but account is disabled", user);
+                                slog::warn!(logger, "PASS: User {} authenticated but account is disabled", user);
                                 ControlChanMsg::AuthFailed
                             }
                         }
                         Err(crate::auth::AuthenticationError::BadUser) => {
-                            slog::warn!(logger, "Login attempt for unknown user {}", username);
+                            slog::warn!(logger, "PASS: Login attempt for unknown user {}", username);
                             ControlChanMsg::AuthFailed
                         }
                         Err(err) => {
-                            slog::warn!(logger, "Failed login attempt for user {}, reason={}", username, err);
+                            slog::warn!(logger, "PASS: Failed login attempt for user {}, reason={}", username, err);
                             if let Some(failed_logins) = failed_logins {
                                 let result = failed_logins.failed(source_ip, username.clone()).await;
                                 if let Some(state) = result {
@@ -128,7 +128,7 @@ where
                                         LockState::MaxFailuresReached => {
                                             slog::warn!(
                                                 logger,
-                                                "Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, LockState={:?})",
+                                                "PASS: Maximum number bad login attempts reached according to the policy so the locking policy is now active (Username={}, IP={}, LockState={:?})",
                                                 username,
                                                 source_ip,
                                                 state
@@ -137,7 +137,7 @@ where
                                         LockState::AlreadyLocked => {
                                             slog::info!(
                                                 logger,
-                                                "Another bad login attempt but the locking policy is already active (Username={}, IP={}, LockState={:?})",
+                                                "PASS: Another bad login attempt but the locking policy is already active (Username={}, IP={}, LockState={:?})",
                                                 username,
                                                 source_ip,
                                                 state
@@ -152,7 +152,7 @@ where
                     };
                     tokio::spawn(async move {
                         if let Err(err) = tx.send(msg).await {
-                            slog::warn!(logger, "{}", err);
+                            slog::warn!(logger, "PASS: Could not send internal message: {}", err);
                         }
                     });
                 });

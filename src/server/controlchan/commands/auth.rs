@@ -51,7 +51,7 @@ where
             (true, AuthParam::Tls) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(ControlChanMsg::SecureControlChannel).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "AUTH: Could not send internal message to notify of TLS upgrade: {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))

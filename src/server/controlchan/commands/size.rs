@@ -46,6 +46,7 @@ where
             match storage.metadata((*user).as_ref().unwrap(), &path).await {
                 Ok(metadata) => {
                     let file_len = metadata.len();
+                    slog::info!(logger, "SIZE: Successful size command for file {:?}: (size: {})", &path, file_len);
                     if let Err(err) = tx_success
                         .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                             ReplyCode::FileStatus,
@@ -53,12 +54,13 @@ where
                         )))
                         .await
                     {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "SIZE: Could not send internal message to notify of SIZE success: {}", err);
                     }
                 }
                 Err(err) => {
+                    slog::warn!(logger, "SIZE: Command failed for file {:?}: {}", &path, err);
                     if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "SIZE: Could not send internal message to notify of SIZE failure: {}", err);
                     }
                 }
             }

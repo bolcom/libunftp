@@ -38,8 +38,11 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: DataChanCmd = match args.parsed_command.clone() {
-            Command::List { path, options } => DataChanCmd::List { path, options },
+        let (cmd, path_opt): (DataChanCmd, Option<String>) = match args.parsed_command.clone() {
+            Command::List { path, options } => {
+                let path_clone = path.clone();
+                (DataChanCmd::List { path, options }, path_clone)
+            }
             _ => panic!("Programmer error, expected command to be LIST"),
         };
         let logger = args.logger;
@@ -47,12 +50,19 @@ where
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        slog::warn!(logger, "could not notify data channel to respond with LIST. {}", err);
+                        slog::warn!(logger, "LIST: could not notify data channel to respond with LIST. {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => {
+                if let Some(path) = path_opt {
+                    slog::warn!(logger, "LIST: no data connection established for LISTing {:?}", path);
+                } else {
+                    slog::warn!(logger, "LIST: no data connection established for LIST");
+                }
+                Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
+            }
         }
     }
 }

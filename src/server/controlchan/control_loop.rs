@@ -190,7 +190,7 @@ where
                         match cmd {
                             Some(cmd_result) => incoming = Some(cmd_result.map(Event::Command)),
                             None => {
-                                slog::info!(logger, "Command stream ended.");
+                                slog::info!(logger, "Control connection was closed.");
                                 incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
                             }
                         }
@@ -206,7 +206,7 @@ where
                         };
                     },
                     _ = shutdown.listen() => {
-                        slog::info!(logger, "Shutting down control loop");
+                        slog::warn!(logger, "Closing open control connection because of shutdown signal");
                         incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
                         // TODO: Do we want to wait a bit for a data transfer to complete i.e. session.data_busy is true?
                     }
@@ -220,7 +220,7 @@ where
                     if let Some(tx) = proxyloop_msg_tx {
                         tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session.clone())).await.unwrap();
                     };
-                    slog::info!(logger, "Exiting control loop");
+                    slog::debug!(logger, "Exiting control loop");
                     return;
                 }
                 Some(Ok(event)) => {
