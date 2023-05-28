@@ -223,16 +223,18 @@ impl GcsClient {
             request = request.header(*hk, *hv);
         }
 
+        // Return permanent error for now, even though this is likely a bug in unFTP
         let request = request
             .method(method)
             .body(body.into())
             .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
+        // Return retryable error if there's a connection error to GCS
         let response = self
             .http
             .request(request)
             .await
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+            .map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?;
 
         if !response.status().is_success() {
             let err_kind = match response.status().as_u16() {
