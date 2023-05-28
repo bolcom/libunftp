@@ -1,9 +1,28 @@
+use std::fmt;
+
 /// A reply to the FTP client
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Reply {
     None,
     CodeAndMsg { code: ReplyCode, msg: String },
     MultiLine { code: ReplyCode, lines: Vec<String> },
+}
+
+// A custom debug implementation to avoid spamming the log with a large amount of data
+impl fmt::Debug for Reply {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Reply::None => write!(f, "None"),
+            Reply::CodeAndMsg { code, msg } => write!(f, "CodeAndMsg {{ code: {:?}, msg: {:?} }}", code, msg),
+            Reply::MultiLine { code, lines } => {
+                if lines.len() > 1 {
+                    write!(f, "MultiLine {{ code: {:?}, {} lines - output omitted) }}", code, lines.len())
+                } else {
+                    write!(f, "MultiLine {{ code: {:?}, line: {:?} }}", code, lines)
+                }
+            }
+        }
+    }
 }
 
 /// The reply codes according to RFC 959.
