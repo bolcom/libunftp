@@ -5,6 +5,7 @@ use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
+use libc;
 use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},
@@ -296,11 +297,42 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 }
 
+// Maps IO errors to FTP errors in a sensible way.
+// We try to capture all the permanent failures.
+// The rest is assumed to be 'retryable' so they map to 4xx FTP reply, in this case a LocalError
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        match err.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+        match err {
+            e if e.kind() == std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+            // Could also be a directory, but we don't know
+            e if e.kind() == std::io::ErrorKind::AlreadyExists => Error::from(ErrorKind::PermanentFileNotAvailable),
+            e if e.kind() == std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            // The below should be changed when the io_error_more issues are resolved (https://github.com/rust-lang/rust/issues/86442)
+            // For each workaround, I mention the ErrorKind that can can replace it when stable
+            // TODO: find a workaround for Windows
+            // DirectoryNotEmpty
+            #[cfg(unix)]
+            e if e.raw_os_error() == Some(libc::ENOTEMPTY) => Error::from(ErrorKind::PermanentDirectoryNotEmpty),
+            // NotADirectory
+            #[cfg(unix)]
+            e if e.raw_os_error() == Some(libc::ENOTDIR) => Error::from(ErrorKind::PermanentDirectoryNotAvailable),
+            // IsADirectory, FileTooLarge, NotSeekable, InvalidFilename, FilesystemLoop
+            #[cfg(unix)]
+            e if e.raw_os_error() == Some(libc::EISDIR)
+                || e.raw_os_error() == Some(libc::EFBIG)
+                || e.raw_os_error() == Some(libc::ESPIPE)
+                || e.raw_os_error() == Some(libc::ENAMETOOLONG)
+                || e.raw_os_error() == Some(libc::ELOOP) =>
+            {
+                Error::from(ErrorKind::PermanentFileNotAvailable)
+            }
+            // StorageFull
+            #[cfg(unix)]
+            e if e.raw_os_error() == Some(libc::ENOSPC) => Error::from(ErrorKind::InsufficientStorageSpaceError),
+            // ReadOnlyFilesystem - Read-only filesystem can be considered a permission error
+            #[cfg(unix)]
+            e if e.raw_os_error() == Some(libc::EROFS) => Error::from(ErrorKind::PermissionDenied),
+            // All other errors should be retryable
             _ => Error::new(ErrorKind::LocalError, err),
         }
     }
