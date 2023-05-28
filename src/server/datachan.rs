@@ -12,9 +12,12 @@ use crate::{
 
 use crate::server::chancomms::DataChanCmd;
 use std::{path::PathBuf, sync::Arc};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::net::TcpStream;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_rustls::TlsAcceptor;
+
+use crate::metrics;
 
 #[derive(Debug)]
 struct DataCommandExecutor<Storage, User>
@@ -24,7 +27,7 @@ where
     User: UserDetail,
 {
     pub user: Arc<Option<User>>,
-    pub socket: tokio::net::TcpStream,
+    pub socket: TcpStream,
     pub control_msg_tx: Sender<ControlChanMsg>,
     pub storage: Arc<Storage>,
     pub cwd: PathBuf,
@@ -33,6 +36,68 @@ where
     pub logger: slog::Logger,
     pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
     pub data_abort_rx: Option<Receiver<()>>,
+}
+
+use std::fmt;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::time::Instant;
+
+struct MeasuringWriter<W> {
+    writer: W,
+    command: &'static str,
+}
+
+struct MeasuringReader<R> {
+    reader: R,
+    command: &'static str,
+}
+
+impl<W: AsyncWrite + Unpin> AsyncWrite for MeasuringWriter<W> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> std::task::Poll<Result<usize, std::io::Error>> {
+        let this = self.get_mut();
+
+        let result = Pin::new(&mut this.writer).poll_write(cx, buf);
+        if let Poll::Ready(Ok(bytes_written)) = &result {
+            metrics::inc_sent_bytes(*bytes_written, this.command);
+        }
+
+        result
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.writer).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.writer).poll_shutdown(cx)
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for MeasuringReader<R> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let result = Pin::new(&mut this.reader).poll_read(cx, buf);
+        if let Poll::Ready(Ok(())) = &result {
+            let bytes_read = buf.filled().len();
+            metrics::inc_received_bytes(bytes_read, this.command);
+        }
+        result
+    }
+}
+
+impl<W> MeasuringWriter<W> {
+    fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
+        Self { writer, command }
+    }
+}
+
+impl<R> MeasuringReader<R> {
+    fn new(reader: R, command: &'static str) -> MeasuringReader<R> {
+        Self { reader, command }
+    }
 }
 
 impl<Storage, User> DataCommandExecutor<Storage, User>
@@ -69,7 +134,7 @@ where
             }
             DataChanMsg::ExternalCommand(command) => {
                 let p = command.path().unwrap_or_default();
-                slog::info!(self.logger, "Data channel command received: {:?}", command; "path" => p);
+                slog::debug!(self.logger, "Data channel command received: {:?}", command; "path" => p);
                 self.execute_command(command).await;
             }
         }
@@ -85,10 +150,10 @@ where
                 self.exec_stor(path).await;
             }
             DataChanCmd::List { path, .. } => {
-                self.exec_list(path).await;
+                self.exec_list_variant(path, ListCommand::List).await;
             }
             DataChanCmd::Nlst { path } => {
-                self.exec_nlst(path).await;
+                self.exec_list_variant(path, ListCommand::Nlst).await;
             }
         }
     }
@@ -97,29 +162,51 @@ where
     async fn exec_retr(self, path: String) {
         let path_copy = path.clone();
         let path = self.cwd.join(path);
-        let tx_sending: Sender<ControlChanMsg> = self.control_msg_tx.clone();
-        let tx_error: Sender<ControlChanMsg> = self.control_msg_tx.clone();
-        let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let get_result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
-        match get_result {
-            Ok(bytes_copied) => {
-                if let Err(err) = output.shutdown().await {
-                    slog::warn!(self.logger, "Could not shutdown output stream after RETR: {}", err);
+        let tx: Sender<ControlChanMsg> = self.control_msg_tx.clone();
+        let mut output = Self::writer(self.socket, self.ftps_mode, "retr").await;
+
+        let start_time = Instant::now();
+        let result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
+
+        if let Err(err) = output.shutdown().await {
+            match err.kind() {
+                std::io::ErrorKind::BrokenPipe => {
+                    slog::debug!(self.logger, "Output stream was already shutdown after RETR: {:?}", err);
                 }
-                if let Err(err) = tx_sending
+                _ => slog::warn!(self.logger, "Could not shutdown output stream after RETR: {:?}", err),
+            }
+        }
+
+        let duration = start_time.elapsed();
+        match result {
+            Ok(bytes_copied) => {
+                slog::info!(
+                    self.logger,
+                    "Successful RETR {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                    &path_copy,
+                    HumanDuration(duration),
+                    HumanBytes(bytes_copied),
+                    TransferSpeed(bytes_copied as f64 / duration.as_secs_f64()),
+                );
+                metrics::inc_transferred("retr", "successful");
+
+                if let Err(err) = tx
                     .send(ControlChanMsg::SentData {
                         bytes: bytes_copied,
                         path: path_copy,
                     })
                     .await
                 {
-                    slog::error!(self.logger, "Could not notify control channel of successful RETR: {}", err);
+                    slog::error!(self.logger, "Could not notify control channel of successful RETR: {:?}", err);
                 }
             }
             Err(err) => {
-                slog::warn!(self.logger, "Error copying streams during RETR: {}", err);
-                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
-                    slog::warn!(self.logger, "Could not notify control channel of error with RETR: {}", err);
+                slog::warn!(self.logger, "Error during RETR transfer after {}: {:?}", HumanDuration(duration), err);
+
+                categorize_and_register_error(&err, "retr");
+
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                    slog::warn!(self.logger, "Could not notify control channel of error with RETR: {:?}", err);
                 }
             }
         }
@@ -129,34 +216,168 @@ where
     async fn exec_stor(self, path: String) {
         let path_copy = path.clone();
         let path = self.cwd.join(path);
-        let tx_ok = self.control_msg_tx.clone();
-        let tx_error = self.control_msg_tx.clone();
+        let tx = self.control_msg_tx.clone();
+
+        let start_time = Instant::now();
         let put_result = self
             .storage
             .put(
                 (*self.user).as_ref().unwrap(),
-                Self::reader(self.socket, self.ftps_mode).await,
+                Self::reader(self.socket, self.ftps_mode, "stor").await,
                 path,
                 self.start_pos,
             )
             .await;
+        let duration = start_time.elapsed();
+
         match put_result {
             Ok(bytes) => {
-                if let Err(err) = tx_ok.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
-                    slog::error!(self.logger, "Could not notify control channel of successful STOR: {}", err);
+                slog::info!(
+                    self.logger,
+                    "Successful STOR {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                    &path_copy,
+                    HumanDuration(duration),
+                    HumanBytes(bytes),
+                    TransferSpeed(bytes as f64 / duration.as_secs_f64()),
+                );
+
+                if let Err(err) = tx.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
+                    slog::error!(self.logger, "Could not notify control channel of successful STOR: {:?}", err);
                 }
             }
             Err(err) => {
-                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(err)).await {
-                    slog::error!(self.logger, "Could not notify control channel of error with STOR: {}", err);
+                slog::warn!(self.logger, "Error during STOR transfer after {}: {:?}", HumanDuration(duration), err);
+
+                categorize_and_register_error(&err, "stor");
+
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                    slog::error!(self.logger, "Could not notify control channel of error with STOR: {:?}", err);
                 }
             }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn exec_list(self, path: Option<String>) {
-        let path = match path {
+    async fn exec_list_variant(self, path: Option<String>, command: ListCommand) {
+        let path = self.resolve_path(path);
+        let tx = self.control_msg_tx.clone();
+        let mut output = Self::writer(self.socket, self.ftps_mode.clone(), command.as_lower_str()).await;
+
+        let start_time = Instant::now();
+
+        let list_result = match command {
+            ListCommand::List => self.storage.list_fmt((*self.user).as_ref().unwrap(), path.clone()).await,
+            ListCommand::Nlst => self
+                .storage
+                .nlst((*self.user).as_ref().unwrap(), path.clone())
+                .await
+                .map_err(|e| Error::new(ErrorKind::PermanentDirectoryNotAvailable, e)),
+        };
+
+        match list_result {
+            Ok(cursor) => {
+                slog::debug!(self.logger, "Copying future for {}", command.as_str());
+                let mut input = cursor;
+                let result = tokio::io::copy(&mut input, &mut output).await;
+
+                if let Err(err) = output.shutdown().await {
+                    match err.kind() {
+                        std::io::ErrorKind::BrokenPipe => {
+                            slog::debug!(self.logger, "Output stream was already shutdown after {}: {:?}", command.as_str(), err);
+                        }
+                        _ => slog::warn!(self.logger, "Could not shutdown output stream after {}: {:?}", command.as_str(), err),
+                    }
+                }
+                let duration = start_time.elapsed();
+
+                match result {
+                    Ok(bytes) => {
+                        slog::info!(
+                            self.logger,
+                            "Successful LIST {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                            path,
+                            HumanDuration(duration),
+                            HumanBytes(bytes),
+                            TransferSpeed(bytes as f64 / duration.as_secs_f64()),
+                        );
+                        metrics::inc_transferred(command.as_lower_str(), "success");
+                        if let Err(err) = tx.send(ControlChanMsg::DirectorySuccessfullyListed).await {
+                            slog::error!(self.logger, "Could not notify control channel of error with {}: {:?}", command.as_str(), err);
+                        }
+                    }
+                    Err(e) => {
+                        let duration = start_time.elapsed();
+                        slog::warn!(
+                            self.logger,
+                            "Failed to send directory list for path {:?} ({} command) after {}: {:?}",
+                            path,
+                            command.as_str(),
+                            HumanDuration(duration),
+                            e,
+                        );
+
+                        let err = Error::from(e);
+                        categorize_and_register_error(&err, command.as_lower_str());
+                    }
+                }
+            }
+            Err(err) => {
+                let duration = start_time.elapsed();
+
+                slog::warn!(
+                    self.logger,
+                    "Failed to retrieve directory list for path {:?} ({} command) from storage backend after {}: {:?}",
+                    path,
+                    command.as_str(),
+                    HumanDuration(duration),
+                    err,
+                );
+
+                categorize_and_register_error(&err, command.as_lower_str());
+
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                    slog::error!(self.logger, "Could not notify control channel of error with {}: {:?}", command.as_str(), err);
+                }
+            }
+        }
+    }
+
+    #[tracing_attributes::instrument]
+    async fn writer(socket: TcpStream, ftps_mode: FtpsConfig, command: &'static str) -> Box<dyn AsyncWrite + Send + Unpin + Sync> {
+        match ftps_mode {
+            FtpsConfig::Off => Box::new(MeasuringWriter::new(socket, command)) as Box<dyn AsyncWrite + Send + Unpin + Sync>,
+            FtpsConfig::Building { .. } => panic!("Illegal state"),
+            FtpsConfig::On { tls_config } => {
+                let io = async move {
+                    let acceptor: TlsAcceptor = tls_config.into();
+                    let tls_stream = acceptor.accept(socket).await.unwrap();
+                    MeasuringWriter::new(tls_stream, command)
+                }
+                .await;
+                Box::new(io) as Box<dyn AsyncWrite + Send + Unpin + Sync>
+            }
+        }
+    }
+
+    #[tracing_attributes::instrument]
+    async fn reader(socket: TcpStream, ftps_mode: FtpsConfig, command: &'static str) -> Box<dyn AsyncRead + Send + Unpin + Sync> {
+        match ftps_mode {
+            FtpsConfig::Off => Box::new(MeasuringReader::new(socket, command)) as Box<dyn AsyncRead + Send + Unpin + Sync>,
+            FtpsConfig::Building { .. } => panic!("Illegal state"),
+            FtpsConfig::On { tls_config } => {
+                let io = async move {
+                    let acceptor: TlsAcceptor = tls_config.into();
+                    let tls_stream = acceptor.accept(socket).await.unwrap();
+                    MeasuringReader::new(tls_stream, command)
+                }
+                .await;
+                Box::new(io) as Box<dyn AsyncRead + Send + Unpin + Sync>
+            }
+        }
+    }
+
+    fn resolve_path(&self, path: Option<String>) -> PathBuf {
+        match path {
             Some(path) => {
                 if path == "." {
                     self.cwd.clone()
@@ -165,99 +386,6 @@ where
                 }
             }
             None => self.cwd.clone(),
-        };
-        let tx_ok = self.control_msg_tx.clone();
-        let mut output = Self::writer(self.socket, self.ftps_mode).await;
-        let result = match self.storage.list_fmt((*self.user).as_ref().unwrap(), path).await {
-            Ok(cursor) => {
-                slog::debug!(self.logger, "Copying future for List");
-                let mut input = cursor;
-                match tokio::io::copy(&mut input, &mut output).await {
-                    Ok(_) => Ok(ControlChanMsg::DirectorySuccessfullyListed),
-                    Err(e) => Err(e),
-                }
-            }
-            Err(err) => {
-                slog::warn!(self.logger, "Failed to send directory list: {:?}", err);
-                match output.write_all(&format!("{}\r\n", err).into_bytes()).await {
-                    Ok(_) => Ok(ControlChanMsg::DirectoryListFailure),
-                    Err(e) => Err(e),
-                }
-            }
-        };
-        match result {
-            Ok(msg) => {
-                if let Err(err) = output.shutdown().await {
-                    slog::warn!(self.logger, "Could not shutdown output stream during LIST: {}", err);
-                }
-                if let Err(err) = tx_ok.send(msg).await {
-                    slog::error!(self.logger, "Could not notify control channel of LIST result: {}", err);
-                }
-            }
-            Err(err) => slog::warn!(self.logger, "Failed to send reply to LIST: {}", err),
-        }
-    }
-
-    #[tracing_attributes::instrument]
-    async fn exec_nlst(self, path: Option<String>) {
-        let path = match path {
-            Some(path) => self.cwd.join(path),
-            None => self.cwd.clone(),
-        };
-        let tx_ok = self.control_msg_tx.clone();
-        let tx_error = self.control_msg_tx.clone();
-        match self.storage.nlst((*self.user).as_ref().unwrap(), path).await {
-            Ok(mut input) => {
-                let mut output = Self::writer(self.socket, self.ftps_mode).await;
-                match tokio::io::copy(&mut input, &mut output).await {
-                    Ok(_) => {
-                        if let Err(err) = output.shutdown().await {
-                            slog::warn!(self.logger, "Could not shutdown output stream during NLIST: {}", err);
-                        }
-                        if let Err(err) = tx_ok.send(ControlChanMsg::DirectorySuccessfullyListed).await {
-                            slog::error!(self.logger, "Could not notify control channel of successful NLIST: {}", err);
-                        }
-                    }
-                    Err(err) => slog::warn!(self.logger, "Could not copy from storage implementation during NLST: {}", err),
-                }
-            }
-            Err(e) => {
-                if let Err(err) = tx_error.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
-                    slog::warn!(self.logger, "Could not notify control channel of error with NLIST: {}", err);
-                }
-            }
-        }
-    }
-
-    #[tracing_attributes::instrument]
-    async fn writer(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync> {
-        match ftps_mode {
-            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>,
-            FtpsConfig::Building { .. } => panic!("Illegal state"),
-            FtpsConfig::On { tls_config } => {
-                let io = async move {
-                    let acceptor: TlsAcceptor = tls_config.into();
-                    acceptor.accept(socket).await.unwrap()
-                }
-                .await;
-                Box::new(io) as Box<dyn tokio::io::AsyncWrite + Send + Unpin + Sync>
-            }
-        }
-    }
-
-    #[tracing_attributes::instrument]
-    async fn reader(socket: tokio::net::TcpStream, ftps_mode: FtpsConfig) -> Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync> {
-        match ftps_mode {
-            FtpsConfig::Off => Box::new(socket) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>,
-            FtpsConfig::Building { .. } => panic!("Illegal state"),
-            FtpsConfig::On { tls_config } => {
-                let io = async move {
-                    let acceptor: TlsAcceptor = tls_config.into();
-                    acceptor.accept(socket).await.unwrap()
-                }
-                .await;
-                Box::new(io) as Box<dyn tokio::io::AsyncRead + Send + Unpin + Sync>
-            }
         }
     }
 }
@@ -270,7 +398,7 @@ where
 /// session_arc: the user session that is also shared with the control channel.
 /// socket: the data socket we'll be working with.
 #[tracing_attributes::instrument]
-pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, mut socket: tokio::net::TcpStream)
+pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, mut socket: TcpStream)
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
@@ -289,7 +417,7 @@ where
                     if let Err(err) = socket.shutdown().await {
                         slog::error!(
                             logger,
-                            "Couldn't close datachannel for IP ({}) that does not match the IP({}) of the control channel.\n{:?}",
+                            "Couldn't close datachannel for IP ({}) that does not match the IP({}) of the control channel: {:?}",
                             datachan_addr.ip(),
                             controlchan_ip,
                             err
@@ -306,7 +434,7 @@ where
                 }
             }
             Err(err) => {
-                slog::error!(logger, "Couldn't determine data channel address.\n{:?}", err);
+                slog::error!(logger, "Couldn't determine data channel address: {:?}", err);
                 return;
             }
         }
@@ -356,4 +484,108 @@ where
     };
 
     tokio::spawn(command_executor.execute(session_arc));
+}
+
+use std::time::Duration;
+
+struct HumanDuration(Duration);
+
+impl fmt::Display for HumanDuration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let total_secs = self.0.as_secs();
+
+        let hours = total_secs / 3600;
+        let minutes = (total_secs % 3600) / 60;
+        let seconds = total_secs % 60;
+        let millis = self.0.subsec_millis();
+
+        if hours > 0 {
+            write!(f, "{}h {}m {}s {}ms", hours, minutes, seconds, millis)
+        } else if minutes > 0 {
+            write!(f, "{}m {}s {}ms", minutes, seconds, millis)
+        } else if seconds > 0 {
+            write!(f, "{}s {}ms", seconds, millis)
+        } else {
+            write!(f, "{}ms", millis)
+        }
+    }
+}
+
+struct HumanBytes(u64);
+
+impl fmt::Display for HumanBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const KIB: u64 = 1024;
+        const MIB: u64 = KIB * 1024;
+        const GIB: u64 = MIB * 1024;
+        const TIB: u64 = GIB * 1024;
+
+        if self.0 >= TIB {
+            write!(f, "{:.2} TiB", (self.0 as f64) / (TIB as f64))
+        } else if self.0 >= GIB {
+            write!(f, "{:.2} GiB", (self.0 as f64) / (GIB as f64))
+        } else if self.0 >= MIB {
+            write!(f, "{:.2} MiB", (self.0 as f64) / (MIB as f64))
+        } else if self.0 >= KIB {
+            write!(f, "{:.2} KiB", (self.0 as f64) / (KIB as f64))
+        } else {
+            write!(f, "{} B", self.0)
+        }
+    }
+}
+
+struct TransferSpeed(f64);
+
+impl fmt::Display for TransferSpeed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kb_per_second = self.0 / 1024.0;
+        if kb_per_second < 1.0 {
+            return write!(f, "{:.2} B/s", self.0);
+        }
+
+        let mb_per_second = kb_per_second / 1024.0;
+        if mb_per_second < 1.0 {
+            return write!(f, "{:.2} KB/s", kb_per_second);
+        }
+
+        let gb_per_second = mb_per_second / 1024.0;
+        if gb_per_second < 1.0 {
+            return write!(f, "{:.2} MB/s", mb_per_second);
+        }
+
+        write!(f, "{:.2} GB/s", gb_per_second)
+    }
+}
+
+// Collapse the StorageError kind into a client-error, server-error or unknown-error.
+// The PermissionDenied is seperated because it depends on specifics whether it is a server or client error
+// Unknown errors should not happen but need to be handled
+fn categorize_and_register_error(err: &Error, command: &'static str) {
+    match err.kind() {
+        e if e == ErrorKind::PermanentFileNotAvailable => metrics::inc_transferred(command, "client-error"),
+        e if e == ErrorKind::TransientFileNotAvailable || e == ErrorKind::LocalError => metrics::inc_transferred(command, "server-error"),
+        e if e == ErrorKind::PermissionDenied => metrics::inc_transferred(command, "permission-error"),
+        _ => metrics::inc_transferred(command, "unknown-error"),
+    }
+}
+
+#[derive(Debug)]
+enum ListCommand {
+    List,
+    Nlst,
+}
+
+impl ListCommand {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ListCommand::List => "LIST",
+            ListCommand::Nlst => "NLST",
+        }
+    }
+    fn as_lower_str(&self) -> &'static str {
+        match self {
+            ListCommand::List => "list",
+            ListCommand::Nlst => "nlst",
+        }
+    }
 }

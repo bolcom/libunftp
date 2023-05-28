@@ -263,7 +263,7 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         P: AsRef<Path> + Send + Debug,
     {
         let mut reader = self.get(user, path, start_pos).await?;
-        Ok(tokio::io::copy(&mut reader, output).await?)
+        Ok(tokio::io::copy(&mut reader, output).await.map_err(Error::from)?)
     }
 
     /// Returns the content of the given file from offset start_pos.

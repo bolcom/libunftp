@@ -26,10 +26,10 @@ where
             let s: String = String::from_utf8_lossy(username).into();
             self.logger = self.logger.new(slog::o!("username" => s));
         }
-        slog::info!(self.logger, "Control channel event {:?}", event; "seq" => self.sequence_nr);
+        slog::debug!(self.logger, "Control channel event {:?}", event; "seq" => self.sequence_nr);
         let result = self.next.handle(event).await;
         match &result {
-            Ok(reply) => slog::info!(self.logger, "Control channel reply {:?}", reply; "seq" => self.sequence_nr),
+            Ok(reply) => slog::debug!(self.logger, "Control channel reply {:?}", reply; "seq" => self.sequence_nr),
             Err(error) => slog::warn!(self.logger, "Control channel error {:?}", error; "seq" => self.sequence_nr),
         };
         result
