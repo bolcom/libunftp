@@ -5,7 +5,8 @@
 - Cleaned INFO log output
 - New metrics (ftp_transferred_total, ftp_sent_bytes, ftp_received_bytes)
 - Useful new log messages such as data command summary with transfer speed
-- Various bug fixes (RETR reply on missing data connection, mapping to correct ftp errors)
+- Fixed bug where REST command didn't work correctly
+- Various other bug fixes (RETR reply on missing data connection, mapping to correct ftp errors)
 
 ## 2023-01-25 Release of all crates
 

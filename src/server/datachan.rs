@@ -31,7 +31,6 @@ where
     pub control_msg_tx: Sender<ControlChanMsg>,
     pub storage: Arc<Storage>,
     pub cwd: PathBuf,
-    pub start_pos: u64,
     pub ftps_mode: FtpsConfig,
     pub logger: slog::Logger,
     pub data_cmd_rx: Option<Receiver<DataChanCmd>>,
@@ -113,10 +112,11 @@ where
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.recv() => {
-                self.handle_incoming(DataChanMsg::ExternalCommand(command)).await;
+                let session = session_arc.lock().await;
+                self.handle_incoming(DataChanMsg::ExternalCommand(command), session.start_pos).await;
             },
             Some(_) = data_abort_rx.recv() => {
-                self.handle_incoming(DataChanMsg::Abort).await;
+                self.handle_incoming(DataChanMsg::Abort, 0).await;
             },
             _ = &mut timeout_delay => {
                 slog::warn!(self.logger, "Data channel connection timed out");
@@ -127,7 +127,7 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn handle_incoming(self, incoming: DataChanMsg) {
+    async fn handle_incoming(self, incoming: DataChanMsg, start_pos: u64) {
         match incoming {
             DataChanMsg::Abort => {
                 slog::info!(self.logger, "Data channel abort received");
@@ -135,19 +135,19 @@ where
             DataChanMsg::ExternalCommand(command) => {
                 let p = command.path().unwrap_or_default();
                 slog::debug!(self.logger, "Data channel command received: {:?}", command; "path" => p);
-                self.execute_command(command).await;
+                self.execute_command(command, start_pos).await;
             }
         }
     }
 
     #[tracing_attributes::instrument]
-    async fn execute_command(self, cmd: DataChanCmd) {
+    async fn execute_command(self, cmd: DataChanCmd, start_pos: u64) {
         match cmd {
             DataChanCmd::Retr { path } => {
-                self.exec_retr(path).await;
+                self.exec_retr(path, start_pos).await;
             }
             DataChanCmd::Stor { path } => {
-                self.exec_stor(path).await;
+                self.exec_stor(path, start_pos).await;
             }
             DataChanCmd::List { path, .. } => {
                 self.exec_list_variant(path, ListCommand::List).await;
@@ -159,14 +159,14 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn exec_retr(self, path: String) {
+    async fn exec_retr(self, path: String, start_pos: u64) {
         let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode, "retr").await;
 
         let start_time = Instant::now();
-        let result = self.storage.get_into((*self.user).as_ref().unwrap(), path, self.start_pos, &mut output).await;
+        let result = self.storage.get_into((*self.user).as_ref().unwrap(), path, start_pos, &mut output).await;
 
         if let Err(err) = output.shutdown().await {
             match err.kind() {
@@ -233,7 +233,7 @@ where
     }
 
     #[tracing_attributes::instrument]
-    async fn exec_stor(self, path: String) {
+    async fn exec_stor(self, path: String, start_pos: u64) {
         let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx = self.control_msg_tx.clone();
@@ -245,7 +245,7 @@ where
                 (*self.user).as_ref().unwrap(),
                 Self::reader(self.socket, self.ftps_mode, "stor").await,
                 path,
-                self.start_pos,
+                start_pos,
             )
             .await;
         let duration = start_time.elapsed();
@@ -492,7 +492,6 @@ where
             control_msg_tx,
             storage: Arc::clone(&session.storage),
             cwd: session.cwd.clone(),
-            start_pos: session.start_pos,
             ftps_mode,
             logger,
             data_abort_rx: Some(data_abort_rx),
