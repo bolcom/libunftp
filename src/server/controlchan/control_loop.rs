@@ -398,6 +398,7 @@ where
                 ErrorKind::PermanentDirectoryNotEmpty => Ok(Reply::new(ReplyCode::FileError, "Directory not empty")),
                 ErrorKind::PermissionDenied => Ok(Reply::new(ReplyCode::FileError, "Permission denied")),
                 ErrorKind::CommandNotImplemented => Ok(Reply::new(ReplyCode::CommandNotImplemented, "Command not implemented")),
+                ErrorKind::ConnectionClosed => Ok(Reply::new(ReplyCode::ConnectionClosed, "Connection closed")),
             },
             CommandChannelReply(reply) => Ok(reply),
         }

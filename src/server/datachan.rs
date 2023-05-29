@@ -171,7 +171,10 @@ where
         if let Err(err) = output.shutdown().await {
             match err.kind() {
                 std::io::ErrorKind::BrokenPipe => {
-                    slog::debug!(self.logger, "Output stream was already shutdown after RETR: {:?}", err);
+                    slog::debug!(self.logger, "Output stream was already closed by peer after RETR: {:?}", err);
+                }
+                std::io::ErrorKind::NotConnected => {
+                    slog::debug!(self.logger, "Output stream was already closed after RETR: {:?}", err);
                 }
                 _ => slog::warn!(self.logger, "Could not shutdown output stream after RETR: {:?}", err),
             }
@@ -201,9 +204,26 @@ where
                 }
             }
             Err(err) => {
-                slog::warn!(self.logger, "Error during RETR transfer after {}: {:?}", HumanDuration(duration), err);
+                let io_error_kind = err.get_io_error().map(|e| e.kind());
 
-                categorize_and_register_error(&err, "retr");
+                if io_error_kind == Some(std::io::ErrorKind::BrokenPipe) {
+                    slog::info!(
+                        self.logger,
+                        "RETR transfer interrupted by client (BrokenPipe). This could be expected client behavior. Path {:?}; Duration {} (number of bytes copied unknown)",
+                        &path_copy,
+                        HumanDuration(duration)
+                    );
+                } else {
+                    slog::warn!(
+                        self.logger,
+                        "Error during RETR {:?} transfer after {}: {:?}",
+                        &path_copy,
+                        HumanDuration(duration),
+                        err
+                    );
+                }
+
+                categorize_and_register_error(&self.logger, &err, "retr");
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::warn!(self.logger, "Could not notify control channel of error with RETR: {:?}", err);
@@ -248,7 +268,7 @@ where
             Err(err) => {
                 slog::warn!(self.logger, "Error during STOR transfer after {}: {:?}", HumanDuration(duration), err);
 
-                categorize_and_register_error(&err, "stor");
+                categorize_and_register_error(&self.logger, &err, "stor");
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with STOR: {:?}", err);
@@ -283,7 +303,10 @@ where
                 if let Err(err) = output.shutdown().await {
                     match err.kind() {
                         std::io::ErrorKind::BrokenPipe => {
-                            slog::debug!(self.logger, "Output stream was already shutdown after {}: {:?}", command.as_str(), err);
+                            slog::debug!(self.logger, "Output stream was already closed by peer after {}: {:?}", command.as_str(), err);
+                        }
+                        std::io::ErrorKind::NotConnected => {
+                            slog::debug!(self.logger, "Output stream was already closed after {}: {:?}", command.as_str(), err);
                         }
                         _ => slog::warn!(self.logger, "Could not shutdown output stream after {}: {:?}", command.as_str(), err),
                     }
@@ -317,7 +340,7 @@ where
                         );
 
                         let err = Error::from(e);
-                        categorize_and_register_error(&err, command.as_lower_str());
+                        categorize_and_register_error(&self.logger, &err, command.as_lower_str());
                     }
                 }
             }
@@ -333,7 +356,7 @@ where
                     err,
                 );
 
-                categorize_and_register_error(&err, command.as_lower_str());
+                categorize_and_register_error(&self.logger, &err, command.as_lower_str());
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with {}: {:?}", command.as_str(), err);
@@ -560,12 +583,33 @@ impl fmt::Display for TransferSpeed {
 // Collapse the StorageError kind into a client-error, server-error or unknown-error.
 // The PermissionDenied is seperated because it depends on specifics whether it is a server or client error
 // Unknown errors should not happen but need to be handled
-fn categorize_and_register_error(err: &Error, command: &'static str) {
+fn categorize_and_register_error(logger: &slog::Logger, err: &Error, command: &'static str) {
     match err.kind() {
-        e if e == ErrorKind::PermanentFileNotAvailable => metrics::inc_transferred(command, "client-error"),
-        e if e == ErrorKind::TransientFileNotAvailable || e == ErrorKind::LocalError => metrics::inc_transferred(command, "server-error"),
-        e if e == ErrorKind::PermissionDenied => metrics::inc_transferred(command, "permission-error"),
-        _ => metrics::inc_transferred(command, "unknown-error"),
+        ErrorKind::PermanentFileNotAvailable => metrics::inc_transferred(command, "client-error"),
+        ErrorKind::TransientFileNotAvailable | ErrorKind::LocalError => metrics::inc_transferred(command, "server-error"),
+        ErrorKind::PermissionDenied => metrics::inc_transferred(command, "permission-error"),
+        ErrorKind::ConnectionClosed => {
+            if let Some(io_error) = err.get_io_error() {
+                match io_error.kind() {
+                    std::io::ErrorKind::ConnectionReset => metrics::inc_transferred(command, "network-error"), // Could also be a client error, but can't be sure
+                    std::io::ErrorKind::BrokenPipe => {
+                        // Clients like Cyberduck appear to close the connection prematurely for chunked downloading, generating many "errors"
+                        if command != "retr" {
+                            metrics::inc_transferred(command, "client");
+                        }
+                    }
+                    std::io::ErrorKind::ConnectionAborted => metrics::inc_transferred(command, "server-error"), // Could be a network issue
+                    _ => {
+                        slog::debug!(logger, "Unmapped ConnectionClosed io error: {:?}", io_error);
+                        metrics::inc_transferred(command, "server-error")
+                    }
+                }
+            }
+        }
+        _ => {
+            slog::debug!(logger, "Unmapped error: {:?}", err);
+            metrics::inc_transferred(command, "unknown-error")
+        }
     }
 }
 

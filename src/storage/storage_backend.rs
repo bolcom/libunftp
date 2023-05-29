@@ -302,37 +302,40 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
 // The rest is assumed to be 'retryable' so they map to 4xx FTP reply, in this case a LocalError
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        match err {
-            e if e.kind() == std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
+        let kind = err.kind();
+        let raw_os_error = err.raw_os_error();
+        match (kind, raw_os_error) {
+            (std::io::ErrorKind::NotFound, _) => Error::new(ErrorKind::PermanentFileNotAvailable, err),
             // Could also be a directory, but we don't know
-            e if e.kind() == std::io::ErrorKind::AlreadyExists => Error::from(ErrorKind::PermanentFileNotAvailable),
-            e if e.kind() == std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+            (std::io::ErrorKind::AlreadyExists, _) => Error::new(ErrorKind::PermanentFileNotAvailable, err),
+            (std::io::ErrorKind::PermissionDenied, _) => Error::new(ErrorKind::PermissionDenied, err),
             // The below should be changed when the io_error_more issues are resolved (https://github.com/rust-lang/rust/issues/86442)
             // For each workaround, I mention the ErrorKind that can can replace it when stable
             // TODO: find a workaround for Windows
             // DirectoryNotEmpty
             #[cfg(unix)]
-            e if e.raw_os_error() == Some(libc::ENOTEMPTY) => Error::from(ErrorKind::PermanentDirectoryNotEmpty),
+            (_, Some(libc::ENOTEMPTY)) => Error::new(ErrorKind::PermanentDirectoryNotEmpty, err),
             // NotADirectory
             #[cfg(unix)]
-            e if e.raw_os_error() == Some(libc::ENOTDIR) => Error::from(ErrorKind::PermanentDirectoryNotAvailable),
+            (_, Some(libc::ENOTDIR)) => Error::new(ErrorKind::PermanentDirectoryNotAvailable, err),
             // IsADirectory, FileTooLarge, NotSeekable, InvalidFilename, FilesystemLoop
             #[cfg(unix)]
-            e if e.raw_os_error() == Some(libc::EISDIR)
-                || e.raw_os_error() == Some(libc::EFBIG)
-                || e.raw_os_error() == Some(libc::ESPIPE)
-                || e.raw_os_error() == Some(libc::ENAMETOOLONG)
-                || e.raw_os_error() == Some(libc::ELOOP) =>
-            {
-                Error::from(ErrorKind::PermanentFileNotAvailable)
+            (_, Some(libc::EISDIR) | Some(libc::EFBIG) | Some(libc::ESPIPE) | Some(libc::ENAMETOOLONG) | Some(libc::ELOOP)) => {
+                Error::new(ErrorKind::PermanentFileNotAvailable, err)
             }
             // StorageFull
             #[cfg(unix)]
-            e if e.raw_os_error() == Some(libc::ENOSPC) => Error::from(ErrorKind::InsufficientStorageSpaceError),
+            (_, Some(libc::ENOSPC)) => Error::new(ErrorKind::InsufficientStorageSpaceError, err),
             // ReadOnlyFilesystem - Read-only filesystem can be considered a permission error
             #[cfg(unix)]
-            e if e.raw_os_error() == Some(libc::EROFS) => Error::from(ErrorKind::PermissionDenied),
-            // All other errors should be retryable
+            (_, Some(libc::EROFS)) => Error::new(ErrorKind::PermissionDenied, err),
+            // Retryable error: Client most likely forcefully aborted the connection or there was a network issue
+            (std::io::ErrorKind::ConnectionReset, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Retryable error: Client most likely intentionally closed the connection
+            (std::io::ErrorKind::BrokenPipe, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Retryable error: There was likely a network issue
+            (std::io::ErrorKind::ConnectionAborted, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Other errors are assumed to be local transient problems, retryable for the client
             _ => Error::new(ErrorKind::LocalError, err),
         }
     }
