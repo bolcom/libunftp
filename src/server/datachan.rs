@@ -185,13 +185,18 @@ where
             Ok(bytes_copied) => {
                 slog::info!(
                     self.logger,
-                    "Successful RETR {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                    "Successful RETR {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
                     &path_copy,
                     HumanDuration(duration),
                     HumanBytes(bytes_copied),
                     TransferSpeed(bytes_copied as f64 / duration.as_secs_f64()),
+                    start_pos,
                 );
-                metrics::inc_transferred("retr", "successful");
+
+                // only register transfer of a single file transfer
+                if start_pos == 0 {
+                    metrics::inc_transferred("retr", "success");
+                }
 
                 if let Err(err) = tx
                     .send(ControlChanMsg::SentData {
@@ -207,23 +212,37 @@ where
                 let io_error_kind = err.get_io_error().map(|e| e.kind());
 
                 if io_error_kind == Some(std::io::ErrorKind::BrokenPipe) {
-                    slog::info!(
-                        self.logger,
-                        "RETR transfer interrupted by client (BrokenPipe). This could be expected client behavior. Path {:?}; Duration {} (number of bytes copied unknown)",
-                        &path_copy,
-                        HumanDuration(duration)
-                    );
+                    if start_pos == 0 {
+                        slog::warn!(
+                            self.logger,
+                            "Client halted RETR transfer (BrokenPipe). Certain FTP clients may do this to download file sections separately, in which case RESTarts may occur and will be logged at DEBUG level. Refer to your FTP client's documentation if this causes issues. Path {:?}; Duration {} (number of bytes copied unknown).",
+                            &path_copy,
+                            HumanDuration(duration)
+                        );
+                    } else {
+                        slog::debug!(
+                            self.logger,
+                            "RETR transfer stopped by client (BrokenPipe). Remember, this could be standard for some FTP clients. Path {:?}; Duration {} (number of bytes copied unknown); start_pos {}",
+                            &path_copy,
+                            HumanDuration(duration),
+                            start_pos
+                        );
+                    }
                 } else {
                     slog::warn!(
                         self.logger,
-                        "Error during RETR {:?} transfer after {}: {:?}",
+                        "Error during RETR {:?} transfer after {}: {:?}; start_pos={}",
                         &path_copy,
                         HumanDuration(duration),
-                        err
+                        err,
+                        start_pos
                     );
                 }
 
-                categorize_and_register_error(&self.logger, &err, "retr");
+                // only register transfer errors for a single file transfer once
+                if start_pos == 0 {
+                    categorize_and_register_error(&self.logger, &err, "retr");
+                }
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::warn!(self.logger, "Could not notify control channel of error with RETR: {:?}", err);
@@ -254,12 +273,18 @@ where
             Ok(bytes) => {
                 slog::info!(
                     self.logger,
-                    "Successful STOR {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                    "Successful STOR {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
                     &path_copy,
                     HumanDuration(duration),
                     HumanBytes(bytes),
                     TransferSpeed(bytes as f64 / duration.as_secs_f64()),
+                    start_pos,
                 );
+
+                // only register transfer of a single file transfer
+                if start_pos == 0 {
+                    metrics::inc_transferred("stor", "success");
+                }
 
                 if let Err(err) = tx.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
                     slog::error!(self.logger, "Could not notify control channel of successful STOR: {:?}", err);
@@ -268,7 +293,10 @@ where
             Err(err) => {
                 slog::warn!(self.logger, "Error during STOR transfer after {}: {:?}", HumanDuration(duration), err);
 
-                categorize_and_register_error(&self.logger, &err, "stor");
+                // only register transfer errors for a single file transfer once
+                if start_pos == 0 {
+                    categorize_and_register_error(&self.logger, &err, "stor");
+                }
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with STOR: {:?}", err);
@@ -590,14 +618,14 @@ fn categorize_and_register_error(logger: &slog::Logger, err: &Error, command: &'
         ErrorKind::ConnectionClosed => {
             if let Some(io_error) = err.get_io_error() {
                 match io_error.kind() {
-                    std::io::ErrorKind::ConnectionReset => metrics::inc_transferred(command, "network-error"), // Could also be a client error, but can't be sure
+                    std::io::ErrorKind::ConnectionReset => metrics::inc_transferred(command, "client-interrupted"),
                     std::io::ErrorKind::BrokenPipe => {
                         // Clients like Cyberduck appear to close the connection prematurely for chunked downloading, generating many "errors"
                         if command != "retr" {
-                            metrics::inc_transferred(command, "client");
+                            metrics::inc_transferred(command, "client-interrupted");
                         }
                     }
-                    std::io::ErrorKind::ConnectionAborted => metrics::inc_transferred(command, "server-error"), // Could be a network issue
+                    std::io::ErrorKind::ConnectionAborted => metrics::inc_transferred(command, "network-error"), // Could be a network issue
                     _ => {
                         slog::debug!(logger, "Unmapped ConnectionClosed io error: {:?}", io_error);
                         metrics::inc_transferred(command, "server-error")

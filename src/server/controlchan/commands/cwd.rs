@@ -50,7 +50,7 @@ where
         let logger = args.logger;
 
         if let Err(err) = storage.cwd((*session.user).as_ref().unwrap(), path.clone()).await {
-            slog::warn!(logger, "CWD: Failed to cwd directory: {}", err);
+            slog::warn!(logger, "CWD: Failed to cwd directory {:?}: {} ", path, err);
             let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
             if let Err(e) = r {
                 slog::warn!(logger, "CWD: Could not send internal message to notify of CWD error: {}", e);
