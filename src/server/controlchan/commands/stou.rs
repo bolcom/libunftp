@@ -42,7 +42,7 @@ where
                 Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
             }
             None => {
-                slog::warn!(logger, "STOR: no data connection established for STORing {:?}", path);
+                slog::warn!(logger, "STOU: no data connection established for STOU file {:?}", path);
                 Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
             }
         }

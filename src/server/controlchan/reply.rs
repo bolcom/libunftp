@@ -16,7 +16,7 @@ impl fmt::Debug for Reply {
             Reply::CodeAndMsg { code, msg } => write!(f, "CodeAndMsg {{ code: {:?}, msg: {:?} }}", code, msg),
             Reply::MultiLine { code, lines } => {
                 if lines.len() > 1 {
-                    write!(f, "MultiLine {{ code: {:?}, {} lines - output omitted) }}", code, lines.len())
+                    write!(f, "MultiLine {{ code: {:?}, {} lines ({}...) }}", code, lines.len(), lines[0])
                 } else {
                     write!(f, "MultiLine {{ code: {:?}, line: {:?} }}", code, lines)
                 }

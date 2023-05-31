@@ -94,13 +94,13 @@ where
                                 .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(ReplyCode::CommandOkay, lines)))
                                 .await
                             {
-                                slog::warn!(logger, "{}", err);
+                                slog::warn!(logger, "STAT: Could not send internal message to notify of STAT success: {}", err);
                             }
                         }
                         Err(e) => {
                             slog::info!(logger, "STAT: Failure listing file or directory {:?}", path_str);
                             if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
-                                slog::warn!(logger, "{}", err);
+                                slog::warn!(logger, "STAT: Could not send internal message to notify of STAT failure: {}", err);
                             }
                         }
                     }

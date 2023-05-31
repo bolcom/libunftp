@@ -73,7 +73,7 @@ where
                             )))
                             .await
                         {
-                            slog::warn!(logger, "MDTM: Could not send internal message to notify of MDTM failure: {}", err);
+                            slog::warn!(logger, "MDTM: Could not send internal message to notify of MDTM success: {}", err);
                         }
                     }
                 }

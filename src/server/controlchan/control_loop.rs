@@ -206,7 +206,7 @@ where
                         };
                     },
                     _ = shutdown.listen() => {
-                        slog::warn!(logger, "Closing open control connection because of shutdown signal");
+                        slog::info!(logger, "Closing open control connection because of shutdown signal");
                         incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
                         // TODO: Do we want to wait a bit for a data transfer to complete i.e. session.data_busy is true?
                     }
