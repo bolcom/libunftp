@@ -21,17 +21,17 @@ readme = "README.md"
 async-trait = "0.1.68"
 hyper = { version = "0.14.26", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.23.2"
-libunftp = { version="0.18.8", path="../../"}
+libunftp = { version="0.18.9", path="../../"}
 percent-encoding = "2.2.0"
-regex = "1.8.1"
+regex = "1.8.3"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
-tokio = { version = "1.28.1", features = ["rt", "net", "sync", "io-util", "time"] }
+tokio = { version = "1.28.2", features = ["rt", "net", "sync", "io-util", "time"] }
 tracing = { version = "0.1.37", default-features = false }
 tracing-attributes = "0.1.24"
 
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
-tokio = { version = "1.28.1", features = ["macros"] }
+tokio = { version = "1.28.2", features = ["macros"] }
 unftp-sbe-fs = { version="0.2.2", path="../unftp-sbe-fs"}

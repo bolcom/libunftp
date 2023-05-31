@@ -1,12 +1,17 @@
 # Changelog
 
-## upcoming
+### libunftp 0.18.9
 
-- Cleaned INFO log output
-- New metrics (ftp_transferred_total, ftp_sent_bytes, ftp_received_bytes)
-- Useful new log messages such as data command summary with transfer speed
-- Fixed bug where REST command didn't work correctly
-- Various other bug fixes (RETR reply on missing data connection, mapping to correct ftp errors)
+_tag: libunftp-0.18.9_
+
+- [#461](https://github.com/bolcom/libunftp/pull/461) Cleaned INFO log output
+- [#461](https://github.com/bolcom/libunftp/pull/461) New metrics (ftp_transferred_total, ftp_sent_bytes, ftp_received_bytes)
+- [#461](https://github.com/bolcom/libunftp/pull/461) Useful new log messages such as data command summary with transfer speed
+- [#461](https://github.com/bolcom/libunftp/pull/461) Fixed bug where REST command didn't work correctly
+- [#461](https://github.com/bolcom/libunftp/pull/461) Various other bug fixes (RETR reply on missing data connection, mapping to correct ftp errors)
+- [#458](https://github.com/bolcom/libunftp/pull/458), [66756f1](https://github.com/bolcom/libunftp/commit/66756f1af19515c2df65fa58518d7c874fb2497a) Added partial support for FTP Active Mode. See `Server::active_passive_mode`
+- [#453](https://github.com/bolcom/libunftp/pull/453) Added support for the BYE command
+- Upgraded dependencies and Rust version
 
 ## 2023-01-25 Release of all crates
 
