@@ -75,6 +75,7 @@ where
             }
             Some(path) => {
                 let path: &str = std::str::from_utf8(&path)?;
+                let path_str = path.to_string();
                 let path = path.to_owned();
 
                 let session = args.session.lock().await;
@@ -88,16 +89,18 @@ where
                 tokio::spawn(async move {
                     match storage.list_vec((*user).as_ref().unwrap(), path).await {
                         Ok(lines) => {
+                            slog::info!(logger, "STAT: Successfully listed file or directory {:?}", path_str);
                             if let Err(err) = tx_success
                                 .send(ControlChanMsg::CommandChannelReply(Reply::new_multiline(ReplyCode::CommandOkay, lines)))
                                 .await
                             {
-                                slog::warn!(logger, "{}", err);
+                                slog::warn!(logger, "STAT: Could not send internal message to notify of STAT success: {}", err);
                             }
                         }
                         Err(e) => {
+                            slog::info!(logger, "STAT: Failure listing file or directory {:?}", path_str);
                             if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(Error::new(ErrorKind::LocalError, e))).await {
-                                slog::warn!(logger, "{}", err);
+                                slog::warn!(logger, "STAT: Could not send internal message to notify of STAT failure: {}", err);
                             }
                         }
                     }

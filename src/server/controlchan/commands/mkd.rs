@@ -50,11 +50,15 @@ where
         let logger = args.logger;
         tokio::spawn(async move {
             if let Err(err) = storage.mkd((*user).as_ref().unwrap(), &path).await {
+                slog::warn!(logger, "MKD: Failure creating directory {:?} {}", path_str, err);
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
-                    slog::warn!(logger, "{}", err);
+                    slog::warn!(logger, "MKD: Could not send internal message to notify of MKD failure: {}", err);
                 }
-            } else if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
-                slog::warn!(logger, "{}", err);
+            } else {
+                slog::info!(logger, "MKD: Successfully created directory {:?}", path_str);
+                if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
+                    slog::warn!(logger, "MKD: Could not send internal message to notify of MKD success: {}", err);
+                }
             }
         });
         Ok(Reply::none())

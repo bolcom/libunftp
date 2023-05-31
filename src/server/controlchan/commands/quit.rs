@@ -45,6 +45,7 @@ where
         if let Err(send_res) = tx.send(ControlChanMsg::ExitControlLoop).await {
             slog::warn!(logger, "could not send internal message: QUIT. {}", send_res);
         }
+        slog::info!(logger, "QUIT: User logged out");
         Ok(Reply::new(ReplyCode::ClosingControlConnection, "Bye!"))
     }
 }

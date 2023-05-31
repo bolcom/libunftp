@@ -5,6 +5,7 @@ use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::prelude::{DateTime, Utc};
+use libc;
 use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},
@@ -262,7 +263,7 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         P: AsRef<Path> + Send + Debug,
     {
         let mut reader = self.get(user, path, start_pos).await?;
-        Ok(tokio::io::copy(&mut reader, output).await?)
+        Ok(tokio::io::copy(&mut reader, output).await.map_err(Error::from)?)
     }
 
     /// Returns the content of the given file from offset start_pos.
@@ -296,11 +297,45 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 }
 
+// Maps IO errors to FTP errors in a sensible way.
+// We try to capture all the permanent failures.
+// The rest is assumed to be 'retryable' so they map to 4xx FTP reply, in this case a LocalError
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        match err.kind() {
-            std::io::ErrorKind::NotFound => Error::from(ErrorKind::PermanentFileNotAvailable),
-            std::io::ErrorKind::PermissionDenied => Error::from(ErrorKind::PermissionDenied),
+        let kind = err.kind();
+        let raw_os_error = err.raw_os_error();
+        match (kind, raw_os_error) {
+            (std::io::ErrorKind::NotFound, _) => Error::new(ErrorKind::PermanentFileNotAvailable, err),
+            // Could also be a directory, but we don't know
+            (std::io::ErrorKind::AlreadyExists, _) => Error::new(ErrorKind::PermanentFileNotAvailable, err),
+            (std::io::ErrorKind::PermissionDenied, _) => Error::new(ErrorKind::PermissionDenied, err),
+            // The below should be changed when the io_error_more issues are resolved (https://github.com/rust-lang/rust/issues/86442)
+            // For each workaround, I mention the ErrorKind that can can replace it when stable
+            // TODO: find a workaround for Windows
+            // DirectoryNotEmpty
+            #[cfg(unix)]
+            (_, Some(libc::ENOTEMPTY)) => Error::new(ErrorKind::PermanentDirectoryNotEmpty, err),
+            // NotADirectory
+            #[cfg(unix)]
+            (_, Some(libc::ENOTDIR)) => Error::new(ErrorKind::PermanentDirectoryNotAvailable, err),
+            // IsADirectory, FileTooLarge, NotSeekable, InvalidFilename, FilesystemLoop
+            #[cfg(unix)]
+            (_, Some(libc::EISDIR) | Some(libc::EFBIG) | Some(libc::ESPIPE) | Some(libc::ENAMETOOLONG) | Some(libc::ELOOP)) => {
+                Error::new(ErrorKind::PermanentFileNotAvailable, err)
+            }
+            // StorageFull
+            #[cfg(unix)]
+            (_, Some(libc::ENOSPC)) => Error::new(ErrorKind::InsufficientStorageSpaceError, err),
+            // ReadOnlyFilesystem - Read-only filesystem can be considered a permission error
+            #[cfg(unix)]
+            (_, Some(libc::EROFS)) => Error::new(ErrorKind::PermissionDenied, err),
+            // Retryable error: Client most likely forcefully aborted the connection or there was a network issue
+            (std::io::ErrorKind::ConnectionReset, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Retryable error: Client most likely intentionally closed the connection
+            (std::io::ErrorKind::BrokenPipe, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Retryable error: There was likely a network issue
+            (std::io::ErrorKind::ConnectionAborted, _) => Error::new(ErrorKind::ConnectionClosed, err),
+            // Other errors are assumed to be local transient problems, retryable for the client
             _ => Error::new(ErrorKind::LocalError, err),
         }
     }

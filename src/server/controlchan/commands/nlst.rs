@@ -39,8 +39,11 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: DataChanCmd = match args.parsed_command.clone() {
-            Command::Nlst { path } => DataChanCmd::Nlst { path },
+        let (cmd, path_opt): (DataChanCmd, Option<String>) = match args.parsed_command.clone() {
+            Command::Nlst { path } => {
+                let path_clone = path.clone();
+                (DataChanCmd::Nlst { path }, path_clone)
+            }
             _ => panic!("Programmer error, expected command to be NLST"),
         };
         let logger = args.logger;
@@ -48,12 +51,19 @@ where
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "NLST: could not notify data channel to respond with NLST. {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Sending directory list"))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => {
+                if let Some(path) = path_opt {
+                    slog::warn!(logger, "NLST: no data connection established for NLSTing {:?}", path);
+                } else {
+                    slog::warn!(logger, "NLST: no data connection established for NLST");
+                }
+                Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
+            }
         }
     }
 }

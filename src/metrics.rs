@@ -39,14 +39,21 @@ where
 lazy_static! {
     static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
     static ref FTP_SESSIONS: IntGauge = register_int_gauge!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
+    static ref FTP_SESSIONS_COUNT: IntCounter = register_int_counter!(opts!("ftp_sessions_count", "Total number of FTP sessions.")).unwrap();
     static ref FTP_BACKEND_WRITE_BYTES: IntCounter =
-        register_int_counter!(opts!("ftp_backend_write_bytes", "Total number of bytes written to the backend.")).unwrap();
-    static ref FTP_BACKEND_READ_BYTES: IntCounter =
-        register_int_counter!(opts!("ftp_backend_read_bytes", "Total number of bytes retrieved from the backend.")).unwrap();
+        register_int_counter!(opts!("ftp_backend_write_bytes", "Total number of bytes successfully written to the backend.")).unwrap();
+    static ref FTP_BACKEND_READ_BYTES: IntCounter = register_int_counter!(opts!(
+        "ftp_backend_read_bytes",
+        "Total number of bytes successfully retrieved from the backend and sent to the client."
+    ))
+    .unwrap();
     static ref FTP_BACKEND_WRITE_FILES: IntCounter =
-        register_int_counter!(opts!("ftp_backend_write_files", "Total number of files written to the backend.")).unwrap();
-    static ref FTP_BACKEND_READ_FILES: IntCounter =
-        register_int_counter!(opts!("ftp_backend_read_files", "Total number of files retrieved from the backend.")).unwrap();
+        register_int_counter!(opts!("ftp_backend_write_files", "Total number of files successfully written to the backend.")).unwrap();
+    static ref FTP_BACKEND_READ_FILES: IntCounter = register_int_counter!(opts!(
+        "ftp_backend_read_files",
+        "Total number of files successfully retrieved from the backend."
+    ))
+    .unwrap();
     static ref FTP_COMMAND_TOTAL: IntCounterVec = register_int_counter_vec!("ftp_command_total", "Total number of commands received.", &["command"]).unwrap();
     static ref FTP_REPLY_TOTAL: IntCounterVec = register_int_counter_vec!(
         "ftp_reply_total",
@@ -56,6 +63,15 @@ lazy_static! {
     .unwrap();
     static ref FTP_ERROR_TOTAL: IntCounterVec =
         register_int_counter_vec!("ftp_error_total", "Total number of errors encountered.", &["type", "event_type", "event"]).unwrap();
+    static ref FTP_SENT_BYTES: IntCounterVec = register_int_counter_vec!("ftp_sent_bytes", "Total bytes sent to FTP clients", &["command"]).unwrap();
+    static ref FTP_RECEIVED_BYTES: IntCounterVec =
+        register_int_counter_vec!("ftp_received_bytes", "Total bytes received from FTP clients", &["command"]).unwrap();
+    static ref FTP_TRANSFERRED_TOTAL: IntCounterVec = register_int_counter_vec!(
+        "ftp_transferred_total",
+        "The total number of attempted file transfers and directory listings",
+        &["command", "status"]
+    )
+    .unwrap();
 }
 
 /// Add a metric for an event.
@@ -81,9 +97,25 @@ fn add_event_metric(event: &Event) {
     }
 }
 
+/// Increase the amount of bytes sent (/downloaded/ from client perspective)
+pub fn inc_sent_bytes(bytes: usize, command: &'static str) {
+    FTP_SENT_BYTES.with_label_values(&[command]).inc_by(bytes.try_into().unwrap());
+}
+
+/// Increase the amount of bytes received (/uploaded/ from client perspective)
+pub fn inc_received_bytes(bytes: usize, command: &'static str) {
+    FTP_RECEIVED_BYTES.with_label_values(&[command]).inc_by(bytes.try_into().unwrap());
+}
+
+/// Increase the number of file and directory listing transfer attempts
+pub fn inc_transferred(command: &'static str, status: &'static str) {
+    FTP_TRANSFERRED_TOTAL.with_label_values(&[command, status]).inc();
+}
+
 /// Increase the metrics gauge for client sessions
 pub fn inc_session() {
     FTP_SESSIONS.inc();
+    FTP_SESSIONS_COUNT.inc();
 }
 
 /// Decrease the metrics gauge for client sessions

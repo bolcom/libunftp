@@ -36,12 +36,15 @@ where
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(DataChanCmd::Stor { path }).await {
-                        slog::warn!(logger, "sending command failed. {}", err);
+                        slog::warn!(logger, "STOU: could not send Stor command over data channel. {}", err);
                     }
                 });
                 Ok(Reply::new_with_string(ReplyCode::FileStatusOkay, filename.to_string_lossy().to_string()))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => {
+                slog::warn!(logger, "STOU: no data connection established for STOU file {:?}", path);
+                Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
+            }
         }
     }
 }

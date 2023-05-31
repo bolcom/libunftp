@@ -29,6 +29,11 @@ impl Error {
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
+
+    /// Attempts to get a reference to the inner `std::io::Error` if there is one.
+    pub fn get_io_error(&self) -> Option<&std::io::Error> {
+        self.source.as_ref()?.downcast_ref::<std::io::Error>()
+    }
 }
 
 impl From<ErrorKind> for Error {
@@ -54,10 +59,7 @@ pub enum ErrorKind {
     PermanentFileNotAvailable,
     /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
     /// The storage back-end implementation should return this if a error occurred where it doesn't
-    /// make sense for it to be retried. For example in the case where file access is denied.
-    /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
-    /// The storage back-end implementation should return this if a error occurred where it doesn't
-    /// make sense for it to be retried. For example in the case where a file is busy.
+    /// make sense for it to be retried. For example in the case where the directory doesn't exist
     #[display(fmt = "550 Permanent directory not available")]
     PermanentDirectoryNotAvailable,
     /// Error that will cause an FTP reply code of 550 to be returned to the FTP client.
@@ -70,7 +72,11 @@ pub enum ErrorKind {
     /// make sense for it to be retried. For example in the case where file access is denied.
     #[display(fmt = "550 Permission denied")]
     PermissionDenied,
-    /// Error that will cause an FTP reply code of 451 to be returned to the FTP client. Its means
+    /// Error that will cause an FTP reply code of 426 to be returned to the FTP client. It means the transfer was
+    /// aborted, possibly by the client or because of a network issue
+    #[display(fmt = "426 Connection closed transfer aborted")]
+    ConnectionClosed,
+    /// Error that will cause an FTP reply code of 451 to be returned to the FTP client. It means
     /// the requested action was aborted due to a local error (internal storage back-end error) in
     /// processing.
     #[display(fmt = "451 Local error")]

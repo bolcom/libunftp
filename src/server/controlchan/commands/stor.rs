@@ -34,21 +34,30 @@ where
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
-        let cmd: DataChanCmd = match args.parsed_command.clone() {
-            Command::Stor { path } => DataChanCmd::Stor { path },
-            _ => panic!("Programmer error, expected command to be STOR"),
+
+        let (cmd, path): (DataChanCmd, String) = match args.parsed_command.clone() {
+            Command::Stor { path } => {
+                let path_clone = path.clone();
+                (DataChanCmd::Stor { path }, path_clone)
+            }
+            _ => panic!("Programmer error, expected command to be LIST"),
         };
+
         let logger = args.logger;
         match session.data_cmd_tx.take() {
             Some(tx) => {
                 tokio::spawn(async move {
                     if let Err(err) = tx.send(cmd).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "STOR: could not notify data channel to respond with STOR. {}", err);
                     }
                 });
                 Ok(Reply::new(ReplyCode::FileStatusOkay, "Ready to receive data"))
             }
-            None => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            None => {
+                slog::warn!(logger, "STOR: no data connection established for STORing {:?}", path);
+
+                Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"))
+            }
         }
     }
 }

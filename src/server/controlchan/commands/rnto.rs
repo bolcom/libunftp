@@ -52,15 +52,16 @@ where
         let user = (*session.user).as_ref().unwrap();
         let old_path = from.to_string_lossy().to_string();
         let new_path = to.to_string_lossy().to_string();
-        match storage.rename(user, from, to).await {
+        match storage.rename(user, &from, &to).await {
             Ok(_) => {
+                slog::info!(logger, "RNTO: Successfully renamed {:?} to {:?}", from, to);
                 if let Err(err) = tx_control_chan.send(ControlChanMsg::RenameSuccess { old_path, new_path }).await {
-                    slog::warn!(logger, "{}", err);
+                    slog::warn!(logger, "RNTO: Could not send internal message to notify of RNTO success: {}", err);
                 }
             }
             Err(err) => {
                 if let Err(err) = tx_control_chan.send(ControlChanMsg::StorageError(err)).await {
-                    slog::warn!(logger, "{}", err);
+                    slog::warn!(logger, "RNTO: Could not send internal message to notify of RNTO failure: {}", err);
                 }
             }
         }

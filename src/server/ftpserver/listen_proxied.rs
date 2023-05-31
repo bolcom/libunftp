@@ -149,7 +149,8 @@ where
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply: Reply = super::controlchan::commands::make_pasv_reply(self.options.passive_host.clone(), &destination_ip, reserved_port).await;
+            let reply: Reply =
+                super::controlchan::commands::make_pasv_reply(&self.logger, self.options.passive_host.clone(), &destination_ip, reserved_port).await;
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {

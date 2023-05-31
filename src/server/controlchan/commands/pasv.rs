@@ -116,7 +116,7 @@ impl Pasv {
 
         let port = listener.local_addr()?.port();
 
-        let reply = make_pasv_reply(passive_host, conn_addr.ip(), port).await;
+        let reply = make_pasv_reply(&logger, passive_host, conn_addr.ip(), port).await;
         if let Reply::CodeAndMsg {
             code: ReplyCode::EnteringPassiveMode,
             ..
@@ -170,7 +170,7 @@ where
     }
 }
 
-pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port: u16) -> Reply {
+pub async fn make_pasv_reply(logger: &slog::Logger, passive_host: PassiveHost, conn_ip: &Ipv4Addr, port: u16) -> Reply {
     let p1 = port >> 8;
     let p2 = port - (p1 * 256);
     let octets = match passive_host {
@@ -179,7 +179,11 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
         PassiveHost::Dns(ref dns_name) => {
             let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
             match tokio::net::lookup_host(x).await {
-                Err(_) => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
+                Err(e) => {
+                    slog::warn!(logger, "make_pasv_reply: Could not look up host for pasv reply: {}", e);
+
+                    return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name));
+                }
                 Ok(mut ip_iter) => loop {
                     match ip_iter.next() {
                         None => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
@@ -190,6 +194,7 @@ pub async fn make_pasv_reply(passive_host: PassiveHost, conn_ip: &Ipv4Addr, port
             }
         }
     };
+    slog::info!(logger, "Listening on passive port {}:{}", conn_ip, port);
     Reply::new_with_string(
         ReplyCode::EnteringPassiveMode,
         format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),

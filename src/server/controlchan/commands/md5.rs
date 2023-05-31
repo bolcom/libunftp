@@ -73,12 +73,13 @@ where
                         )))
                         .await
                     {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "MD5: Could not send internal message to notify of MD5 success: {}", err);
                     }
                 }
                 Err(err) => {
+                    slog::warn!(logger, "MD5: Failed to retrieve MD5 sum for {:?} from backend: {}", path, err);
                     if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
-                        slog::warn!(logger, "{}", err);
+                        slog::warn!(logger, "MD5: Could not send internal message to notify of MD5 failure: {}", err);
                     }
                 }
             }

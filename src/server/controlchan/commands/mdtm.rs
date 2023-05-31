@@ -51,14 +51,21 @@ where
                     let modification_time = match metadata.modified() {
                         Ok(v) => Some(v),
                         Err(err) => {
+                            slog::warn!(
+                                logger,
+                                "MDTM: Could not get the modified time from the fetched metadata for path {:?}: {}",
+                                path,
+                                err
+                            );
                             if let Err(err) = tx_fail.send(ControlChanMsg::StorageError(err)).await {
-                                slog::warn!(logger, "{}", err);
+                                slog::warn!(logger, "MDTM: Could not send internal message to notify of MDTM failure: {}", err);
                             };
                             None
                         }
                     };
 
                     if let Some(mtime) = modification_time {
+                        slog::info!(logger, "MDTM: Successfully fetched modification time for path {:?}", path);
                         if let Err(err) = tx_success
                             .send(ControlChanMsg::CommandChannelReply(Reply::new_with_string(
                                 ReplyCode::FileStatus,
@@ -66,7 +73,7 @@ where
                             )))
                             .await
                         {
-                            slog::warn!(logger, "{}", err);
+                            slog::warn!(logger, "MDTM: Could not send internal message to notify of MDTM success: {}", err);
                         }
                     }
                 }
