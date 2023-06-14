@@ -68,17 +68,24 @@ impl GcsClient {
         self.http_get(uri).await
     }
 
-    pub async fn list<P: AsRef<Path>>(&self, path: P) -> Result<ResponseBody, Error> {
+    pub async fn list<P: AsRef<Path>>(&self, path: P, next_page_token: Option<String>) -> Result<ResponseBody, Error> {
         // includeTrailingDelimiter makes our prefix ('subdirs') end up in the items[] as objects
         // We need this to get access to the 'updated' field
         // See the docs at https://cloud.google.com/storage/docs/json_api/v1/objects/list
-        let uri = make_uri(format!(
+        let mut url_str = format!(
             "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&prefix={}",
             self.base_url,
             self.bucket_name,
-            "kind,prefixes,items(id,name,size,updated)", // limit the fields
-            self.path_str(path, TrailingSlash::Ensure)?,
-        ))?;
+            "kind,prefixes,items(id,name,size,updated),nextPageToken", // limit the fields
+            self.path_str(path.as_ref(), TrailingSlash::Ensure)?,
+        );
+
+        if let Some(token) = next_page_token {
+            url_str.push_str("&pageToken=");
+            url_str.push_str(&token);
+        }
+
+        let uri = make_uri(url_str)?;
 
         self.http_get(uri).await
     }
