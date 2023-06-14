@@ -1,8 +1,9 @@
 # Changelog
 
-### upcoming
+### upcoming gcs-sbe
 
-- [#465](https://github.com/bolcom/libunftp/pull/465) Handle paginated results for LIST fixing issue #464
+- [#465](https://github.com/bolcom/libunftp/pull/465) GCS SBE: Handle paginated results for LIST fixing issue #464
+- [#466](https://github.com/bolcom/libunftp/pull/465) Fixed an (unreleased) issue in GCS SBE regarding root directory affecting list and cwd
 
 ### libunftp 0.18.9
 
