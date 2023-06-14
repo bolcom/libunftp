@@ -68,6 +68,30 @@ pub fn initialize_docker() -> Mutex<Child> {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn root_dir_regression() {
+    run_test(async {
+        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        ftp_stream.login("anonymous", "").await.unwrap();
+        ftp_stream.mkdir("some_directory").await.unwrap();
+
+        // fake-gcs-server doesn't respond the same way as actual GCS for "prefix=/"
+        // So we cannot test this case here
+        //ftp_stream.cwd("/").await.unwrap();
+
+        let content = b"Hello from this test!\n";
+        let mut reader = Cursor::new(content);
+
+        ftp_stream.put("greeting.txt", &mut reader).await.unwrap();
+
+        let list = ftp_stream.list(None).await.unwrap();
+        assert_ne!(list.len(), 0);
+
+        ftp_stream.rm("greeting.txt").await.unwrap();
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn newly_created_dir_is_empty() {
     run_test(async {
         let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
@@ -256,7 +280,7 @@ async fn run_test(test: impl Future<Output = ()>) {
 
     tokio::spawn(
         Server::new(Box::new(move || {
-            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/unftp"), AuthMethod::None)
+            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/"), AuthMethod::None)
         }))
         .logger(Some(Logger::root(drain, o!())))
         .listen(ADDR),

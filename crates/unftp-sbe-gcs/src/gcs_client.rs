@@ -73,17 +73,21 @@ impl GcsClient {
         // We need this to get access to the 'updated' field
         // See the docs at https://cloud.google.com/storage/docs/json_api/v1/objects/list
         let mut url_str = format!(
-            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&prefix={}",
+            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true",
             self.base_url,
             self.bucket_name,
             "kind,prefixes,items(id,name,size,updated),nextPageToken", // limit the fields
-            self.path_str(path.as_ref(), TrailingSlash::Ensure)?,
         );
 
         if let Some(token) = next_page_token {
             url_str.push_str("&pageToken=");
             url_str.push_str(&token);
         }
+
+        if !Self::path_is_root(&path) {
+            url_str.push_str("&prefix=");
+            url_str.push_str(self.path_str(path, TrailingSlash::Ensure)?.as_str());
+        };
 
         let uri = make_uri(url_str)?;
 
@@ -181,16 +185,29 @@ impl GcsClient {
     where
         P: AsRef<Path> + Send + Debug,
     {
+        let prefix_param = if Self::path_is_root(&path) {
+            String::new()
+        } else {
+            format!("&prefix={}", self.path_str(path, TrailingSlash::Ensure)?)
+        };
+
         // URI specially crafted to determine whether a directory (prefix) is empty
         let uri = make_uri(format!(
-            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&maxResults=2&prefix={}",
+            "{}/storage/v1/b/{}/o?prettyPrint=false&fields={}&delimiter=/&includeTrailingDelimiter=true&maxResults=2{}",
             self.base_url,
             self.bucket_name,
             "prefixes,items(id,name,size,updated),nextPageToken", // nextPageToken helps detect whether the directory is empty
-            self.path_str(path, TrailingSlash::Ensure)?,
+            prefix_param,
         ))?;
 
         self.http_get(uri).await
+    }
+
+    fn path_is_root<P: AsRef<Path>>(path: &P) -> bool {
+        let path = path.as_ref();
+        let relative_path = path.strip_prefix("/").unwrap_or(path);
+
+        relative_path.parent().is_none()
     }
 
     fn path_str<P: AsRef<Path>>(&self, path: P, trailing_slash: TrailingSlash) -> Result<String, Error> {
