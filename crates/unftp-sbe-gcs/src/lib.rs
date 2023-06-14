@@ -152,7 +152,18 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
         P: AsRef<Path> + Send + Debug,
         <Self as StorageBackend<User>>::Metadata: Metadata,
     {
-        self.gcs.list(path).await?.list()
+        let path_buf = path.as_ref().to_path_buf();
+        let mut resp = self.gcs.list(&path_buf, None).await?;
+        let mut next_token: Option<String>;
+
+        next_token = resp.next_token();
+        let mut dirlist = resp.list()?;
+        while let Some(token) = next_token {
+            resp = self.gcs.list(&path_buf, Some(token)).await?;
+            next_token = resp.next_token();
+            dirlist.extend(resp.list()?);
+        }
+        Ok(dirlist)
     }
 
     async fn get_into<'a, P, W: ?Sized>(&self, user: &User, path: P, start_pos: u64, output: &'a mut W) -> Result<u64, Error>

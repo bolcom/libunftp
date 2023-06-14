@@ -11,6 +11,7 @@ use std::{iter::Extend, path::PathBuf};
 pub(crate) struct ResponseBody {
     items: Option<Vec<Item>>,
     prefixes: Option<Vec<String>>,
+    #[serde(rename = "nextPageToken")]
     next_page_token: Option<String>,
 }
 
@@ -103,6 +104,10 @@ impl ResponseBody {
             (_, _, Some(items)) => items.len() == 1 && items[0].name.ends_with('/'),
             (_, _, _) => false,
         }
+    }
+
+    pub(crate) fn next_token(&self) -> Option<String> {
+        self.next_page_token.as_ref().cloned()
     }
 }
 

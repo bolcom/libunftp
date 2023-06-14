@@ -1,5 +1,9 @@
 # Changelog
 
+### upcoming
+
+- [#465](https://github.com/bolcom/libunftp/pull/465) Handle paginated results for LIST fixing issue #464
+
 ### libunftp 0.18.9
 
 _tag: libunftp-0.18.9_
