@@ -5,6 +5,7 @@ use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use libunftp::storage::{Error, ErrorKind};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::de::DeserializeOwned;
+use std::fmt;
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
@@ -35,6 +36,21 @@ pub(crate) struct GcsClient {
 
     tokens: TokenSource,
 }
+
+#[derive(Debug)]
+pub struct HttpError {
+    status_code: u16,
+    status_text: String,
+    body: String,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "HTTP Error - Status: {} ({}), Body: {}", self.status_code, self.status_text, self.body)
+    }
+}
+
+impl std::error::Error for HttpError {}
 
 impl GcsClient {
     pub fn new<A: Into<AuthMethod>>(base_url: String, bucket_name: String, root: PathBuf, auth: A) -> Self {
@@ -268,7 +284,20 @@ impl GcsClient {
                 _ => ErrorKind::LocalError,
             };
 
-            return Err(Error::from(err_kind));
+            let status = response.status();
+            let body = hyper::body::aggregate(response).await.map_err(|e| Error::new(err_kind, e))?;
+
+            let body_string = String::from_utf8_lossy(body.chunk());
+            let error_message = format!("HTTP error: {} {}", status, body_string);
+
+            // Create the HttpError with additional information
+            let http_error = HttpError {
+                status_code: status.as_u16(),
+                status_text: status.canonical_reason().unwrap_or("Unknown").to_string(),
+                body: error_message,
+            };
+
+            return Err(Error::new(err_kind, http_error));
         }
 
         Ok(response)
