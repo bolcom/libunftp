@@ -1,9 +1,13 @@
 # Changelog
 
-### upcoming gcs-sbe
+### unftp-sbe-gcs v0.2.3
 
-- [#465](https://github.com/bolcom/libunftp/pull/465) GCS SBE: Handle paginated results for LIST fixing issue #464
-- [#466](https://github.com/bolcom/libunftp/pull/465) Fixed an (unreleased) issue in GCS SBE regarding root directory affecting list and cwd
+- [#449](https://github.com/bolcom/libunftp/pull/449) GCS Backend has had a cleanup (deduplication, modularization)
+- [#461](https://github.com/bolcom/libunftp/pull/461) Better GCS error mapping to FTP and convey the causing
+- [#465](https://github.com/bolcom/libunftp/pull/465) Handle paginated results for LIST fixing issue #464
+- [#466](https://github.com/bolcom/libunftp/pull/465) Fixed an (unreleased) issue regarding root directory affecting list and cwd
+- [#467](https://github.com/bolcom/libunftp/pull/467) Added more verbose error details for HTTP responses with error body
+- [#478](https://github.com/bolcom/libunftp/pull/468) Fixed CWD on / error when the directory was empty
 
 ### libunftp 0.18.9
 
