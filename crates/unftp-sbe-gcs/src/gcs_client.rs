@@ -203,7 +203,7 @@ impl GcsClient {
         self.http_get(uri).await
     }
 
-    fn path_is_root<P: AsRef<Path>>(path: &P) -> bool {
+    pub(crate) fn path_is_root<P: AsRef<Path>>(path: &P) -> bool {
         let path = path.as_ref();
         let relative_path = path.strip_prefix("/").unwrap_or(path);
 

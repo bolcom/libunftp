@@ -233,12 +233,16 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     where
         P: AsRef<Path> + Send + Debug,
     {
-        let dir_empty_resp = self.gcs.dir_empty(path).await?;
-
-        if !dir_empty_resp.dir_exists() {
-            Err(Error::from(ErrorKind::PermanentDirectoryNotAvailable))
-        } else {
+        if GcsClient::path_is_root(&path) {
             Ok(())
+        } else {
+            let dir_empty_resp = self.gcs.dir_empty(path).await?;
+
+            if !dir_empty_resp.dir_exists() {
+                Err(Error::from(ErrorKind::PermanentDirectoryNotAvailable))
+            } else {
+                Ok(())
+            }
         }
     }
 }
