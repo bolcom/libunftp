@@ -28,10 +28,11 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let text = vec![
-            "Help:",
+        let text: Vec<String> = vec![
+            "Help:".to_string(),
             format!("Powered by libunftp: {}", env!("CARGO_PKG_VERSION")),
-            "View the docs at: https://unftp.rs/"];
+            "View the docs at: https://unftp.rs/".to_string(),
+        ];
         Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))
     }
 }
