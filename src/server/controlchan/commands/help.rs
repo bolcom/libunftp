@@ -28,8 +28,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, _args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let text = vec!["Help:", "Powered by libunftp"];
-        // TODO: Add useful information here like operating server type and app name.
+        let text = vec!["Help:", "Powered by libunftp", "View the docs at: https://unftp.rs/"];
         Ok(Reply::new_multiline(ReplyCode::HelpMessage, text))
     }
 }
