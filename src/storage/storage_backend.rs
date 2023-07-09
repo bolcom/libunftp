@@ -4,7 +4,10 @@ use super::error::Error;
 use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
-use chrono::prelude::{DateTime, Utc};
+use chrono::{
+    prelude::{DateTime, Utc},
+    Datelike,
+};
 use libc;
 use md5::{Digest, Md5};
 use std::{
@@ -113,7 +116,15 @@ where
         let modified: String = self
             .metadata
             .modified()
-            .map(|x| DateTime::<Utc>::from(x).format("%b %d %H:%M").to_string())
+            .map(|modified| {
+                let modified = DateTime::<Utc>::from(modified);
+                let now = Utc::now();
+                if modified.year() == now.year() {
+                    modified.format("%b %d %H:%M").to_string()
+                } else {
+                    modified.format("%b %d %Y").to_string()
+                }
+            })
             .unwrap_or_else(|_| "--- -- --:--".to_string());
         let basename = self.path.as_ref().components().last();
         let path = match basename {
