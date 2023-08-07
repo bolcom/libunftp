@@ -21,7 +21,9 @@ readme = "README.md"
 [dependencies]
 async-trait = "0.1.75"
 cfg-if = "1.0"
+cap-std = "2.0"
 futures = { version = "0.3.29", default-features = false, features = ["std"] }
+lazy_static = "1.4.0"
 libunftp = { version="0.19.1", path="../../"}
 path_abs = "0.5.1"
 tokio = { version = "1.35.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
