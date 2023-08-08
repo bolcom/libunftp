@@ -343,7 +343,25 @@ async fn dele() {
 
     ftp_stream.login("hoi", "jij").await.unwrap();
     ftp_stream.rm(file_name).await.unwrap();
-    assert_eq!(std::fs::metadata(file_name).unwrap_err().kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(std::fs::metadata(file_in_root.path()).unwrap_err().kind(), std::io::ErrorKind::NotFound);
+}
+
+#[tokio::test]
+async fn rmd() {
+    let addr = "127.0.0.1:1243";
+    let root = std::env::temp_dir();
+
+    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
+    tokio::time::sleep(Duration::new(1, 0)).await;
+    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
+    let dir_in_root = tempfile::tempdir_in(root).unwrap();
+    let file_name = dir_in_root.path().file_name().unwrap().to_str().unwrap();
+
+    ensure_login_required(ftp_stream.rm(file_name).await);
+
+    ftp_stream.login("hoi", "jij").await.unwrap();
+    ftp_stream.rmdir(file_name).await.unwrap();
+    assert_eq!(std::fs::metadata(dir_in_root.path()).unwrap_err().kind(), std::io::ErrorKind::NotFound);
 }
 
 #[tokio::test]
