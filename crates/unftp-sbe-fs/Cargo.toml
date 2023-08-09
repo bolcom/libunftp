@@ -20,6 +20,7 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.68"
+cfg-if = "1.0"
 futures = { version = "0.3.28", default-features = false, features = ["std"] }
 libunftp = { version="0.18.9", path="../../"}
 path_abs = "0.5.1"

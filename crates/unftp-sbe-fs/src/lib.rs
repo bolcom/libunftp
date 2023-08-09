@@ -21,6 +21,7 @@ mod ext;
 pub use ext::ServerExt;
 
 use async_trait::async_trait;
+use cfg_if::cfg_if;
 use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use std::{
@@ -28,6 +29,14 @@ use std::{
     path::{Path, PathBuf},
     time::SystemTime,
 };
+
+cfg_if! {
+    if #[cfg(target_os = "linux")] {
+        use std::os::linux::fs::MetadataExt;
+    } else if #[cfg(target_os = "unix")] {
+        use std::os::unix::fs::MetadataExt;
+    }
+}
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.
@@ -224,7 +233,6 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 }
 
-#[allow(unreachable_code)]
 impl Metadata for Meta {
     fn len(&self) -> u64 {
         self.inner.len()
@@ -247,57 +255,42 @@ impl Metadata for Meta {
     }
 
     fn gid(&self) -> u32 {
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::linux::fs::MetadataExt;
-
-            return self.inner.st_gid();
+        cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                self.inner.st_gid()
+            }
+            else if #[cfg(target_os = "unix")] {
+                self.inner.gid()
+            } else {
+                0
+            }
         }
-
-        #[cfg(target_os = "unix")]
-        {
-            use std::os::unix::fs::MetadataExt;
-
-            return self.inner.gid();
-        }
-
-        0
     }
 
     fn uid(&self) -> u32 {
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::linux::fs::MetadataExt;
-
-            return self.inner.st_uid();
+        cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                self.inner.st_uid()
+            }
+            else if #[cfg(target_os = "unix")] {
+                self.inner.uid()
+            } else {
+                0
+            }
         }
-
-        #[cfg(target_os = "unix")]
-        {
-            use std::os::unix::fs::MetadataExt;
-
-            return self.inner.uid();
-        }
-
-        0
     }
 
     fn links(&self) -> u64 {
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::linux::fs::MetadataExt;
-
-            return self.inner.st_nlink();
+        cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                self.inner.st_nlink()
+            }
+            else if #[cfg(target_os = "unix")] {
+                self.inner.nlink()
+            } else {
+                1
+            }
         }
-
-        #[cfg(target_os = "unix")]
-        {
-            use std::os::unix::fs::MetadataExt;
-
-            return self.inner.nlink();
-        }
-
-        1
     }
 }
 
