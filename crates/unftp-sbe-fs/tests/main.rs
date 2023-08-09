@@ -238,33 +238,70 @@ async fn put() {
     assert_eq!(remote_data, content);
 }
 
-#[tokio::test]
-async fn list() {
-    let addr = "127.0.0.1:1239";
-    let root = std::env::temp_dir();
+mod list {
+    use super::*;
 
-    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
-    tokio::time::sleep(Duration::new(1, 0)).await;
-    // Create a filename in the ftp root that we will look for in the `LIST` output
-    let path = root.join("test.txt");
-    {
-        let _f = std::fs::File::create(path);
-    }
+    #[tokio::test]
+    async fn root() {
+        let addr = "127.0.0.1:1239";
+        let root = std::env::temp_dir();
 
-    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
-
-    ensure_login_required(ftp_stream.list(None).await);
-
-    ftp_stream.login("hoi", "jij").await.unwrap();
-    let list = ftp_stream.list(None).await.unwrap();
-    let mut found = false;
-    for entry in list {
-        if entry.contains("test.txt") {
-            found = true;
-            break;
+        tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
+        tokio::time::sleep(Duration::new(1, 0)).await;
+        // Create a filename in the ftp root that we will look for in the `LIST` output
+        let path = root.join("test.txt");
+        {
+            let _f = std::fs::File::create(path);
         }
+
+        let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let list = ftp_stream.list(None).await.unwrap();
+        let mut found = false;
+        for entry in list {
+            if entry.contains("test.txt") {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
     }
-    assert!(found);
+
+    #[tokio::test]
+    async fn subdir() {
+        let addr = "127.0.0.1:1252";
+        let root = std::env::temp_dir();
+
+        tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
+        tokio::time::sleep(Duration::new(1, 0)).await;
+        let dir_in_root = tempfile::TempDir::new_in(root).unwrap();
+        // Create a filename in the subdirectory that we will look for in the `LIST` output
+        let path = dir_in_root.path().join("test.txt");
+        {
+            let _f = std::fs::File::create(path);
+        }
+
+        let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let list = ftp_stream
+            .list(dir_in_root.path().file_name().map(std::ffi::OsStr::to_str).flatten())
+            .await
+            .unwrap();
+        let mut found = false;
+        for entry in list {
+            if entry.contains("test.txt") {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
+    }
 }
 
 #[tokio::test]
