@@ -4,6 +4,8 @@ use super::{chosen::OptionsHolder, ServerError};
 use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::{auth::UserDetail, server::controlchan, storage::StorageBackend};
+use std::ffi::OsString;
+use std::os::fd::AsRawFd;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -20,6 +22,8 @@ where
     pub options: OptionsHolder<Storage, User>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
+    pub connection_helper: Option<OsString>,
+    pub connection_helper_args: Vec<OsString>
 }
 
 impl<Storage, User> Listener<Storage, User>
@@ -35,6 +39,8 @@ where
             options,
             shutdown_topic,
             failed_logins,
+            connection_helper,
+            connection_helper_args
         } = self;
         let listener = TcpListener::bind(bind_address).await?;
         loop {
@@ -42,10 +48,37 @@ where
             match listener.accept().await {
                 Ok((tcp_stream, socket_addr)) => {
                     slog::info!(logger, "Incoming control connection from {:?}", socket_addr);
-                    let result =
-                        controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream, None, None, shutdown_listener, failed_logins.clone()).await;
-                    if let Err(err) = result {
-                        slog::error!(logger, "Could not spawn control channel loop for connection from {:?}: {:?}", socket_addr, err)
+                    if let Some(helper) = connection_helper.as_ref() {
+                        slog::info!(logger, "Spawning {:?}", helper);
+                        let fd = tcp_stream.as_raw_fd();
+                        nix::fcntl::fcntl(fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty())).unwrap();
+                        let result = tokio::process::Command::new(helper)
+                            .args(connection_helper_args.iter())
+                            .arg(fd.to_string())
+                            .spawn();
+                        let logger2 = logger.clone();
+                        match result {
+                            Ok(mut child) => {
+                                tokio::spawn(async move {
+                                    let child_status = child.wait().await;
+                                    slog::debug!(logger2, "helper process exited {:?}", child_status);
+                                });
+                            }
+                            Err(err) => {
+                                slog::error!(logger,
+                                    "Could not spawn helper process for connection from {:?}: {:?}",
+                                    socket_addr, err);
+                            }
+                        }
+                    } else {
+                        let result =
+                            controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream,
+                                None, None, shutdown_listener, failed_logins.clone()).await;
+                        if let Err(err) = result {
+                            slog::error!(logger,
+                                "Could not spawn control channel loop for connection from {:?}: {:?}",
+                                socket_addr, err);
+                        }
                     }
                 }
                 Err(err) => {

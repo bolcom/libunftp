@@ -57,6 +57,7 @@ where
                         session.username = Some(user.to_string());
                         session.state = SessionState::WaitCmd;
                         session.user = Arc::new(Some(user_detail));
+                        // TODO: enter capsicum here.
                         Ok(Reply::new(ReplyCode::UserLoggedInViaCert, "User logged in"))
                     }
                     Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials")),

@@ -449,7 +449,11 @@ where
 /// session_arc: the user session that is also shared with the control channel.
 /// socket: the data socket we'll be working with.
 #[tracing_attributes::instrument]
-pub async fn spawn_processing<Storage, User>(logger: slog::Logger, session_arc: SharedSession<Storage, User>, mut socket: TcpStream)
+pub async fn spawn_processing<Storage, User>(
+    logger: slog::Logger,
+    session_arc: SharedSession<Storage, User>,
+    mut socket: TcpStream
+)
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,

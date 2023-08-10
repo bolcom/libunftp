@@ -25,7 +25,7 @@ use crate::{
 };
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::{fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{fmt::Debug, ffi::OsString, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -75,6 +75,9 @@ where
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
     failed_logins_policy: Option<FailedLoginsPolicy>,
     active_passive_mode: ActivePassiveMode,
+    connection_helper: Option<OsString>,
+    connection_helper_args: Vec<OsString>,
+    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
 }
 
 impl<Storage, User> Server<Storage, User>
@@ -101,13 +104,15 @@ where
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
     pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
+        let passive_ports = options::DEFAULT_PASSIVE_PORTS;
+        let pasv_listener = Arc::new(std::sync::Mutex::new(None));
         Server {
             storage: Arc::from(sbe_generator),
             greeting: DEFAULT_GREETING,
             authenticator,
             data_listener: Arc::new(NopListener {}),
             presence_listener: Arc::new(NopListener {}),
-            passive_ports: options::DEFAULT_PASSIVE_PORTS,
+            passive_ports,
             passive_host: options::DEFAULT_PASSIVE_HOST,
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
@@ -123,6 +128,9 @@ where
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
             active_passive_mode: ActivePassiveMode::default(),
+            connection_helper: None,
+            connection_helper_args: Vec::new(),
+            pasv_listener
         }
     }
 
@@ -393,6 +401,21 @@ where
         self
     }
 
+    /// Preallocate a listener socket for the PASV command
+    ///
+    /// Preallocate a socket suitable for servicing the PASV command as received from the given IP
+    /// address.  This method is completely optional, but it is necessary in order to use the
+    /// [`service`] method when the server is running in capability mode.
+    // In the future, this could be extended to accept multiple invocations, allocating a
+    // collection of sockets.
+    pub async fn pasv_listener(self, addr: std::net::IpAddr) -> Self {
+        // XXX: maybe should convert this into a synchronous function by using
+        // std::net::TcpListener::bind instead of tokio::net::TcpListener::bind
+        let sock = crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone()).await.unwrap();
+        *self.pasv_listener.lock().unwrap() = Some(sock);
+        self
+    }
+
     /// Sets the range of passive ports that we'll use for passive connections.
     ///
     /// # Example
@@ -493,6 +516,24 @@ where
         self
     }
 
+    /// Assign a connection helper to the server.
+    ///
+    /// Rather than listening for and servicing connections in the same binary, this option allows
+    /// accepted connections to be serviced by a different program.  After accepting a connection,
+    /// the Server will execute the provided helper process.  Any provided arguments will be passed
+    /// to the helper process.  After those arguments, the Server will pass an integer, which is
+    /// the file descriptor number of the connected socket.
+    ///
+    /// # Arguments
+    ///
+    /// - `path` - Path to the helper executable
+    /// - `args` - Optional arguments to pass to the helper executable.
+    pub fn connection_helper(mut self, path: OsString, args: Vec<OsString>) -> Self {
+        self.connection_helper = Some(path);
+        self.connection_helper_args = args;
+        self
+    }
+
     /// Enables a password guessing protection policy
     ///
     /// Policy used to temporarily block an account, source IP or the
@@ -588,6 +629,8 @@ where
                     options: (&self).into(),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
+                    connection_helper: self.connection_helper.clone(),
+                    connection_helper_args: self.connection_helper_args.clone()
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -609,6 +652,33 @@ where
                 Self::shutdown_linger(logger, shutdown_notifier, opts.grace_period).await
             }
         }
+    }
+
+    /// Service a newly established connection.
+    ///
+    /// Use this method instead of [`listen`](Server::listen) if you want to listen for and accept
+    /// new connections yourself, instead of using libunftp to do it.
+    pub async fn service(self, tcp_stream: tokio::net::TcpStream)  -> std::result::Result<(), crate::server::ControlChanError> {
+        let failed_logins = self.failed_logins_policy.as_ref()
+            .map(|policy| FailedLoginsCache::new(policy.clone()));
+        let options: chosen::OptionsHolder<Storage, User> = (&self).into();
+        let shutdown_notifier = Arc::new(shutdown::Notifier::new());
+        let shutdown_listener = shutdown_notifier.subscribe().await;
+        slog::debug!(self.logger, "Servicing control connection from");
+        let result = controlchan::spawn_loop::<Storage, User>(
+            (&options).into(),
+            tcp_stream,
+            None,
+            None,
+            shutdown_listener,
+            failed_logins.clone()
+        ).await;
+        if let Err(err) = result {
+            slog::error!(self.logger, "Could not spawn control channel loop: {:?}", err);
+        } else {
+            shutdown_notifier.linger().await;
+        }
+        Ok(())
     }
 
     // Waits for sub-components to shut down gracefully or aborts if the grace period expires
@@ -650,6 +720,7 @@ where
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,
+            pasv_listener: server.pasv_listener.clone()
         }
     }
 }

@@ -31,7 +31,8 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 const BIND_RETRIES: u8 = 10;
 
 #[derive(Debug)]
-pub struct Pasv {}
+pub struct Pasv {
+}
 
 impl Pasv {
     pub fn new() -> Self {
@@ -39,7 +40,7 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    async fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
+    pub async fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
@@ -107,11 +108,17 @@ impl Pasv {
             }
         };
 
-        let listener = Pasv::try_port_range(args.local_addr.ip(), args.passive_ports).await;
-
-        let listener = match listener {
-            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
-            Ok(l) => l,
+        let olistener = {
+            session.lock().await.listener.take()
+        };
+        let listener = if let Some(listener) = olistener {
+            listener
+        } else {
+            let elistener = Pasv::try_port_range(args.local_addr.ip(), args.passive_ports).await;
+            match elistener {
+                Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+                Ok(l) => l,
+            }
         };
 
         let port = listener.local_addr()?.port();
@@ -127,7 +134,9 @@ impl Pasv {
             // We cannot await this since we first need to let the client know where to connect :-)
             tokio::spawn(async move {
                 // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
-                match tokio::time::timeout(Duration::from_secs(15), listener.accept()).await {
+                let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
+                session.lock().await.listener = Some(listener);
+                match r {
                     Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(logger, session, socket).await,
                     Ok(Err(e)) => slog::error!(logger, "Error waiting for data connection: {}", e),
                     Err(_) => slog::warn!(logger, "Client did not connect to data port in time"),

@@ -17,6 +17,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::net::TcpListener;
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -113,6 +114,8 @@ where
     pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
     // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
+    // A preallocated socket to use for PASV.
+    pub listener: Option<TcpListener>,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -146,6 +149,7 @@ where
             data_busy: false,
             cert_chain: None,
             failed_logins: None,
+            listener: None
         }
     }
 
@@ -159,6 +163,11 @@ where
             metrics::inc_session();
         }
         self.collect_metrics = collect_metrics;
+        self
+    }
+
+    pub fn pasv_listener(mut self, listener: TcpListener) -> Self {
+        self.listener = Some(listener);
         self
     }
 

@@ -34,6 +34,7 @@ where
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
+    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
 }
 
 impl<Storage, User> From<&OptionsHolder<Storage, User>> for controlchan::LoopConfig<Storage, User>
@@ -43,6 +44,8 @@ where
     Storage::Metadata: Metadata,
 {
     fn from(server: &OptionsHolder<Storage, User>) -> Self {
+        // So this is when you create a new storage backend?
+        // XXX Shouldn't instantiate storage until _after_ successful auth.
         controlchan::LoopConfig {
             authenticator: server.authenticator.clone(),
             storage: (server.storage)(),
@@ -59,6 +62,7 @@ where
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,
+            pasv_listener: server.pasv_listener.clone()
         }
     }
 }

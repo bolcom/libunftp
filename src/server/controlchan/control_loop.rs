@@ -69,6 +69,7 @@ where
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
+    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
 }
 
 /// Does TCP processing when an FTP client connects
@@ -101,25 +102,29 @@ where
         data_listener,
         presence_listener,
         active_passive_mode,
+        pasv_listener,
         ..
     } = config;
 
     let tls_configured = matches!(ftps_config, FtpsConfig::On { .. });
     let storage_features = storage.supported_features();
     let (control_msg_tx, mut control_msg_rx): (Sender<ControlChanMsg>, Receiver<ControlChanMsg>) = channel(1);
-    let session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
+    let local_addr = tcp_stream.local_addr()?;
+    let mut session: Session<Storage, User> = Session::new(Arc::new(storage), tcp_stream.peer_addr()?)
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
         .proxy_connection(proxy_connection)
         .failed_logins(failed_logins);
+    if let Some(s) = pasv_listener.lock().unwrap().take() {
+        session = session.pasv_listener(s);
+    }
 
     let mut logger = logger.new(
         slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.proxy_control.map(|p| p.source).unwrap_or(session.source))),
     );
 
     let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
-    let local_addr = tcp_stream.local_addr()?;
 
     let event_chain = PrimaryEventHandler {
         logger: logger.clone(),
