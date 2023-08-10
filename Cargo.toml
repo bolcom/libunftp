@@ -39,7 +39,7 @@ futures-util = { version = "0.3.28", default-features = false, features = ["allo
 getrandom = "0.2.9"
 lazy_static = "1.4.0"
 md-5 = "0.10.5"
-moka = "0.9.7"
+moka = { version = "0.9.7", default-features = false, features = ["sync"] }
 prometheus = { version = "0.13.3", default-features = false }
 proxy-protocol = "0.5.0"
 rustls = "0.20.8"
