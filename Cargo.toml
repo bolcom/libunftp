@@ -33,7 +33,7 @@ members = [
 async-trait = "0.1.68"
 bitflags = "1.3.2"
 bytes = "1.4.0"
-chrono = { version = "0.4.26", default-features = false, features = ["std"] }
+chrono = { version = "0.4.26", default-features = false, features = ["clock", "std"] }
 derive_more = { version = "0.99.17", features = ["display"] }
 futures-util = { version = "0.3.28", default-features = false, features = ["alloc", "sink"] }
 getrandom = "0.2.9"
