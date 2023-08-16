@@ -33,7 +33,7 @@ use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
 use std::{
     fmt::Debug,
-    io::Seek,
+    io::{self, Seek},
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
@@ -51,7 +51,8 @@ pub struct Filesystem {
     // The Arc is necessary so we can pass it to async closures.  Which is of dubious utility
     // anyway, since most of those closures execute functions like fstatfs that are faster than the
     // cost of switching a thread.
-    root_fd: Arc<cap_std::fs::Dir>
+    root_fd: Arc<cap_std::fs::Dir>,
+    root: PathBuf
 }
 
 #[derive(Debug)]
@@ -82,7 +83,8 @@ impl Filesystem {
         let aa = cap_std::ambient_authority();
         let root_fd = Arc::new(cap_std::fs::Dir::open_ambient_dir(&path, aa).unwrap());
         Filesystem {
-            root_fd
+            root_fd,
+            root: path
         }
     }
 }
@@ -90,6 +92,21 @@ impl Filesystem {
 #[async_trait]
 impl<User: UserDetail> StorageBackend<User> for Filesystem {
     type Metadata = Meta;
+
+    /// Restrict the backend's capabilities so that it may only access files underneath `path`.
+    /// Once restricted, it may never be unrestricted.
+    ///
+    /// The path should be absolute.
+    fn enter<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()>
+    {
+        let relpath = match path.as_ref().strip_prefix(self.root.as_path()) {
+            Ok(r) => r,
+            Err(_) => return Err(io::Error::new(io::ErrorKind::Other,
+                "Path not a descendant of the previous root"))
+        };
+        self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
+        Ok(())
+    }
 
     fn supported_features(&self) -> u32 {
         libunftp::storage::FEATURE_RESTART | libunftp::storage::FEATURE_SITEMD5

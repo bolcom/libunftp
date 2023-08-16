@@ -12,6 +12,7 @@ use libc;
 use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},
+    io,
     path::Path,
     result,
     time::SystemTime,
@@ -163,6 +164,14 @@ where
 pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
+
+    /// Restrict the backend's capabilities so that it may only access files underneath `path`.
+    /// Once restricted, it may never be unrestricted.
+    ///
+    /// The path should be absolute.
+    fn enter<P: AsRef<Path>>(&mut self, _path: P) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "Not supported by this StorageBackend"))
+    }
 
     /// Implement to set the name of the storage back-end. By default it returns the type signature.
     fn name(&self) -> &str {
