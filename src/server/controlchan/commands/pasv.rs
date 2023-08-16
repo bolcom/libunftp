@@ -24,7 +24,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use std::{io, net::SocketAddr, ops::Range};
-use std::{net::Ipv4Addr, time::Duration};
+use std::{net::{IpAddr, Ipv4Addr}, time::Duration};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -39,7 +39,7 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
+    async fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
@@ -52,7 +52,7 @@ impl Pasv {
             };
 
             let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
-            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
+            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr, port as u16)).await;
             if listener.is_ok() {
                 break;
             }
@@ -107,7 +107,7 @@ impl Pasv {
             }
         };
 
-        let listener = Pasv::try_port_range(args.local_addr, args.passive_ports).await;
+        let listener = Pasv::try_port_range(args.local_addr.ip(), args.passive_ports).await;
 
         let listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
