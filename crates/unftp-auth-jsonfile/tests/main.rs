@@ -15,7 +15,7 @@ async fn credentials_from_file_type_plain() {
     let path = input_file_path("cred.json".to_string());
 
     let json_auther = JsonFileAuthenticator::from_file(path).unwrap();
-    assert_eq!(json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap(), DefaultUser);
+    let _: DefaultUser = json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -23,7 +23,7 @@ async fn credentials_from_file_type_gzipped() {
     let path = input_file_path("cred.json.gz".to_string());
 
     let json_auther = JsonFileAuthenticator::from_file(path).unwrap();
-    assert_eq!(json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap(), DefaultUser);
+    let _: DefaultUser = json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -31,5 +31,5 @@ async fn credentials_from_file_type_gzipped_base64() {
     let path = input_file_path("cred.json.gz.b64".to_string());
 
     let json_auther = JsonFileAuthenticator::from_file(path).unwrap();
-    assert_eq!(json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap(), DefaultUser);
+    let _: DefaultUser = json_auther.authenticate("testuser", &"testpassword".into()).await.unwrap();
 }
