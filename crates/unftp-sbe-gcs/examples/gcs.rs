@@ -87,16 +87,20 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         let ftps_key_file = matches
             .value_of(FTPS_KEY_FILE)
             .ok_or("Internal error: use of an undefined command line parameter")?;
-        libunftp::Server::new(Box::new(move || {
+        libunftp::ServerBuilder::new(Box::new(move || {
             unftp_sbe_gcs::CloudStorage::with_api_base(&gcs_base_url, &bucket_name, PathBuf::new(), service_account_key.clone())
         }))
         .ftps(ftps_certs_file, ftps_key_file)
+        .build()
+        .unwrap()
         .listen(BIND_ADDRESS)
         .await?;
     } else {
-        libunftp::Server::new(Box::new(move || {
+        libunftp::ServerBuilder::new(Box::new(move || {
             unftp_sbe_gcs::CloudStorage::with_api_base(&gcs_base_url, &bucket_name, PathBuf::new(), service_account_key.clone())
         }))
+        .build()
+        .unwrap()
         .listen(BIND_ADDRESS)
         .await?;
     }

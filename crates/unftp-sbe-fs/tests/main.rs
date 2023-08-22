@@ -1,5 +1,5 @@
 use async_ftp::{types::Result, FtpStream};
-use libunftp::{auth::DefaultUser, options::FtpsRequired, Server};
+use libunftp::{auth::DefaultUser, options::FtpsRequired, ServerBuilder};
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use std::fmt::Debug;
@@ -32,14 +32,14 @@ struct Harness {
 
 async fn custom_server_harness<S>(s: S) -> Harness
 where
-    S: Fn(PathBuf) -> Server<Filesystem, DefaultUser>,
+    S: Fn(PathBuf) -> ServerBuilder<Filesystem, DefaultUser>,
 {
     let port = TESTPORT.fetch_add(1, Ordering::Relaxed);
     let addr = format!("127.0.0.1:{}", port);
     let tempdir = tempfile::TempDir::new().unwrap();
     let root = tempdir.path().to_path_buf();
 
-    let server = s(root.clone()).listen(addr.clone());
+    let server = s(root.clone()).build().unwrap().listen(addr.clone());
 
     tokio::spawn(server);
     while async_ftp::FtpStream::connect(&addr).await.is_err() {

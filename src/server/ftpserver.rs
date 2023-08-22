@@ -41,7 +41,7 @@ use std::{fmt::Debug, ffi::OsString, future::Future, net::SocketAddr, ops::Range
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
-/// let server = Server::with_fs("/srv/ftp");
+/// let server = Server::with_fs("/srv/ftp").build().unwrap();
 /// rt.spawn(server.listen("127.0.0.1:2121"));
 /// // ...
 /// drop(rt);
@@ -50,6 +50,35 @@ use std::{fmt::Debug, ffi::OsString, future::Future, net::SocketAddr, ops::Range
 /// [`Authenticator`]: auth::Authenticator
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
 pub struct Server<Storage, User>
+where
+    Storage: StorageBackend<User>,
+    User: UserDetail,
+{
+    storage: Arc<dyn (Fn() -> Storage) + Send + Sync>,
+    greeting: &'static str,
+    authenticator: Arc<dyn Authenticator<User>>,
+    data_listener: Arc<dyn DataListener>,
+    presence_listener: Arc<dyn PresenceListener>,
+    passive_ports: Range<u16>,
+    passive_host: PassiveHost,
+    collect_metrics: bool,
+    ftps_mode: FtpsConfig,
+    ftps_required_control_chan: FtpsRequired,
+    ftps_required_data_chan: FtpsRequired,
+    idle_session_timeout: std::time::Duration,
+    proxy_protocol_mode: ProxyMode,
+    logger: slog::Logger,
+    site_md5: SiteMd5,
+    shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
+    failed_logins_policy: Option<FailedLoginsPolicy>,
+    active_passive_mode: ActivePassiveMode,
+    connection_helper: Option<OsString>,
+    connection_helper_args: Vec<OsString>,
+    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
+}
+
+/// Used to create [`Server`]s.  
+pub struct ServerBuilder<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
@@ -80,15 +109,15 @@ where
     pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
 }
 
-impl<Storage, User> Server<Storage, User>
+impl<Storage, User> ServerBuilder<Storage, User>
 where
     Storage: StorageBackend<User> + 'static,
     Storage::Metadata: Metadata,
     User: UserDetail + 'static,
 {
-    /// Construct a new [`Server`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
+    /// Construct a new [`ServerBuilder`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
     ///
-    /// [`Server`]: struct.Server.html
+    /// [`ServerBuilder`]: struct.ServerBuilder.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
     pub fn new(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>) -> Self
@@ -98,15 +127,15 @@ where
         Self::with_authenticator(sbe_generator, Arc::new(AnonymousAuthenticator {}))
     }
 
-    /// Construct a new [`Server`] with the given [`StorageBackend`] generator and [`Authenticator`]. The other parameters will be set to defaults.
+    /// Construct a new [`ServerBuilder`] with the given [`StorageBackend`] generator and [`Authenticator`]. The other parameters will be set to defaults.
     ///
-    /// [`Server`]: struct.Server.html
+    /// [`ServerBuilder`]: struct.ServerBuilder.html
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
     pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> Self {
         let passive_ports = options::DEFAULT_PASSIVE_PORTS;
         let pasv_listener = Arc::new(std::sync::Mutex::new(None));
-        Server {
+        ServerBuilder {
             storage: Arc::from(sbe_generator),
             greeting: DEFAULT_GREETING,
             authenticator,
@@ -145,7 +174,9 @@ where
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp")
-    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}));
+    ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}))
+    ///                  .build()
+    ///                  .unwrap();
     /// ```
     ///
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
@@ -167,11 +198,47 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .active_passive_mode(ActivePassiveMode::ActiveAndPassive);
+    ///              .active_passive_mode(ActivePassiveMode::ActiveAndPassive)
+    ///              .build()
+    ///              .unwrap();
     /// ```
     pub fn active_passive_mode<M: Into<ActivePassiveMode>>(mut self, mode: M) -> Self {
         self.active_passive_mode = mode.into();
         self
+    }
+
+    /// Finalize the options and build a [`Server`].
+    pub fn build(self) -> std::result::Result<Server<Storage, User>, ServerError> {
+        let ftps_mode = match self.ftps_mode {
+            FtpsConfig::Off => FtpsConfig::Off,
+            FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
+                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags, self.ftps_client_auth, self.ftps_trust_store.clone())?,
+            },
+            FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
+        };
+        Ok(Server {
+            storage: self.storage,
+            greeting: self.greeting,
+            authenticator: self.authenticator,
+            data_listener: self.data_listener,
+            presence_listener: self.presence_listener,
+            passive_ports: self.passive_ports,
+            passive_host: self.passive_host,
+            collect_metrics: self.collect_metrics,
+            ftps_mode,
+            ftps_required_control_chan: self.ftps_required_control_chan,
+            ftps_required_data_chan: self.ftps_required_data_chan,
+            idle_session_timeout: self.idle_session_timeout,
+            proxy_protocol_mode: self.proxy_protocol_mode,
+            logger: self.logger,
+            site_md5: self.site_md5,
+            shutdown: self.shutdown,
+            failed_logins_policy: self.failed_logins_policy,
+            active_passive_mode: self.active_passive_mode,
+            connection_helper: self.connection_helper,
+            connection_helper_args: self.connection_helper_args,
+            pasv_listener: self.pasv_listener,
+        })
     }
 
     /// Enables FTPS by configuring the path to the certificates file and the private key file. Both
@@ -195,7 +262,7 @@ where
     }
 
     /// Allows switching on Mutual TLS. For this to work the trust anchors also needs to be set using
-    /// the [ftps_trust_store](crate::Server::ftps_trust_store) method.
+    /// the [ftps_trust_store](crate::ServerBuilder::ftps_trust_store) method.
     ///
     /// # Example
     ///
@@ -230,7 +297,7 @@ where
 
     /// Sets the certificates to use when verifying client certificates in Mutual TLS mode. This
     /// should point to certificates in a PEM formatted file. For this to have any effect MTLS needs
-    /// to be switched on via the [ftps_client_auth](crate::Server::ftps_client_auth) method.
+    /// to be switched on via the [ftps_client_auth](crate::ServerBuilder::ftps_client_auth) method.
     ///
     /// # Example
     ///
@@ -281,11 +348,13 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").greeting("Welcome to my FTP Server");
+    /// let mut server = Server::with_fs("/tmp")
+    ///     .greeting("Welcome to my FTP Server")
+    ///     .build();
     ///
     /// // Or instead if you prefer:
     /// let mut server = Server::with_fs("/tmp");
-    /// server.greeting("Welcome to my FTP Server");
+    /// server.greeting("Welcome to my FTP Server").build();
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
         self.greeting = greeting;
@@ -327,11 +396,11 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").metrics();
+    /// let mut builder = Server::with_fs("/tmp").metrics();
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_fs("/tmp");
-    /// server.metrics();
+    /// let mut builder = Server::with_fs("/tmp");
+    /// builder.metrics();
     /// ```
     pub fn metrics(mut self) -> Self {
         self.collect_metrics = true;
@@ -364,7 +433,9 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .passive_host([127,0,0,1]);
+    ///              .passive_host([127,0,0,1])
+    ///              .build()
+    ///              .unwrap();
     /// ```
     /// Or the same but more explicitly:
     ///
@@ -374,7 +445,9 @@ where
     /// use std::net::Ipv4Addr;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .passive_host(options::PassiveHost::Ip(Ipv4Addr::new(127, 0, 0, 1)));
+    ///              .passive_host(options::PassiveHost::Ip(Ipv4Addr::new(127, 0, 0, 1)))
+    ///              .build()
+    ///              .unwrap();
     /// ```
     ///
     /// To determine the passive IP from the incoming control connection:
@@ -384,7 +457,9 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .passive_host(options::PassiveHost::FromConnection);
+    ///              .passive_host(options::PassiveHost::FromConnection)
+    ///              .build()
+    ///              .unwrap();
     /// ```
     ///
     /// Get the IP by resolving a DNS name:
@@ -394,7 +469,9 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .passive_host("ftp.myserver.org");
+    ///              .passive_host("ftp.myserver.org")
+    ///              .build()
+    ///              .unwrap();
     /// ```
     pub fn passive_host<H: Into<PassiveHost>>(mut self, host_option: H) -> Self {
         self.passive_host = host_option.into();
@@ -425,12 +502,12 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::with_fs("/tmp")
+    /// let builder = Server::with_fs("/tmp")
     ///              .passive_ports(49152..65535);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_fs("/tmp");
-    /// server.passive_ports(49152..65535);
+    /// let mut builder = Server::with_fs("/tmp");
+    /// builder.passive_ports(49152..65535);
     /// ```
     pub fn passive_ports(mut self, range: Range<u16>) -> Self {
         self.passive_ports = range;
@@ -461,7 +538,7 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").proxy_protocol_mode(2121);
+    /// let mut server = Server::with_fs("/tmp").proxy_protocol_mode(2121).build().unwrap();
     /// ```
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
@@ -484,7 +561,8 @@ where
     ///    tokio::time::sleep(Duration::from_secs(10)).await; // Shut the server down after 10 seconds.
     ///    libunftp::options::Shutdown::new()
     ///      .grace_period(Duration::from_secs(5)) // Allow 5 seconds to shutdown gracefully
-    /// });
+    /// }).build()
+    /// .unwrap();
     /// ```
     pub fn shutdown_indicator<I>(mut self, indicator: I) -> Self
     where
@@ -509,7 +587,7 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").sitemd5(SiteMd5::None);
+    /// let mut server = Server::with_fs("/tmp").sitemd5(SiteMd5::None).build().unwrap();
     /// ```
     pub fn sitemd5<M: Into<SiteMd5>>(mut self, sitemd5_option: M) -> Self {
         self.site_md5 = sitemd5_option.into();
@@ -564,17 +642,42 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// // With default policy
-    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default());
+    /// let server =
+    /// Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::default()).build().unwrap();
     ///
     /// // Or choose a specific policy like based on source IP and
     /// // longer block (maximum 3 attempts, 5 minutes, IP based
     /// // blocking)
     /// use std::time::Duration;
-    /// let server = Server::with_fs("/tmp").failed_logins_policy(FailedLoginsPolicy::new(3, Duration::from_secs(300), FailedLoginsBlock::IP));
+    /// let server = Server::with_fs("/tmp")
+    ///     .failed_logins_policy(FailedLoginsPolicy::new(3, Duration::from_secs(300), FailedLoginsBlock::IP))
+    ///     .build()
+    ///     .unwrap();
     /// ```
     pub fn failed_logins_policy(mut self, policy: FailedLoginsPolicy) -> Self {
         self.failed_logins_policy = Some(policy);
         self
+    }
+}
+
+impl<Storage, User> Server<Storage, User>
+where
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
+{
+    /// Construct a new [`ServerBuilder`] with the given [`StorageBackend`] generator and an [`AnonymousAuthenticator`]
+    ///
+    /// [`ServerBuilder`]: struct.ServerBuilder.html
+    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
+    /// [`AnonymousAuthenticator`]: ../auth/struct.AnonymousAuthenticator.html
+    #[deprecated(since = "0.19.0", note = "use ServerBuilder::new instead")]
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>) -> ServerBuilder<Storage, User>
+    where
+        AnonymousAuthenticator: Authenticator<User>,
+    {
+        ServerBuilder::new(sbe_generator)
     }
 
     /// Runs the main FTP process asynchronously. Should be started in a async runtime context.
@@ -587,21 +690,14 @@ where
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
-    /// let server = Server::with_fs("/srv/ftp");
+    /// let server = Server::with_fs("/srv/ftp").build().unwrap();
     /// rt.spawn(server.listen("127.0.0.1:2121"));
     /// // ...
     /// drop(rt);
     /// ```
     ///
     #[tracing_attributes::instrument]
-    pub async fn listen<T: Into<String> + Debug>(mut self, bind_address: T) -> std::result::Result<(), ServerError> {
-        self.ftps_mode = match self.ftps_mode {
-            FtpsConfig::Off => FtpsConfig::Off,
-            FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
-                tls_config: tls::new_config(certs_file, key_file, self.ftps_tls_flags, self.ftps_client_auth, self.ftps_trust_store.clone())?,
-            },
-            FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
-        };
+    pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
 
         let logger = self.logger.clone();
         let bind_address: SocketAddr = bind_address.into().parse()?;
@@ -695,6 +791,16 @@ where
         }
         // TODO: Implement feature where we keep on listening for a while i.e. GracefulAcceptingConnections
     }
+
+    /// Construct a new [`ServerBuilder`] with the given [`StorageBackend`] generator and [`Authenticator`]. The other parameters will be set to defaults.
+    ///
+    /// [`ServerBuilder`]: struct.ServerBuilder.html
+    /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
+    /// [`Authenticator`]: ../auth/trait.Authenticator.html
+    #[deprecated(since = "0.19.0", note = "use ServerBuilder::with_authenticator instead")]
+    pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> ServerBuilder<Storage, User> {
+        ServerBuilder::with_authenticator(sbe_generator, authenticator)
+    }
 }
 
 impl<Storage, User> From<&Server<Storage, User>> for chosen::OptionsHolder<Storage, User>
@@ -725,13 +831,13 @@ where
     }
 }
 
-impl<Storage, User> Debug for Server<Storage, User>
+impl<Storage, User> Debug for ServerBuilder<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Server")
+        f.debug_struct("ServerBuilder")
             .field("authenticator", &self.authenticator)
             .field("collect_metrics", &self.collect_metrics)
             .field("active_passive_mode", &self.active_passive_mode)
@@ -746,6 +852,31 @@ where
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("ftps_trust_store", &self.ftps_trust_store)
+            .field("idle_session_timeout", &self.idle_session_timeout)
+            .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("failed_logins_policy", &self.failed_logins_policy)
+            .finish()
+    }
+}
+
+impl<Storage, User> Debug for Server<Storage, User>
+where
+    Storage: StorageBackend<User>,
+    User: UserDetail,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ServerBuilder")
+            .field("authenticator", &self.authenticator)
+            .field("collect_metrics", &self.collect_metrics)
+            .field("active_passive_mode", &self.active_passive_mode)
+            .field("greeting", &self.greeting)
+            .field("logger", &self.logger)
+            .field("metrics", &self.collect_metrics)
+            .field("passive_ports", &self.passive_ports)
+            .field("passive_host", &self.passive_host)
+            .field("ftps_mode", &self.ftps_mode)
+            .field("ftps_required_control_chan", &self.ftps_required_control_chan)
+            .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("idle_session_timeout", &self.idle_session_timeout)
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)

@@ -34,7 +34,9 @@
 //!     let ftp_home = std::env::temp_dir();
 //!     let server = libunftp::Server::with_fs(ftp_home)
 //!         .greeting("Welcome to my FTP server")
-//!         .passive_ports(50000..65535);
+//!         .passive_ports(50000..65535)
+//!         .build()
+//!         .unwrap();
 //!
 //!     server.listen("127.0.0.1:2121").await;
 //! }
@@ -50,6 +52,6 @@ pub mod notification;
 pub(crate) mod server;
 pub mod storage;
 
-pub use crate::server::ftpserver::{error::ServerError, options, Server};
+pub use crate::server::ftpserver::{error::ServerError, options, Server, ServerBuilder};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
