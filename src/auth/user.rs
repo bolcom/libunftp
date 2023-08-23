@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, Debug, Display, Formatter},
-    path::Path
+    path::Path,
 };
 
 /// UserDetail defines the requirements for implementations that hold _Security Subject_

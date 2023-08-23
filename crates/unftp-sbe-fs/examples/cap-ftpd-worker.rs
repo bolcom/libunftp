@@ -8,14 +8,14 @@ use std::{
     env,
     os::fd::{FromRawFd, RawFd},
     process::exit,
-    sync::{Arc, Mutex}
+    sync::{Arc, Mutex},
 };
 
 use tokio::net::TcpStream;
 
 use libunftp::Server;
-use unftp_sbe_fs::Filesystem;
 use unftp_auth_jsonfile::{JsonFileAuthenticator, User};
+use unftp_sbe_fs::Filesystem;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -26,16 +26,14 @@ async fn main() {
         eprintln!("Usage: {} <AUTH_FILE> <FD>", args[0]);
         exit(2);
     }
-    let fd: RawFd = if let Ok(fd) =  args[2].parse() {
+    let fd: RawFd = if let Ok(fd) = args[2].parse() {
         fd
     } else {
         eprintln!("Usage: {} <FD>\nFD must be numeric", args[0]);
         exit(2)
     };
 
-    let std_stream = unsafe {
-        std::net::TcpStream::from_raw_fd(fd)
-    };
+    let std_stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
 
     let control_sock = TcpStream::from_std(std_stream).unwrap();
 
@@ -44,8 +42,7 @@ async fn main() {
     // storage just before calling service.
     let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir())));
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
-    let server: Server<Filesystem, User> = libunftp::ServerBuilder::with_authenticator(
-        sgen, auth)
+    let server: Server<Filesystem, User> = libunftp::ServerBuilder::with_authenticator(sgen, auth)
         .pasv_listener(control_sock.local_addr().unwrap().ip())
         .await
         .build()

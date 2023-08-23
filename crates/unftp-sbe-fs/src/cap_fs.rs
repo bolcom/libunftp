@@ -2,16 +2,9 @@
 // Most of these functions are copied almost verbatim from tokio::fs, but with the std parts
 // replaced by cap_std.
 
-use std::{
-    io,
-    path::Path,
-    sync::Arc
-};
+use std::{io, path::Path, sync::Arc};
 
-use tokio::{
-    sync::mpsc,
-    task::spawn_blocking
-};
+use tokio::{sync::mpsc, task::spawn_blocking};
 use tokio_stream::wrappers::ReceiverStream;
 
 /// Exact copy of tokio::fs::asyncify
@@ -22,10 +15,7 @@ where
 {
     match spawn_blocking(f).await {
         Ok(res) => res,
-        Err(_) => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "background task failed",
-        )),
+        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "background task failed")),
     }
 }
 
@@ -40,12 +30,7 @@ pub async fn open<P: AsRef<Path>>(root: Arc<cap_std::fs::Dir>, path: P) -> io::R
     asyncify(move || root.open(path)).await
 }
 
-pub async fn open_with<P: AsRef<Path>>(
-    root: Arc<cap_std::fs::Dir>,
-    path: P,
-    options: cap_std::fs::OpenOptions
-) -> io::Result<cap_std::fs::File>
-{
+pub async fn open_with<P: AsRef<Path>>(root: Arc<cap_std::fs::Dir>, path: P, options: cap_std::fs::OpenOptions) -> io::Result<cap_std::fs::File> {
     let path = path.as_ref().to_owned();
     asyncify(move || root.open_with(path, &options)).await
 }
@@ -58,9 +43,7 @@ pub async fn open_with<P: AsRef<Path>>(
 /// operation on a separate thread pool using [`spawn_blocking`].
 ///
 /// [`spawn_blocking`]: tokio::task::spawn_blocking
-pub fn read_dir(root: Arc<cap_std::fs::Dir>, path: impl AsRef<Path>)
-    -> ReceiverStream<io::Result<cap_std::fs::DirEntry>>
-{
+pub fn read_dir(root: Arc<cap_std::fs::Dir>, path: impl AsRef<Path>) -> ReceiverStream<io::Result<cap_std::fs::DirEntry>> {
     const CHUNKSIZE: usize = 32;
 
     let path = path.as_ref().to_owned();
@@ -72,10 +55,8 @@ pub fn read_dir(root: Arc<cap_std::fs::Dir>, path: impl AsRef<Path>)
                 for entry in rd {
                     tx.blocking_send(entry).unwrap()
                 }
-            },
-            Err(e) => {
-                tx.blocking_send(Err(e)).unwrap()
             }
+            Err(e) => tx.blocking_send(Err(e)).unwrap(),
         }
     }));
     ReceiverStream::new(rx)
@@ -119,7 +100,7 @@ pub async fn rename(root: Arc<cap_std::fs::Dir>, from: impl AsRef<Path>, to: imp
 }
 
 /// Queries the file system metadata for a path.
-pub async fn symlink_metadata<P: AsRef<Path>>(root: Arc<cap_std::fs::Dir>, path: P) ->io::Result<cap_std::fs::Metadata> {
+pub async fn symlink_metadata<P: AsRef<Path>>(root: Arc<cap_std::fs::Dir>, path: P) -> io::Result<cap_std::fs::Metadata> {
     let path = path.as_ref().to_owned();
     asyncify(move || root.symlink_metadata(path)).await
 }

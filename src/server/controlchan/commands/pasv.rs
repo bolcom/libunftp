@@ -24,15 +24,17 @@ use crate::{
 };
 use async_trait::async_trait;
 use std::{io, net::SocketAddr, ops::Range};
-use std::{net::{IpAddr, Ipv4Addr}, time::Duration};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
 
 #[derive(Debug)]
-pub struct Pasv {
-}
+pub struct Pasv {}
 
 impl Pasv {
     pub fn new() -> Self {
@@ -108,9 +110,7 @@ impl Pasv {
             }
         };
 
-        let olistener = {
-            session.lock().await.listener.take()
-        };
+        let olistener = { session.lock().await.listener.take() };
         let listener = if let Some(listener) = olistener {
             listener
         } else {

@@ -26,10 +26,7 @@ mod cap_fs;
 
 use async_trait::async_trait;
 use cfg_if::cfg_if;
-use futures::{
-    future::TryFutureExt,
-    stream::TryStreamExt
-};
+use futures::{future::TryFutureExt, stream::TryStreamExt};
 use lazy_static::lazy_static;
 use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
@@ -54,7 +51,7 @@ pub struct Filesystem {
     // anyway, since most of those closures execute functions like fstatfs that are faster than the
     // cost of switching a thread.
     root_fd: Arc<cap_std::fs::Dir>,
-    root: PathBuf
+    root: PathBuf,
 }
 
 #[derive(Debug)]
@@ -84,10 +81,7 @@ impl Filesystem {
         let path = root.into();
         let aa = cap_std::ambient_authority();
         let root_fd = Arc::new(cap_std::fs::Dir::open_ambient_dir(&path, aa).unwrap());
-        Filesystem {
-            root_fd,
-            root: path
-        }
+        Filesystem { root_fd, root: path }
     }
 }
 
@@ -99,12 +93,10 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     /// Once restricted, it may never be unrestricted.
     ///
     /// The path should be absolute.
-    fn enter<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()>
-    {
+    fn enter<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
         let relpath = match path.as_ref().strip_prefix(self.root.as_path()) {
             Ok(r) => r,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::Other,
-                "Path not a descendant of the previous root"))
+            Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Path not a descendant of the previous root")),
         };
         self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
         Ok(())
@@ -132,16 +124,15 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     {
         let path = strip_prefixes(path.as_ref());
 
-        let fis: Vec<Fileinfo<std::path::PathBuf, Self::Metadata>> =
-            cap_fs::read_dir(self.root_fd.clone(), path)
+        let fis: Vec<Fileinfo<std::path::PathBuf, Self::Metadata>> = cap_fs::read_dir(self.root_fd.clone(), path)
             .and_then(|dirent| {
                 let entry_path: PathBuf = dirent.file_name().into();
-                cap_fs::symlink_metadata(self.root_fd.clone(), path.join(entry_path.clone()))
-                    .map_ok(move |meta| {
-                        let metadata = Meta { inner: meta };
-                        Fileinfo{ path: entry_path, metadata}
-                    })
-            }).try_collect::<Vec<_>>()
+                cap_fs::symlink_metadata(self.root_fd.clone(), path.join(entry_path.clone())).map_ok(move |meta| {
+                    let metadata = Meta { inner: meta };
+                    Fileinfo { path: entry_path, metadata }
+                })
+            })
+            .try_collect::<Vec<_>>()
             .await?;
 
         Ok(fis)
@@ -187,13 +178,17 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     #[tracing_attributes::instrument]
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
         let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
-        cap_fs::remove_file(self.root_fd.clone(), path).await.map_err(|error: std::io::Error| error.into())
+        cap_fs::remove_file(self.root_fd.clone(), path)
+            .await
+            .map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
         let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
-        cap_fs::remove_dir(self.root_fd.clone(), path).await.map_err(|error: std::io::Error| error.into())
+        cap_fs::remove_dir(self.root_fd.clone(), path)
+            .await
+            .map_err(|error: std::io::Error| error.into())
     }
 
     #[tracing_attributes::instrument]

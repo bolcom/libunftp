@@ -114,7 +114,7 @@ where
                                         Some(Err(e)) => {
                                             slog::error!(logger, "{}", e);
                                             ControlChanMsg::AuthFailed
-                                        },
+                                        }
                                         None => {
                                             slog::error!(logger, "Failed to lock Session::storage during PASS.");
                                             ControlChanMsg::AuthFailed

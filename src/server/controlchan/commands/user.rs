@@ -63,7 +63,7 @@ where
                                 Some(Err(e)) => {
                                     slog::error!(args.logger, "{}", e);
                                     Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials"))
-                                },
+                                }
                                 None => {
                                     slog::error!(args.logger, "Failed to lock Session::storage during USER.");
                                     Ok(Reply::new(ReplyCode::NotLoggedIn, "Temporarily unavailable"))

@@ -25,7 +25,7 @@ use crate::{
 };
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::{fmt::Debug, ffi::OsString, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -74,7 +74,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
+    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>,
 }
 
 /// Used to create [`Server`]s.  
@@ -106,7 +106,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>
+    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>,
 }
 
 impl<Storage, User> ServerBuilder<Storage, User>
@@ -159,7 +159,7 @@ where
             active_passive_mode: ActivePassiveMode::default(),
             connection_helper: None,
             connection_helper_args: Vec::new(),
-            pasv_listener
+            pasv_listener,
         }
     }
 
@@ -488,7 +488,9 @@ where
     pub async fn pasv_listener(self, addr: std::net::IpAddr) -> Self {
         // XXX: maybe should convert this into a synchronous function by using
         // std::net::TcpListener::bind instead of tokio::net::TcpListener::bind
-        let sock = crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone()).await.unwrap();
+        let sock = crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone())
+            .await
+            .unwrap();
         *self.pasv_listener.lock().unwrap() = Some(sock);
         self
     }
@@ -698,7 +700,6 @@ where
     ///
     #[tracing_attributes::instrument]
     pub async fn listen<T: Into<String> + Debug>(self, bind_address: T) -> std::result::Result<(), ServerError> {
-
         let logger = self.logger.clone();
         let bind_address: SocketAddr = bind_address.into().parse()?;
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
@@ -726,7 +727,7 @@ where
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                     connection_helper: self.connection_helper.clone(),
-                    connection_helper_args: self.connection_helper_args.clone()
+                    connection_helper_args: self.connection_helper_args.clone(),
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
@@ -754,21 +755,13 @@ where
     ///
     /// Use this method instead of [`listen`](Server::listen) if you want to listen for and accept
     /// new connections yourself, instead of using libunftp to do it.
-    pub async fn service(self, tcp_stream: tokio::net::TcpStream)  -> std::result::Result<(), crate::server::ControlChanError> {
-        let failed_logins = self.failed_logins_policy.as_ref()
-            .map(|policy| FailedLoginsCache::new(policy.clone()));
+    pub async fn service(self, tcp_stream: tokio::net::TcpStream) -> std::result::Result<(), crate::server::ControlChanError> {
+        let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
         let options: chosen::OptionsHolder<Storage, User> = (&self).into();
         let shutdown_notifier = Arc::new(shutdown::Notifier::new());
         let shutdown_listener = shutdown_notifier.subscribe().await;
         slog::debug!(self.logger, "Servicing control connection from");
-        let result = controlchan::spawn_loop::<Storage, User>(
-            (&options).into(),
-            tcp_stream,
-            None,
-            None,
-            shutdown_listener,
-            failed_logins.clone()
-        ).await;
+        let result = controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream, None, None, shutdown_listener, failed_logins.clone()).await;
         if let Err(err) = result {
             slog::error!(self.logger, "Could not spawn control channel loop: {:?}", err);
         } else {
@@ -798,7 +791,10 @@ where
     /// [`StorageBackend`]: ../storage/trait.StorageBackend.html
     /// [`Authenticator`]: ../auth/trait.Authenticator.html
     #[deprecated(since = "0.19.0", note = "use ServerBuilder::with_authenticator instead")]
-    pub fn with_authenticator(sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>, authenticator: Arc<dyn Authenticator<User> + Send + Sync>) -> ServerBuilder<Storage, User> {
+    pub fn with_authenticator(
+        sbe_generator: Box<dyn (Fn() -> Storage) + Send + Sync>,
+        authenticator: Arc<dyn Authenticator<User> + Send + Sync>,
+    ) -> ServerBuilder<Storage, User> {
         ServerBuilder::with_authenticator(sbe_generator, authenticator)
     }
 }
@@ -826,7 +822,7 @@ where
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,
-            pasv_listener: server.pasv_listener.clone()
+            pasv_listener: server.pasv_listener.clone(),
         }
     }
 }

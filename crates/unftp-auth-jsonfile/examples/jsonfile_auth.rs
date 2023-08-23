@@ -8,7 +8,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let authenticator = JsonFileAuthenticator::from_file(String::from("credentials.json"))?;
 
     let addr = "127.0.0.1:2121";
-    let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator))
+    let server = libunftp::Server::with_fs(std::env::temp_dir())
+        .authenticator(Arc::new(authenticator))
         .build()
         .unwrap();
 

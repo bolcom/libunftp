@@ -1,7 +1,7 @@
 //! A server that jails each connected session with Capsicum.
 #![cfg(target_os = "freebsd")]
 
-use std::{ffi::OsString, str::FromStr, path::Path};
+use std::{ffi::OsString, path::Path, str::FromStr};
 
 use unftp_sbe_fs::ServerExt;
 

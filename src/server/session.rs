@@ -16,8 +16,8 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -149,7 +149,7 @@ where
             data_busy: false,
             cert_chain: None,
             failed_logins: None,
-            listener: None
+            listener: None,
         }
     }
 
