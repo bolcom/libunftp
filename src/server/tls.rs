@@ -13,7 +13,6 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use tokio_rustls::webpki;
 
 // FTPSConfig shows how TLS security is configured for the server or a particular channel.
 #[derive(Clone)]
@@ -55,7 +54,7 @@ pub enum ConfigError {
     Load(#[from] io::Error),
 
     #[error("error building root certs")]
-    RootCerts(#[from] webpki::Error),
+    RootCerts(rustls::Error),
 
     #[error("error initialising Rustls")]
     RustlsInit(#[from] rustls::Error),
@@ -72,14 +71,14 @@ pub fn new_config<P: AsRef<Path>>(
     let privkey: PrivateKey = load_private_key(key_file)?;
 
     let client_auther = match client_auth {
-        FtpsClientAuth::Off => NoClientAuth::new(),
+        FtpsClientAuth::Off => NoClientAuth::boxed(),
         FtpsClientAuth::Request => {
             let store: RootCertStore = root_cert_store(trust_store)?;
-            AllowAnyAnonymousOrAuthenticatedClient::new(store)
+            AllowAnyAnonymousOrAuthenticatedClient::new(store).boxed()
         }
         FtpsClientAuth::Require => {
             let store: RootCertStore = root_cert_store(trust_store)?;
-            AllowAnyAuthenticatedClient::new(store)
+            AllowAnyAuthenticatedClient::new(store).boxed()
         }
     };
 
