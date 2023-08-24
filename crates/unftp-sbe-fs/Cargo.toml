@@ -43,7 +43,7 @@ tempfile = "3.8.1"
 tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.18"
 getrandom = "0.2.11"
+unftp-auth-jsonfile = { path = "../unftp-auth-jsonfile" }
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = "0.2.0"
-unftp-auth-jsonfile = { path = "../unftp-auth-jsonfile" }

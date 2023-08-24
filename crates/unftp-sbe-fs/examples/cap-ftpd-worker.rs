@@ -2,14 +2,14 @@
 //! A libexec helper for cap-std.  It takes an int as $1 which is interpreted as
 //! a file descriptor for an already-connected an authenticated control socket.
 //! Do not invoke this program directly.  Rather, invoke it by examples/cap-ftpd
-#![cfg(target_os = "freebsd")]
-
 use std::{
     env,
     os::fd::{FromRawFd, RawFd},
     process::exit,
     sync::{Arc, Mutex},
 };
+
+use cfg_if::cfg_if;
 
 use tokio::net::TcpStream;
 
@@ -47,6 +47,10 @@ async fn main() {
         .await
         .build()
         .unwrap();
-    capsicum::enter().unwrap();
+    cfg_if! {
+        if #[cfg(target_os = "freebsd")] {
+            capsicum::enter().unwrap();
+        }
+    }
     server.service(control_sock).await.unwrap()
 }
