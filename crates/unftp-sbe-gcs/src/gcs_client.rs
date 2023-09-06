@@ -451,7 +451,7 @@ impl Token {
 impl From<yup_oauth2::AccessToken> for Token {
     fn from(source: yup_oauth2::AccessToken) -> Self {
         Self {
-            value: source.as_str().to_string(),
+            value: source.token().unwrap_or("").to_string(),
             expires_at: source.expiration_time(),
         }
     }
