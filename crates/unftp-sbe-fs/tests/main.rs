@@ -369,15 +369,12 @@ async fn dele(#[future] harness: Harness) {
     assert_eq!(std::fs::metadata(file_in_root.path()).unwrap_err().kind(), std::io::ErrorKind::NotFound);
 }
 
+#[rstest]
+#[awt]
 #[tokio::test]
-async fn rmd() {
-    let addr = "127.0.0.1:1243";
-    let root = std::env::temp_dir();
-
-    tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
-    tokio::time::sleep(std::time::Duration::new(1, 0)).await;
-    let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
-    let dir_in_root = tempfile::tempdir_in(root).unwrap();
+async fn rmd(#[future] harness: Harness) {
+    let mut ftp_stream = FtpStream::connect(harness.addr).await.unwrap();
+    let dir_in_root = tempfile::tempdir_in(harness.root).unwrap();
     let file_name = dir_in_root.path().file_name().unwrap().to_str().unwrap();
 
     ensure_login_required(ftp_stream.rm(file_name).await);
