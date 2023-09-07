@@ -501,18 +501,21 @@ mod test {
         );
         assert_eq!(json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap(), DefaultUser);
         assert_eq!(json_authenticator.authenticate("dan", &"".into()).await.unwrap(), DefaultUser);
-        match json_authenticator.authenticate("carol", &"this is the wrong password".into()).await {
-            Err(AuthenticationError::BadPassword) => assert!(true),
-            _ => assert!(false),
-        }
-        match json_authenticator.authenticate("bella", &"this is the wrong password".into()).await {
-            Err(AuthenticationError::BadPassword) => assert!(true),
-            _ => assert!(false),
-        }
-        match json_authenticator.authenticate("chuck", &"12345678".into()).await {
-            Err(AuthenticationError::BadUser) => assert!(true),
-            _ => assert!(false),
-        }
+        let mut is_err = match json_authenticator.authenticate("carol", &"this is the wrong password".into()).await {
+            Err(AuthenticationError::BadPassword) => true,
+            _ => false,
+        };
+        assert!(is_err);
+        is_err = match json_authenticator.authenticate("bella", &"this is the wrong password".into()).await {
+            Err(AuthenticationError::BadPassword) => true,
+            _ => false,
+        };
+        assert!(is_err);
+        is_err = match json_authenticator.authenticate("chuck", &"12345678".into()).await {
+            Err(AuthenticationError::BadUser) => true,
+            _ => false,
+        };
+        assert!(is_err);
 
         assert_eq!(
             json_authenticator

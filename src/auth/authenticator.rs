@@ -19,7 +19,7 @@ where
     /// Tells whether its OK to not ask for a password when a valid client cert
     /// was presented.
     async fn cert_auth_sufficient(&self, _username: &str) -> bool {
-        return false;
+        false
     }
 
     /// Implement to set the name of the authenticator. By default it returns the type signature.

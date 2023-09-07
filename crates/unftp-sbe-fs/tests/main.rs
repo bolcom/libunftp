@@ -42,7 +42,7 @@ where
     let server = s(root.clone()).listen(addr.clone());
 
     tokio::spawn(server);
-    while !async_ftp::FtpStream::connect(&addr).await.is_ok() {
+    while async_ftp::FtpStream::connect(&addr).await.is_err() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
@@ -51,7 +51,7 @@ where
 
 #[fixture]
 async fn harness() -> Harness {
-    custom_server_harness(|root| libunftp::Server::with_fs(root)).await
+    custom_server_harness(libunftp::Server::with_fs).await
 }
 
 #[rstest]
@@ -285,10 +285,7 @@ mod list {
         ensure_login_required(ftp_stream.list(None).await);
 
         ftp_stream.login("hoi", "jij").await.unwrap();
-        let list = ftp_stream
-            .list(dir_in_root.path().file_name().map(std::ffi::OsStr::to_str).flatten())
-            .await
-            .unwrap();
+        let list = ftp_stream.list(dir_in_root.path().file_name().and_then(std::ffi::OsStr::to_str)).await.unwrap();
         let mut found = false;
         for entry in list {
             if entry.contains("test.txt") {
