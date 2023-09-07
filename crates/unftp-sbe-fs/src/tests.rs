@@ -165,7 +165,7 @@ fn fileinfo_fmt() {
     };
     let my_format = format!("{}", fileinfo);
     let basename = std::path::Path::new(&dir).file_name().unwrap().to_string_lossy();
-    let format = format!("-rwxr-xr-x            1            0            0              5 Jan 01 00:00 {}", basename);
+    let format = format!("-rwxr-xr-x            1            0            0              5  Jan 01 1970 {}", basename);
     assert_eq!(my_format, format);
 }
 
