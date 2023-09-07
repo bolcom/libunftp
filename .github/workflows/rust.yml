@@ -2,7 +2,7 @@ name: build
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: 1.67.1
+  RUST_VERSION: 1.72.0
 
 on:
   push:

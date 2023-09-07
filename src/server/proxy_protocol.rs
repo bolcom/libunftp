@@ -25,7 +25,7 @@ impl From<u16> for ProxyMode {
 
 #[derive(Error, Debug)]
 #[error("Proxy Protocol Error")]
-pub(self) enum ProxyError {
+enum ProxyError {
     #[error("header doesn't end with CRLF")]
     CrlfError,
     #[error("header size is incorrect")]
