@@ -71,14 +71,7 @@ jobs:
         - name: Run tests
           run: >
             cargo test 
-            --verbose --workspace 
-            -- 
-            --skip can_change_into_virtual_directory
-            --skip creating_directory_with_file_in_it 
-            --skip deleting_directory_fails_if_contains_file 
-            --skip deleting_empty_directory_succeeds 
-            --skip file_sizes 
-            --skip newly_created_dir_is_empty
+            --verbose --workspace --exclude 'unftp-sbe-gcs*'
         - name: Doc tests
           run: cargo test --doc --workspace
         - name: Build Examples
