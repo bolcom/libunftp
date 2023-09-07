@@ -375,7 +375,7 @@ async fn rmd() {
     let root = std::env::temp_dir();
 
     tokio::spawn(libunftp::Server::with_fs(root.clone()).listen(addr));
-    tokio::time::sleep(Duration::new(1, 0)).await;
+    tokio::time::sleep(std::time::Duration::new(1, 0)).await;
     let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
     let dir_in_root = tempfile::tempdir_in(root).unwrap();
     let file_name = dir_in_root.path().file_name().unwrap().to_str().unwrap();
