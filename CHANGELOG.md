@@ -1,5 +1,20 @@
 # Changelog
 
+### libunftp 0.19.0
+
+_tag: libunftp-0.19.0_
+
+- [#471](https://github.com/bolcom/libunftp/pull/471) Added unFTP documentation link to help command output
+- Include libunftp version in help command output
+- [#470](https://github.com/bolcom/libunftp/pull/470) Fixed issue with modified datetime formatting for `Fileinfo` where old
+  dates didn't render correctly.
+- [#482](https://github.com/bolcom/libunftp/pull/482) Fixed RUSTSEC-2023-0052
+- Compile against Rust 1.72.0
+- BREAKING: Upgrade to latest bitflags dependency. Bitflags are exposed in the API 
+  for the TlsFlags option.
+- Improved tests
+- Upgraded dependencies
+
 ### unftp-sbe-gcs v0.2.3
 
 - [#449](https://github.com/bolcom/libunftp/pull/449) GCS Backend has had a cleanup (deduplication, modularization)
