@@ -1,4 +1,5 @@
 use super::ObjectMetadata;
+use base64::Engine;
 use chrono::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{de, Deserialize};
@@ -128,7 +129,9 @@ impl Item {
     }
 
     pub(crate) fn to_md5(&self) -> Result<String, Error> {
-        let md5 = base64::decode(&self.md5_hash).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        let md5 = base64::engine::general_purpose::STANDARD
+            .decode(&self.md5_hash)
+            .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
         Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
     }
 }

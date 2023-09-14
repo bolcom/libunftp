@@ -67,7 +67,7 @@ add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sb
 
 ```toml
 [dependencies]
-libunftp = "0.18.9"
+libunftp = "0.19.0"
 unftp-sbe-fs = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```

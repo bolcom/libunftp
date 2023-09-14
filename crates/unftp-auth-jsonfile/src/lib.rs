@@ -145,6 +145,7 @@
 //!
 
 use async_trait::async_trait;
+use base64::Engine;
 use bytes::Bytes;
 use flate2::read::GzDecoder;
 use ipnet::Ipv4Net;
@@ -229,7 +230,7 @@ impl JsonFileAuthenticator {
                 let mut b = Vec::new();
                 f.read_to_end(&mut b)?;
                 b.retain(|&x| x != b'\n' && x != b'\r');
-                gzdata = base64::decode(b)?;
+                gzdata = base64::engine::general_purpose::STANDARD.decode(b)?;
             } else {
                 f.read_to_end(&mut gzdata)?;
             }
@@ -279,11 +280,12 @@ impl JsonFileAuthenticator {
                 username.clone(),
                 UserCreds {
                     password: Password::Pbkdf2Password {
-                        pbkdf2_salt: base64::decode(pbkdf2_salt)
+                        pbkdf2_salt: base64::engine::general_purpose::STANDARD
+                            .decode(pbkdf2_salt)
                             .map_err(|_| "Could not base64 decode the salt")?
                             .try_into()
                             .map_err(|_| "Could not convert String to Bytes")?,
-                        pbkdf2_key: base64::decode(pbkdf2_key)
+                        pbkdf2_key: base64::engine::general_purpose::STANDARD.decode(pbkdf2_key)
                             .map_err(|_| "Could not decode base64")?
                             .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
                             .result()

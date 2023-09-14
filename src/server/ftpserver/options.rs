@@ -96,6 +96,7 @@ impl Display for FtpsRequired {
 
 bitflags! {
     /// Used to configure TLS options employed for FTPS
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct TlsFlags: u32 {
         /// Enables TLS version 1.2
         const V1_2               = 0b00000001;
@@ -106,7 +107,7 @@ bitflags! {
         /// Enables TLS session resumption via means tickets ([rfc5077](https://tools.ietf.org/html/rfc5077))
         const RESUMPTION_TICKETS = 0b00010000;
         /// Enables the latest safe TLS versions i.e. 1.2 and 1.3
-        const LATEST_VERSIONS = Self::V1_2.bits | Self::V1_3.bits;
+        const LATEST_VERSIONS = Self::V1_2.bits() | Self::V1_3.bits();
     }
 }
 
