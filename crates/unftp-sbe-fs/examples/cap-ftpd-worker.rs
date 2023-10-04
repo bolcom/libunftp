@@ -1,4 +1,3 @@
-// vim: tw=80
 //! A libexec helper for cap-std.  It takes an int as $1 which is interpreted as
 //! a file descriptor for an already-connected an authenticated control socket.
 //! Do not invoke this program directly.  Rather, invoke it by examples/cap-ftpd
