@@ -10,8 +10,7 @@
 //! [
 //!   {
 //!     "username": "alice",
-//!     "password": "I am in Wonderland!",
-//!     "home": "/usr/home/alice",
+//!     "password": "I am in Wonderland!"
 //!   }
 //! ]
 //! ```
@@ -151,21 +150,14 @@ use bytes::Bytes;
 use flate2::read::GzDecoder;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
-use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser, UserDetail};
+use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use ring::{
     digest::SHA256_OUTPUT_LEN,
     pbkdf2::{verify, PBKDF2_HMAC_SHA256},
 };
 use serde::Deserialize;
 use std::io::prelude::*;
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    fmt, fs,
-    num::NonZeroU32,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{collections::HashMap, convert::TryInto, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
 use valid::{constraint::Length, Validate};
 
@@ -184,14 +176,12 @@ enum Credentials {
         pbkdf2_iter: NonZeroU32,
         client_cert: Option<ClientCertCredential>,
         allowed_ip_ranges: Option<Vec<String>>,
-        home: Option<PathBuf>,
     },
     Plaintext {
         username: String,
         password: Option<String>,
         client_cert: Option<ClientCertCredential>,
         allowed_ip_ranges: Option<Vec<String>>,
-        home: Option<PathBuf>,
     },
 }
 
@@ -218,37 +208,6 @@ struct UserCreds {
     pub password: Password,
     pub client_cert: Option<ClientCertCredential>,
     pub allowed_ip_ranges: Option<IpRange<Ipv4Net>>,
-    pub home: Option<PathBuf>,
-}
-
-#[derive(Debug)]
-pub struct User {
-    username: String,
-    home: Option<PathBuf>,
-}
-
-impl User {
-    fn new(username: &str, home: &Option<PathBuf>) -> Self {
-        User {
-            username: username.to_owned(),
-            home: home.clone(),
-        }
-    }
-}
-
-impl UserDetail for User {
-    fn home(&self) -> Option<&Path> {
-        match &self.home {
-            None => None,
-            Some(p) => Some(p.as_path()),
-        }
-    }
-}
-
-impl fmt::Display for User {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.username.as_str())
-    }
 }
 
 impl JsonFileAuthenticator {
@@ -302,14 +261,12 @@ impl JsonFileAuthenticator {
                 password,
                 client_cert,
                 allowed_ip_ranges: ip_ranges,
-                home,
             } => (
                 username.clone(),
                 UserCreds {
                     password: Password::PlainPassword { password },
                     client_cert,
                     allowed_ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
-                    home,
                 },
             ),
             Credentials::Pbkdf2 {
@@ -319,7 +276,6 @@ impl JsonFileAuthenticator {
                 pbkdf2_iter,
                 client_cert,
                 allowed_ip_ranges: ip_ranges,
-                home,
             } => (
                 username.clone(),
                 UserCreds {
@@ -343,7 +299,6 @@ impl JsonFileAuthenticator {
                     },
                     client_cert,
                     allowed_ip_ranges: Self::parse_ip_range(username, ip_ranges)?,
-                    home,
                 },
             ),
         };
@@ -395,9 +350,9 @@ impl JsonFileAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<User> for JsonFileAuthenticator {
+impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<User, AuthenticationError> {
+    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<DefaultUser, AuthenticationError> {
         let res = if let Some(actual_creds) = self.credentials_map.get(username) {
             let client_cert = &actual_creds.client_cert;
             let certificate = &creds.certificate_chain.as_ref().and_then(|x| x.first());
@@ -405,7 +360,7 @@ impl Authenticator<User> for JsonFileAuthenticator {
             let ip_check_result = if !Self::ip_ok(creds, actual_creds) {
                 Err(AuthenticationError::IpDisallowed)
             } else {
-                Ok(User::new(username, &actual_creds.home))
+                Ok(DefaultUser {})
             };
 
             let cn_check_result = match (&client_cert, certificate) {
@@ -416,14 +371,14 @@ impl Authenticator<User> for JsonFileAuthenticator {
                     (Some(cn), cert) => match cert.verify_cn(cn) {
                         Ok(is_authorized) => {
                             if is_authorized {
-                                Some(Ok(User::new(username, &actual_creds.home)))
+                                Some(Ok(DefaultUser {}))
                             } else {
                                 Some(Err(AuthenticationError::CnDisallowed))
                             }
                         }
                         Err(e) => Some(Err(AuthenticationError::with_source("verify_cn", e))),
                     },
-                    (None, _) => Some(Ok(User::new(username, &actual_creds.home))),
+                    (None, _) => Some(Ok(DefaultUser {})),
                 },
                 (Some(_), None) => Some(Err(AuthenticationError::CnDisallowed)),
                 _ => None,
@@ -432,7 +387,7 @@ impl Authenticator<User> for JsonFileAuthenticator {
             let pass_check_result = match &creds.password {
                 Some(ref given_password) => {
                     if Self::check_password(given_password, &actual_creds.password).is_ok() {
-                        Some(Ok(User::new(username, &actual_creds.home)))
+                        Some(Ok(DefaultUser {}))
                     } else {
                         Some(Err(AuthenticationError::BadPassword))
                     }
@@ -500,15 +455,6 @@ impl Authenticator<User> for JsonFileAuthenticator {
     }
 }
 
-#[async_trait]
-impl Authenticator<DefaultUser> for JsonFileAuthenticator {
-    #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<DefaultUser, AuthenticationError> {
-        let _: User = self.authenticate(username, creds).await?;
-        Ok(DefaultUser {})
-    }
-}
-
 mod test {
     #[allow(unused_imports)]
     use libunftp::auth::ClientCert;
@@ -528,13 +474,11 @@ mod test {
     "username": "bella",
     "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
     "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
-    "pbkdf2_iter": 500000,
-    "home": "/usr/home/bella"
+    "pbkdf2_iter": 500000
   },
   {
     "username": "carol",
-    "password": "not so secure",
-    "home": "/home/carol"
+    "password": "not so secure"
   },
   {
     "username": "dan",
@@ -543,50 +487,54 @@ mod test {
   }
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
-        let alice: DefaultUser = json_authenticator
-            .authenticate("alice", &"this is the correct password for alice".into())
-            .await
-            .unwrap();
-        assert_eq!(alice, DefaultUser);
-        let bella: DefaultUser = json_authenticator
-            .authenticate("bella", &"this is the correct password for bella".into())
-            .await
-            .unwrap();
-        assert_eq!(bella, DefaultUser);
-        let carol: DefaultUser = json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap();
-        assert_eq!(carol, DefaultUser);
-        let dan: DefaultUser = json_authenticator.authenticate("dan", &"".into()).await.unwrap();
-        assert_eq!(dan, DefaultUser);
-        let r: Result<DefaultUser, _> = json_authenticator.authenticate("carol", &"this is the wrong password".into()).await;
-        match r {
-            Err(AuthenticationError::BadPassword) => assert!(true),
-            _ => assert!(false),
-        }
-        let r: Result<DefaultUser, _> = json_authenticator.authenticate("bella", &"this is the wrong password".into()).await;
-        match r {
-            Err(AuthenticationError::BadPassword) => assert!(true),
-            _ => assert!(false),
-        }
-        let r: Result<DefaultUser, _> = json_authenticator.authenticate("chuck", &"12345678".into()).await;
-        match r {
-            Err(AuthenticationError::BadUser) => assert!(true),
-            _ => assert!(false),
-        }
+        assert_eq!(
+            json_authenticator
+                .authenticate("alice", &"this is the correct password for alice".into())
+                .await
+                .unwrap(),
+            DefaultUser
+        );
+        assert_eq!(
+            json_authenticator
+                .authenticate("bella", &"this is the correct password for bella".into())
+                .await
+                .unwrap(),
+            DefaultUser
+        );
+        assert_eq!(json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap(), DefaultUser);
+        assert_eq!(json_authenticator.authenticate("dan", &"".into()).await.unwrap(), DefaultUser);
+        let mut is_err = match json_authenticator.authenticate("carol", &"this is the wrong password".into()).await {
+            Err(AuthenticationError::BadPassword) => true,
+            _ => false,
+        };
+        assert!(is_err);
+        is_err = match json_authenticator.authenticate("bella", &"this is the wrong password".into()).await {
+            Err(AuthenticationError::BadPassword) => true,
+            _ => false,
+        };
+        assert!(is_err);
+        is_err = match json_authenticator.authenticate("chuck", &"12345678".into()).await {
+            Err(AuthenticationError::BadUser) => true,
+            _ => false,
+        };
+        assert!(is_err);
 
-        let dan: DefaultUser = json_authenticator
-            .authenticate(
-                "dan",
-                &libunftp::auth::Credentials {
-                    certificate_chain: None,
-                    password: Some("".into()),
-                    source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(dan, DefaultUser);
+        assert_eq!(
+            json_authenticator
+                .authenticate(
+                    "dan",
+                    &libunftp::auth::Credentials {
+                        certificate_chain: None,
+                        password: Some("".into()),
+                        source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    },
+                )
+                .await
+                .unwrap(),
+            DefaultUser
+        );
 
-        let dan: Result<DefaultUser, _> = json_authenticator
+        match json_authenticator
             .authenticate(
                 "dan",
                 &libunftp::auth::Credentials {
@@ -595,8 +543,8 @@ mod test {
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(128, 0, 0, 1)),
                 },
             )
-            .await;
-        match dan {
+            .await
+        {
             Err(AuthenticationError::IpDisallowed) => assert!(true),
             _ => assert!(false),
         }
@@ -650,13 +598,13 @@ mod test {
   }  
 ]"#;
         let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
-        assert!(!<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "alice").await);
-        assert!(<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "bob").await);
-        assert!(!<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "carol").await);
-        assert!(!<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "dan").await);
-        assert!(!<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "eve").await);
-        assert!(<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "freddie").await);
-        assert!(!<JsonFileAuthenticator as Authenticator<User>>::cert_auth_sufficient(&json_authenticator, "santa").await);
+        assert!(!json_authenticator.cert_auth_sufficient("alice").await);
+        assert!(json_authenticator.cert_auth_sufficient("bob").await);
+        assert!(!json_authenticator.cert_auth_sufficient("carol").await);
+        assert!(!json_authenticator.cert_auth_sufficient("dan").await);
+        assert!(!json_authenticator.cert_auth_sufficient("eve").await);
+        assert!(json_authenticator.cert_auth_sufficient("freddie").await);
+        assert!(!json_authenticator.cert_auth_sufficient("santa").await);
     }
 
     #[tokio::test]
@@ -730,21 +678,23 @@ mod test {
         let client_cert: Vec<u8> = cert.to_vec();
 
         // correct certificate and password combo authenticates successfully
-        let alice: DefaultUser = json_authenticator
-            .authenticate(
-                "alice",
-                &libunftp::auth::Credentials {
-                    certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
-                    password: Some("has a password".into()),
-                    source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(alice, DefaultUser);
+        assert_eq!(
+            json_authenticator
+                .authenticate(
+                    "alice",
+                    &libunftp::auth::Credentials {
+                        certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
+                        password: Some("has a password".into()),
+                        source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    },
+                )
+                .await
+                .unwrap(),
+            DefaultUser
+        );
 
         // correct password but missing certificate fails
-        let alice: Result<DefaultUser, _> = json_authenticator
+        match json_authenticator
             .authenticate(
                 "alice",
                 &libunftp::auth::Credentials {
@@ -753,28 +703,30 @@ mod test {
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
                 },
             )
-            .await;
-        match alice {
+            .await
+        {
             Err(AuthenticationError::CnDisallowed) => assert!(true),
             _ => assert!(false),
         }
 
         // correct certificate and no password needed according to json file authenticates successfully
-        let bob: DefaultUser = json_authenticator
-            .authenticate(
-                "bob",
-                &libunftp::auth::Credentials {
-                    certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
-                    password: None,
-                    source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(bob, DefaultUser);
+        assert_eq!(
+            json_authenticator
+                .authenticate(
+                    "bob",
+                    &libunftp::auth::Credentials {
+                        certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
+                        password: None,
+                        source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    },
+                )
+                .await
+                .unwrap(),
+            DefaultUser
+        );
 
         // certificate with incorrect CN and no password needed according to json file fails to authenticate
-        let carol: Result<DefaultUser, _> = json_authenticator
+        match json_authenticator
             .authenticate(
                 "carol",
                 &libunftp::auth::Credentials {
@@ -783,57 +735,26 @@ mod test {
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
                 },
             )
-            .await;
-        match carol {
+            .await
+        {
             Err(AuthenticationError::CnDisallowed) => assert!(true),
             _ => assert!(false),
         }
 
         // any trusted certificate without password according to json file authenticates successfully
-        let dean: DefaultUser = json_authenticator
-            .authenticate(
-                "dean",
-                &libunftp::auth::Credentials {
-                    certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
-                    password: None,
-                    source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(dean, DefaultUser);
-    }
-
-    #[tokio::test]
-    async fn test_json_home() {
-        use super::*;
-
-        let json: &str = r#"[
-  {
-    "username": "bella",
-    "pbkdf2_salt": "dGhpc2lzYWJhZHNhbHR0b28=",
-    "pbkdf2_key": "C2kkRTybDzhkBGUkTn5Ys1LKPl8XINI46x74H4c9w8s=",
-    "pbkdf2_iter": 500000,
-    "home": "/usr/home/bella"
-  },
-  {
-    "username": "carol",
-    "password": "not so secure",
-    "home": "/home/carol"
-  }
-]"#;
-        let json_authenticator = JsonFileAuthenticator::from_json(json).unwrap();
-        let carol: User = json_authenticator
-            .authenticate(
-                "carol",
-                &libunftp::auth::Credentials {
-                    certificate_chain: None,
-                    password: Some("not so secure".into()),
-                    source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(carol.home(), Some(Path::new("/home/carol")));
+        assert_eq!(
+            json_authenticator
+                .authenticate(
+                    "dean",
+                    &libunftp::auth::Credentials {
+                        certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
+                        password: None,
+                        source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    },
+                )
+                .await
+                .unwrap(),
+            DefaultUser
+        );
     }
 }
