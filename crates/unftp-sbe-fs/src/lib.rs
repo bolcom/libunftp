@@ -89,16 +89,14 @@ impl Filesystem {
 impl<User: UserDetail> StorageBackend<User> for Filesystem {
     type Metadata = Meta;
 
-    /// Restrict the backend's capabilities so that it may only access files underneath `path`.
-    /// Once restricted, it may never be unrestricted.
-    ///
-    /// The path should be absolute.
-    fn enter<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
-        let relpath = match path.as_ref().strip_prefix(self.root.as_path()) {
-            Ok(r) => r,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Path not a descendant of the previous root")),
-        };
-        self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
+    fn enter<U: UserDetail>(&mut self, user_detail: &U) -> io::Result<()> {
+        if let Some(path) = user_detail.home() {
+            let relpath = match path.strip_prefix(self.root.as_path()) {
+                Ok(r) => r,
+                Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Path not a descendant of the previous root")),
+            };
+            self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
+        }
         Ok(())
     }
 

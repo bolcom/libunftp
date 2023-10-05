@@ -104,34 +104,26 @@ where
                                 ControlChanMsg::AuthFailed
                             } else if user.account_enabled() {
                                 let mut session = session2clone.lock().await;
-                                slog::info!(logger, "PASS: User {} logged in", user);
-                                if let Some(home) = user.home() {
-                                    // Using Arc::get_mut means that this won't work if the Session
-                                    // is currently servicing multiple commands concurrently.  But
-                                    // it shouldn't ever be servicing PASS at the same time as
-                                    // another command.
-                                    match Arc::get_mut(&mut session.storage).map(|s| s.enter(home)) {
-                                        Some(Err(e)) => {
-                                            slog::error!(logger, "{}", e);
-                                            ControlChanMsg::AuthFailed
-                                        }
-                                        None => {
-                                            slog::error!(logger, "Failed to lock Session::storage during PASS.");
-                                            ControlChanMsg::AuthFailed
-                                        }
-                                        Some(Ok(())) => {
-                                            session.user = Arc::new(Some(user));
-                                            ControlChanMsg::AuthSuccess {
-                                                username,
-                                                trace_id: session.trace_id,
-                                            }
-                                        }
+                                // Using Arc::get_mut means that this won't work if the Session is
+                                // currently servicing multiple commands concurrently.  But it
+                                // shouldn't ever be servicing PASS at the same time as another
+                                // command.
+                                match Arc::get_mut(&mut session.storage).map(|s| s.enter(&user)) {
+                                    Some(Err(e)) => {
+                                        slog::error!(logger, "{}", e);
+                                        ControlChanMsg::AuthFailed
                                     }
-                                } else {
-                                    session.user = Arc::new(Some(user));
-                                    ControlChanMsg::AuthSuccess {
-                                        username,
-                                        trace_id: session.trace_id,
+                                    None => {
+                                        slog::error!(logger, "Failed to lock Session::storage during PASS.");
+                                        ControlChanMsg::AuthFailed
+                                    }
+                                    Some(Ok(())) => {
+                                        slog::info!(logger, "PASS: User {} logged in", user);
+                                        session.user = Arc::new(Some(user));
+                                        ControlChanMsg::AuthSuccess {
+                                            username,
+                                            trace_id: session.trace_id,
+                                        }
                                     }
                                 }
                             } else {

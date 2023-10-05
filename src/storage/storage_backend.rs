@@ -165,12 +165,12 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
 
-    /// Restrict the backend's capabilities so that it may only access files underneath `path`.
-    /// Once restricted, it may never be unrestricted.
+    /// Restrict the backend's capabilities commensurate with the provided
+    /// [`UserDetail`](crate::auth::UserDetail).
     ///
-    /// The path should be absolute.
-    fn enter<P: AsRef<Path>>(&mut self, _path: P) -> io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "Not supported by this StorageBackend"))
+    /// Once restricted, it may never be unrestricted.
+    fn enter<U: UserDetail>(&mut self, _user_detail: &U) -> io::Result<()> {
+        Ok(())
     }
 
     /// Implement to set the name of the storage back-end. By default it returns the type signature.
