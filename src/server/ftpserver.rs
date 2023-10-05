@@ -482,7 +482,7 @@ where
     ///
     /// Preallocate a socket suitable for servicing the PASV command as received from the given IP
     /// address.  This method is completely optional, but it is necessary in order to use the
-    /// [`service`] method when the server is running in capability mode.
+    /// [`Server::service`] method when the server is running in capability mode.
     // In the future, this could be extended to accept multiple invocations, allocating a
     // collection of sockets.
     pub async fn pasv_listener(self, addr: std::net::IpAddr) -> Self {
