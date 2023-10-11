@@ -30,9 +30,10 @@ use futures::{future::TryFutureExt, stream::TryStreamExt};
 use lazy_static::lazy_static;
 use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use tokio::io::AsyncSeekExt;
 use std::{
     fmt::Debug,
-    io::{self, Seek},
+    io,
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
@@ -139,11 +140,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     //#[tracing_attributes::instrument]
     async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
-        let mut file = cap_fs::open(self.root_fd.clone(), path).await?;
+        let file = cap_fs::open(self.root_fd.clone(), path).await?;
+        let mut file = tokio::fs::File::from_std(file.into_std());
         if start_pos > 0 {
-            file.seek(std::io::SeekFrom::Start(start_pos))?;
+            file.seek(std::io::SeekFrom::Start(start_pos)).await?;
         }
-        let file = tokio::fs::File::from_std(file.into_std());
 
         Ok(Box::new(tokio::io::BufReader::with_capacity(4096, file)) as Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>)
     }
@@ -160,11 +161,10 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
         let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
         let mut oo = cap_std::fs::OpenOptions::new();
         oo.write(true).create(true);
-        let mut file = cap_fs::open_with(self.root_fd.clone(), path, oo).await?;
-        // XXX set_len ideally should go in a spawn_blocking
-        file.set_len(start_pos)?;
-        file.seek(std::io::SeekFrom::Start(start_pos))?;
-        let file = tokio::fs::File::from_std(file.into_std());
+        let file = cap_fs::open_with(self.root_fd.clone(), path, oo).await?;
+        let mut file = tokio::fs::File::from_std(file.into_std());
+        file.set_len(start_pos).await?;
+        file.seek(std::io::SeekFrom::Start(start_pos)).await?;
 
         let mut reader = tokio::io::BufReader::with_capacity(4096, bytes);
         let mut writer = tokio::io::BufWriter::with_capacity(4096, file);
