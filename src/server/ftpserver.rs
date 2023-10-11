@@ -751,7 +751,7 @@ where
         }
     }
 
-    /// Service a newly established connection.
+    /// Service a newly established connection as a control connection.
     ///
     /// Use this method instead of [`listen`](Server::listen) if you want to listen for and accept
     /// new connections yourself, instead of using libunftp to do it.
