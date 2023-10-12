@@ -21,6 +21,7 @@ pub async fn main() {
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .connection_helper(helper.into(), helper_args)
         .build()
+        .await
         .unwrap();
 
     println!("Starting ftp server on {}", addr);

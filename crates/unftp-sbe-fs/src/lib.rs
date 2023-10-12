@@ -13,6 +13,7 @@
 //!         .greeting("Welcome to my FTP server")
 //!         .passive_ports(50000..65535)
 //!         .build()
+//!         .await
 //!         .unwrap();
 //!
 //!     server.listen("127.0.0.1:2121").await;

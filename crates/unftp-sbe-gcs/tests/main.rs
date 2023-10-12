@@ -284,6 +284,7 @@ async fn run_test(test: impl Future<Output = ()>) {
         }))
         .logger(Some(Logger::root(drain, o!())))
         .build()
+        .await
         .unwrap()
         .listen(ADDR),
     );

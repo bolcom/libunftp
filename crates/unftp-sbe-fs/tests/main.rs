@@ -39,7 +39,10 @@ where
     let tempdir = tempfile::TempDir::new().unwrap();
     let root = tempdir.path().to_path_buf();
 
-    let server = s(root.clone()).build().unwrap().listen(addr.clone());
+    let server = s(root.clone()).build()
+        .await
+        .unwrap()
+        .listen(addr.clone());
 
     tokio::spawn(server);
     while async_ftp::FtpStream::connect(&addr).await.is_err() {

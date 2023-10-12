@@ -200,8 +200,8 @@ async fn main() {
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
     let server: Server<Filesystem, User> = libunftp::ServerBuilder::with_authenticator(sgen, auth)
         .pasv_listener(control_sock.local_addr().unwrap().ip())
-        .await
         .build()
+        .await
         .unwrap();
     cfg_if! {
         if #[cfg(target_os = "freebsd")] {

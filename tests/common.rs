@@ -17,6 +17,7 @@ pub async fn run_with_auth() {
         .greeting("Welcome test")
         .failed_logins_policy(FailedLoginsPolicy::new(3, std::time::Duration::new(5, 0), FailedLoginsBlock::User))
         .build()
+        .await
         .unwrap();
     server.listen(addr).await.unwrap();
 }
