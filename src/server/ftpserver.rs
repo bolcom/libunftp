@@ -106,7 +106,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener_addr: Option<std::net::IpAddr>
+    pasv_listener_addr: Option<std::net::IpAddr>,
 }
 
 impl<Storage, User> ServerBuilder<Storage, User>
@@ -214,11 +214,8 @@ where
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
         let pasv_listener = Arc::new(std::sync::Mutex::new(match self.pasv_listener_addr {
-            Some(addr) => {
-                Some(crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone())
-                    .await?)
-            },
-            None => None
+            Some(addr) => Some(crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone()).await?),
+            None => None,
         }));
         Ok(Server {
             storage: self.storage,

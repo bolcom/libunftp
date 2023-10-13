@@ -31,7 +31,6 @@ use futures::{future::TryFutureExt, stream::TryStreamExt};
 use lazy_static::lazy_static;
 use libunftp::auth::UserDetail;
 use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
-use tokio::io::AsyncSeekExt;
 use std::{
     fmt::Debug,
     io,
@@ -39,6 +38,7 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
+use tokio::io::AsyncSeekExt;
 
 #[cfg(target_os = "unix")]
 use std::os::unix::fs::MetadataExt;
