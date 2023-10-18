@@ -91,7 +91,7 @@ impl Filesystem {
 impl<User: UserDetail> StorageBackend<User> for Filesystem {
     type Metadata = Meta;
 
-    fn enter<U: UserDetail>(&mut self, user_detail: &U) -> io::Result<()> {
+    fn enter(&mut self, user_detail: &User) -> io::Result<()> {
         if let Some(path) = user_detail.home() {
             let relpath = match path.strip_prefix(self.root.as_path()) {
                 Ok(r) => r,

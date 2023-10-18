@@ -169,7 +169,7 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// [`UserDetail`](crate::auth::UserDetail).
     ///
     /// Once restricted, it may never be unrestricted.
-    fn enter<U: UserDetail>(&mut self, _user_detail: &U) -> io::Result<()> {
+    fn enter(&mut self, _user_detail: &User) -> io::Result<()> {
         Ok(())
     }
 
