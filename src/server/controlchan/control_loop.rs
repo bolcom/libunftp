@@ -69,7 +69,7 @@ where
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
-    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>,
+    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpSocket>>>,
 }
 
 /// Does TCP processing when an FTP client connects

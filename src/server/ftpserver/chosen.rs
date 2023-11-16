@@ -34,7 +34,7 @@ where
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
-    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>,
+    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpSocket>>>,
 }
 
 impl<Storage, User> From<&OptionsHolder<Storage, User>> for controlchan::LoopConfig<Storage, User>

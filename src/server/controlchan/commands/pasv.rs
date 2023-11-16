@@ -17,7 +17,7 @@ use crate::{
         },
         datachan,
         ftpserver::options::PassiveHost,
-        session::SharedSession,
+        session::{ListenerSock, SharedSession},
         ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
@@ -28,7 +28,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     time::Duration,
 };
-use tokio::net::TcpListener;
+use tokio::net::TcpSocket;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
@@ -42,10 +42,10 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    pub async fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
+    pub fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
 
-        let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
+        let mut socket: io::Result<TcpSocket> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
         for _ in 1..BIND_RETRIES {
             let random_u32 = {
@@ -55,13 +55,14 @@ impl Pasv {
             };
 
             let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
-            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr, port as u16)).await;
-            if listener.is_ok() {
+            let s = TcpSocket::new_v4()?;
+            if s.bind(std::net::SocketAddr::new(local_addr, port as u16)).is_ok() {
+                socket = Ok(s);
                 break;
             }
         }
 
-        listener
+        socket
     }
 
     // modifies the session by adding channels that are used to communicate with the data connection
@@ -110,16 +111,28 @@ impl Pasv {
             }
         };
 
-        let olistener = { session.lock().await.listener.take() };
-        let listener = if let Some(listener) = olistener {
-            listener
-        } else {
-            let elistener = Pasv::try_port_range(args.local_addr.ip(), args.passive_ports).await;
-            match elistener {
-                Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
-                Ok(l) => l,
+        let mut listener = session.lock().await.listener.take();
+        if listener.is_none() {
+            match Pasv::try_port_range(args.local_addr.ip(), args.passive_ports) {
+                Ok(s) => {
+                    listener = ListenerSock::Bound(s);
+                }
+                Err(_) => {
+                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
+                }
             }
-        };
+        }
+        if let ListenerSock::Bound(s) = listener {
+            match s.listen(1024) {
+                Ok(s) => {
+                    listener = ListenerSock::Listening(s);
+                }
+                Err(_) => {
+                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
+                }
+            }
+        }
+        let listener = listener.into_listening().unwrap();
 
         let port = listener.local_addr()?.port();
 
@@ -135,7 +148,7 @@ impl Pasv {
             tokio::spawn(async move {
                 // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
                 let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
-                session.lock().await.listener = Some(listener);
+                session.lock().await.listener = ListenerSock::Listening(listener);
                 match r {
                     Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(logger, session, socket).await,
                     Ok(Err(e)) => slog::error!(logger, "Error waiting for data connection: {}", e),

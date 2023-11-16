@@ -74,7 +74,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpListener>>>,
+    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpSocket>>>,
 }
 
 /// Used to create [`Server`]s.  
@@ -214,7 +214,7 @@ where
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
         let pasv_listener = Arc::new(std::sync::Mutex::new(match self.pasv_listener_addr {
-            Some(addr) => Some(crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone()).await?),
+            Some(addr) => Some(crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone())?),
             None => None,
         }));
         Ok(Server {

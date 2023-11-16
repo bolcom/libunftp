@@ -16,8 +16,37 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpSocket};
 use tokio::sync::mpsc::{Receiver, Sender};
+
+/// A listening socket that may be preallocated
+#[derive(Debug, Default)]
+pub enum ListenerSock {
+    /// Nothing is preallocated
+    #[default]
+    None,
+    /// The socket is preallocated and bound to a port, but not yet listening
+    Bound(TcpSocket),
+    /// The socket is already listening
+    Listening(TcpListener),
+}
+
+impl ListenerSock {
+    pub fn into_listening(self) -> Option<TcpListener> {
+        match self {
+            ListenerSock::Listening(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, ListenerSock::None)
+    }
+
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, Self::None)
+    }
+}
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -115,7 +144,7 @@ where
     // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
     // A preallocated socket to use for PASV.
-    pub listener: Option<TcpListener>,
+    pub listener: ListenerSock,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -149,7 +178,7 @@ where
             data_busy: false,
             cert_chain: None,
             failed_logins: None,
-            listener: None,
+            listener: ListenerSock::None,
         }
     }
 
@@ -166,8 +195,8 @@ where
         self
     }
 
-    pub fn pasv_listener(mut self, listener: TcpListener) -> Self {
-        self.listener = Some(listener);
+    pub fn pasv_listener(mut self, listener: TcpSocket) -> Self {
+        self.listener = ListenerSock::Bound(listener);
         self
     }
 
