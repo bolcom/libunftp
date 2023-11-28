@@ -254,7 +254,6 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             None => json!(null).to_string(),
         };
 
-        println!("{}", parsed);
         if self.regex.is_match(&parsed) {
             Ok(DefaultUser {})
         } else {
