@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 
-//! Contains the [`Authenticator`](crate::auth::Authenticator) and [`UserDetail`](crate::auth::UserDetail)
+//! Contains the [`Authenticator`] and [`UserDetail`]
 //! traits that are used to extend libunftp's authentication and user detail storage capabilities.
 //!
 //! Pre-made implementations exists on crates.io (search for `unftp-auth-`) and you can define your

@@ -22,6 +22,7 @@ use std::string::String;
 pub struct RestAuthenticator {
     username_placeholder: String,
     password_placeholder: String,
+    source_ip_placeholder: String,
 
     method: Method,
     url: String,
@@ -30,11 +31,12 @@ pub struct RestAuthenticator {
     regex: Regex,
 }
 
-/// Used to build the [`RestAuthenticator`](crate::RestAuthenticator)
+/// Used to build the [`RestAuthenticator`]
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
     username_placeholder: String,
     password_placeholder: String,
+    source_ip_placeholder: String,
 
     method: Method,
     url: String,
@@ -44,20 +46,102 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Creates a new `Builder` instance with default settings.
     ///
+    /// This method initializes a new builder that you can use to configure and
+    /// ultimately construct a [`RestAuthenticator`]. Each setting has a default
+    /// value that can be customized through the builder's methods.
+    ///
+    /// For customization we have several methods:
+    /// The placeholder methods (E.g.: `with_username_placeholder`) allow you to
+    /// configure placeholders for certain fields.
+    /// These placeholders, will be replaced by actual values (FTP username,
+    /// password, or the client's source IP) when preparing requests.
+    /// You can use these placeholders in the templates supplied `with_url` or
+    /// `with_body` .
+    ///
+    ///
+
     pub fn new() -> Builder {
         Builder { ..Default::default() }
     }
 
-    /// Specifies the placeholder string in the rest of the fields that would be replaced by the username
+    /// Sets the placeholder for the FTP username.
+    ///
+    /// This placeholder will be replaced with the actual FTP username in the fields where it's used.
+    /// Refer to the general placeholder concept above for more information.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - A `String` representing the placeholder for the FTP username.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use unftp_auth_rest::{Builder, RestAuthenticator};
+    /// #
+    /// let mut builder = Builder::new()
+    ///   .with_username_placeholder("{USER}".to_string())
+    ///   .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string());
+    /// ```
+    ///
+    /// In the example above, `"{USER}"` within the body template is replaced with the actual FTP username during request
+    /// preparation. If the placeholder configuration is not set, any `"{USER}"` text would stay unreplaced in the request.
     pub fn with_username_placeholder(mut self, s: String) -> Self {
         self.username_placeholder = s;
         self
     }
 
-    /// specify the placeholder string in the rest of the fields that would be replaced by the password
+    /// Sets the placeholder for the FTP password.
+    ///
+    /// This placeholder will be replaced with the actual FTP password in the fields where it's used.
+    /// Refer to the general placeholder concept above for more information.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - A `String` representing the placeholder for the FTP password.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use unftp_auth_rest::{Builder, RestAuthenticator};
+    /// #
+    /// let mut builder = Builder::new()
+    ///   .with_password_placeholder("{PASS}".to_string())
+    ///   .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string());
+    /// ```
+    ///
+    /// In the example above, "{PASS}" within the body template is replaced with the actual FTP password during request
+    /// preparation. If the placeholder configuration is not set, any "{PASS}" text would stay unreplaced in the request.
     pub fn with_password_placeholder(mut self, s: String) -> Self {
         self.password_placeholder = s;
+        self
+    }
+
+    /// Sets the placeholder for the source IP of the FTP client.
+    ///
+    /// This placeholder will be replaced with the actual source IP in the fields where it's used.
+    /// Refer to the general placeholder concept above for more information.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - A `String` representing the placeholder for the FTP client's source IP.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use unftp_auth_rest::{Builder, RestAuthenticator};
+    /// #
+    /// let mut builder = Builder::new()
+    ///   .with_source_ip_placeholder("{IP}".to_string())
+    ///   .with_body(r#"{"username":"{USER}","password":"{PASS}", "source_ip":"{IP}"}"#.to_string());
+    /// ```
+    ///
+    /// In the example above, "{IP}" within the body template is replaced with the actual source IP of the FTP client
+    /// during request preparation. If the placeholder configuration is not set, any "{IP}" text would stay unreplaced
+    /// in the request.
+    pub fn with_source_ip_placeholder(mut self, s: String) -> Self {
+        self.source_ip_placeholder = s;
         self
     }
 
@@ -97,6 +181,7 @@ impl Builder {
         Ok(RestAuthenticator {
             username_placeholder: self.username_placeholder,
             password_placeholder: self.password_placeholder,
+            source_ip_placeholder: self.source_ip_placeholder,
             method: self.method,
             url: self.url,
             body: self.body,
@@ -107,37 +192,46 @@ impl Builder {
 }
 
 impl RestAuthenticator {
-    fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str) -> String {
-        string
-            .replace(&self.username_placeholder, username)
-            .replace(&self.password_placeholder, password)
+    fn fill_encoded_placeholders(&self, string: &str, username: &str, password: &str, source_ip: &str) -> String {
+        let mut result = string.to_owned();
+
+        if !self.username_placeholder.is_empty() {
+            result = result.replace(&self.username_placeholder, username);
+        }
+        if !self.password_placeholder.is_empty() {
+            result = result.replace(&self.password_placeholder, password);
+        }
+        if !self.source_ip_placeholder.is_empty() {
+            result = result.replace(&self.source_ip_placeholder, source_ip);
+        }
+
+        result
     }
 }
 
-// FIXME: add support for authenticated user
 #[async_trait]
 impl Authenticator<DefaultUser> for RestAuthenticator {
-    #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
     async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password = creds.password.as_ref().ok_or(AuthenticationError::BadPassword)?.as_ref();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
-        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url);
+        let source_ip = creds.source_ip.to_string();
+        let source_ip_url = utf8_percent_encode(&source_ip, NON_ALPHANUMERIC).collect::<String>();
 
-        let username_json = encode_string_json(username);
-        let password_json = encode_string_json(password);
-        let body = self.fill_encoded_placeholders(&self.body, &username_json, &password_json);
+        let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url, &source_ip_url);
 
-        // FIXME: need to clone too much, just to keep tokio::spawn() happy, with its 'static requirement. is there a way maybe to work this around with proper lifetime specifiers? Or is it better to just clone the whole object?
-        let method = self.method.clone();
-        let selector = self.selector.clone();
-        let regex = self.regex.clone();
+        let username_json = serde_json::to_string(username).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
+        let trimmed_username_json = username_json.trim_matches('"');
+        let password_json = serde_json::to_string(password).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
+        let trimmed_password_json = password_json.trim_matches('"');
+        let source_ip_json = serde_json::to_string(&source_ip).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
+        let trimmed_source_ip_json = source_ip_json.trim_matches('"');
 
-        //slog::debug!("{} {}", url, body);
+        let body = self.fill_encoded_placeholders(&self.body, trimmed_username_json, trimmed_password_json, trimmed_source_ip_json);
 
         let req = Request::builder()
-            .method(method)
+            .method(&self.method)
             .header("Content-type", "application/json")
             .uri(url)
             .body(Body::from(body))
@@ -149,40 +243,24 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             .request(req)
             .await
             .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
+
         let body_bytes = hyper::body::to_bytes(resp.into_body())
             .await
             .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
         let body: Value = serde_json::from_slice(&body_bytes).map_err(|e| AuthenticationError::with_source("rest authenticator unmarshalling error", e))?;
-        let parsed = match body.pointer(&selector) {
+        let parsed = match body.pointer(&self.selector) {
             Some(parsed) => parsed.to_string(),
             None => json!(null).to_string(),
         };
 
-        if regex.is_match(&parsed) {
+        println!("{}", parsed);
+        if self.regex.is_match(&parsed) {
             Ok(DefaultUser {})
         } else {
             Err(AuthenticationError::BadPassword)
         }
     }
-}
-
-/// limited capabilities, meant for us-ascii username and password only, really
-fn encode_string_json(string: &str) -> String {
-    let mut res = String::with_capacity(string.len() * 2);
-
-    for i in string.chars() {
-        match i {
-            '\\' => res.push_str("\\\\"),
-            '"' => res.push_str("\\\""),
-            ' '..='~' => res.push(i),
-            _ => {
-                //slog::error!("special character {} is not supported", i);
-            }
-        }
-    }
-
-    res
 }
 
 /// Possible errors while doing REST lookup

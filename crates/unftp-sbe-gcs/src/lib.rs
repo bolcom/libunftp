@@ -79,7 +79,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// A [`StorageBackend`](libunftp::storage::StorageBackend) that uses Cloud storage from Google.
+/// A [`StorageBackend`] that uses Cloud storage from Google.
 /// cloned for each controlchan!
 #[derive(Clone, Debug)]
 pub struct CloudStorage {

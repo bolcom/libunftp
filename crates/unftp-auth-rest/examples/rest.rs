@@ -12,18 +12,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let authenticator: RestAuthenticator = Builder::new()
         .with_username_placeholder("{USER}".to_string())
         .with_password_placeholder("{PASS}".to_string())
-        .with_url("https://authenticateme.mydomain.com/path".to_string())
+        .with_source_ip_placeholder("{IP}".to_string())
+        .with_url("http://127.0.0.1:5000/authenticate".to_string())
         .with_method(hyper::Method::POST)
-        .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string())
+        .with_body(r#"{"username":"{USER}","password":"{PASS}", "source_ip":"{IP}"}"#.to_string())
         .with_selector("/status".to_string())
-        .with_regex("pass".to_string())
+        .with_regex("success".to_string())
         .build()?;
 
     let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator));
 
     println!("Starting ftp server on {}", addr);
-    let runtime = TokioBuilder::new_current_thread().build()?;
+    let runtime = TokioBuilder::new_current_thread().enable_io().enable_time().build()?;
     runtime.block_on(server.listen(addr))?;
     Ok(())
 }
