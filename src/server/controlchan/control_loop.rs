@@ -69,7 +69,7 @@ where
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
-    pub pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpSocket>>>,
+    pub binder: Arc<std::sync::Mutex<Option<Box<dyn crate::options::Binder>>>>,
 }
 
 /// Does TCP processing when an FTP client connects
@@ -102,7 +102,7 @@ where
         data_listener,
         presence_listener,
         active_passive_mode,
-        pasv_listener,
+        binder,
         ..
     } = config;
 
@@ -116,8 +116,8 @@ where
         .control_msg_tx(control_msg_tx.clone())
         .proxy_connection(proxy_connection)
         .failed_logins(failed_logins);
-    if let Some(s) = pasv_listener.lock().unwrap().take() {
-        session = session.pasv_listener(s);
+    if let Some(b) = binder.lock().unwrap().take() {
+        session = session.binder(b);
     }
 
     let mut logger = logger.new(

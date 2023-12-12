@@ -74,7 +74,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener: Arc<std::sync::Mutex<Option<tokio::net::TcpSocket>>>,
+    binder: Arc<std::sync::Mutex<Option<Box<dyn crate::options::Binder>>>>,
 }
 
 /// Used to create [`Server`]s.  
@@ -106,7 +106,7 @@ where
     active_passive_mode: ActivePassiveMode,
     connection_helper: Option<OsString>,
     connection_helper_args: Vec<OsString>,
-    pasv_listener_addr: Option<std::net::IpAddr>,
+    binder: Option<Box<dyn crate::options::Binder>>,
 }
 
 impl<Storage, User> ServerBuilder<Storage, User>
@@ -158,7 +158,7 @@ where
             active_passive_mode: ActivePassiveMode::default(),
             connection_helper: None,
             connection_helper_args: Vec::new(),
-            pasv_listener_addr: None,
+            binder: None,
         }
     }
 
@@ -213,10 +213,7 @@ where
             },
             FtpsConfig::On { tls_config } => FtpsConfig::On { tls_config },
         };
-        let pasv_listener = Arc::new(std::sync::Mutex::new(match self.pasv_listener_addr {
-            Some(addr) => Some(crate::server::controlchan::commands::Pasv::try_port_range(addr, self.passive_ports.clone())?),
-            None => None,
-        }));
+        let binder = Arc::new(std::sync::Mutex::new(self.binder));
         Ok(Server {
             storage: self.storage,
             greeting: self.greeting,
@@ -238,7 +235,7 @@ where
             active_passive_mode: self.active_passive_mode,
             connection_helper: self.connection_helper,
             connection_helper_args: self.connection_helper_args,
-            pasv_listener,
+            binder,
         })
     }
 
@@ -475,15 +472,12 @@ where
         self
     }
 
-    /// Preallocate a listener socket for the PASV command
+    /// Set a callback for binding sockets
     ///
-    /// Preallocate a socket suitable for servicing the PASV command as received from the given IP
-    /// address.  This method is completely optional, but it is necessary in order to use the
-    /// [`Server::service`] method when the server is running in capability mode.
-    // In the future, this could be extended to accept multiple invocations, allocating a
-    // collection of sockets.
-    pub fn pasv_listener(mut self, addr: std::net::IpAddr) -> Self {
-        self.pasv_listener_addr = Some(addr);
+    /// If present, this helper will be used for binding sockets instead of the standard routines
+    /// in std or tokio.  It can be useful in capability mode.
+    pub fn binder<B: crate::options::Binder + 'static>(mut self, b: B) -> Self {
+        self.binder = Some(Box::new(b));
         self
     }
 
@@ -822,7 +816,7 @@ where
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,
-            pasv_listener: server.pasv_listener.clone(),
+            binder: server.binder.clone(),
         }
     }
 }

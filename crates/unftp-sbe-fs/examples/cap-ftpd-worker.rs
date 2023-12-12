@@ -173,7 +173,54 @@ mod auth {
 
 use auth::{JsonFileAuthenticator, User};
 
+cfg_if! {
+    if #[cfg(target_os = "freebsd")] {
+        use std::{
+            io,
+            net::IpAddr,
+            ops::Range
+        };
+        use async_trait::async_trait;
+        use capsicum::casper::Casper;
+        use capsicum_net::{CapNetAgent, CasperExt, tokio::TcpSocketExt};
+        use tokio::net::TcpSocket;
+
+        #[derive(Debug)]
+        struct CapBinder {
+            agent: CapNetAgent
+        }
+
+        impl CapBinder {
+            fn new(agent: CapNetAgent) -> Self {
+                Self{agent}
+            }
+        }
+
+        #[async_trait]
+        impl libunftp::options::Binder for CapBinder {
+            async fn bind(&mut self, local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
+                const BIND_RETRIES: u8 = 10;
+
+                for _ in 1..BIND_RETRIES {
+                    let mut data = [0u8; 2];
+                    getrandom::getrandom(&mut data).expect("Error generating random port");
+                    let r16 = u16::from_ne_bytes(data);
+                    let p = passive_ports.start + r16 % (passive_ports.end - passive_ports.start);
+                    let socket = TcpSocket::new_v4()?;
+                    let addr = std::net::SocketAddr::new(local_addr, p);
+                    match socket.cap_bind(&mut self.agent, addr) {
+                        Ok(()) => return Ok(socket),
+                        Err(_) => todo!()
+                    }
+                }
+                panic!()
+            }
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
+#[allow(unused_mut)] // Not unused on all OSes.
 async fn main() {
     println!("Starting helper");
     let args: Vec<String> = env::args().collect();
@@ -198,11 +245,19 @@ async fn main() {
     // storage just before calling service.
     let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir())));
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
-    let server: Server<Filesystem, User> = libunftp::ServerBuilder::with_authenticator(sgen, auth)
-        .pasv_listener(control_sock.local_addr().unwrap().ip())
-        .build()
-        .await
-        .unwrap();
+
+    let mut sb = libunftp::ServerBuilder::with_authenticator(sgen, auth);
+    cfg_if! {
+        if #[cfg(target_os = "freebsd")] {
+            // Safe because we're single-threaded
+            let mut casper = unsafe { Casper::new().unwrap() };
+
+            let cap_net = casper.net().unwrap();
+            let binder = CapBinder::new(cap_net);
+            sb = sb.binder(binder);
+        }
+    }
+    let server: Server<Filesystem, User> = sb.build().await.unwrap();
     cfg_if! {
         if #[cfg(target_os = "freebsd")] {
             capsicum::enter().unwrap();

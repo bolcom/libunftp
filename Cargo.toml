@@ -62,3 +62,8 @@ libc = "0.2"
 pretty_assertions = "1.4.0"
 tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
 unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs"}
+
+
+[patch.crates-io]
+capsicum = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
+casper-sys = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}

@@ -48,4 +48,6 @@ tracing-subscriber = "0.3.18"
 getrandom = "0.2.11"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
-capsicum = "0.2.0"
+capsicum = { version = "0.3.0", features = ["casper"] }
+capsicum-net = { version = "0.1.0", features = ["tokio"], git = "https://github.com/asomers/capsicum-net", rev = "c6fc574" }
+

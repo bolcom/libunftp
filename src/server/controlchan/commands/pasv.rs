@@ -17,7 +17,7 @@ use crate::{
         },
         datachan,
         ftpserver::options::PassiveHost,
-        session::{ListenerSock, SharedSession},
+        session::SharedSession,
         ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
@@ -42,7 +42,7 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    pub fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
+    fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
         let rng_length = passive_ports.end - passive_ports.start + 1;
 
         let mut socket: io::Result<TcpSocket> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
@@ -111,28 +111,16 @@ impl Pasv {
             }
         };
 
-        let mut listener = session.lock().await.listener.take();
-        if listener.is_none() {
-            match Pasv::try_port_range(args.local_addr.ip(), args.passive_ports) {
-                Ok(s) => {
-                    listener = ListenerSock::Bound(s);
-                }
-                Err(_) => {
-                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                }
-            }
-        }
-        if let ListenerSock::Bound(s) = listener {
-            match s.listen(1024) {
-                Ok(s) => {
-                    listener = ListenerSock::Listening(s);
-                }
-                Err(_) => {
-                    return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established"));
-                }
-            }
-        }
-        let listener = listener.into_listening().unwrap();
+        let listener = if let Some(ref mut binder) = session.lock().await.binder {
+            binder.bind(args.local_addr.ip(), args.passive_ports).await
+        } else {
+            Pasv::try_port_range(args.local_addr.ip(), args.passive_ports)
+        };
+        let listener = match listener {
+            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
+            Ok(l) => l,
+        };
+        let listener = listener.listen(1024).unwrap();
 
         let port = listener.local_addr()?.port();
 
@@ -148,7 +136,6 @@ impl Pasv {
             tokio::spawn(async move {
                 // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
                 let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
-                session.lock().await.listener = ListenerSock::Listening(listener);
                 match r {
                     Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(logger, session, socket).await,
                     Ok(Err(e)) => slog::error!(logger, "Error waiting for data connection: {}", e),
