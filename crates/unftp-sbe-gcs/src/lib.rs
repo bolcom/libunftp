@@ -12,8 +12,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.19.0"
-//! unftp-sbe-gcs = "0.2.3"
+//! libunftp = "0.19.1"
+//! unftp-sbe-gcs = "0.2.5"
 //! tokio = { version = "1", features = ["full"] }
 //! ```
 //!
