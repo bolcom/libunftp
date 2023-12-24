@@ -224,7 +224,12 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     {
         let list = self.list(user, path).await?;
 
-        let file_infos: Vec<u8> = list.iter().map(|fi| format!("{}\r\n", fi)).collect::<String>().into_bytes();
+        let buffer = list.iter().fold(String::new(), |mut buf, fi| {
+            let _ = write!(buf, "{}\r\n", fi);
+            buf
+        });
+
+        let file_infos: Vec<u8> = buffer.into_bytes();
 
         Ok(std::io::Cursor::new(file_infos))
     }
@@ -253,15 +258,18 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     {
         let list = self.list(user, path).await.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))?;
 
-        let bytes = list
-            .iter()
-            .map(|file| {
-                let info = file.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("");
-                format!("{}\r\n", info)
-            })
-            .collect::<String>()
-            .into_bytes();
-        Ok(std::io::Cursor::new(bytes))
+        let buffer = list.iter().fold(String::new(), |mut buf, fi| {
+            let _ = write!(
+                buf,
+                "{}\r\n",
+                fi.path.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")).to_str().unwrap_or("")
+            );
+            buf
+        });
+
+        let file_infos: Vec<u8> = buffer.into_bytes();
+
+        Ok(std::io::Cursor::new(file_infos))
     }
 
     /// Gets the content of the given FTP file from offset start_pos file by copying it to the output writer.

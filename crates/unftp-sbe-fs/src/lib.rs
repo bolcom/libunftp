@@ -1,4 +1,4 @@
-//! A libunftp [`StorageBackend`](libunftp::storage::StorageBackend) that uses a local filesystem, like a traditional FTP server.
+//! A libunftp [`StorageBackend`] that uses a local filesystem, like a traditional FTP server.
 //!
 //! Here is an example for using this storage backend
 //!

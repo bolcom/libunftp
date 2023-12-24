@@ -4,7 +4,7 @@ use crate::auth::*;
 use async_trait::async_trait;
 
 ///
-/// [`Authenticator`](crate::auth::Authenticator) implementation that simply allows everyone.
+/// [`Authenticator`] implementation that simply allows everyone.
 ///
 /// # Example
 ///

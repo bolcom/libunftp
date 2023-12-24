@@ -3,7 +3,7 @@ use base64::Engine;
 use chrono::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{de, Deserialize};
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::str::FromStr;
 use std::time::SystemTime;
 use std::{iter::Extend, path::PathBuf};
@@ -132,7 +132,10 @@ impl Item {
         let md5 = base64::engine::general_purpose::STANDARD
             .decode(&self.md5_hash)
             .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
-        Ok(md5.iter().map(|b| format!("{:02x}", b)).collect())
+        Ok(md5.iter().fold(String::new(), |mut output, b| {
+            let _ = write!(output, "{b:02x}");
+            output
+        }))
     }
 }
 

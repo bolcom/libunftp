@@ -1,5 +1,9 @@
 # Changelog
 
+### upcoming
+
+- [#492](https://github.com/bolcom/libunftp/pull/492) Added source IP parameter support
+
 ### libunftp 0.19.0
 
 _tag: libunftp-0.19.0_

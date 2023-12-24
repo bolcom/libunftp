@@ -1,4 +1,4 @@
-//! Contains the [`StorageBackend`](crate::storage::StorageBackend) trait that can be implemented to
+//! Contains the [`StorageBackend`] trait that can be implemented to
 //! create virtual file systems for libunftp.
 //!
 //! Pre-made implementations exists on crates.io (search for `unftp-sbe-`) and you can define your
@@ -12,7 +12,7 @@
 //! async-trait = "0.1.50"
 //! ```
 //!
-//! 2. Implement the [`StorageBackend`](crate::storage::StorageBackend) trait and optionally the [`Metadata`](crate::storage::Metadata) trait:
+//! 2. Implement the [`StorageBackend`] trait and optionally the [`Metadata`] trait:
 //!
 //! ```no_run
 //! use async_trait::async_trait;
