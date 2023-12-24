@@ -221,14 +221,20 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
 
         let url = self.fill_encoded_placeholders(&self.url, &username_url, &password_url, &source_ip_url);
 
-        let username_json = serde_json::to_string(username).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
-        let trimmed_username_json = username_json.trim_matches('"');
-        let password_json = serde_json::to_string(password).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
-        let trimmed_password_json = password_json.trim_matches('"');
-        let source_ip_json = serde_json::to_string(&source_ip).map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?;
-        let trimmed_source_ip_json = source_ip_json.trim_matches('"');
+        let username = serde_json::to_string(username)
+            .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
+            .trim_matches('"')
+            .to_string();
+        let password = serde_json::to_string(password)
+            .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
+            .trim_matches('"')
+            .to_string();
+        let source_ip = serde_json::to_string(&source_ip)
+            .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
+            .trim_matches('"')
+            .to_string();
 
-        let body = self.fill_encoded_placeholders(&self.body, trimmed_username_json, trimmed_password_json, trimmed_source_ip_json);
+        let body = self.fill_encoded_placeholders(&self.body, &username, &password, &source_ip);
 
         let req = Request::builder()
             .method(&self.method)
