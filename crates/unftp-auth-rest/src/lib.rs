@@ -209,6 +209,21 @@ impl RestAuthenticator {
     }
 }
 
+trait TrimQuotes {
+    fn trim_quotes(&self) -> &str;
+}
+
+impl TrimQuotes for String {
+    // Used to trim quotes from a json-string formatted string
+    fn trim_quotes(&self) -> &str {
+        if self.starts_with('"') && self.ends_with('"') && self.len() > 1 {
+            &self[1..self.len() - 1]
+        } else {
+            self
+        }
+    }
+}
+
 #[async_trait]
 impl Authenticator<DefaultUser> for RestAuthenticator {
     #[tracing_attributes::instrument]
@@ -223,15 +238,15 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
 
         let username = serde_json::to_string(username)
             .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
-            .trim_matches('"')
+            .trim_quotes()
             .to_string();
         let password = serde_json::to_string(password)
             .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
-            .trim_matches('"')
+            .trim_quotes()
             .to_string();
         let source_ip = serde_json::to_string(&source_ip)
             .map_err(|e| AuthenticationError::ImplPropagated(e.to_string(), None))?
-            .trim_matches('"')
+            .trim_quotes()
             .to_string();
 
         let body = self.fill_encoded_placeholders(&self.body, &username, &password, &source_ip);
