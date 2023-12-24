@@ -85,8 +85,8 @@ impl Builder {
     ///   .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string());
     /// ```
     ///
-    /// In the example above, `"{USER}"` within the body template is replaced with the actual FTP username during request
-    /// preparation. If the placeholder configuration is not set, any `"{USER}"` text would stay unreplaced in the request.
+    /// In the example above, `{USER}` within the body template is replaced with the actual FTP username during request
+    /// preparation. If the placeholder configuration is not set, any `{USER}` text would stay unreplaced in the request.
     pub fn with_username_placeholder(mut self, s: String) -> Self {
         self.username_placeholder = s;
         self
@@ -111,8 +111,8 @@ impl Builder {
     ///   .with_body(r#"{"username":"{USER}","password":"{PASS}"}"#.to_string());
     /// ```
     ///
-    /// In the example above, "{PASS}" within the body template is replaced with the actual FTP password during request
-    /// preparation. If the placeholder configuration is not set, any "{PASS}" text would stay unreplaced in the request.
+    /// In the example above, `{PASS}` within the body template is replaced with the actual FTP password during request
+    /// preparation. If the placeholder configuration is not set, any `{PASS}` text would stay unreplaced in the request.
     pub fn with_password_placeholder(mut self, s: String) -> Self {
         self.password_placeholder = s;
         self
@@ -137,8 +137,8 @@ impl Builder {
     ///   .with_body(r#"{"username":"{USER}","password":"{PASS}", "source_ip":"{IP}"}"#.to_string());
     /// ```
     ///
-    /// In the example above, "{IP}" within the body template is replaced with the actual source IP of the FTP client
-    /// during request preparation. If the placeholder configuration is not set, any "{IP}" text would stay unreplaced
+    /// In the example above, `{IP}` within the body template is replaced with the actual source IP of the FTP client
+    /// during request preparation. If the placeholder configuration is not set, any `{IP}` text would stay unreplaced
     /// in the request.
     pub fn with_source_ip_placeholder(mut self, s: String) -> Self {
         self.source_ip_placeholder = s;
