@@ -1,8 +1,23 @@
 # Changelog
 
-### upcoming
+### libunftp 0.19.1
+
+_tag: libunftp-0.19.1_
+
+- Upgraded dependencies
+
+### unftp-auth-rest v0.2.4
 
 - [#492](https://github.com/bolcom/libunftp/pull/492) Added source IP parameter support
+- compiled against libunftp v0.19.1
+
+### unftp-auth-jsonfile v0.3.3, unftp-auth-pam v0.2.4
+
+- compiled against libunftp v0.19.1
+
+### unftp-sbe-fs v0.2.4, unftp-auth-pam v0.2.5
+
+- compiled against libunftp v0.19.1
 
 ### libunftp 0.19.0
 

@@ -1,7 +1,7 @@
 [package]
 name = "unftp-sbe-gcs"
 description = "A storage back-end for libunftp, storing files in Google Cloud Storage (GCS)"
-version = "0.2.4"
+version = "0.2.5"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -18,25 +18,25 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gc
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.73"
-base64 = "0.21.4"
+async-trait = "0.1.75"
+base64 = "0.21.5"
 bytes = "1.5.0"
 chrono = { version = "0.4.31", default-features = false, features = ["std", "serde"] }
-futures = { version = "0.3.28", default-features = false, features = ["std"] }
-hyper = { version = "0.14.27", features = ["client", "runtime", "stream", "http1"] }
-hyper-rustls = "0.24.1"
-libunftp = { version="0.19.0", path="../../"}
+futures = { version = "0.3.29", default-features = false, features = ["std"] }
+hyper = { version = "0.14.28", features = ["client", "runtime", "stream", "http1"] }
+hyper-rustls = "0.24.2"
+libunftp = { version="0.19.1", path="../../"}
 mime = "0.3.17"
-percent-encoding = "2.3.0"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.107"
-time = "0.3.28"
-tokio = { version = "1.32.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+percent-encoding = "2.3.1"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+time = "0.3.31"
+tokio = { version = "1.35.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.14"
-tokio-util = { version = "0.7.8", features = ["codec", "compat"] }
-tracing = { version = "0.1.37", default-features = false }
-tracing-attributes = "0.1.26"
-yup-oauth2 = "8.3.0"
+tokio-util = { version = "0.7.10", features = ["codec", "compat"] }
+tracing = { version = "0.1.40", default-features = false }
+tracing-attributes = "0.1.27"
+yup-oauth2 = "8.3.1"
 
 [dev-dependencies]
 async_ftp = "6.0.0"
@@ -50,6 +50,6 @@ slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_in
 slog-async = "2.8.0"
 slog-stdlog = "4.1.1"
 slog-term = "2.9.0"
-tempfile = "3.8.0"
-tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
-tracing-subscriber = "0.3.17"
+tempfile = "3.8.1"
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = "0.3.18"
