@@ -12,7 +12,7 @@ use crate::{
         ftpserver::chosen::OptionsHolder,
         proxy_protocol::{spawn_proxy_header_parsing, ProxyConnection, ProxyProtocolSwitchboard},
         session::SharedSession,
-        ControlChanMsg, Reply,
+        ControlChanMsg, Reply, ReplyCode,
     },
     storage::StorageBackend,
     ServerError,
@@ -77,15 +77,15 @@ where
                                 slog::info!(self.logger, "Incoming control connection: {:?} ({:?})(control port: {:?})", connection, socket_addr, self.external_control_port);
                                 let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
                                 let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(proxyloop_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
-                                if result.is_err() {
-                                    slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", result.err().unwrap())
+                                if let Err(e) = result {
+                                    slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", e);
                                 }
                             } else {
                                 // handle incoming data connections
                                 slog::info!(self.logger, "Incoming data connection: {:?} ({:?}) (range: {:?})", connection, socket_addr, self.options.passive_ports);
                                 if !self.options.passive_ports.contains(&destination_port) {
                                     slog::warn!(self.logger, "Incoming proxy connection going to unconfigured port! This port is not configured as a passive listening port: port {} not in passive port range {:?}", destination_port, self.options.passive_ports);
-                                    tcp_stream.shutdown().await.unwrap();
+                                    tcp_stream.shutdown().await?;
                                     continue;
                                 }
                                 self.dispatch_data_connection(tcp_stream, connection).await;
@@ -123,7 +123,9 @@ where
                 }
                 None => {
                     slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
-                    tcp_stream.shutdown().await.unwrap();
+                    if let Err(e) = tcp_stream.shutdown().await {
+                        slog::error!(self.logger, "Error during tcp_stream shutdown: {:?}", e);
+                    }
                 }
             }
         }
@@ -136,12 +138,11 @@ where
         // 3. put expiry time in the LIFO list
         // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})"
 
-        let mut reserved_port: u16 = 0;
-        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-            let port = switchboard.reserve_next_free_port(session_arc.clone()).await.unwrap();
-            slog::info!(self.logger, "Reserving data port: {:?}", port);
-            reserved_port = port
-        }
+        let port = match &mut self.proxy_protocol_switchboard {
+            Some(switchboard) => switchboard.reserve_next_free_port(session_arc.clone()).await,
+            None => panic!("Proxy protocol switchboard unavailable. This should not happen."),
+        };
+
         let session = session_arc.lock().await;
         if let Some(proxy_connection) = session.proxy_control {
             let destination_ip = match proxy_connection.destination.ip() {
@@ -149,13 +150,21 @@ where
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply: Reply =
-                super::controlchan::commands::make_pasv_reply(&self.logger, self.options.passive_host.clone(), &destination_ip, reserved_port).await;
+            let reply = match port {
+                Ok(port) => super::controlchan::commands::make_pasv_reply(&self.logger, self.options.passive_host.clone(), &destination_ip, port).await,
+                Err(_) => Reply::new_with_string(ReplyCode::CantOpenDataConnection, "Local error".to_string()),
+            };
 
             let tx_some = session.control_msg_tx.clone();
             if let Some(tx) = tx_some {
                 let tx = tx.clone();
-                tx.send(ControlChanMsg::CommandChannelReply(reply)).await.unwrap();
+                if let Err(err) = tx.send(ControlChanMsg::CommandChannelReply(reply)).await {
+                    slog::warn!(
+                        self.logger,
+                        "PASV (listen_proxied): Could not send internal message to reply to the client: {}",
+                        err
+                    );
+                }
             }
         }
     }

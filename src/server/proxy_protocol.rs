@@ -270,8 +270,10 @@ where
                     Ok(_) => {
                         // Remove and disassociate existing passive channels
                         if let Some(active_datachan_hash) = &session.proxy_active_datachan {
-                            slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_hash);
-                            self.unregister_hash(active_datachan_hash);
+                            if active_datachan_hash != &hash {
+                                slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_hash);
+                                self.unregister_hash(active_datachan_hash);
+                            }
                         }
 
                         // Associate the new port to the session,
