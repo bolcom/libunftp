@@ -108,7 +108,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<Self::Metadata> {
-        let path = path.as_ref().to_owned();
+        let path = strip_prefixes(path.as_ref());
         let fs_meta = cap_fs::symlink_metadata(self.root_fd.clone(), &path)
             .await
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
@@ -140,7 +140,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     //#[tracing_attributes::instrument]
     async fn get<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
-        let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
+        let path = strip_prefixes(path.as_ref());
         let file = cap_fs::open(self.root_fd.clone(), path).await?;
         let mut file = tokio::fs::File::from_std(file.into_std());
         if start_pos > 0 {
@@ -159,7 +159,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     ) -> Result<u64> {
         // TODO: Add permission checks
 
-        let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
+        let path = strip_prefixes(path.as_ref());
         let mut oo = cap_std::fs::OpenOptions::new();
         oo.write(true).create(true);
         let file = cap_fs::open_with(self.root_fd.clone(), path, oo).await?;
@@ -176,7 +176,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
-        let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
+        let path = strip_prefixes(path.as_ref());
         cap_fs::remove_file(self.root_fd.clone(), path)
             .await
             .map_err(|error: std::io::Error| error.into())
@@ -184,7 +184,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
-        let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
+        let path = strip_prefixes(path.as_ref());
         cap_fs::remove_dir(self.root_fd.clone(), path)
             .await
             .map_err(|error: std::io::Error| error.into())
@@ -192,7 +192,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     #[tracing_attributes::instrument]
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
-        let path = path.as_ref().strip_prefix("/").unwrap_or(path.as_ref());
+        let path = strip_prefixes(path.as_ref());
         cap_fs::create_dir(self.root_fd.clone(), path)
             .await
             .map_err(|error: std::io::Error| error.into())
