@@ -41,6 +41,7 @@ use tokio::{
         mpsc::{channel, Receiver, Sender},
         Mutex,
     },
+    task::JoinHandle,
 };
 use tokio_util::codec::{Decoder, Framed};
 
@@ -81,7 +82,7 @@ pub(crate) async fn spawn<Storage, User>(
     proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
     failed_logins: Option<Arc<FailedLoginsCache>>,
-) -> Result<(), ControlChanError>
+) -> Result<JoinHandle<()>, ControlChanError>
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -182,7 +183,7 @@ where
     reply_sink.send(Reply::new(ReplyCode::ServiceReady, config.greeting)).await?;
     reply_sink.flush().await?;
 
-    tokio::spawn(async move {
+    let jh = tokio::spawn(async move {
         // The control channel event loop
         slog::info!(logger, "Starting control loop");
         loop {
@@ -297,7 +298,7 @@ where
         }
     });
 
-    Ok(())
+    Ok(jh)
 }
 
 // gets the reply to be sent to the client and tells if the connection should be closed.

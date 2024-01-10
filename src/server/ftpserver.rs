@@ -756,10 +756,15 @@ where
         let shutdown_listener = shutdown_notifier.subscribe().await;
         slog::debug!(self.logger, "Servicing control connection from");
         let result = controlchan::spawn_loop::<Storage, User>((&options).into(), tcp_stream, None, None, shutdown_listener, failed_logins.clone()).await;
-        if let Err(err) = result {
-            slog::error!(self.logger, "Could not spawn control channel loop: {:?}", err);
-        } else {
-            shutdown_notifier.linger().await;
+        match result {
+            Err(err) => {
+                slog::error!(self.logger, "Could not spawn control channel loop: {:?}", err);
+            }
+            Ok(jh) => {
+                if let Err(e) = jh.await {
+                    slog::error!(self.logger, "Control loop failed to complete: {:?}", e);
+                }
+            }
         }
         Ok(())
     }
