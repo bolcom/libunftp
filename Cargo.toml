@@ -40,6 +40,7 @@ getrandom = "0.2.11"
 lazy_static = "1.4.0"
 md-5 = "0.10.6"
 moka = { version = "0.11.3", default-features = false, features = ["sync"] }
+nix = { version = "0.26.2", default-features = false, features = ["fs"] }
 prometheus = { version = "0.13.3", default-features = false }
 proxy-protocol = "0.5.0"
 rustls = "0.21.10"
@@ -47,7 +48,7 @@ rustls-pemfile = "1.0.4"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.1"
 thiserror = "1.0.51"
-tokio = { version = "1.35.1", features = ["macros", "rt", "net", "sync", "io-util", "time"] }
+tokio = { version = "1.35.1", features = ["macros", "rt", "net", "process", "sync", "io-util", "time"] }
 tokio-rustls = "0.24.1"
 tokio-util = { version = "0.7.10", features = ["codec"] }
 tracing = { version = "0.1.40", default-features = false }
@@ -61,3 +62,8 @@ libc = "0.2"
 pretty_assertions = "1.4.0"
 tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
 unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs"}
+
+
+[patch.crates-io]
+capsicum = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
+casper-sys = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}

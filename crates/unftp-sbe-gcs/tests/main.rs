@@ -1,6 +1,6 @@
 use async_ftp::FtpStream;
 use lazy_static::*;
-use libunftp::Server;
+use libunftp::ServerBuilder;
 use unftp_sbe_gcs::CloudStorage;
 
 use more_asserts::assert_ge;
@@ -279,10 +279,13 @@ async fn run_test(test: impl Future<Output = ()>) {
     let drain = slog_async::Async::new(drain).build().fuse();
 
     tokio::spawn(
-        Server::new(Box::new(move || {
+        ServerBuilder::new(Box::new(move || {
             CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/"), AuthMethod::None)
         }))
         .logger(Some(Logger::root(drain, o!())))
+        .build()
+        .await
+        .unwrap()
         .listen(ADDR),
     );
 

@@ -1,6 +1,6 @@
 use crate::Filesystem;
 use libunftp::auth::DefaultUser;
-use libunftp::Server;
+use libunftp::{Server, ServerBuilder};
 use std::path::PathBuf;
 
 /// Extension trait purely for construction convenience.
@@ -15,9 +15,9 @@ pub trait ServerExt {
     ///
     /// let server = Server::with_fs("/srv/ftp");
     /// ```
-    fn with_fs<P: Into<PathBuf> + Send + 'static>(path: P) -> Server<Filesystem, DefaultUser> {
+    fn with_fs<P: Into<PathBuf> + Send + 'static>(path: P) -> ServerBuilder<Filesystem, DefaultUser> {
         let p = path.into();
-        libunftp::Server::new(Box::new(move || {
+        libunftp::ServerBuilder::new(Box::new(move || {
             let p = &p.clone();
             Filesystem::new(p)
         }))

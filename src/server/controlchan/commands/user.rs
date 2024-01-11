@@ -54,10 +54,25 @@ where
                 match auth_result {
                     Ok(user_detail) => {
                         let user = username_str;
-                        session.username = Some(user.to_string());
-                        session.state = SessionState::WaitCmd;
-                        session.user = Arc::new(Some(user_detail));
-                        Ok(Reply::new(ReplyCode::UserLoggedInViaCert, "User logged in"))
+                        // Using Arc::get_mut means that this won't work if the Session is
+                        // currently servicing multiple commands concurrently.  But it shouldn't
+                        // ever be servicing USER at the same time as another command.
+                        match Arc::get_mut(&mut session.storage).map(|s| s.enter(&user_detail)) {
+                            Some(Err(e)) => {
+                                slog::error!(args.logger, "{}", e);
+                                Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials"))
+                            }
+                            None => {
+                                slog::error!(args.logger, "Failed to lock Session::storage during USER.");
+                                Ok(Reply::new(ReplyCode::NotLoggedIn, "Temporarily unavailable"))
+                            }
+                            Some(Ok(())) => {
+                                session.username = Some(user.to_string());
+                                session.state = SessionState::WaitCmd;
+                                session.user = Arc::new(Some(user_detail));
+                                Ok(Reply::new(ReplyCode::UserLoggedInViaCert, "User logged in"))
+                            }
+                        }
                     }
                     Err(_e) => Ok(Reply::new(ReplyCode::NotLoggedIn, "Invalid credentials")),
                 }

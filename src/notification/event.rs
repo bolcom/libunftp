@@ -70,7 +70,7 @@ pub struct EventMeta {
 }
 
 /// An listener for [`DataEvent`](crate::notification::DataEvent)s. Implementations can
-/// be passed to [`Server::notify_data`](crate::Server::notify_data)
+/// be passed to [`ServerBuilder::notify_data`](crate::ServerBuilder::notify_data)
 /// in order to receive notifications.
 #[async_trait]
 pub trait DataListener: Sync + Send + Debug {
@@ -79,8 +79,8 @@ pub trait DataListener: Sync + Send + Debug {
     async fn receive_data_event(&self, e: DataEvent, m: EventMeta);
 }
 
-/// An listener for [`PresenceEvent`](crate::notification::PresenceEvent)s. Implementations can
-/// be passed to [`Server::notify_presence`](crate::Server::notify_presence)
+/// A listener for [`PresenceEvent`](crate::notification::PresenceEvent)s. Implementations can
+/// be passed to [`ServerBuilder::notify_presence`](crate::ServerBuilder::notify_presence)
 /// in order to receive notifications.
 #[async_trait]
 pub trait PresenceListener: Sync + Send + Debug {

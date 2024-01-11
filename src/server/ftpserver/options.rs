@@ -1,13 +1,16 @@
-//! Contains code pertaining to the setup options that can be given to the [`Server`](crate::Server)
+//! Contains code pertaining to the setup options that can be given to the [`ServerBuilder`](crate::ServerBuilder)
 
+use async_trait::async_trait;
 use bitflags::bitflags;
 use std::time::Duration;
 use std::{
     fmt::Formatter,
     fmt::{self, Debug, Display},
+    io,
     net::{IpAddr, Ipv4Addr},
     ops::Range,
 };
+use tokio::net::TcpSocket;
 
 // Once we're sure about the types of these I think its good to expose it to the API user so that
 // he/she can see what our server defaults are.
@@ -18,7 +21,15 @@ pub(crate) const DEFAULT_PASSIVE_PORTS: Range<u16> = 49152..65535;
 pub(crate) const DEFAULT_FTPS_REQUIRE: FtpsRequired = FtpsRequired::None;
 pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 
-/// The option to [Server.passive_host](crate::Server::passive_host). It allows the user to specify how the IP address
+/// A helper trait to customize how the server binds to ports
+#[async_trait]
+pub trait Binder: Debug + Send {
+    /// Create a [`tokio::net::TcpSocket`] and bind it to the given address, with a port in the
+    /// given range.
+    async fn bind(&mut self, local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket>;
+}
+
+/// The option to [ServerBuilder::passive_host](crate::ServerBuilder::passive_host). It allows the user to specify how the IP address
 /// communicated in the _PASV_ response is determined.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum PassiveHost {
@@ -57,7 +68,7 @@ impl From<&str> for PassiveHost {
     }
 }
 
-/// The option to [Server.ftps_required](crate::Server::ftps_required). It allows the user to specify whether clients are required
+/// The option to [ServerBuilder::ftps_required](crate::ServerBuilder::ftps_required). It allows the user to specify whether clients are required
 /// to upgrade a to secure TLS connection i.e. use FTPS.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FtpsRequired {
@@ -119,7 +130,7 @@ impl Default for TlsFlags {
     }
 }
 
-/// The option to [Server.ftps_client_auth](crate::Server::ftps_client_auth). Tells if and how mutual TLS (client certificate
+/// The option to [ServerBuilder::ftps_client_auth](crate::ServerBuilder::ftps_client_auth). Tells if and how mutual TLS (client certificate
 /// authentication) should be handled.
 #[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub enum FtpsClientAuth {
@@ -129,11 +140,11 @@ pub enum FtpsClientAuth {
     Off,
     /// Mutual TLS is on and whilst the server will request a certificate it will still proceed
     /// without one. If a certificate is sent by the client it will be validated against the
-    /// configured trust anchors (see [Server::ftps_trust_store](crate::Server::ftps_trust_store)).
+    /// configured trust anchors (see [ServerBuilder::ftps_trust_store](crate::ServerBuilder::ftps_trust_store)).
     Request,
     /// Mutual TLS is on, the server will request a certificate and it won't proceed without a
     /// client certificate that validates against the configured trust anchors (see
-    /// [Server::ftps_trust_store](crate::Server::ftps_trust_store)).
+    /// [ServerBuilder::ftps_trust_store](crate::ServerBuilder::ftps_trust_store)).
     Require,
 }
 
@@ -148,7 +159,7 @@ impl From<bool> for FtpsClientAuth {
     }
 }
 
-/// The options for [Server.sitemd5](crate::Server::sitemd5).
+/// The options for [ServerBuilder::sitemd5](crate::ServerBuilder::sitemd5).
 /// Allow MD5 either to be used by all, logged in users only or no one.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum SiteMd5 {
@@ -162,7 +173,8 @@ pub enum SiteMd5 {
 }
 
 /// Tells how graceful shutdown should happen. An instance of this struct should be returned from
-/// the future passed to [Server.shutdown_indicator](crate::Server::shutdown_indicator).
+/// the future passed to
+/// [ServerBuilder::shutdown_indicator](crate::ServerBuilder::shutdown_indicator).
 pub struct Shutdown {
     pub(crate) grace_period: Duration,
     //pub(crate) handle_new_connections: bool,
@@ -242,8 +254,9 @@ impl Default for FailedLoginsPolicy {
     }
 }
 
-/// The options for [Server.active_passive_mode](crate::Server::active_passive_mode).
-/// This allows to switch active / passive mode on or off.
+/// The options for
+/// [ServerBuilder::active_passive_mode](crate::ServerBuilder::active_passive_mode).  This allows
+/// to switch active / passive mode on or off.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum ActivePassiveMode {
     /// Only passive mode is enabled

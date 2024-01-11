@@ -1,10 +1,10 @@
 use std::env;
 use std::sync::Arc;
-use tokio::runtime::Builder as TokioBuilder;
 use unftp_auth_rest::{Builder, RestAuthenticator};
 use unftp_sbe_fs::ServerExt;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main(flavor = "current_thread")]
+pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
     let _args: Vec<String> = env::args().collect();
@@ -21,10 +21,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let addr = "127.0.0.1:2121";
-    let server = libunftp::Server::with_fs(std::env::temp_dir()).authenticator(Arc::new(authenticator));
+    let server = libunftp::Server::with_fs(std::env::temp_dir())
+        .authenticator(Arc::new(authenticator))
+        .build()
+        .await
+        .unwrap();
 
     println!("Starting ftp server on {}", addr);
-    let runtime = TokioBuilder::new_current_thread().enable_io().enable_time().build()?;
-    runtime.block_on(server.listen(addr))?;
+    server.listen(addr).await?;
     Ok(())
 }

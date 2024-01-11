@@ -1,4 +1,7 @@
-use std::fmt::{self, Debug, Display, Formatter};
+use std::{
+    fmt::{self, Debug, Display, Formatter},
+    path::Path,
+};
 
 /// UserDetail defines the requirements for implementations that hold _Security Subject_
 /// information for use by the server.
@@ -15,6 +18,14 @@ pub trait UserDetail: Send + Sync + Display + Debug {
     /// Tells if this subject's account is enabled. This default implementation simply returns true.
     fn account_enabled(&self) -> bool {
         true
+    }
+
+    /// Returns the user's home directory, if any.  If the user has a home directory, then their
+    /// sessions will be restricted to this directory.
+    ///
+    /// The path should be absolute.
+    fn home(&self) -> Option<&Path> {
+        None
     }
 }
 

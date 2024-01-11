@@ -7,6 +7,13 @@ use std::io::Write;
 use tokio::runtime::Runtime;
 
 #[test]
+fn fs_strip_prefixes() {
+    assert_eq!(strip_prefixes(Path::new("foo/bar")), Path::new("foo/bar"));
+    assert_eq!(strip_prefixes(Path::new("/foo/bar")), Path::new("foo/bar"));
+    assert_eq!(strip_prefixes(Path::new("/")), Path::new("."));
+}
+
+#[test]
 fn fs_stat() {
     let root = std::env::temp_dir();
 

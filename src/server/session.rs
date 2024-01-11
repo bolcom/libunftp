@@ -113,6 +113,8 @@ where
     pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
     // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
+    // An optional functor that can bind a socket
+    pub binder: Option<Box<dyn crate::options::Binder>>,
 }
 
 impl<Storage, User> Session<Storage, User>
@@ -146,6 +148,7 @@ where
             data_busy: false,
             cert_chain: None,
             failed_logins: None,
+            binder: None,
         }
     }
 
@@ -159,6 +162,11 @@ where
             metrics::inc_session();
         }
         self.collect_metrics = collect_metrics;
+        self
+    }
+
+    pub fn binder(mut self, binder: Box<dyn crate::options::Binder>) -> Self {
+        self.binder = Some(binder);
         self
     }
 
