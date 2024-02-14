@@ -19,33 +19,33 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-fs
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.75"
+async-trait = "0.1.77"
 cfg-if = "1.0"
 cap-std = "2.0"
-futures = { version = "0.3.29", default-features = false, features = ["std"] }
+futures = { version = "0.3.30", default-features = false, features = ["std"] }
 lazy_static = "1.4.0"
 libunftp = { version="0.19.1", path="../../"}
 path_abs = "0.5.1"
-tokio = { version = "1.35.1", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio = { version = "1.36.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.14"
 tracing = { version = "0.1.40", default-features = false }
 tracing-attributes = "0.1.27"
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-async-trait = "0.1.73"
+async-trait = "0.1.77"
 more-asserts = "0.3.1"
 pretty_assertions = "1.4.0"
 pretty_env_logger = "0.5.0"
 rstest = "0.18.2"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.107"
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
 slog-async = "2.8.0"
 slog-term = "2.9.0"
-tempfile = "3.8.1"
-tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3.10.0"
+tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.18"
-getrandom = "0.2.11"
+getrandom = "0.2.12"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = { version = "0.3.0", features = ["casper"] }
