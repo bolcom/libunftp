@@ -1,5 +1,10 @@
 # Changelog
 
+### Upcoming
+
+- Compile against Rust 1.76.0
+- Upgraded dependencies
+
 ### libunftp 0.19.1
 
 _tag: libunftp-0.19.1_

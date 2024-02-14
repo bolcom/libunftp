@@ -157,7 +157,7 @@ use ring::{
 };
 use serde::Deserialize;
 use std::io::prelude::*;
-use std::{collections::HashMap, convert::TryInto, fs, num::NonZeroU32, path::Path, time::Duration};
+use std::{collections::HashMap, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
 use valid::{constraint::Length, Validate};
 
@@ -283,18 +283,15 @@ impl JsonFileAuthenticator {
                         pbkdf2_salt: base64::engine::general_purpose::STANDARD
                             .decode(pbkdf2_salt)
                             .map_err(|_| "Could not base64 decode the salt")?
-                            .try_into()
-                            .map_err(|_| "Could not convert String to Bytes")?,
-                        pbkdf2_key: base64::engine::general_purpose::STANDARD.decode(pbkdf2_key)
+                            .into(),
+                        pbkdf2_key: base64::engine::general_purpose::STANDARD
+                            .decode(pbkdf2_key)
                             .map_err(|_| "Could not decode base64")?
                             .validate("pbkdf2_key", &Length::Max(SHA256_OUTPUT_LEN))
                             .result()
-                            .map_err(|_| {
-                                format!("Key of user \"{}\" is too long", username)
-                            })?
-                            .unwrap() // this unwrap is just giving the value within
-                            .try_into()
-                            .map_err(|_| "Could not convert to Bytes")?,
+                            .map_err(|_| format!("Key of user \"{}\" is too long", username))?
+                            .unwrap() // Safe to use given Validated's API
+                            .into(),
                         pbkdf2_iter,
                     },
                     client_cert,
