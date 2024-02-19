@@ -1,7 +1,9 @@
+//! Showing how to use proxy protocol mode.
+
 use unftp_sbe_fs::ServerExt;
 
 #[tokio::main]
-pub async fn main() {
+async fn main() {
     pretty_env_logger::init();
 
     let addr = "127.0.0.1:2121";

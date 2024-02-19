@@ -1,10 +1,12 @@
+//! Shows how to use the REST authenticator
+
 use std::env;
 use std::sync::Arc;
 use unftp_auth_rest::{Builder, RestAuthenticator};
 use unftp_sbe_fs::ServerExt;
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
     let _args: Vec<String> = env::args().collect();

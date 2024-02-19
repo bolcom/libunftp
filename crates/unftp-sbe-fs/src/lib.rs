@@ -56,6 +56,7 @@ pub struct Filesystem {
     root: PathBuf,
 }
 
+/// Metadata for the storage back-end
 #[derive(Debug)]
 pub struct Meta {
     inner: cap_std::fs::Metadata,

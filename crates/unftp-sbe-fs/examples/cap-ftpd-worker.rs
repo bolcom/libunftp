@@ -1,18 +1,16 @@
 //! A libexec helper for cap-std.  It takes an int as $1 which is interpreted as
 //! a file descriptor for an already-connected an authenticated control socket.
 //! Do not invoke this program directly.  Rather, invoke it by examples/cap-ftpd
+#![allow(unsafe_code)]
+use cfg_if::cfg_if;
+use libunftp::Server;
 use std::{
     env,
     os::fd::{FromRawFd, RawFd},
     process::exit,
     sync::{Arc, Mutex},
 };
-
-use cfg_if::cfg_if;
-
 use tokio::net::TcpStream;
-
-use libunftp::Server;
 use unftp_sbe_fs::Filesystem;
 
 mod auth {

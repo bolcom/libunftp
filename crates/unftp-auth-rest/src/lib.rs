@@ -1,7 +1,3 @@
-#![deny(clippy::all)]
-#![deny(missing_docs)]
-#![forbid(unsafe_code)]
-
 //! This crate provides a [libunftp](https://crates.io/crates/libunftp) `Authenticator`
 //! implementation that authenticates by consuming a JSON REST API.
 //!

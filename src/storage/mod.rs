@@ -163,7 +163,6 @@
 //! ```
 //!
 //! [`Server`]: ../struct.Server.html
-#![deny(missing_docs)]
 
 pub(crate) mod error;
 pub use error::{Error, ErrorKind};

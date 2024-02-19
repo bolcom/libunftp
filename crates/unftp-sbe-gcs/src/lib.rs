@@ -1,6 +1,3 @@
-#![deny(clippy::all)]
-#![deny(missing_docs)]
-#![forbid(unsafe_code)]
 #![allow(clippy::unnecessary_wraps)]
 
 //! An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files
