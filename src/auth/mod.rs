@@ -1,5 +1,3 @@
-#![deny(missing_docs)]
-
 //! Contains the [`Authenticator`] and [`UserDetail`]
 //! traits that are used to extend libunftp's authentication and user detail storage capabilities.
 //!

@@ -1,6 +1,3 @@
-#![deny(clippy::all)]
-#![deny(missing_docs)]
-#![forbid(unsafe_code)]
 #![doc(html_root_url = "https://docs.rs/libunftp/0.19.1")]
 
 //! libunftp is an extensible, async, cloud orientated FTP(S) server library.

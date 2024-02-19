@@ -29,6 +29,13 @@ members = [
     "crates/unftp-sbe-gcs"
 ]
 
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+
 [dependencies]
 async-trait = "0.1.77"
 bitflags = "2.4.2"
@@ -63,7 +70,9 @@ pretty_assertions = "1.4.0"
 tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread"] }
 unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs"}
 
-
 [patch.crates-io]
 capsicum = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
 casper-sys = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
+
+[lints]
+workspace=true

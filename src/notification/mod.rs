@@ -1,4 +1,3 @@
-#![deny(missing_docs)]
 //!
 //! Allows users to listen to events emitted by libunftp.
 //!

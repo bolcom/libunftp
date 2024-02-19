@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::Path, str::FromStr};
 use unftp_sbe_fs::ServerExt;
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn main() {
+async fn main() {
     let addr = "127.0.0.1:2121";
 
     let args: Vec<String> = std::env::args().collect();

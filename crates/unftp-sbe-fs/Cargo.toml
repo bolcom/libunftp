@@ -51,3 +51,5 @@ getrandom = "0.2.12"
 capsicum = { version = "0.3.0", features = ["casper"] }
 capsicum-net = { version = "0.1.0", features = ["tokio"], git = "https://github.com/asomers/capsicum-net", rev = "c6fc574" }
 
+[lints]
+workspace = true
