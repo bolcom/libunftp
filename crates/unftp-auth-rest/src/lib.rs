@@ -279,19 +279,14 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
 }
 
 /// Possible errors while doing REST lookup
+#[allow(missing_docs)] // TODO: fill in these docs
 #[derive(Debug)]
 pub enum RestError {
-    ///
     InvalidUri(InvalidUri),
-    ///
     HttpStatusError(u16),
-    ///
     HyperError(hyper::Error),
-    ///
     HttpError(String),
-    ///
     JsonDeserializationError(serde_json::Error),
-    ///
     JsonSerializationError(serde_json::Error),
 }
 
