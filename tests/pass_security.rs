@@ -2,7 +2,7 @@ pub mod common;
 use std::io::Error;
 use tokio::net::TcpStream;
 
-async fn read_from_server<'a>(buffer: &'a mut Vec<u8>, stream: &TcpStream) -> &'a str {
+async fn read_from_server<'a>(buffer: &'a mut [u8], stream: &TcpStream) -> &'a str {
     loop {
         stream.readable().await.unwrap();
         let n = match stream.try_read(buffer) {
