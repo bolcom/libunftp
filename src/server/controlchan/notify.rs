@@ -53,7 +53,7 @@ where
         let events = if let Event::InternalMsg(msg) = &event {
             let presence_event = match msg {
                 ControlChanMsg::AuthSuccess { username, trace_id } => {
-                    self.username = username.clone();
+                    self.username.clone_from(username);
                     self.trace_id = *trace_id;
                     Some(notification::PresenceEvent::LoggedIn)
                 }
