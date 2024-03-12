@@ -3,7 +3,6 @@ use libunftp::auth::DefaultUser;
 use pretty_assertions::assert_eq;
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::Write;
 use tokio::runtime::Runtime;
 
 #[test]

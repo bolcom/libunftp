@@ -18,7 +18,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{string::String, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]

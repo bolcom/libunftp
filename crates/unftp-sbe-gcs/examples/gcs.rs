@@ -1,5 +1,5 @@
 use clap::{Arg, Command};
-use std::{error::Error, path::PathBuf, result::Result};
+use std::{error::Error, path::PathBuf};
 use tracing::Level;
 
 // To run this example with the local fake GCS (see tests/resources/gcs_test.sh) instead of Google GCS,

@@ -1,7 +1,7 @@
 //! Contains code pertaining to initialization options for the [`Cloud Storage Backend`](super::CloudStorage)
 
 use core::fmt;
-use std::{convert::TryFrom, path::PathBuf};
+use std::path::PathBuf;
 use yup_oauth2::ServiceAccountKey;
 
 /// Used with [`CloudStorage::new`](super::CloudStorage::new()) to specify how the storage back-end

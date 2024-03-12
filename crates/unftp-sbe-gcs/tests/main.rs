@@ -6,7 +6,6 @@ use unftp_sbe_gcs::CloudStorage;
 use more_asserts::assert_ge;
 use path_abs::PathInfo;
 use pretty_assertions::assert_eq;
-use slog::Drain;
 use slog::*;
 use std::{
     io::{Cursor, Read},
