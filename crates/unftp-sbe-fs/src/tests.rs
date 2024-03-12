@@ -248,7 +248,7 @@ fn fs_md5() {
 
     // Create a filesystem StorageBackend with the directory containing our temp file as root
     let fs = Filesystem::new(&root);
-    file.write(DATA.as_bytes()).unwrap();
+    file.write_all(DATA.as_bytes()).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
