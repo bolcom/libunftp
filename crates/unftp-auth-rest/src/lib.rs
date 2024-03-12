@@ -8,7 +8,6 @@ use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUse
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{json, Value};
-use std::string::String;
 
 /// A [libunftp](https://crates.io/crates/libunftp) `Authenticator`
 /// implementation that authenticates by consuming a JSON REST API.

@@ -8,7 +8,6 @@ use chrono::{
     prelude::{DateTime, Utc},
     Datelike,
 };
-use libc;
 use md5::{Digest, Md5};
 use std::{
     fmt::{self, Debug, Formatter, Write},

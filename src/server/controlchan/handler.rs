@@ -10,7 +10,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{ops::Range, result::Result, sync::Arc};
+use std::{ops::Range, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
 // Common interface for all handlers of `Commands`

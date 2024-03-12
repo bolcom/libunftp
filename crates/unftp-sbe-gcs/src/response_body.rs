@@ -4,9 +4,9 @@ use chrono::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{de, Deserialize};
 use std::fmt::{Display, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::SystemTime;
-use std::{iter::Extend, path::PathBuf};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct ResponseBody {
@@ -143,7 +143,6 @@ impl Item {
 mod test {
     use super::*;
     use libunftp::storage::Metadata;
-    use std::time::SystemTime;
 
     #[test]
     fn to_metadata() {
