@@ -11,11 +11,6 @@ pub trait ControlChanMiddleware: Send + Sync {
     // Handles the specified `Event` and returns a `Reply` for the user or a `ControlChanError` if
     // some unexpected error occurred.
     async fn handle(&mut self, e: Event) -> Result<Reply, ControlChanError>;
-
-    // Returns a name for the middleware
-    fn name(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
 }
 
 // Allows plain functions to be middleware. Experimental...

@@ -22,11 +22,6 @@ where
     User: UserDetail,
 {
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError>;
-
-    // Returns the name of the command handler
-    fn name(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
 }
 
 /// Represents arguments passed to a `CommandHandler`
