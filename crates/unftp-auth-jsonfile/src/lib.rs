@@ -500,21 +500,18 @@ mod test {
         );
         assert_eq!(json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap(), DefaultUser);
         assert_eq!(json_authenticator.authenticate("dan", &"".into()).await.unwrap(), DefaultUser);
-        let mut is_err = match json_authenticator.authenticate("carol", &"this is the wrong password".into()).await {
-            Err(AuthenticationError::BadPassword) => true,
-            _ => false,
-        };
-        assert!(is_err);
-        is_err = match json_authenticator.authenticate("bella", &"this is the wrong password".into()).await {
-            Err(AuthenticationError::BadPassword) => true,
-            _ => false,
-        };
-        assert!(is_err);
-        is_err = match json_authenticator.authenticate("chuck", &"12345678".into()).await {
-            Err(AuthenticationError::BadUser) => true,
-            _ => false,
-        };
-        assert!(is_err);
+        assert!(matches!(
+            json_authenticator.authenticate("carol", &"this is the wrong password".into()).await,
+            Err(AuthenticationError::BadPassword)
+        ));
+        assert!(matches!(
+            json_authenticator.authenticate("bella", &"this is the wrong password".into()).await,
+            Err(AuthenticationError::BadPassword)
+        ));
+        assert!(matches!(
+            json_authenticator.authenticate("chuck", &"12345678".into()).await,
+            Err(AuthenticationError::BadUser)
+        ));
 
         assert_eq!(
             json_authenticator
@@ -542,8 +539,8 @@ mod test {
             )
             .await
         {
-            Err(AuthenticationError::IpDisallowed) => assert!(true),
-            _ => assert!(false),
+            Err(AuthenticationError::IpDisallowed) => (),
+            _ => panic!(),
         }
     }
 
@@ -702,8 +699,8 @@ mod test {
             )
             .await
         {
-            Err(AuthenticationError::CnDisallowed) => assert!(true),
-            _ => assert!(false),
+            Err(AuthenticationError::CnDisallowed) => (),
+            _ => panic!(),
         }
 
         // correct certificate and no password needed according to json file authenticates successfully
@@ -734,8 +731,8 @@ mod test {
             )
             .await
         {
-            Err(AuthenticationError::CnDisallowed) => assert!(true),
-            _ => assert!(false),
+            Err(AuthenticationError::CnDisallowed) => (),
+            _ => panic!(),
         }
 
         // any trusted certificate without password according to json file authenticates successfully
