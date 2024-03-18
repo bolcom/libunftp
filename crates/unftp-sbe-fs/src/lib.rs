@@ -153,12 +153,15 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
 
     async fn put<P: AsRef<Path> + Send, R: tokio::io::AsyncRead + Send + Sync + 'static + Unpin>(
         &self,
-        _user: &User,
+        user: &User,
         bytes: R,
         path: P,
         start_pos: u64,
     ) -> Result<u64> {
         // TODO: Add permission checks
+        if user.read_only() {
+            return Err(Error::new(ErrorKind::PermissionDenied, "Write access denied"));
+        }
 
         let path = strip_prefixes(path.as_ref());
         let mut oo = cap_std::fs::OpenOptions::new();
@@ -176,7 +179,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()> {
+        if user.read_only() {
+            return Err(Error::new(ErrorKind::PermissionDenied, "Write access denied"));
+        }
+
         let path = strip_prefixes(path.as_ref());
         cap_fs::remove_file(self.root_fd.clone(), path)
             .await
@@ -184,7 +191,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()> {
+        if user.read_only() {
+            return Err(Error::new(ErrorKind::PermissionDenied, "Write access denied"));
+        }
+
         let path = strip_prefixes(path.as_ref());
         cap_fs::remove_dir(self.root_fd.clone(), path)
             .await
@@ -192,7 +203,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &User, path: P) -> Result<()> {
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()> {
+        if user.read_only() {
+            return Err(Error::new(ErrorKind::PermissionDenied, "Write access denied"));
+        }
+
         let path = strip_prefixes(path.as_ref());
         cap_fs::create_dir(self.root_fd.clone(), path)
             .await
@@ -200,7 +215,11 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     #[tracing_attributes::instrument]
-    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &User, from: P, to: P) -> Result<()> {
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &User, from: P, to: P) -> Result<()> {
+        if user.read_only() {
+            return Err(Error::new(ErrorKind::PermissionDenied, "Write access denied"));
+        }
+
         let from = from.as_ref().strip_prefix("/").unwrap_or(from.as_ref());
         let to = to.as_ref().strip_prefix("/").unwrap_or(to.as_ref());
 

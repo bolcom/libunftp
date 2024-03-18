@@ -31,6 +31,7 @@ mod auth {
     pub struct User {
         username: String,
         home: Option<PathBuf>,
+        read_only: bool,
     }
 
     #[derive(Deserialize, Clone, Debug)]
@@ -40,6 +41,8 @@ mod auth {
             username: String,
             password: Option<String>,
             home: Option<PathBuf>,
+            #[serde(default)]
+            read_only: bool,
         },
     }
 
@@ -47,13 +50,15 @@ mod auth {
     struct UserCreds {
         pub password: Option<String>,
         pub home: Option<PathBuf>,
+        pub read_only: bool,
     }
 
     impl User {
-        fn new(username: &str, home: &Option<PathBuf>) -> Self {
+        fn new(username: &str, home: &Option<PathBuf>, read_only: bool) -> Self {
             User {
                 username: username.to_owned(),
                 home: home.clone(),
+                read_only,
             }
         }
     }
@@ -64,6 +69,10 @@ mod auth {
                 None => None,
                 Some(p) => Some(p.as_path()),
             }
+        }
+
+        fn read_only(&self) -> bool {
+            self.read_only
         }
     }
 
@@ -99,7 +108,12 @@ mod auth {
 
         fn list_entry_to_map_entry(user_info: Credentials) -> Result<(String, UserCreds), Box<dyn std::error::Error>> {
             let map_entry = match user_info {
-                Credentials::Plaintext { username, password, home } => (username.clone(), UserCreds { password, home }),
+                Credentials::Plaintext {
+                    username,
+                    password,
+                    home,
+                    read_only,
+                } => (username.clone(), UserCreds { password, home, read_only }),
             };
             Ok(map_entry)
         }
@@ -125,7 +139,7 @@ mod auth {
                 let pass_check_result = match &creds.password {
                     Some(ref given_password) => {
                         if Self::check_password(given_password, &actual_creds.password).is_ok() {
-                            Some(Ok(User::new(username, &actual_creds.home)))
+                            Some(Ok(User::new(username, &actual_creds.home, actual_creds.read_only)))
                         } else {
                             Some(Err(AuthenticationError::BadPassword))
                         }
@@ -137,7 +151,7 @@ mod auth {
                     None => Err(AuthenticationError::BadPassword),
                     Some(pass_res) => {
                         if pass_res.is_ok() {
-                            Ok(User::new(username, &actual_creds.home))
+                            Ok(User::new(username, &actual_creds.home, actual_creds.read_only))
                         } else {
                             pass_res
                         }

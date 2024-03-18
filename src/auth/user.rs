@@ -27,6 +27,11 @@ pub trait UserDetail: Send + Sync + Display + Debug {
     fn home(&self) -> Option<&Path> {
         None
     }
+
+    /// Should the user have read-only access, regardless of the Unix file permissions?
+    fn read_only(&self) -> bool {
+        false
+    }
 }
 
 /// DefaultUser is a default implementation of the `UserDetail` trait that doesn't hold any user
