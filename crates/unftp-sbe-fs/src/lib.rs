@@ -100,6 +100,28 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
             };
             self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
         }
+        cfg_if! {
+            if #[cfg(target_os = "freebsd")] {
+                use capsicum::CapRights;
+
+                let mut rights = capsicum::RightsBuilder::new();
+                rights.allow(capsicum::Right::Fcntl);
+                rights.allow(capsicum::Right::Fstatat);
+                rights.allow(capsicum::Right::Lookup);
+                rights.allow(capsicum::Right::Read);
+                rights.allow(capsicum::Right::Seek);
+                if !user_detail.read_only() {
+                    rights.allow(capsicum::Right::Create);
+                    rights.allow(capsicum::Right::Ftruncate);
+                    rights.allow(capsicum::Right::Mkdirat);
+                    rights.allow(capsicum::Right::RenameatSource);
+                    rights.allow(capsicum::Right::RenameatTarget);
+                    rights.allow(capsicum::Right::Unlinkat);
+                    rights.allow(capsicum::Right::Write);
+                }
+                rights.finalize().limit(&self.root_fd)?;
+            }
+        }
         Ok(())
     }
 
