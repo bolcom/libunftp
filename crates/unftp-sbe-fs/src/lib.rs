@@ -30,7 +30,7 @@ use cfg_if::cfg_if;
 use futures::{future::TryFutureExt, stream::TryStreamExt};
 use lazy_static::lazy_static;
 use libunftp::auth::UserDetail;
-use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Result, StorageBackend};
+use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Permissions, Result, StorageBackend};
 use std::{
     fmt::Debug,
     io,
@@ -40,8 +40,8 @@ use std::{
 };
 use tokio::io::AsyncSeekExt;
 
-#[cfg(target_os = "unix")]
-use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.
@@ -250,7 +250,7 @@ impl Metadata for Meta {
 
     fn gid(&self) -> u32 {
         cfg_if! {
-            if #[cfg(target_os = "unix")] {
+            if #[cfg(unix)] {
                 self.inner.gid()
             } else {
                 0
@@ -260,7 +260,7 @@ impl Metadata for Meta {
 
     fn uid(&self) -> u32 {
         cfg_if! {
-            if #[cfg(target_os = "unix")] {
+            if #[cfg(unix)] {
                 self.inner.uid()
             } else {
                 0
@@ -270,10 +270,20 @@ impl Metadata for Meta {
 
     fn links(&self) -> u64 {
         cfg_if! {
-            if #[cfg(target_os = "unix")] {
+            if #[cfg(unix)] {
                 self.inner.nlink()
             } else {
                 1
+            }
+        }
+    }
+
+    fn permissions(&self) -> Permissions {
+        cfg_if! {
+            if #[cfg(unix)] {
+                Permissions(self.inner.permissions().mode())
+            } else {
+                Permissions(0o7755)
             }
         }
     }

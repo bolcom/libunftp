@@ -243,6 +243,44 @@ async fn put(#[future] harness: Harness) {
 mod list {
     use super::*;
 
+    /// test the exact format of the output
+    #[cfg(unix)]
+    #[rstest]
+    #[awt]
+    #[tokio::test]
+    async fn format(#[future] harness: Harness) {
+        use regex::Regex;
+        use std::os::unix::fs::{fchown, MetadataExt, OpenOptionsExt};
+
+        // Create a filename in the ftp root that we will look for in the `LIST` output
+        let path = harness.root.join("test.txt");
+        let f = std::fs::OpenOptions::new().read(true).write(true).create(true).mode(0o754).open(path).unwrap();
+        // Because most OSes set the file's gid to its parent directory's, and the parent
+        // directory's is often root, deliberately set it to something more interesting.
+        fchown(&f, None, Some(nix::unistd::Gid::effective().as_raw())).unwrap();
+        let md = f.metadata().unwrap();
+        let uid = md.uid();
+        let gid = md.gid();
+        let link_count = md.nlink();
+        let size = md.len();
+
+        let mut ftp_stream = FtpStream::connect(harness.addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let list = ftp_stream.list(None).await.unwrap();
+        let pat = format!("^-rwxr-xr--\\s+{link_count}\\s+{uid}\\s+{gid}\\s+{size}.*test.txt");
+        let re = Regex::new(&pat).unwrap();
+        for entry in list {
+            if entry.contains("test.txt") {
+                assert!(re.is_match(&entry), "\"{entry}\" did not match pattern {re:?}");
+                return;
+            }
+        }
+        panic!("Entry not found");
+    }
+
     #[rstest]
     #[awt]
     #[tokio::test]
