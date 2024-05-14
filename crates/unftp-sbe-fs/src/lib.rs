@@ -114,7 +114,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
             .await
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
         let target = if fs_meta.is_symlink() {
-            match self.root_fd.read_link(path) {
+            match self.root_fd.read_link_contents(path) {
                 Ok(p) => Some(p),
                 Err(_e) => {
                     // XXX We should really log an error here.  But a logger object is not
@@ -143,7 +143,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
                 let fullpath = path.join(entry_path.clone());
                 cap_fs::symlink_metadata(self.root_fd.clone(), fullpath.clone()).map_ok(move |meta| {
                     let target = if meta.is_symlink() {
-                        match self.root_fd.read_link(&fullpath) {
+                        match self.root_fd.read_link_contents(&fullpath) {
                             Ok(p) => Some(p),
                             Err(_e) => {
                                 // XXX We should really log an error here.  But a logger object is
