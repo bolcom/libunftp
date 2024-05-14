@@ -59,6 +59,7 @@ pub struct Filesystem {
 #[derive(Debug)]
 pub struct Meta {
     inner: cap_std::fs::Metadata,
+    target: Option<PathBuf>,
 }
 
 /// Strip the "/" prefix, if any, from a path.  Suitable for preprocessing the input pathnames
@@ -112,7 +113,19 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
         let fs_meta = cap_fs::symlink_metadata(self.root_fd.clone(), &path)
             .await
             .map_err(|_| Error::from(ErrorKind::PermanentFileNotAvailable))?;
-        Ok(Meta { inner: fs_meta })
+        let target = if fs_meta.is_symlink() {
+            match self.root_fd.read_link(path) {
+                Ok(p) => Some(p),
+                Err(_e) => {
+                    // XXX We should really log an error here.  But a logger object is not
+                    // available.
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        Ok(Meta { inner: fs_meta, target })
     }
 
     #[allow(clippy::type_complexity)]
@@ -127,8 +140,21 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
         let fis: Vec<Fileinfo<std::path::PathBuf, Self::Metadata>> = cap_fs::read_dir(self.root_fd.clone(), path)
             .and_then(|dirent| {
                 let entry_path: PathBuf = dirent.file_name().into();
-                cap_fs::symlink_metadata(self.root_fd.clone(), path.join(entry_path.clone())).map_ok(move |meta| {
-                    let metadata = Meta { inner: meta };
+                let fullpath = path.join(entry_path.clone());
+                cap_fs::symlink_metadata(self.root_fd.clone(), fullpath.clone()).map_ok(move |meta| {
+                    let target = if meta.is_symlink() {
+                        match self.root_fd.read_link(&fullpath) {
+                            Ok(p) => Some(p),
+                            Err(_e) => {
+                                // XXX We should really log an error here.  But a logger object is
+                                // not available.
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    let metadata = Meta { inner: meta, target };
                     Fileinfo { path: entry_path, metadata }
                 })
             })
@@ -285,6 +311,10 @@ impl Metadata for Meta {
                 Permissions(0o7755)
             }
         }
+    }
+
+    fn readlink(&self) -> Option<&Path> {
+        self.target.as_deref()
     }
 }
 
