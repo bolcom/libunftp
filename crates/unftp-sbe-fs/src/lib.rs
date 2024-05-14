@@ -40,7 +40,7 @@ use std::{
 use tokio::io::AsyncSeekExt;
 
 #[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use cap_std::fs::{MetadataExt, PermissionsExt};
 
 /// The Filesystem struct is an implementation of the StorageBackend trait that keeps its files
 /// inside a specific root directory on local disk.
