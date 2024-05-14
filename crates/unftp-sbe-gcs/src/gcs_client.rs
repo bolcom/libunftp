@@ -100,13 +100,14 @@ impl GcsClient {
             url_str.push_str(&token);
         }
 
-        if !Self::path_is_root(&path) {
+        let real_path = self.real_path(path);
+
+        if !Self::path_is_root(&real_path) {
             url_str.push_str("&prefix=");
-            url_str.push_str(self.path_str(path, TrailingSlash::Ensure)?.as_str());
+            url_str.push_str(self.encode_path(real_path, TrailingSlash::Ensure)?.as_str());
         };
 
         let uri = make_uri(url_str)?;
-
         self.http_get(uri).await
     }
 
@@ -226,12 +227,16 @@ impl GcsClient {
         relative_path.parent().is_none()
     }
 
-    fn path_str<P: AsRef<Path>>(&self, path: P, trailing_slash: TrailingSlash) -> Result<String, Error> {
-        const SLASH_URLENCODED: &str = "%2F";
-
+    fn real_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         let path = path.as_ref();
         let relative_path = path.strip_prefix("/").unwrap_or(path);
-        if let Some(path) = self.root.join(relative_path).to_str() {
+        self.root.join(relative_path)
+    }
+
+    fn encode_path(&self, path: PathBuf, trailing_slash: TrailingSlash) -> Result<String, Error> {
+        const SLASH_URLENCODED: &str = "%2F";
+
+        if let Some(path) = path.to_str() {
             let mut result_path = utf8_percent_encode(path, NON_ALPHANUMERIC).collect::<String>();
 
             match trailing_slash {
@@ -250,6 +255,10 @@ impl GcsClient {
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
         }
+    }
+
+    fn path_str<P: AsRef<Path>>(&self, path: P, trailing_slash: TrailingSlash) -> Result<String, Error> {
+        self.encode_path(self.real_path(path), trailing_slash)
     }
 
     async fn http_raw<B>(&self, method: Method, uri: Uri, body: B, headers: &[(&str, &str)]) -> Result<Response<Body>, Error>
