@@ -333,6 +333,103 @@ mod list {
         }
         assert!(found);
     }
+
+    /// test the exact format of the output for symlinks
+    #[cfg(unix)]
+    #[rstest]
+    #[case::relative(harness(), false)]
+    // Symlinks with absolute paths can be read, too
+    // https://github.com/bytecodealliance/cap-std/issues/353
+    #[case::absolute(harness(), true)]
+    #[awt]
+    #[tokio::test]
+    async fn symlink(
+        #[case]
+        #[future]
+        harness: Harness,
+        #[case] absolute: bool,
+    ) {
+        use regex::Regex;
+        use std::os::unix::fs::MetadataExt;
+
+        // Create a filename in the ftp root that we will look for in the `LIST` output
+        let path = harness.root.join("link");
+        let target = if absolute { "/target" } else { "target" };
+        std::os::unix::fs::symlink(target, &path).unwrap();
+        let md = std::fs::symlink_metadata(&path).unwrap();
+        let uid = md.uid();
+        let gid = md.gid();
+        let link_count = md.nlink();
+        let size = md.len();
+
+        let mut ftp_stream = FtpStream::connect(harness.addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let list = ftp_stream.list(None).await.unwrap();
+        let pat = format!("^l[rwx-]{{9}}\\s+{link_count}\\s+{uid}\\s+{gid}\\s+{size}.*link -> {target}");
+        let re = Regex::new(&pat).unwrap();
+        for entry in list {
+            if entry.contains("link") {
+                assert!(re.is_match(&entry), "\"{entry}\" did not match pattern {re:?}");
+                return;
+            }
+        }
+        panic!("Entry not found");
+    }
+}
+
+mod mdtm {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    /// Get the modification time of a regular file
+    #[rstest]
+    #[awt]
+    #[tokio::test]
+    async fn regular(#[future] harness: Harness) {
+        // Create a filename in the ftp root that we will look for in the `LIST` output
+        let path = harness.root.join("test.txt");
+        let f = std::fs::File::create(path).unwrap();
+        let modified = f.metadata().unwrap().modified().unwrap();
+
+        let mut ftp_stream = FtpStream::connect(harness.addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let r = ftp_stream.mdtm("test.txt").await.unwrap().unwrap();
+        assert_eq!(r.to_rfc2822(), chrono::DateTime::<chrono::Utc>::from(modified).to_rfc2822());
+    }
+
+    /// Get the modification time of a symlink
+    #[rstest]
+    #[case::relative(harness(), false)]
+    #[case::absolute(harness(), true)]
+    #[awt]
+    #[tokio::test]
+    async fn symlink(
+        #[case]
+        #[future]
+        harness: Harness,
+        #[case] absolute: bool,
+    ) {
+        // Create a filename in the ftp root that we will look for in the `LIST` output
+        let path = harness.root.join("link");
+        let target = if absolute { "/target" } else { "target" };
+        std::os::unix::fs::symlink(target, &path).unwrap();
+        let md = std::fs::symlink_metadata(&path).unwrap();
+        let modified = md.modified().unwrap();
+
+        let mut ftp_stream = FtpStream::connect(harness.addr).await.unwrap();
+
+        ensure_login_required(ftp_stream.list(None).await);
+
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        let r = ftp_stream.mdtm("link").await.unwrap().unwrap();
+        assert_eq!(r.to_rfc2822(), chrono::DateTime::<chrono::Utc>::from(modified).to_rfc2822());
+    }
 }
 
 #[rstest]
