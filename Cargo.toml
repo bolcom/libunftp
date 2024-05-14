@@ -61,7 +61,7 @@ tokio-util = { version = "0.7.10", features = ["codec"] }
 tracing = { version = "0.1.40", default-features = false }
 tracing-attributes = "0.1.27"
 uuid = { version = "1.7.0", features = ["v4"] }
-x509-parser = "0.14.0"
+x509-parser = "0.16.0"
 dashmap = "5.5.3"
 libc = "0.2"
 
