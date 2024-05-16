@@ -1,6 +1,12 @@
 # Changelog
 
-### unftp-auth-gcs v0.2.6
+### unftp-sbe-fs v0.2.6
+
+- Compiled against libunftp v0.20.0
+- Fixed the format of the LIST command
+- Upgraded dependencies
+
+### unftp-sbe-gcs v0.2.6
 
 - Compiled against libunftp v0.20.0
 - Fix listing when root path is set (#509)

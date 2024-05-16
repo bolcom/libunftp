@@ -22,7 +22,7 @@ Add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`
 ```toml
 [dependencies]
 libunftp = "0.20.0"
-unftp-sbe-fs = "0.2.2"
+unftp-sbe-fs = "0.2.5"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -37,7 +37,9 @@ pub async fn main() {
     let ftp_home = std::env::temp_dir();
     let server = libunftp::Server::with_fs(ftp_home)
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535);
+        .passive_ports(50000..65535)
+        .build()
+        .unwrap();
 
     server.listen("127.0.0.1:2121").await;
 }

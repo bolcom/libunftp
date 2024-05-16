@@ -1,6 +1,6 @@
 [package]
 name = "unftp-sbe-fs"
-version = "0.2.4"
+version = "0.2.5"
 description = "A storage back-end for libunftp, storing files on local disk"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -51,7 +51,7 @@ getrandom = "0.2.15"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = { version = "0.3.0", features = ["casper"] }
-capsicum-net = { version = "0.1.0", features = ["tokio"], git = "https://github.com/asomers/capsicum-net", rev = "c6fc574" }
+#capsicum-net = { version = "0.1.0", features = ["tokio"], git = "https://github.com/asomers/capsicum-net", rev = "c6fc574" }
 
 [lints]
 workspace = true
