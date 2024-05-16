@@ -1,6 +1,14 @@
 # Changelog
 
+### unftp-auth-gcs v0.2.6
+
+- Compiled against libunftp v0.20.0
+- Fix listing when root path is set (#509)
+- Upgraded dependencies
+
 ### libunftp 0.20.0
+
+_tag: libunftp-0.10.0_
 
 - Compile against Rust 1.78.0
 - Added support for Capsicum on FreeBSD (#481)
