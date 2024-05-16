@@ -92,7 +92,6 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         }))
         .ftps(ftps_certs_file, ftps_key_file)
         .build()
-        .await
         .unwrap()
         .listen(BIND_ADDRESS)
         .await?;
@@ -101,7 +100,6 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             unftp_sbe_gcs::CloudStorage::with_api_base(&gcs_base_url, &bucket_name, PathBuf::new(), service_account_key.clone())
         }))
         .build()
-        .await
         .unwrap()
         .listen(BIND_ADDRESS)
         .await?;
