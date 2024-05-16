@@ -1,6 +1,6 @@
 [package]
 name = "libunftp"
-version = "0.19.1" # remember to update html_root_url
+version = "0.20.0" # remember to update html_root_url
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -9,7 +9,7 @@ authors = [
     "Maarten Dirkse <mdirkse@bol.com>",
     "Steven Meunier <smeunier@bol.com>",
     "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
-   ]
+]
 description = "Extensible, async, cloud orientated FTP(S) server library."
 documentation = "https://docs.rs/libunftp/"
 repository = "https://github.com/bolcom/libunftp"
@@ -37,42 +37,42 @@ missing_docs = "deny"
 all = "deny"
 
 [dependencies]
-async-trait = "0.1.77"
-bitflags = "2.4.2"
-bytes = "1.5.0"
-chrono = { version = "0.4.34", default-features = false, features = ["clock", "std"] }
+async-trait = "0.1.80"
+bitflags = "2.5.0"
+bytes = "1.6.0"
+chrono = { version = "0.4.38", default-features = false, features = ["clock", "std"] }
 derive_more = { version = "0.99.17", features = ["display"] }
 futures-util = { version = "0.3.30", default-features = false, features = ["alloc", "sink"] }
-getrandom = "0.2.12"
+getrandom = "0.2.15"
 lazy_static = "1.4.0"
 md-5 = "0.10.6"
 moka = { version = "0.11.3", default-features = false, features = ["sync"] }
 nix = { version = "0.28.0", default-features = false, features = ["fs"] }
-prometheus = { version = "0.13.3", default-features = false }
+prometheus = { version = "0.13.4", default-features = false }
 proxy-protocol = "0.5.0"
-rustls = "0.21.10"
+rustls = "0.21.12"
 rustls-pemfile = "1.0.4"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.1"
-thiserror = "1.0.57"
-tokio = { version = "1.36.0", features = ["macros", "rt", "net", "process", "sync", "io-util", "time"] }
+thiserror = "1.0.60"
+tokio = { version = "1.37.0", features = ["macros", "rt", "net", "process", "sync", "io-util", "time"] }
 tokio-rustls = "0.24.1"
-tokio-util = { version = "0.7.10", features = ["codec"] }
+tokio-util = { version = "0.7.11", features = ["codec"] }
 tracing = { version = "0.1.40", default-features = false }
 tracing-attributes = "0.1.27"
-uuid = { version = "1.7.0", features = ["v4"] }
+uuid = { version = "1.8.0", features = ["v4"] }
 x509-parser = "0.16.0"
 dashmap = "5.5.3"
 libc = "0.2"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
-tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread"] }
-unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs"}
+tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
+unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs" }
 
 [patch.crates-io]
-capsicum = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
-casper-sys = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee"}
+capsicum = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee" }
+casper-sys = { git = "https://github.com/asomers/capsicum-rs", rev = "24330ee" }
 
 [lints]
-workspace=true
+workspace = true

@@ -10,21 +10,21 @@
 * Run `make pr-prep`, ensuring everything is green
 * Before releasing libunftp itself, run unFTP while pointing to the new version of libunftp
 * Update CHANGELOG.md for all the crates affected
-* Prepare release notes for the Github release page
-* Make a new commit (don't push) indicating the crate name and version number e.g.    
-    > Release libunftp version x.y.x
+* Prepare release notes for the GitHub release page
+* Make a new commit (don't push) indicating the crate name and version number e.g.
+  > Release libunftp version x.y.x
 
-    or
+  or
 
-    > Release unftp-sbe-fs version x.y.x
+  > Release unftp-sbe-fs version x.y.x
 
-    or
+  or
 
-    > Release all
+  > Release all
 * Run `make publish`
-* Push to Github
-* Create the release in Github using tag format {component}-{version} e.g.
+* Push to GitHub
+* Create the release in GitHub using tag format {component}-{version} e.g.
   > libunftp-0.17.1
   or
-  > unftp-sbe-fs-0.1.1    
+  > unftp-sbe-fs-0.1.1
 * Notify the Telegram channel.

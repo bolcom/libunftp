@@ -1,9 +1,13 @@
 # Changelog
 
-### Upcoming
+### libunftp 0.20.0
 
-- Compile against Rust 1.76.0
+- Compile against Rust 1.78.0
+- Added support for Capsicum on FreeBSD (#481)
+- Fixed proxy protocol issue #494 when removing stale data channel
 - Upgraded dependencies
+- Code cleanup and documentation improvements
+- BREAKING: Introduced a new `ServerBuilder` struct to build the `Server`.
 
 ### libunftp 0.19.1
 
@@ -30,11 +34,12 @@ _tag: libunftp-0.19.0_
 
 - [#471](https://github.com/bolcom/libunftp/pull/471) Added unFTP documentation link to help command output
 - Include libunftp version in help command output
-- [#470](https://github.com/bolcom/libunftp/pull/470) Fixed issue with modified datetime formatting for `Fileinfo` where old
+- [#470](https://github.com/bolcom/libunftp/pull/470) Fixed issue with modified datetime formatting for `Fileinfo` where
+  old
   dates didn't render correctly.
 - [#482](https://github.com/bolcom/libunftp/pull/482) Fixed RUSTSEC-2023-0052
 - Compile against Rust 1.72.0
-- BREAKING: Upgrade to latest bitflags dependency. Bitflags are exposed in the API 
+- BREAKING: Upgrade to latest bitflags dependency. Bitflags are exposed in the API
   for the TlsFlags option.
 - Improved tests
 - Upgraded dependencies
@@ -44,8 +49,10 @@ _tag: libunftp-0.19.0_
 - [#449](https://github.com/bolcom/libunftp/pull/449) GCS Backend has had a cleanup (deduplication, modularization)
 - [#461](https://github.com/bolcom/libunftp/pull/461) Better GCS error mapping to FTP and convey the causing
 - [#465](https://github.com/bolcom/libunftp/pull/465) Handle paginated results for LIST fixing issue #464
-- [#466](https://github.com/bolcom/libunftp/pull/465) Fixed an (unreleased) issue regarding root directory affecting list and cwd
-- [#467](https://github.com/bolcom/libunftp/pull/467) Added more verbose error details for HTTP responses with error body
+- [#466](https://github.com/bolcom/libunftp/pull/465) Fixed an (unreleased) issue regarding root directory affecting
+  list and cwd
+- [#467](https://github.com/bolcom/libunftp/pull/467) Added more verbose error details for HTTP responses with error
+  body
 - [#478](https://github.com/bolcom/libunftp/pull/468) Fixed CWD on / error when the directory was empty
 
 ### libunftp 0.18.9
@@ -53,11 +60,15 @@ _tag: libunftp-0.19.0_
 _tag: libunftp-0.18.9_
 
 - [#461](https://github.com/bolcom/libunftp/pull/461) Cleaned INFO log output
-- [#461](https://github.com/bolcom/libunftp/pull/461) New metrics (ftp_transferred_total, ftp_sent_bytes, ftp_received_bytes)
-- [#461](https://github.com/bolcom/libunftp/pull/461) Useful new log messages such as data command summary with transfer speed
+- [#461](https://github.com/bolcom/libunftp/pull/461) New metrics (ftp_transferred_total, ftp_sent_bytes,
+  ftp_received_bytes)
+- [#461](https://github.com/bolcom/libunftp/pull/461) Useful new log messages such as data command summary with transfer
+  speed
 - [#461](https://github.com/bolcom/libunftp/pull/461) Fixed bug where REST command didn't work correctly
-- [#461](https://github.com/bolcom/libunftp/pull/461) Various other bug fixes (RETR reply on missing data connection, mapping to correct ftp errors)
-- [#458](https://github.com/bolcom/libunftp/pull/458), [66756f1](https://github.com/bolcom/libunftp/commit/66756f1af19515c2df65fa58518d7c874fb2497a) Added partial support for FTP Active Mode. See `Server::active_passive_mode`
+- [#461](https://github.com/bolcom/libunftp/pull/461) Various other bug fixes (RETR reply on missing data connection,
+  mapping to correct ftp errors)
+- [#458](https://github.com/bolcom/libunftp/pull/458), [66756f1](https://github.com/bolcom/libunftp/commit/66756f1af19515c2df65fa58518d7c874fb2497a)
+  Added partial support for FTP Active Mode. See `Server::active_passive_mode`
 - [#453](https://github.com/bolcom/libunftp/pull/453) Added support for the BYE command
 - Upgraded dependencies and Rust version
 
@@ -93,7 +104,8 @@ _tag: libunftp-0.18.8_
 
 ### 2022-09-25 libunftp 0.18.6
 
-- [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes issue [#208](https://github.com/bolcom/libunftp/issues/208)
+- [#429](https://github.com/bolcom/libunftp/pull/429) Await proxy protocol header in a separate task, fixes
+  issue [#208](https://github.com/bolcom/libunftp/issues/208)
 - [#428](https://github.com/bolcom/libunftp/pull/428) Support Elliptic Curve Private Keys
 - Upgraded dependencies
 
@@ -103,8 +115,10 @@ _tag: libunftp-0.18.8_
 
 _tag: unftp-auth-jsonfile-0.2.1_
 
-- [#416](https://github.com/bolcom/libunftp/pull/416) GCS support for `RMD`. Plus `CWD` now checks target directory existence
-- [#415](https://github.com/bolcom/libunftp/pull/415) Support directory timestamps in GCS. To resolve issues with some UI FTP clients, such as Cyberduck
+- [#416](https://github.com/bolcom/libunftp/pull/416) GCS support for `RMD`. Plus `CWD` now checks target directory
+  existence
+- [#415](https://github.com/bolcom/libunftp/pull/415) Support directory timestamps in GCS. To resolve issues with some
+  UI FTP clients, such as Cyberduck
 
 ### unftp-auth-* v0.2.1
 
@@ -121,7 +135,8 @@ _tag: unftp-auth-jsonfile-0.2.1_
 _tag: libunftp-0.18.5_
 
 - [#414](https://github.com/bolcom/libunftp/pull/414) Fixed path display issues for Windows clients.
-- [#413](https://github.com/bolcom/libunftp/pull/413) Fixed issue where the `OPTS UTF8` command was not handled correctly
+- [#413](https://github.com/bolcom/libunftp/pull/413) Fixed issue where the `OPTS UTF8` command was not handled
+  correctly
   as seen with the FTP client included in Windows Explorer.
 - Upgraded dependencies
 
@@ -129,12 +144,14 @@ _tag: libunftp-0.18.5_
 
 _tag: libunftp-0.18.4_
 
-- [#343](https://github.com/bolcom/libunftp/pull/343), anti - brute force password guessing feature, choose from different failed login attempts policies: deters
+- [#343](https://github.com/bolcom/libunftp/pull/343), anti - brute force password guessing feature, choose from
+  different failed login attempts policies: deters
   successive failed login attempts based on IP, username or the combination of both
-- [#403](https://github.com/bolcom/libunftp/pull/403), [#404](https://github.com/bolcom/libunftp/pull/404) Improved logging: The username and file path are logged in 
+- [#403](https://github.com/bolcom/libunftp/pull/403), [#404](https://github.com/bolcom/libunftp/pull/404) Improved
+  logging: The username and file path are logged in
   separate fields in more places.
-- [#405](https://github.com/bolcom/libunftp/pull/405) Improved metrics: The `ftp_reply_total` and `ftp_error_total` 
-  counters now have new labels `event` and `event_type` to allow correlation with the event for which a reply is given 
+- [#405](https://github.com/bolcom/libunftp/pull/405) Improved metrics: The `ftp_reply_total` and `ftp_error_total`
+  counters now have new labels `event` and `event_type` to allow correlation with the event for which a reply is given
   or for which an error occurred.
 - [#402](https://github.com/bolcom/libunftp/pull/402) Allow `OPTS UTF8 ..` without needing to authenticate.
 - Upgraded dependencies
@@ -143,7 +160,8 @@ _tag: libunftp-0.18.4_
 
 _tag: libunftp-0.18.3_
 
-- [#394](https://github.com/bolcom/libunftp/pull/394) Implemented a new API (`Server.notify_data` and `Server.notify_presence`) 
+- [#394](https://github.com/bolcom/libunftp/pull/394) Implemented a new API (`Server.notify_data`
+  and `Server.notify_presence`)
   to allow listening for file events.
 - Upgraded dependencies
 
@@ -151,7 +169,8 @@ _tag: libunftp-0.18.3_
 
 _tag: libunftp-0.18.2_
 
-- [#386](https://github.com/bolcom/libunftp/issues/386) Implemented graceful shutdown through the Server.shutdown_indicator method.
+- [#386](https://github.com/bolcom/libunftp/issues/386) Implemented graceful shutdown through the
+  Server.shutdown_indicator method.
 - Upgraded to rustls v0.20.0
 - Upgraded other minor dependency versions
 - Testing improvements
@@ -161,14 +180,14 @@ _tag: libunftp-0.18.2_
 _tag: libunftp-0.18.1_
 
 - Replace futures with futures-util and use Tokio's mpsc channels
-- [#371](https://github.com/bolcom/libunftp/pull/371), [#377](https://github.com/bolcom/libunftp/pull/377) Fixed an 
-  issue where rclone reported all file sizes as 0. The fix was to include the number of links to a file in the output 
+- [#371](https://github.com/bolcom/libunftp/pull/371), [#377](https://github.com/bolcom/libunftp/pull/377) Fixed an
+  issue where rclone reported all file sizes as 0. The fix was to include the number of links to a file in the output
   to the client.
 - Fixed a unit tests
 - Upgraded dependencies
-- [#379](https://github.com/bolcom/libunftp/pull/379) Fixed an issue where the `Permissions` struct could not be used 
+- [#379](https://github.com/bolcom/libunftp/pull/379) Fixed an issue where the `Permissions` struct could not be used
   even though it was public.
-- [#380](https://github.com/bolcom/libunftp/pull/380), [#381](https://github.com/bolcom/libunftp/pull/381) Return STAT 
+- [#380](https://github.com/bolcom/libunftp/pull/380), [#381](https://github.com/bolcom/libunftp/pull/381) Return STAT
   response as a multi-line in accordance with RFC 959 in order to fix an issue with the Cyberduck client.
 
 ## 2021-07-13 Release of all crates
@@ -177,19 +196,19 @@ _tag: libunftp-0.18.1_
 
 _tag: libunftp-0.18.0_
 
-- [#356](https://github.com/bolcom/libunftp/pull/356) Authenticators can now also take the connection source IP, and 
+- [#356](https://github.com/bolcom/libunftp/pull/356) Authenticators can now also take the connection source IP, and
   the client certificate chain into account in addition to the password when performing authentication.
-- [#356](https://github.com/bolcom/libunftp/pull/356/files) **Breaking**: The `Authenticator::authenticate` method now 
+- [#356](https://github.com/bolcom/libunftp/pull/356/files) **Breaking**: The `Authenticator::authenticate` method now
   takes a `Credentials` structure reference instead of a `str` reference for the second parameter.
-- [#373](https://github.com/bolcom/libunftp/pull/373) **Breaking**: The `StorageBackend` methods were all changed to 
+- [#373](https://github.com/bolcom/libunftp/pull/373) **Breaking**: The `StorageBackend` methods were all changed to
   take a reference of a user (`&User`) instead of an optional reference to it (`&Option<User>`).
 - Dependency upgrades and cleanups
 - Fixed an issue where OPTS UTF8 returned the wrong FTP reply code
 - [#361](https://github.com/bolcom/libunftp/issues/361) Don't allow consecutive PASS commands
 - Added support for TLS client certificates
-- [#358](https://github.com/bolcom/libunftp/pull/358/files) Added the ability for authenticators to do password-less 
-  authentication when the user presents a valid client certificate. See the `Authenticator.cert_auth_sufficient` method. 
-  
+- [#358](https://github.com/bolcom/libunftp/pull/358/files) Added the ability for authenticators to do password-less
+  authentication when the user presents a valid client certificate. See the `Authenticator.cert_auth_sufficient` method.
+
 ### unftp-auth-jsonfile v0.2.0
 
 _tag: unftp-auth-jsonfile-0.2.0_
@@ -214,14 +233,16 @@ _tag: unftp-auth-jsonfile-0.2.0_
 _tag: unftp-sbe-gcs-0.1.1_
 
 - Added an extension trait that adds a `Server::with_gcs` constructor.
-- Added support for the `SITE MD5` FTP command. Also see [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5) in libunftp. 
+- Added support for the `SITE MD5` FTP command. Also
+  see [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5) in libunftp.
 
 ## 2021-05-22 libunftp 0.17.4
 
 _tag: libunftp-0.17.4_
 
-- Added a new `SITE MD5` command that allows FTP clients to obtain the MD5 checksum of a remote file. The feature is 
-  disabled for anonymous users by default. See [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5).
+- Added a new `SITE MD5` command that allows FTP clients to obtain the MD5 checksum of a remote file. The feature is
+  disabled for anonymous users by default.
+  See [Server::sitemd5](https://docs.rs/libunftp/0.17.4/libunftp/struct.Server.html#method.sitemd5).
 
 ## 2021-05-02 libunftp v0.17.3
 
@@ -240,12 +261,12 @@ _tag: unftp-auth-jsonfile-0.1.1_
 _tag: libunftp-0.17.2_
 
 - Fixed output formatting of the FEAT command.
-- Fixed the SIZE command that wrongly took the REST restart position into account and also caused number overflows 
+- Fixed the SIZE command that wrongly took the REST restart position into account and also caused number overflows
   because of that.
-- Removed panics that could happen when failing to load the TLS certificate or key, these errors are now propagated via 
+- Removed panics that could happen when failing to load the TLS certificate or key, these errors are now propagated via
   the `Server::listen` method.
 - Implemented TLS session resumption with server side session IDs.
-- Implemented TLS session resumption with [tickets](https://tools.ietf.org/html/rfc5077).  
+- Implemented TLS session resumption with [tickets](https://tools.ietf.org/html/rfc5077).
 - Added the `Server::ftps_tls_flags` method to allow switching TLS features on or off.
 
 ## 2021-04-18 libunftp v0.17.1
@@ -255,7 +276,8 @@ _tag: libunftp-0.17.1_
 Changes in this release:
 
 - [#327](https://github.com/bolcom/libunftp/issues/327) Allow PROT and PBSZ without requiring authentication.
-- [#330](https://github.com/bolcom/libunftp/pull/330) Load TLS certificates only once at startup instead of on every connect.
+- [#330](https://github.com/bolcom/libunftp/pull/330) Load TLS certificates only once at startup instead of on every
+  connect.
 
 ## 2021-03-26 Newly splitted auth and storage back-ends
 
@@ -269,8 +291,7 @@ Changes in this release:
 
 _tag: libunftp-0.17.0_
 
-
-The main focus of this release was the removal of contained authentication and storage back-ends from the libunftp crate 
+The main focus of this release was the removal of contained authentication and storage back-ends from the libunftp crate
 and into their own crates. As you can imagine this brings about breaking changes.
 
 Source code for these crates can still be found in this repository under the `crates` directory.
@@ -283,15 +304,14 @@ Breaking Changes:
 - Split the PAM authenticator into crate [unftp-auth-pam](https://crates.io/crates/unftp-auth-pam)
 - Split the REST authenticator into crate [unftp-auth-rest](https://crates.io/crates/unftp-auth-rest)
 - Changed some public API names to adhere to Rust naming conventions:
-  - PAMAuthenticator became PamAuthenticator
-  - PassiveHost::IP became PassiveHost::Ip
-  - PassiveHost::DNS became PassiveHost::Dns
-  - RestError::HTTPStatusError became RestError::HttpStatusError
-  - RestError::JSONDeserializationError became RestError::JsonDeserializationError
-  - RestError::JSONSerializationError became RestError::JsonSerializationError
+    - PAMAuthenticator became PamAuthenticator
+    - PassiveHost::IP became PassiveHost::Ip
+    - PassiveHost::DNS became PassiveHost::Dns
+    - RestError::HTTPStatusError became RestError::HttpStatusError
+    - RestError::JSONDeserializationError became RestError::JsonDeserializationError
+    - RestError::JSONSerializationError became RestError::JsonSerializationError
 - The `Server::with_fs` method moved into the `ServerExt` extension trait of `unftp-sbe-fs`
 - The `Server::with_fs_and_auth` method was removed. Use the `Server::with_authenticator` method instead.
-
 
 Other changes:
 
