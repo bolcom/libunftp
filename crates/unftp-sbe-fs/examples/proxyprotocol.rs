@@ -11,7 +11,6 @@ async fn main() {
         .proxy_protocol_mode(2121)
         .passive_ports(5000..5005)
         .build()
-        .await
         .unwrap();
 
     println!("Starting ftp server with proxy protocol on {}", addr);

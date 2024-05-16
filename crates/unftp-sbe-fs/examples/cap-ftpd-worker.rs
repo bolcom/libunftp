@@ -255,7 +255,7 @@ async fn main() {
             sb = sb.binder(binder);
         }
     }
-    let server: Server<Filesystem, User> = sb.build().await.unwrap();
+    let server: Server<Filesystem, User> = sb.build().unwrap();
     cfg_if! {
         if #[cfg(target_os = "freebsd")] {
             capsicum::enter().unwrap();

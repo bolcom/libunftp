@@ -14,7 +14,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .authenticator(Arc::new(authenticator))
         .build()
-        .await
         .unwrap();
 
     println!("Starting ftp server on {}", addr);

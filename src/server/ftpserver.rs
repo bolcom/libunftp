@@ -42,7 +42,7 @@ use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range
 ///
 /// let mut rt = Runtime::new().unwrap();
 /// rt.spawn(async {
-///     let server = Server::with_fs("/srv/ftp").build().await.unwrap();
+///     let server = Server::with_fs("/srv/ftp").build().unwrap();
 ///     server.listen("127.0.0.1:2121").await.unwrap()
 /// });
 /// ```
@@ -205,7 +205,7 @@ where
     }
 
     /// Finalize the options and build a [`Server`].
-    pub async fn build(self) -> std::result::Result<Server<Storage, User>, ServerError> {
+    pub fn build(self) -> std::result::Result<Server<Storage, User>, ServerError> {
         let ftps_mode = match self.ftps_mode {
             FtpsConfig::Off => FtpsConfig::Off,
             FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
@@ -685,7 +685,7 @@ where
     ///
     /// let mut rt = Runtime::new().unwrap();
     /// rt.spawn(async {
-    ///     let server = Server::with_fs("/srv/ftp").build().await.unwrap();
+    ///     let server = Server::with_fs("/srv/ftp").build().unwrap();
     ///     server.listen("127.0.0.1:2121").await
     /// });
     /// // ...
