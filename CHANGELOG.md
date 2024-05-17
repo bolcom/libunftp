@@ -1,6 +1,11 @@
 # Changelog
 
-### unftp-sbe-fs v0.2.6
+### unftp-auth-jsonfile v0.3.4, unftp-auth-pam v0.2.5, unftp-auth-rest v0.2.5
+
+- Compiled against libunftp v0.20.0
+- Upgraded dependencies
+
+### unftp-sbe-fs v0.2.5
 
 - Compiled against libunftp v0.20.0
 - Fixed the format of the LIST command

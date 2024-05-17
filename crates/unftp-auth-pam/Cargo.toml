@@ -1,7 +1,7 @@
 [package]
 name = "unftp-auth-pam"
-version = "0.2.4"
-description = "An authenticator back-end for libunftp that authenticates against PAM"
+version = "0.2.5"
+description = "An authentication back-end for libunftp that authenticates using PAM"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
