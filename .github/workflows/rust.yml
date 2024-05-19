@@ -71,7 +71,7 @@ jobs:
       - name: Run tests
         run: >
           cargo test 
-          --verbose --workspace --exclude 'unftp-sbe-gcs*'
+          --verbose --workspace
       - name: Doc tests
         run: cargo test --doc --workspace
       - name: Build Examples
