@@ -80,3 +80,115 @@ jobs:
         run: cargo build  --workspace
       - name: Build Docs
         run: cargo doc --workspace --no-deps
+
+  build-linux-gnu:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    name: Build on Linux (GNU)
+    env:
+      target: x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Otherwise the code that retrieves the git version doesn't work
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          default: true
+          target: ${{ env.target }}
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpam-dev
+      - name: Build for Linux (GNU)
+        run: cargo build --target=${{ env.target }}
+
+  build-linux-musl:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    name: Build on Linux (MUSL)
+    env:
+      target: x86_64-unknown-linux-musl
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Otherwise the code that retrieves the git version doesn't work
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          default: true
+          target: ${{ env.target }}
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build for Linux (MUSL)
+        run: RUSTFLAGS="-C target-feature=+crt-static" cargo build --target=${{ env.target }}
+
+  build-windows:
+    runs-on: windows-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    name: Build on Windows
+    env:
+      trget: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Otherwise the code that retrieves the git version doesn't work
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          default: true
+          target: ${{ env.trget }}
+      - name: Build for Windows
+        run: cargo build --target=${{ env.trget }}
+
+  build-macos-intel:
+    runs-on: macos-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    name: Build on macOS (Intel)
+    env:
+      target: x86_64-apple-darwin
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Otherwise the code that retrieves the git version doesn't work
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          default: true
+          target: ${{ env.target }}
+      - name: Build for macOS (Intel)
+        run: cargo build --target=${{ env.target }}
+
+  build-macos-arm:
+    runs-on: macos-latest
+    if: ${{ github.ref != 'refs/heads/master' }}
+    name: Build on macOS (ARM)
+    env:
+      target: aarch64-apple-darwin
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Otherwise the code that retrieves the git version doesn't work
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          override: true
+          default: true
+          target: ${{ env.target }}
+      - name: Install Rosetta
+        if: runner.os == 'macOS' && runner.arch == 'arm64'
+        run: softwareupdate --install-rosetta --agree-to-license
+      - name: Build
+        run: cargo build --target=${{ env.target }}

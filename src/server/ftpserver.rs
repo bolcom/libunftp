@@ -599,6 +599,7 @@ where
     ///
     /// - `path` - Path to the helper executable
     /// - `args` - Optional arguments to pass to the helper executable.
+    #[cfg(unix)]
     pub fn connection_helper(mut self, path: OsString, args: Vec<OsString>) -> Self {
         self.connection_helper = Some(path);
         self.connection_helper_args = args;
