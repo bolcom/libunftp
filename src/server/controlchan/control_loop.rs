@@ -251,7 +251,7 @@ where
                                 let s: &ServerConnection = stream.get_ref().1;
                                 if let Some(certs) = s.peer_certificates() {
                                     let mut session = shared_session.lock().await;
-                                    session.cert_chain = Some(certs.iter().map(|c| crate::auth::ClientCert(c.0.clone())).collect());
+                                    session.cert_chain = Some(certs.iter().map(|c| crate::auth::ClientCert(c.as_ref().to_vec())).collect());
                                 }
                                 Box::new(stream)
                             }
