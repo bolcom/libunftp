@@ -28,7 +28,7 @@ tracing-attributes = "0.1.27"
 pam-auth = { package = "pam", version = "0.7.0" }
 
 [dev-dependencies]
-tokio = { version = "1.37.0", features = ["macros"] }
+tokio = { version = "1.38.0", features = ["macros"] }
 
 [lints]
 workspace = true

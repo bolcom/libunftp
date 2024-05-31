@@ -1,8 +1,10 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
 use rustls::{
-    server::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, StoresServerSessions},
+    crypto::{aws_lc_rs, aws_lc_rs::Ticketer},
+    pki_types::{CertificateDer, PrivateKeyDer},
+    server::{ClientCertVerifierBuilder, NoServerSessionStorage, StoresServerSessions, WebPkiClientVerifier},
     version::{TLS12, TLS13},
-    Certificate, NoKeyLog, PrivateKey, RootCertStore, ServerConfig, SupportedProtocolVersion, Ticketer,
+    NoKeyLog, RootCertStore, ServerConfig, SupportedProtocolVersion,
 };
 use std::{
     fmt::{self, Display, Formatter},
@@ -58,6 +60,9 @@ pub enum ConfigError {
 
     #[error("error initialising Rustls")]
     RustlsInit(#[from] rustls::Error),
+
+    #[error("error initialising the client cert verifier")]
+    ClientVerifier(#[from] rustls::server::VerifierBuilderError),
 }
 
 pub fn new_config<P: AsRef<Path>>(
@@ -67,20 +72,17 @@ pub fn new_config<P: AsRef<Path>>(
     client_auth: FtpsClientAuth,
     trust_store: P,
 ) -> Result<Arc<ServerConfig>, ConfigError> {
-    let certs: Vec<Certificate> = load_certs(certs_file)?;
-    let privkey: PrivateKey = load_private_key(key_file)?;
+    let certs: Vec<CertificateDer> = load_certs(certs_file)?;
+    let privkey: PrivateKeyDer = load_private_key(key_file)?;
+
+    let builder: ClientCertVerifierBuilder = WebPkiClientVerifier::builder(Arc::new(root_cert_store(trust_store)?));
 
     let client_auther = match client_auth {
-        FtpsClientAuth::Off => NoClientAuth::boxed(),
-        FtpsClientAuth::Request => {
-            let store: RootCertStore = root_cert_store(trust_store)?;
-            AllowAnyAnonymousOrAuthenticatedClient::new(store).boxed()
-        }
-        FtpsClientAuth::Require => {
-            let store: RootCertStore = root_cert_store(trust_store)?;
-            AllowAnyAuthenticatedClient::new(store).boxed()
-        }
-    };
+        FtpsClientAuth::Off => Ok(WebPkiClientVerifier::no_client_auth()),
+        FtpsClientAuth::Request => builder.allow_unauthenticated().build(),
+        FtpsClientAuth::Require => builder.build(),
+    }
+    .map_err(ConfigError::ClientVerifier)?;
 
     let mut versions: Vec<&SupportedProtocolVersion> = vec![];
     if flags.contains(TlsFlags::V1_2) {
@@ -90,13 +92,13 @@ pub fn new_config<P: AsRef<Path>>(
         versions.push(&TLS13)
     }
 
-    let mut config = ServerConfig::builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&versions).map_err(ConfigError::RustlsInit)?
+    let provider = Arc::new(aws_lc_rs::default_provider());
+    let mut config = ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&versions)
+        .map_err(ConfigError::RustlsInit)?
         .with_client_cert_verifier(client_auther)
-        // No SNI, single certificate 
-        .with_single_cert(certs, privkey).map_err(ConfigError::RustlsInit)?;
+        .with_single_cert(certs, privkey)
+        .map_err(ConfigError::RustlsInit)?; // No SNI, single certificate
 
     // Support session resumption with server side state (Session IDs)
     config.session_storage = if flags.contains(TlsFlags::RESUMPTION_SESS_ID) {
@@ -118,24 +120,25 @@ fn root_cert_store<P: AsRef<Path>>(trust_pem: P) -> Result<RootCertStore, Config
     let mut store = RootCertStore::empty();
     let certs = load_certs(trust_pem)?;
     for cert in certs.iter() {
-        store.add(cert).map_err(ConfigError::RootCerts)?
+        store.add(cert.clone()).map_err(ConfigError::RootCerts)?
     }
     Ok(store)
 }
 
-fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<Certificate>, ConfigError> {
+fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<CertificateDer<'static>>, ConfigError> {
     let certfile: File = File::open(filename)?;
     let mut reader: BufReader<File> = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader).map_err(ConfigError::Load).map(|v| {
-        let mut res = Vec::with_capacity(v.len());
-        for e in v {
-            res.push(Certificate(e));
-        }
-        res
-    })
+    let certs = rustls_pemfile::certs(&mut reader);
+    let mut res = Vec::new();
+    for cert in certs {
+        let cert = cert.map_err(ConfigError::Load)?;
+        res.push(cert);
+    }
+    Ok(res)
 }
 
-fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKey, ConfigError> {
+fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKeyDer<'static>, ConfigError> {
+    use rustls::pki_types::PrivateKeyDer;
     use rustls_pemfile::{read_one, Item};
     use std::iter;
 
@@ -144,9 +147,9 @@ fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKey, ConfigErr
 
     for item in iter::from_fn(|| read_one(&mut reader).transpose()) {
         match item {
-            Ok(Item::RSAKey(key)) => return Ok(PrivateKey(key)),
-            Ok(Item::PKCS8Key(key)) => return Ok(PrivateKey(key)),
-            Ok(Item::ECKey(key)) => return Ok(PrivateKey(key)),
+            Ok(Item::Pkcs1Key(key)) => return Ok(PrivateKeyDer::Pkcs1(key)),
+            Ok(Item::Pkcs8Key(key)) => return Ok(PrivateKeyDer::Pkcs8(key)),
+            Ok(Item::Sec1Key(key)) => return Ok(PrivateKeyDer::Sec1(key)),
             Err(e) => return Err(ConfigError::Load(e)),
             _ => {}
         }
@@ -156,6 +159,7 @@ fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKey, ConfigErr
 }
 
 /// Stores the session IDs server side.
+#[derive(Debug)]
 struct TlsSessionCache {
     cache: moka::sync::Cache<Vec<u8>, Vec<u8>>,
 }

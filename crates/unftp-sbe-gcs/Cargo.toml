@@ -28,10 +28,10 @@ hyper-rustls = "0.24.2"
 libunftp = { version = "0.20.0", path = "../../" }
 mime = "0.3.17"
 percent-encoding = "2.3.1"
-serde = { version = "1.0.202", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 time = "0.3.36"
-tokio = { version = "1.37.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio = { version = "1.38.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.15"
 tokio-util = { version = "0.7.11", features = ["codec", "compat"] }
 tracing = { version = "0.1.40", default-features = false }
@@ -51,5 +51,5 @@ slog-async = "2.8.0"
 slog-stdlog = "4.1.1"
 slog-term = "2.9.1"
 tempfile = "3.10.1"
-tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.18"

@@ -134,6 +134,7 @@ jobs:
     env:
       trget: x86_64-pc-windows-msvc
     steps:
+      - uses: ilammy/setup-nasm@v1
       - name: Checkout code
         uses: actions/checkout@v3
         with:
