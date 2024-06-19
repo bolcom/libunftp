@@ -58,7 +58,7 @@ impl Encoder<Reply> for FtpCodec {
             }
             Reply::MultiLine { code, mut lines } => {
                 // Get the last line since it needs to be preceded by the response code.
-                let last_line = if let Some(x) = lines.pop() { x } else { String::from("") };
+                let last_line = lines.pop().unwrap_or_default();
 
                 // Lines starting with a digit should be indented
                 for it in lines.iter_mut() {

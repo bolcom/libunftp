@@ -75,12 +75,16 @@ pub fn new_config<P: AsRef<Path>>(
     let certs: Vec<CertificateDer> = load_certs(certs_file)?;
     let privkey: PrivateKeyDer = load_private_key(key_file)?;
 
-    let builder: ClientCertVerifierBuilder = WebPkiClientVerifier::builder(Arc::new(root_cert_store(trust_store)?));
-
     let client_auther = match client_auth {
         FtpsClientAuth::Off => Ok(WebPkiClientVerifier::no_client_auth()),
-        FtpsClientAuth::Request => builder.allow_unauthenticated().build(),
-        FtpsClientAuth::Require => builder.build(),
+        FtpsClientAuth::Request => {
+            let builder: ClientCertVerifierBuilder = WebPkiClientVerifier::builder(Arc::new(root_cert_store(trust_store)?));
+            builder.allow_unauthenticated().build()
+        }
+        FtpsClientAuth::Require => {
+            let builder: ClientCertVerifierBuilder = WebPkiClientVerifier::builder(Arc::new(root_cert_store(trust_store)?));
+            builder.build()
+        }
     }
     .map_err(ConfigError::ClientVerifier)?;
 
@@ -134,6 +138,7 @@ fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<CertificateDer<'static>
         let cert = cert.map_err(ConfigError::Load)?;
         res.push(cert);
     }
+
     Ok(res)
 }
 
