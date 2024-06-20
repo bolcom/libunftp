@@ -19,11 +19,11 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.80"
-hyper = { version = "0.14.28", features = ["client", "runtime", "stream", "http1"] }
+hyper = { version = "0.14.29", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.24.2"
-libunftp = { version = "0.20.0", path = "../../" }
+libunftp = { version = "0.20.1", path = "../../" }
 percent-encoding = "2.3.1"
-regex = "1.10.4"
+regex = "1.10.5"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 tokio = { version = "1.38.0", features = ["rt", "net", "sync", "io-util", "time"] }

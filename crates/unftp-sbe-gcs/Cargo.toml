@@ -23,9 +23,9 @@ base64 = "0.21.7"
 bytes = "1.6.0"
 chrono = { version = "0.4.38", default-features = false, features = ["std", "serde"] }
 futures = { version = "0.3.30", default-features = false, features = ["std"] }
-hyper = { version = "0.14.28", features = ["client", "runtime", "stream", "http1"] }
+hyper = { version = "0.14.29", features = ["client", "runtime", "stream", "http1"] }
 hyper-rustls = "0.24.2"
-libunftp = { version = "0.20.0", path = "../../" }
+libunftp = { version = "0.20.1", path = "../../" }
 mime = "0.3.17"
 percent-encoding = "2.3.1"
 serde = { version = "1.0.203", features = ["derive"] }

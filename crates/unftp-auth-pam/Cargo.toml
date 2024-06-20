@@ -20,7 +20,7 @@ readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.80"
-libunftp = { version = "0.20.0", path = "../../" }
+libunftp = { version = "0.20.1", path = "../../" }
 tracing = { version = "0.1.40", default-features = false }
 tracing-attributes = "0.1.27"
 

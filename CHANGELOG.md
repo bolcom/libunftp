@@ -1,5 +1,11 @@
 # Changelog
 
+### libunftp 0.20.1
+
+- Fixed a build issue on Windows
+- Upgraded dependencies
+- Fixed examples on FreeBSD
+
 ### unftp-auth-jsonfile v0.3.4, unftp-auth-pam v0.2.5, unftp-auth-rest v0.2.5
 
 - Compiled against libunftp v0.20.0
