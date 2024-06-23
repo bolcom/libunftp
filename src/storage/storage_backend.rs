@@ -65,6 +65,11 @@ pub trait Metadata {
     fn permissions(&self) -> Permissions {
         Permissions(0o7755)
     }
+
+    /// If this is a symlink, return the path to its target
+    fn readlink(&self) -> Option<&Path> {
+        None
+    }
 }
 
 /// Represents the permissions of a _FTP File_
@@ -134,9 +139,20 @@ where
             }
         };
         let perms = format!("{}", self.metadata.permissions());
+        let link_target = if self.metadata.is_symlink() {
+            match self.metadata.readlink() {
+                Some(t) => format!(" -> {}", t.display()),
+                None => {
+                    // We ought to log an error here, but don't have access to the logger variable
+                    "".to_string()
+                }
+            }
+        } else {
+            "".to_string()
+        };
         write!(
             f,
-            "{filetype}{permissions} {links:>12} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}",
+            "{filetype}{permissions} {links:>12} {owner:>12} {group:>12} {size:#14} {modified:>12} {path}{link_target}",
             filetype = if self.metadata.is_dir() {
                 "d"
             } else if self.metadata.is_symlink() {
