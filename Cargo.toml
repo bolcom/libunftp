@@ -39,7 +39,7 @@ all = "deny"
 [features]
 ring = ["rustls/ring", "rustls/logging", "rustls/std", "rustls/tls12"]
 aws-lc-rs = ["rustls/aws_lc_rs", "rustls/logging", "rustls/std", "rustls/tls12"]
-default = "aws-lc-rs"
+default = ["aws-lc-rs"] 
 
 [dependencies]
 async-trait = "0.1.80"
