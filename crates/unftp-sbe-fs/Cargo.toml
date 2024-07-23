@@ -21,7 +21,7 @@ readme = "README.md"
 [features]
 ring = ["libunftp/ring"]
 aws-ls-rs =  ["libunftp/aws-ls-rs"]
-default = "aws-ls-rs"
+default = ["aws-ls-rs"] 
 
 [dependencies]
 async-trait = "0.1.80"
