@@ -253,7 +253,13 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             .body(Body::from(body))
             .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
-        let client = Client::new();
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1()
+            .build();
+
+        let client = Client::builder().build(https);
 
         let resp = client
             .request(req)
