@@ -80,11 +80,11 @@ impl Filesystem {
     /// Create a new Filesystem backend, with the given root. No operations can take place outside
     /// of the root. For example, when the `Filesystem` root is set to `/srv/ftp`, and a client
     /// asks for `hello.txt`, the server will send it `/srv/ftp/hello.txt`.
-    pub fn new<P: Into<PathBuf>>(root: P) -> Self {
+    pub fn new<P: Into<PathBuf>>(root: P) -> io::Result<Self> {
         let path = root.into();
         let aa = cap_std::ambient_authority();
-        let root_fd = Arc::new(cap_std::fs::Dir::open_ambient_dir(&path, aa).unwrap());
-        Filesystem { root_fd, root: path }
+        let root_fd = Arc::new(cap_std::fs::Dir::open_ambient_dir(&path, aa)?);
+        Ok(Filesystem { root_fd, root: path })
     }
 }
 
