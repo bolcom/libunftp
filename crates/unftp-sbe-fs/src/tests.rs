@@ -23,7 +23,7 @@ fn fs_stat() {
     let meta = file.metadata().unwrap();
 
     // Create a filesystem StorageBackend with the directory containing our temp file as root
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
@@ -48,7 +48,7 @@ fn fs_list() {
     let meta = file.metadata().unwrap();
 
     // Create a filesystem StorageBackend with our root dir
-    let fs = Filesystem::new(root.path());
+    let fs = Filesystem::new(root.path()).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
@@ -74,7 +74,7 @@ fn fs_list_fmt() {
     let relpath = path.strip_prefix(root.path()).unwrap();
 
     // Create a filesystem StorageBackend with our root dir
-    let fs = Filesystem::new(root.path());
+    let fs = Filesystem::new(root.path()).unwrap();
 
     let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
     let my_list = rt.block_on(fs.list_fmt(&DefaultUser {}, "/")).unwrap();
@@ -96,7 +96,7 @@ fn fs_get() {
     file.write_all(data).unwrap();
 
     let filename = path.file_name().unwrap();
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
     let rt = Runtime::new().unwrap();
@@ -117,7 +117,7 @@ fn fs_get() {
 fn fs_put() {
     let root = std::env::temp_dir();
     let orig_content = b"hallo";
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
 
     // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
     // to completion
@@ -178,7 +178,7 @@ fn fileinfo_fmt() {
 #[test]
 fn fs_mkd() {
     let root = tempfile::TempDir::new().unwrap().into_path();
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
     let new_dir_name = "bla";
 
     // Since the Filesystem StorageBackend is based on futures, we need a runtime to run them
@@ -203,7 +203,7 @@ fn fs_rename_file() {
     // to completion
     let rt = Runtime::new().unwrap();
 
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
     let r = rt.block_on(fs.rename(&DefaultUser {}, &old_filename, &new_filename));
     assert!(r.is_ok());
 
@@ -225,7 +225,7 @@ fn fs_rename_dir() {
     // to completion
     let rt = Runtime::new().unwrap();
 
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
     let r = rt.block_on(fs.rename(&DefaultUser {}, &old_dir, &new_dir));
     assert!(r.is_ok());
 
@@ -247,7 +247,7 @@ fn fs_md5() {
     let mut file = file.as_file();
 
     // Create a filesystem StorageBackend with the directory containing our temp file as root
-    let fs = Filesystem::new(&root);
+    let fs = Filesystem::new(&root).unwrap();
     file.write_all(DATA.as_bytes()).unwrap();
 
     // Since the filesystem backend is based on futures, we need a runtime to run it
