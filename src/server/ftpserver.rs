@@ -259,6 +259,22 @@ where
         self
     }
 
+    /// Enables FTPS by configuring the raw FtpsConfig.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .ftps_manual(ftps_config);
+    /// ```
+    pub fn ftps_manual<P: Into<PathBuf>>(mut self, config: FtpsConfig) -> Self {
+        self.ftps_mode = config;
+        self
+    }
+
     /// Allows switching on Mutual TLS. For this to work the trust anchors also needs to be set using
     /// the [ftps_trust_store](crate::ServerBuilder::ftps_trust_store) method.
     ///
