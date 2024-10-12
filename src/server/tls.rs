@@ -143,7 +143,6 @@ fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<CertificateDer<'static>
 }
 
 fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKeyDer<'static>, ConfigError> {
-    use rustls::pki_types::PrivateKeyDer;
     use rustls_pemfile::{read_one, Item};
     use std::iter;
 

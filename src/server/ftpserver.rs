@@ -4,6 +4,7 @@ mod listen;
 mod listen_proxied;
 pub mod options;
 
+use rustls::ServerConfig;
 use super::{
     controlchan,
     failed_logins::FailedLoginsCache,
@@ -268,10 +269,10 @@ where
     /// use unftp_sbe_fs::ServerExt;
     ///
     /// let server = Server::with_fs("/tmp")
-    ///              .ftps_manual(ftps_config);
+    ///              .ftps_manual(config);
     /// ```
-    pub fn ftps_manual<P: Into<PathBuf>>(mut self, config: FtpsConfig) -> Self {
-        self.ftps_mode = config;
+    pub fn ftps_manual<P: Into<PathBuf>>(mut self, config: Arc<ServerConfig>) -> Self {
+        self.ftps_mode = FtpsConfig::On { tls_config: config };
         self
     }
 
