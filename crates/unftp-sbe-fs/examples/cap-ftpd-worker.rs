@@ -241,7 +241,7 @@ async fn main() {
     let auth = Arc::new(JsonFileAuthenticator::from_file(args[1].clone()).unwrap());
     // XXX This would be a lot easier if the libunftp API allowed creating the
     // storage just before calling service.
-    let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir())));
+    let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir()).unwrap()));
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
 
     let mut sb = libunftp::ServerBuilder::with_authenticator(sgen, auth);
