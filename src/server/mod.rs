@@ -17,4 +17,5 @@ pub(crate) use controlchan::reply::{Reply, ReplyCode};
 pub(crate) use controlchan::ControlChanMiddleware;
 pub(crate) use controlchan::Event;
 pub(crate) use controlchan::{ControlChanError, ControlChanErrorKind};
+pub use datachan::RETR_SOCKETS;
 use session::{Session, SessionState};
