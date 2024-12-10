@@ -11,16 +11,13 @@ use crate::{
 };
 
 use crate::server::chancomms::DataChanCmd;
-use std::{
-    path::PathBuf,
-    sync::Arc,
-};
 #[cfg(unix)]
 use std::{
     net::SocketAddr,
     os::fd::{AsRawFd, BorrowedFd, RawFd},
     sync::atomic::{AtomicU64, Ordering},
 };
+use std::{path::PathBuf, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -106,7 +103,7 @@ struct MeasuringWriter<W: AsRawFd> {
     command: &'static str,
 }
 #[cfg(not(unix))]
-struct MeasuringWriter {
+struct MeasuringWriter<W> {
     writer: W,
     command: &'static str,
 }
@@ -185,13 +182,17 @@ impl<R: AsyncRead + Unpin> AsyncRead for MeasuringReader<R> {
     }
 }
 
+#[cfg(unix)]
 impl<W: AsRawFd> MeasuringWriter<W> {
     fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
-        #[cfg(unix)]
-        {
-            let retr_socket = RetrSocket::new(&writer).expect("TODO: better error handling");
-            RETR_SOCKETS.write().unwrap().insert(retr_socket.fd, retr_socket);
-        }
+        let retr_socket = RetrSocket::new(&writer).expect("TODO: better error handling");
+        RETR_SOCKETS.write().unwrap().insert(retr_socket.fd, retr_socket);
+        Self { writer, command }
+    }
+}
+#[cfg(not(unix))]
+impl<W> MeasuringWriter<W> {
+    fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
         Self { writer, command }
     }
 }
