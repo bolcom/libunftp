@@ -13,13 +13,14 @@ use crate::{
 use crate::server::chancomms::DataChanCmd;
 use std::{
     net::SocketAddr,
-    os::fd::{AsRawFd, BorrowedFd, RawFd},
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
 };
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, BorrowedFd, RawFd};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -51,6 +52,7 @@ use std::task::{Context, Poll};
 use std::time::Instant;
 
 /// Holds information about a socket processing a RETR command
+#[cfg(unix)]
 #[derive(Debug)]
 pub struct RetrSocket {
     bytes: AtomicU64,
@@ -58,6 +60,7 @@ pub struct RetrSocket {
     peer: SocketAddr,
 }
 
+#[cfg(unix)]
 impl RetrSocket {
     /// How many bytes have been written to the socket so far?
     ///
@@ -94,6 +97,7 @@ impl RetrSocket {
 }
 
 /// Collection of all sockets currently serving RETR commands
+#[cfg(unix)]
 pub static RETR_SOCKETS: std::sync::RwLock<std::collections::BTreeMap<RawFd, RetrSocket>> = std::sync::RwLock::new(std::collections::BTreeMap::new());
 
 struct MeasuringWriter<W: AsRawFd> {
@@ -113,13 +117,16 @@ impl<W: AsRawFd + AsyncWrite + Unpin> AsyncWrite for MeasuringWriter<W> {
         let result = Pin::new(&mut this.writer).poll_write(cx, buf);
         if let Poll::Ready(Ok(bytes_written)) = &result {
             let bw = *bytes_written as u64;
-            RETR_SOCKETS
-                .read()
-                .unwrap()
-                .get(&this.writer.as_raw_fd())
-                .expect("TODO: better error handling")
-                .bytes
-                .fetch_add(bw, Ordering::Relaxed);
+            #[cfg(unix)]
+            {
+                RETR_SOCKETS
+                    .read()
+                    .unwrap()
+                    .get(&this.writer.as_raw_fd())
+                    .expect("TODO: better error handling")
+                    .bytes
+                    .fetch_add(bw, Ordering::Relaxed);
+            }
             metrics::inc_sent_bytes(*bytes_written, this.command);
         }
 
@@ -151,12 +158,16 @@ impl<R: AsyncRead + Unpin> AsyncRead for MeasuringReader<R> {
 
 impl<W: AsRawFd> MeasuringWriter<W> {
     fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
-        let retr_socket = RetrSocket::new(&writer).expect("TODO: better error handling");
-        RETR_SOCKETS.write().unwrap().insert(retr_socket.fd, retr_socket);
+        #[cfg(unix)]
+        {
+            let retr_socket = RetrSocket::new(&writer).expect("TODO: better error handling");
+            RETR_SOCKETS.write().unwrap().insert(retr_socket.fd, retr_socket);
+        }
         Self { writer, command }
     }
 }
 
+#[cfg(unix)]
 impl<W: AsRawFd> Drop for MeasuringWriter<W> {
     fn drop(&mut self) {
         if let Ok(mut guard) = RETR_SOCKETS.write() {
