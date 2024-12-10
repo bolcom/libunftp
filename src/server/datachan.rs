@@ -11,6 +11,12 @@ use crate::{
 };
 
 use crate::server::chancomms::DataChanCmd;
+#[cfg(unix)]
+use std::{
+    net::SocketAddr,
+    os::fd::{AsRawFd, BorrowedFd, RawFd},
+    sync::atomic::{AtomicU64, Ordering},
+};
 use std::{path::PathBuf, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
@@ -42,6 +48,61 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Instant;
 
+/// Holds information about a socket processing a RETR command
+#[cfg(unix)]
+#[derive(Debug)]
+pub struct RetrSocket {
+    bytes: AtomicU64,
+    fd: RawFd,
+    peer: SocketAddr,
+}
+
+#[cfg(unix)]
+impl RetrSocket {
+    /// How many bytes have been written to the socket so far?
+    ///
+    /// Note that this tracks bytes written to the socket, not sent on the wire.
+    pub fn bytes(&self) -> u64 {
+        self.bytes.load(Ordering::Relaxed)
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        // Safe because we always destroy the RetrSocket when the MeasuringWriter drops
+        #[allow(unsafe_code)]
+        unsafe {
+            BorrowedFd::borrow_raw(self.fd)
+        }
+    }
+
+    fn new<W: AsRawFd>(w: &W) -> nix::Result<Self> {
+        let fd = w.as_raw_fd();
+        let ss: nix::sys::socket::SockaddrStorage = nix::sys::socket::getpeername(fd)?;
+        let peer = if let Some(sin) = ss.as_sockaddr_in() {
+            SocketAddr::V4((*sin).into())
+        } else if let Some(sin6) = ss.as_sockaddr_in6() {
+            SocketAddr::V6((*sin6).into())
+        } else {
+            return Err(nix::errno::Errno::EINVAL);
+        };
+        let bytes = Default::default();
+        Ok(RetrSocket { bytes, fd, peer })
+    }
+
+    pub fn peer(&self) -> &SocketAddr {
+        &self.peer
+    }
+}
+
+/// Collection of all sockets currently serving RETR commands
+#[cfg(unix)]
+pub static RETR_SOCKETS: std::sync::RwLock<std::collections::BTreeMap<RawFd, RetrSocket>> = std::sync::RwLock::new(std::collections::BTreeMap::new());
+
+#[cfg(unix)]
+struct MeasuringWriter<W: AsRawFd> {
+    writer: W,
+    command: &'static str,
+}
+#[cfg(not(unix))]
 struct MeasuringWriter<W> {
     writer: W,
     command: &'static str,
@@ -52,12 +113,46 @@ struct MeasuringReader<R> {
     command: &'static str,
 }
 
+#[cfg(unix)]
+impl<W: AsRawFd + AsyncWrite + Unpin> AsyncWrite for MeasuringWriter<W> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> std::task::Poll<Result<usize, std::io::Error>> {
+        let this = self.get_mut();
+
+        let result = Pin::new(&mut this.writer).poll_write(cx, buf);
+        if let Poll::Ready(Ok(bytes_written)) = &result {
+            let bw = *bytes_written as u64;
+            RETR_SOCKETS
+                .read()
+                .unwrap()
+                .get(&this.writer.as_raw_fd())
+                .expect("TODO: better error handling")
+                .bytes
+                .fetch_add(bw, Ordering::Relaxed);
+            metrics::inc_sent_bytes(*bytes_written, this.command);
+        }
+
+        result
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.writer).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.writer).poll_shutdown(cx)
+    }
+}
+
+#[cfg(not(unix))]
 impl<W: AsyncWrite + Unpin> AsyncWrite for MeasuringWriter<W> {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> std::task::Poll<Result<usize, std::io::Error>> {
         let this = self.get_mut();
 
         let result = Pin::new(&mut this.writer).poll_write(cx, buf);
         if let Poll::Ready(Ok(bytes_written)) = &result {
+            let bw = *bytes_written as u64;
             metrics::inc_sent_bytes(*bytes_written, this.command);
         }
 
@@ -87,9 +182,27 @@ impl<R: AsyncRead + Unpin> AsyncRead for MeasuringReader<R> {
     }
 }
 
+#[cfg(unix)]
+impl<W: AsRawFd> MeasuringWriter<W> {
+    fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
+        let retr_socket = RetrSocket::new(&writer).expect("TODO: better error handling");
+        RETR_SOCKETS.write().unwrap().insert(retr_socket.fd, retr_socket);
+        Self { writer, command }
+    }
+}
+#[cfg(not(unix))]
 impl<W> MeasuringWriter<W> {
     fn new(writer: W, command: &'static str) -> MeasuringWriter<W> {
         Self { writer, command }
+    }
+}
+
+#[cfg(unix)]
+impl<W: AsRawFd> Drop for MeasuringWriter<W> {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = RETR_SOCKETS.write() {
+            guard.remove(&self.writer.as_raw_fd());
+        }
     }
 }
 
