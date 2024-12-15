@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-jsonfile"
-version = "0.3.4"
+version = "0.3.5"
 description = "An authentication back-end for libunftp that authenticates against credentials in JSON format"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",

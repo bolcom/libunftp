@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-rest"
-version = "0.2.6"
+version = "0.2.7"
 description = "An authentication back-end for libunftp that consumes an HTTP API to authenticate"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
