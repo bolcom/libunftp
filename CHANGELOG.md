@@ -1,5 +1,12 @@
 # Changelog
 
+## 2024-12-15 Release of all crates
+
+### libunftp 0.20.2
+
+- [520](https://github.com/bolcom/libunftp/pull/520) Allow https for auth rest url
+- Upgraded dependencies
+
 ### libunftp 0.20.1
 
 - Fixed a build issue on Windows
