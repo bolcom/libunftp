@@ -6,11 +6,16 @@
 
 _tag: libunftp-0.20.2_
 
-- [520](https://github.com/bolcom/libunftp/pull/520) Allow https for auth rest url
 - Upgraded dependencies
 
-### unftp-auth-jsonfile v0.3.5, unftp-auth-pam v0.2.6, unftp-auth-rest v0.2.7
+### unftp-auth-jsonfile v0.3.5, unftp-auth-pam v0.2.6
 
+- Compiled against libunftp v0.20.2
+- Upgraded dependencies
+
+### unftp-auth-rest v0.2.7
+
+- [520](https://github.com/bolcom/libunftp/pull/520) Allow https for auth rest url
 - Compiled against libunftp v0.20.2
 - Upgraded dependencies
 
