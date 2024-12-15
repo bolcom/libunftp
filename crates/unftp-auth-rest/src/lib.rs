@@ -56,7 +56,6 @@ impl Builder {
     /// `with_body` .
     ///
     ///
-
     pub fn new() -> Builder {
         Builder { ..Default::default() }
     }

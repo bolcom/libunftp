@@ -274,7 +274,6 @@ where
     ///              .ftps_client_auth(FtpsClientAuth::Require)
     ///              .ftps_trust_store("/srv/unftp/trusted.pem");
     /// ```
-
     pub fn ftps_client_auth<C>(mut self, auth: C) -> Self
     where
         C: Into<FtpsClientAuth>,
