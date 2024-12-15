@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use async_ftp::{types::Result, FtpStream};
 use libunftp::{auth::DefaultUser, options::FtpsRequired, ServerBuilder};
 use pretty_assertions::assert_eq;

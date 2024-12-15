@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use libunftp::auth::{Authenticator, DefaultUser};
 use std::path::PathBuf;
 use unftp_auth_jsonfile::JsonFileAuthenticator;
