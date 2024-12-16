@@ -157,7 +157,7 @@
 //! ```no_run
 //! # use unftp_sbe_fs::Filesystem;
 //! # struct Vfs{};
-//! # impl Vfs { fn new() -> Filesystem { Filesystem::new("/") } }
+//! # impl Vfs { fn new() -> Filesystem { Filesystem::new("/").unwrap() } }
 //! let vfs_provider = Box::new(|| Vfs::new());
 //! let server = libunftp::Server::new(vfs_provider);
 //! ```
