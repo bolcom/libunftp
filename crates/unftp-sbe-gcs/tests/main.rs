@@ -28,6 +28,7 @@ lazy_static! {
 
 // FIXME: auto-allocate port
 const ADDR: &str = "127.0.0.1:1234";
+const ADDR_WITHOUT_ROOT: &str = "127.0.0.1:4321";
 const GCS_BASE_URL: &str = "http://localhost:9081";
 const GCS_BUCKET: &str = "test-bucket";
 
@@ -38,7 +39,7 @@ pub fn initialize_docker() -> Mutex<Child> {
 
     Command::new("mkdir")
         .arg("-p")
-        .arg(format!("{}/tests/resources/data/{}", current_dir, GCS_BUCKET))
+        .arg(format!("{}/tests/resources/data/{}/unftp", current_dir, GCS_BUCKET))
         .status()
         .unwrap();
     Command::new("docker").arg("stop").arg("fake-gcs").status().unwrap();
@@ -53,7 +54,7 @@ pub fn initialize_docker() -> Mutex<Child> {
         .arg(format!("{}/tests/resources/data:/data", current_dir))
         .arg("-p")
         .arg("9081:9081")
-        .arg("fsouza/fake-gcs-server")
+        .arg("fsouza/fake-gcs-server:1.42.2")
         .arg("-scheme")
         .arg("http")
         .arg("-port")
@@ -69,13 +70,11 @@ pub fn initialize_docker() -> Mutex<Child> {
 #[tokio::test(flavor = "current_thread")]
 async fn root_dir_regression() {
     run_test(async {
-        let mut ftp_stream = FtpStream::connect(ADDR).await.unwrap();
+        let mut ftp_stream = FtpStream::connect(ADDR_WITHOUT_ROOT).await.unwrap();
         ftp_stream.login("anonymous", "").await.unwrap();
         ftp_stream.mkdir("some_directory").await.unwrap();
 
-        // fake-gcs-server doesn't respond the same way as actual GCS for "prefix=/"
-        // So we cannot test this case here
-        //ftp_stream.cwd("/").await.unwrap();
+        ftp_stream.cwd("/").await.unwrap();
 
         let content = b"Hello from this test!\n";
         let mut reader = Cursor::new(content);
@@ -279,7 +278,7 @@ async fn run_test(test: impl Future<Output = ()>) {
 
     tokio::spawn(
         ServerBuilder::new(Box::new(move || {
-            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/"), AuthMethod::None)
+            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/unftp"), AuthMethod::None)
         }))
         .logger(Some(Logger::root(drain, o!())))
         .build()
@@ -287,9 +286,25 @@ async fn run_test(test: impl Future<Output = ()>) {
         .listen(ADDR),
     );
 
+    let decorator2 = slog_term::TermDecorator::new().stderr().build();
+    let drain2 = slog_term::FullFormat::new(decorator2).build().fuse();
+    let drain2 = slog_async::Async::new(drain2).build().fuse();
+
+    tokio::spawn(
+        ServerBuilder::new(Box::new(move || {
+            CloudStorage::with_api_base(GCS_BASE_URL, GCS_BUCKET, PathBuf::from("/"), AuthMethod::None)
+        }))
+        .logger(Some(Logger::root(drain2, o!())))
+        .build()
+        .unwrap()
+        .listen(ADDR_WITHOUT_ROOT),
+    );
+
     tokio::time::sleep(Duration::new(1, 0)).await;
 
     test.await;
+
+    tokio::time::sleep(Duration::new(1, 0)).await;
 
     let mut stdout = String::new();
     let mut stderr = String::new();
