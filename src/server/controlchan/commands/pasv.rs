@@ -56,6 +56,7 @@ impl Pasv {
 
             let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
             let s = TcpSocket::new_v4()?;
+            s.set_reuseaddr(true)?;
             if s.bind(std::net::SocketAddr::new(local_addr, port as u16)).is_ok() {
                 socket = Ok(s);
                 break;
