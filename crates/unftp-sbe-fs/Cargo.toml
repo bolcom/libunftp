@@ -24,7 +24,7 @@ cfg-if = "1.0"
 cap-std = "3.4"
 futures = { version = "0.3.31", default-features = false, features = ["std"] }
 lazy_static = "1.5.0"
-libunftp = { version = "0.20.2", path = "../../" }
+libunftp = { version = "0.20.3", path = "../../" }
 path_abs = "0.5.1"
 tokio = { version = "1.42.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.17"

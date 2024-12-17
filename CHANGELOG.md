@@ -1,5 +1,11 @@
 # Changelog
 
+### libunftp 0.20.3
+
+_tag: libunftp-0.20.3_
+
+- [#528](https://github.com/bolcom/libunftp/pull/528) Fix to enable socket reuse that caused 425 errors in passive mode
+
 ## 2024-12-15 Release of all crates
 
 ### libunftp 0.20.2
