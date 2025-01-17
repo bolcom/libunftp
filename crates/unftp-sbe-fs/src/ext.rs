@@ -19,7 +19,10 @@ pub trait ServerExt {
         let p = path.into();
         libunftp::ServerBuilder::new(Box::new(move || {
             let p = &p.clone();
-            Filesystem::new(p)
+            match Filesystem::new(p) {
+                Ok(fs) => fs,
+                Err(e) => panic!("Cannot open file system root {}: {}", p.display(), e),
+            }
         }))
     }
 }
