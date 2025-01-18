@@ -20,40 +20,40 @@ pub struct ControlChanError {
 #[allow(dead_code)]
 pub enum ControlChanErrorKind {
     /// We encountered a system IO error.
-    #[display(fmt = "Failed to perform IO")]
+    #[display("Failed to perform IO")]
     IoError,
     /// Something went wrong parsing the client's command.
-    #[display(fmt = "Failed to parse command")]
+    #[display("Failed to parse command")]
     ParseError,
     /// Internal Server Error. This is probably a bug, i.e. when we're unable to lock a resource we
     /// should be able to lock.
-    #[display(fmt = "Internal Server Error")]
+    #[display("Internal Server Error")]
     InternalServerError,
     /// Authentication backend returned an error.
-    #[display(fmt = "Something went wrong when trying to authenticate")]
+    #[display("Something went wrong when trying to authenticate")]
     AuthenticationError,
     /// We received something on the data message channel that we don't understand. This should be
     /// impossible.
-    #[display(fmt = "Failed to map event from data channel")]
+    #[display("Failed to map event from data channel")]
     InternalMsgError,
     /// We encountered a non-UTF8 character in the command.
-    #[display(fmt = "Non-UTF8 character in command")]
+    #[display("Non-UTF8 character in command")]
     Utf8Error,
     /// The client issued a command we don't know about.
-    #[display(fmt = "Unknown command: {}", command)]
+    #[display("Unknown command: {}", command)]
     UnknownCommand {
         /// The command that we don't know about
         command: String,
     },
     /// The client issued a command that we know about, but in an invalid way (e.g. `USER` without
     /// an username).
-    #[display(fmt = "Invalid command (invalid parameter)")]
+    #[display("Invalid command (invalid parameter)")]
     InvalidCommand,
     /// The timer on the Control Channel elapsed.
-    #[display(fmt = "Encountered read timeout on the control channel")]
+    #[display("Encountered read timeout on the control channel")]
     ControlChannelTimeout,
     /// The control channel is out of sync e.g. expecting username in session after USER command but found none.
-    #[display(fmt = "Control channel in illegal state")]
+    #[display("Control channel in illegal state")]
     IllegalState,
 }
 

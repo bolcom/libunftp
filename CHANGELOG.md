@@ -1,5 +1,10 @@
 # Changelog
 
+### Upcoming release
+
+- Upgrade dependencies
+- Compiling against Rust 1.85.0
+
 ### libunftp 0.20.3
 
 _tag: libunftp-0.20.3_

@@ -2,12 +2,12 @@
 // See https://github.com/mechiru/gcemeta/blob/master/src/metadata.rs
 // See https://github.com/mechiru/gouth/blob/master/gouth/src/source/metadata.rs
 
-use hyper::client::connect::dns::GaiResolver;
-use hyper::client::HttpConnector;
+use http_body_util::{BodyExt, Empty};
 use hyper::http::header;
-use hyper::{Body, Client, Method, Request, Response};
-use hyper_rustls::HttpsConnector;
+use hyper::{body::Bytes, Method, Request};
 use libunftp::storage::{Error, ErrorKind};
+
+use crate::gcs_client::HttpClientEmpty;
 
 // Environment variable specifying the GCE metadata hostname.
 // If empty, the default value of `METADATA_IP` is used instead.
@@ -22,8 +22,7 @@ const METADATA_HOST: &str = "metadata.google.internal";
 // `github.com/bolcom/libunftp v{package_version}`
 const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
 
-// TODO: MAP to useful error type
-pub(super) async fn request_token(service: Option<String>, client: Client<HttpsConnector<HttpConnector<GaiResolver>>>) -> Result<TokenResponse, Error> {
+pub(super) async fn request_token(service: Option<String>, client: HttpClientEmpty) -> Result<TokenResponse, Error> {
     // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
     let suffix = format!("instance/service-accounts/{}/token", service.unwrap_or_else(|| "default".to_string()));
     //let host = env::var(METADATA_HOST_VAR).unwrap_or_else(|_| METADATA_IP.into());
@@ -35,16 +34,17 @@ pub(super) async fn request_token(service: Option<String>, client: Client<HttpsC
         .header("Metadata-Flavor", "Google")
         .header(header::USER_AGENT, USER_AGENT)
         .method(Method::GET)
-        .body(Body::empty())
+        .body(Empty::<Bytes>::new())
         .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
-    let response: Response<Body> = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+    let response = client.request(request).await.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
 
-    let body_bytes = hyper::body::to_bytes(response.into_body())
+    let body = BodyExt::collect(response.into_body())
         .await
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        .map_err(|e| Error::new(ErrorKind::LocalError, e))?
+        .to_bytes();
 
-    let unmarshall_result: serde_json::Result<TokenResponse> = serde_json::from_slice(body_bytes.to_vec().as_slice());
+    let unmarshall_result: serde_json::Result<TokenResponse> = serde_json::from_slice(&body);
     unmarshall_result.map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
 }
 
