@@ -1,21 +1,26 @@
-use bytes::Buf;
+use bytes::{Buf, Bytes};
 use futures::prelude::*;
-use hyper::{client::HttpConnector, header, Body, Client, Method, Request, Response, Uri};
+use http_body_util::combinators::UnsyncBoxBody;
+use http_body_util::{BodyExt, Either, Empty, StreamBody};
+use hyper::body::{Frame, Incoming};
+use hyper::{body::Body, header, Method, Request, Response, Uri};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::rt::TokioExecutor;
 use libunftp::storage::{Error, ErrorKind};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::de::DeserializeOwned;
 use std::fmt;
+use std::io::Error as StdIoError;
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
     sync::Arc,
 };
+use tokio::io::AsyncRead;
 use tokio::sync::RwLock;
-use tokio_util::{
-    codec::{BytesCodec, FramedRead},
-    compat::FuturesAsyncReadCompatExt,
-};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::io::ReaderStream;
 use yup_oauth2::ServiceAccountAuthenticator;
 
 use crate::{
@@ -24,7 +29,9 @@ use crate::{
     workload_identity,
 };
 
-type HttpClient = Client<HttpsConnector<HttpConnector>>;
+type HttpClientString = Client<HttpsConnector<HttpConnector>, String>;
+type HttpClientStream = Client<HttpsConnector<HttpConnector>, UnsyncBoxBody<Bytes, StdIoError>>;
+pub(super) type HttpClientEmpty = Client<HttpsConnector<HttpConnector>, Empty<Bytes>>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct GcsClient {
@@ -32,7 +39,9 @@ pub(crate) struct GcsClient {
     bucket_name: String,
     root: PathBuf,
 
-    http: HttpClient,
+    client_string: HttpClientString,
+    client_stream: HttpClientStream,
+    client_empty: HttpClientEmpty,
 
     tokens: TokenSource,
 }
@@ -52,6 +61,15 @@ impl fmt::Display for HttpError {
 
 impl std::error::Error for HttpError {}
 
+fn create_http_client<T>() -> Client<HttpsConnector<HttpConnector>, T>
+where
+    T: Body + Send + 'static,
+    T::Data: Send + 'static,
+{
+    let https = HttpsConnectorBuilder::new().with_native_roots().unwrap().https_or_http().enable_http1().build();
+    Client::builder(TokioExecutor::new()).build(https)
+}
+
 impl GcsClient {
     pub fn new<A: Into<AuthMethod>>(base_url: String, bucket_name: String, root: PathBuf, auth: A) -> Self {
         let root = if root.has_root() {
@@ -60,15 +78,19 @@ impl GcsClient {
             root
         };
 
-        let http = Client::builder().build(HttpsConnectorBuilder::new().with_native_roots().https_or_http().enable_http1().build());
+        let client_string: HttpClientString = create_http_client();
+        let client_stream: HttpClientStream = create_http_client();
+        let client_empty: HttpClientEmpty = create_http_client();
 
-        let token_manager = TokenSource::new(auth, http.clone());
+        let token_manager = TokenSource::new(auth, client_empty.clone());
 
         Self {
             base_url,
             bucket_name,
             root,
-            http,
+            client_string,
+            client_stream,
+            client_empty,
             tokens: token_manager,
         }
     }
@@ -111,7 +133,7 @@ impl GcsClient {
         self.http_get(uri).await
     }
 
-    pub async fn get<P: AsRef<Path>>(&self, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>, Error> {
+    pub async fn get<P: AsRef<Path>>(&self, path: P, start_pos: u64) -> Result<Box<dyn AsyncRead + Send + Sync + Unpin>, Error> {
         let uri = make_uri(format!(
             "{}/storage/v1/b/{}/o/{}?alt=media",
             self.base_url,
@@ -123,6 +145,7 @@ impl GcsClient {
 
         let reader = response
             .into_body()
+            .into_data_stream()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
             .into_async_read()
             .compat();
@@ -132,7 +155,7 @@ impl GcsClient {
 
     pub async fn upload<P: AsRef<Path>, R>(&self, path: P, src: R) -> Result<Item, Error>
     where
-        R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static,
+        R: AsyncRead + Send + Sync + Unpin + 'static,
     {
         let uri = make_uri(format!(
             "{}/upload/storage/v1/b/{}/o?uploadType=media&name={}",
@@ -141,10 +164,14 @@ impl GcsClient {
             self.path_str(path, TrailingSlash::Trim)?,
         ))?;
 
-        let reader = tokio::io::BufReader::with_capacity(4096, src);
-        let body = Body::wrap_stream(FramedRead::new(reader, BytesCodec::new()).map_ok(|b| b.freeze()));
+        let body = BodyExt::boxed_unsync(StreamBody::new(ReaderStream::new(src).map_ok(Frame::data)));
+
         let item = self
-            .http_post(uri, body, &[(header::CONTENT_TYPE.as_str(), mime::APPLICATION_OCTET_STREAM.as_ref())])
+            .http_post(
+                uri,
+                Some(Either::Right(body)),
+                &[(header::CONTENT_TYPE.as_str(), mime::APPLICATION_OCTET_STREAM.as_ref())],
+            )
             .await?;
 
         Ok(item)
@@ -173,7 +200,7 @@ impl GcsClient {
 
         self.http_post_raw(
             uri,
-            Body::empty(),
+            None,
             &[
                 (header::CONTENT_TYPE.as_str(), mime::APPLICATION_OCTET_STREAM.as_ref()),
                 (header::CONTENT_LENGTH.as_str(), "0"),
@@ -261,10 +288,13 @@ impl GcsClient {
         self.encode_path(self.real_path(path), trailing_slash)
     }
 
-    async fn http_raw<B>(&self, method: Method, uri: Uri, body: B, headers: &[(&str, &str)]) -> Result<Response<Body>, Error>
-    where
-        B: Into<Body>,
-    {
+    async fn http_raw(
+        &self,
+        method: Method,
+        uri: Uri,
+        body: Option<Either<String, UnsyncBoxBody<Bytes, StdIoError>>>,
+        headers: &[(&str, &str)],
+    ) -> Result<Response<Incoming>, Error> {
         let token = self.tokens.token().await?;
         let mut request = Request::builder().uri(uri).header(header::AUTHORIZATION, format!("Bearer {}", token));
 
@@ -272,19 +302,42 @@ impl GcsClient {
             request = request.header(*hk, *hv);
         }
 
-        // Return permanent error for now, even though this is likely a bug in unFTP
-        let request = request
-            .method(method)
-            .body(body.into())
-            .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+        // If we can't create a request, we return a LocalError
+        // If our request fails (not even a Http error), we return a TransientFileNotAvailable
+        // Both are retryable 4xx's but this seems a more appropriate mapping
+        let response = match body {
+            Some(body) => match body {
+                Either::Left(body) => {
+                    let request = request.method(method).body(body).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+
+                    self.client_string
+                        .request(request)
+                        .await
+                        .map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?
+                }
+                Either::Right(body) => {
+                    let request = request.method(method).body(body).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+
+                    self.client_stream
+                        .request(request)
+                        .await
+                        .map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?
+                }
+            },
+            None => {
+                let request = request
+                    .method(method)
+                    .body(Empty::<Bytes>::new())
+                    .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+
+                self.client_empty
+                    .request(request)
+                    .await
+                    .map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?
+            }
+        };
 
         // Return retryable error if there's a connection error to GCS
-        let response = self
-            .http
-            .request(request)
-            .await
-            .map_err(|e| Error::new(ErrorKind::TransientFileNotAvailable, e))?;
-
         if !response.status().is_success() {
             let err_kind = match response.status().as_u16() {
                 404 => ErrorKind::PermanentFileNotAvailable,
@@ -294,10 +347,26 @@ impl GcsClient {
             };
 
             let status = response.status();
-            let body = hyper::body::aggregate(response).await.map_err(|e| Error::new(err_kind, e))?;
+            let body = BodyExt::collect(response)
+                .await
+                .map_err(|e| {
+                    Error::new(
+                        err_kind,
+                        HttpError {
+                            status_code: status.as_u16(),
+                            status_text: status.canonical_reason().unwrap_or("Unknown").to_string(),
+                            body: format!("Error while constructing error: while collecting failed request body: {}", e),
+                        },
+                    )
+                })?
+                .to_bytes();
 
-            let body_string = String::from_utf8_lossy(body.chunk());
-            let error_message = format!("HTTP error: {} {}", status, body_string);
+            fn first_n_chars(s: &str, n: usize) -> String {
+                s.chars().take(n).collect()
+            }
+
+            let body_string = String::from_utf8_lossy(&body);
+            let error_message = format!("HTTP error: {} body: {}", status, first_n_chars(&body_string, 1000));
 
             // Create the HttpError with additional information
             let http_error = HttpError {
@@ -312,19 +381,24 @@ impl GcsClient {
         Ok(response)
     }
 
-    async fn http_delete_raw(&self, uri: Uri) -> Result<Response<Body>, Error> {
-        self.http_raw(Method::DELETE, uri, Body::empty(), &[]).await
+    async fn http_delete_raw(&self, uri: Uri) -> Result<Response<Incoming>, Error> {
+        self.http_raw(Method::DELETE, uri, None, &[]).await
     }
 
-    async fn http_get_raw(&self, uri: Uri, headers: &[(&str, &str)]) -> Result<Response<Body>, Error> {
-        self.http_raw(Method::GET, uri, Body::empty(), headers).await
+    async fn http_get_raw(&self, uri: Uri, headers: &[(&str, &str)]) -> Result<Response<Incoming>, Error> {
+        self.http_raw(Method::GET, uri, None, headers).await
     }
 
-    async fn http_post_raw(&self, uri: Uri, body: Body, headers: &[(&str, &str)]) -> Result<Response<Body>, Error> {
+    async fn http_post_raw(
+        &self,
+        uri: Uri,
+        body: Option<Either<String, UnsyncBoxBody<Bytes, StdIoError>>>,
+        headers: &[(&str, &str)],
+    ) -> Result<Response<Incoming>, Error> {
         self.http_raw(Method::POST, uri, body, headers).await
     }
 
-    async fn http_post<T>(&self, uri: Uri, body: Body, headers: &[(&str, &str)]) -> Result<T, Error>
+    async fn http_post<T>(&self, uri: Uri, body: Option<Either<String, UnsyncBoxBody<Bytes, StdIoError>>>, headers: &[(&str, &str)]) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -349,15 +423,13 @@ enum TrailingSlash {
     AsIs,
 }
 
-async fn deserialize<T>(response: Response<Body>) -> Result<T, Error>
+async fn deserialize<T>(response: Response<Incoming>) -> Result<T, Error>
 where
     T: DeserializeOwned,
 {
-    let body = hyper::body::aggregate(response)
-        .await
-        .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))?;
+    let body = response.collect().await.map_err(|e| Error::new(ErrorKind::LocalError, e))?.aggregate();
 
-    serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
+    serde_json::from_reader(body.reader()).map_err(|e| Error::new(ErrorKind::LocalError, e))
 }
 
 fn make_uri(path_and_query: String) -> Result<Uri, Error> {
@@ -368,15 +440,17 @@ fn make_uri(path_and_query: String) -> Result<Uri, Error> {
 struct TokenSource {
     cached_token: CachedToken,
     auth: AuthMethod,
-    http: HttpClient,
+    client_body: Client<HttpsConnector<HttpConnector>, String>,
+    client_empty: HttpClientEmpty,
 }
 
 impl TokenSource {
-    fn new<A: Into<AuthMethod>>(auth: A, http: HttpClient) -> Self {
+    fn new<A: Into<AuthMethod>>(auth: A, client_empty: HttpClientEmpty) -> Self {
         TokenSource {
             cached_token: Default::default(),
             auth: auth.into(),
-            http,
+            client_body: create_http_client(),
+            client_empty,
         }
     }
 
@@ -394,14 +468,16 @@ impl TokenSource {
         match &self.auth {
             AuthMethod::ServiceAccountKey(_) => {
                 let key = self.auth.to_service_account_key()?;
-                let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.http.clone()).build().await?;
+                let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client_body.clone()).build().await?;
 
                 auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
                     .map_ok(|t| t.into())
                     .map_err(|e| Error::new(ErrorKind::PermanentFileNotAvailable, e))
                     .await
             }
-            AuthMethod::WorkloadIdentity(service) => workload_identity::request_token(service.clone(), self.http.clone()).await.map(|t| t.into()),
+            AuthMethod::WorkloadIdentity(service) => workload_identity::request_token(service.clone(), self.client_empty.clone())
+                .await
+                .map(|t| t.into()),
             AuthMethod::None => Ok(Token {
                 value: "unftp_test".to_string(),
                 expires_at: None,

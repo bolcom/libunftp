@@ -256,7 +256,14 @@ mod list {
 
         // Create a filename in the ftp root that we will look for in the `LIST` output
         let path = harness.root.join("test.txt");
-        let f = std::fs::OpenOptions::new().read(true).write(true).create(true).mode(0o754).open(path).unwrap();
+        let f = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o754)
+            .open(path)
+            .unwrap();
         // Because most OSes set the file's gid to its parent directory's, and the parent
         // directory's is often root, deliberately set it to something more interesting.
         fchown(&f, None, Some(nix::unistd::Gid::effective().as_raw())).unwrap();

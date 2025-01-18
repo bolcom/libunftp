@@ -19,13 +19,13 @@ pub struct ParseError {
 #[allow(clippy::enum_variant_names)]
 pub enum ParseErrorKind {
     /// The client issued an invalid command (e.g. required parameters are missing).
-    #[display(fmt = "Invalid command")]
+    #[display("Invalid command")]
     InvalidCommand,
     /// Non-UTF8 character encountered.
-    #[display(fmt = "Non-UTF8 character while parsing")]
+    #[display("Non-UTF8 character while parsing")]
     InvalidUtf8,
     /// Invalid end-of-line character.
-    #[display(fmt = "Invalid end-of-line")]
+    #[display("Invalid end-of-line")]
     InvalidEol,
 }
 
