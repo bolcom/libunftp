@@ -182,6 +182,12 @@ fn parse_pasv() {
 }
 
 #[test]
+fn parse_epsv() {
+    let input = "EPSV\r\n";
+    assert_eq!(parse(input).unwrap(), Command::Epsv);
+}
+
+#[test]
 fn parse_port() {
     let input = "PORT\r\n";
     assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));

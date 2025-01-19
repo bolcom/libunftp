@@ -442,6 +442,7 @@ where
             Command::Help => Box::new(commands::Help),
             Command::Noop => Box::new(commands::Noop),
             Command::Pasv => Box::new(commands::Pasv::new()),
+            Command::Epsv => Box::new(commands::Epsv::new()),
             Command::Port { addr } => Box::new(commands::Port::new(addr)),
             Command::Retr { .. } => Box::new(commands::Retr),
             Command::Stor { .. } => Box::new(commands::Stor),

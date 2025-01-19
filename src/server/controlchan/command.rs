@@ -39,6 +39,7 @@ pub enum Command {
     Help,
     Noop,
     Pasv,
+    Epsv,
     Port {
         /// The address to use to make an active connection to the client
         addr: String,
