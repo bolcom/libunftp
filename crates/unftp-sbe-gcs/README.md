@@ -31,7 +31,7 @@ use std::path::PathBuf;
 pub async fn main() {
     let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None))
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .build()
         .unwrap();
 
@@ -52,7 +52,7 @@ pub async fn main() {
         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
     )
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .build()
         .unwrap();
 

@@ -176,7 +176,7 @@ cfg_if! {
         use std::{
             io,
             net::IpAddr,
-            ops::Range
+            ops::RangeInclusive
         };
         use async_trait::async_trait;
         use capsicum::casper::Casper;
@@ -196,7 +196,7 @@ cfg_if! {
 
         #[async_trait]
         impl libunftp::options::Binder for CapBinder {
-            async fn bind(&mut self, local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
+            async fn bind(&mut self, local_addr: IpAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpSocket> {
                 const BIND_RETRIES: u8 = 10;
 
                 for _ in 1..BIND_RETRIES {

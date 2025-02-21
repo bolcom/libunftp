@@ -10,7 +10,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{ops::Range, sync::Arc};
+use std::{ops::RangeInclusive, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
 // Common interface for all handlers of `Commands`
@@ -36,7 +36,7 @@ where
     pub session: SharedSession<Storage, User>,
     pub authenticator: Arc<dyn Authenticator<User>>,
     pub tls_configured: bool,
-    pub passive_ports: Range<u16>,
+    pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub tx_control_chan: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,

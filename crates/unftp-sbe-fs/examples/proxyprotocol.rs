@@ -9,7 +9,7 @@ async fn main() {
     let addr = "127.0.0.1:2121";
     let server = libunftp::Server::with_fs(std::env::temp_dir())
         .proxy_protocol_mode(2121)
-        .passive_ports(5000..5005)
+        .passive_ports(5000..=5005)
         .build()
         .unwrap();
 
