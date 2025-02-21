@@ -11,7 +11,8 @@ use crate::{
     server::tls::FtpsConfig,
     storage::StorageBackend,
 };
-use std::{ops::Range, sync::Arc, time::Duration};
+use std::ops::RangeInclusive;
+use std::{sync::Arc, time::Duration};
 
 // Holds the options the libunftp user opted for.
 pub struct OptionsHolder<Storage, User>
@@ -22,7 +23,7 @@ where
     pub storage: Arc<dyn (Fn() -> Storage) + Send + Sync>,
     pub greeting: &'static str,
     pub authenticator: Arc<dyn Authenticator<User>>,
-    pub passive_ports: Range<u16>,
+    pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FtpsConfig,
     pub collect_metrics: bool,

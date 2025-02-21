@@ -21,9 +21,11 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{io, net::SocketAddr, ops::Range};
-use tokio::net::TcpListener;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use std::{io, net::SocketAddr, ops::RangeInclusive};
+use tokio::{
+    net::TcpListener,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -36,8 +38,8 @@ impl Epsv {
     }
 
     #[tracing_attributes::instrument]
-    async fn try_port_range(local_addr: SocketAddr, passive_ports: Range<u16>) -> io::Result<TcpListener> {
-        let rng_length = passive_ports.end - passive_ports.start + 1;
+    async fn try_port_range(local_addr: SocketAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpListener> {
+        let rng_length = passive_ports.end() - passive_ports.start();
 
         let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
@@ -48,7 +50,7 @@ impl Epsv {
                 u32::from_ne_bytes(data)
             };
 
-            let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
+            let port = random_u32 % rng_length as u32 + *passive_ports.start() as u32;
             listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
             if listener.is_ok() {
                 break;

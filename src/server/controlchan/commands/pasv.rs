@@ -23,7 +23,7 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{io, net::SocketAddr, ops::Range};
+use std::{io, net::SocketAddr, ops::RangeInclusive};
 use std::{
     net::{IpAddr, Ipv4Addr},
     time::Duration,
@@ -42,8 +42,8 @@ impl Pasv {
     }
 
     #[tracing_attributes::instrument]
-    fn try_port_range(local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
-        let rng_length = passive_ports.end - passive_ports.start + 1;
+    fn try_port_range(local_addr: IpAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpSocket> {
+        let rng_length = passive_ports.end() - passive_ports.start() + 1;
 
         let mut socket: io::Result<TcpSocket> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
@@ -54,7 +54,7 @@ impl Pasv {
                 u32::from_ne_bytes(data)
             };
 
-            let port = random_u32 % rng_length as u32 + passive_ports.start as u32;
+            let port = random_u32 % rng_length as u32 + *passive_ports.start() as u32;
             let s = TcpSocket::new_v4()?;
             s.set_reuseaddr(true)?;
             if s.bind(std::net::SocketAddr::new(local_addr, port as u16)).is_ok() {
