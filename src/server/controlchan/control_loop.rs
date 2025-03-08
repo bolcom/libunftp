@@ -33,7 +33,7 @@ use crate::{
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::ServerConnection;
-use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
+use std::{net::SocketAddr, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -58,7 +58,7 @@ where
     pub storage: Storage,
     pub greeting: &'static str,
     pub authenticator: Arc<dyn Authenticator<User>>,
-    pub passive_ports: Range<u16>,
+    pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FtpsConfig,
     pub collect_metrics: bool,
@@ -330,7 +330,7 @@ where
     session: SharedSession<Storage, User>,
     authenticator: Arc<dyn Authenticator<User>>,
     tls_configured: bool,
-    passive_ports: Range<u16>,
+    passive_ports: RangeInclusive<u16>,
     passive_host: PassiveHost,
     tx_control_chan: Sender<ControlChanMsg>,
     local_addr: SocketAddr,

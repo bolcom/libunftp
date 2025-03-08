@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use bitflags::bitflags;
+use std::ops::RangeInclusive;
 use std::time::Duration;
 use std::{
     fmt::Formatter,
     fmt::{self, Debug, Display},
     io,
     net::{IpAddr, Ipv4Addr},
-    ops::Range,
 };
 use tokio::net::TcpSocket;
 
@@ -17,7 +17,7 @@ use tokio::net::TcpSocket;
 pub(crate) const DEFAULT_GREETING: &str = "Welcome to the libunftp FTP server";
 pub(crate) const DEFAULT_IDLE_SESSION_TIMEOUT_SECS: u64 = 600;
 pub(crate) const DEFAULT_PASSIVE_HOST: PassiveHost = PassiveHost::FromConnection;
-pub(crate) const DEFAULT_PASSIVE_PORTS: Range<u16> = 49152..65535;
+pub(crate) const DEFAULT_PASSIVE_PORTS: RangeInclusive<u16> = 49152..=65535;
 pub(crate) const DEFAULT_FTPS_REQUIRE: FtpsRequired = FtpsRequired::None;
 pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 
@@ -26,7 +26,7 @@ pub(crate) const DEFAULT_FTPS_TRUST_STORE: &str = "./trusted.pem";
 pub trait Binder: Debug + Send {
     /// Create a [`tokio::net::TcpSocket`] and bind it to the given address, with a port in the
     /// given range.
-    async fn bind(&mut self, local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket>;
+    async fn bind(&mut self, local_addr: IpAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpSocket>;
 }
 
 /// The option to [ServerBuilder::passive_host](crate::ServerBuilder::passive_host). It allows the user to specify how the IP address

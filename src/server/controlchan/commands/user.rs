@@ -242,7 +242,7 @@ mod tests {
                 session: session_arc,
                 authenticator: auther,
                 tls_configured: true,
-                passive_ports: Default::default(),
+                passive_ports: 0..=0,
                 passive_host: Default::default(),
                 tx_control_chan: tx,
                 local_addr: "127.0.0.1:8080".parse().unwrap(),
