@@ -46,7 +46,7 @@
 //! # // Make it compile
 //! # type RandomAuthenticator = libunftp::auth::AnonymousAuthenticator;
 //! let server = libunftp::Server::with_authenticator(
-//!   Box::new(move || { unftp_sbe_fs::Filesystem::new("/srv/ftp") }),
+//!   Box::new(move || { unftp_sbe_fs::Filesystem::new("/srv/ftp").unwrap() }),
 //!   std::sync::Arc::new(RandomAuthenticator{})
 //! );
 //! ```
