@@ -71,7 +71,7 @@ impl ResponseBody {
         let prefixes_without_object = self.prefixes.map_or(vec![], |prefixes: Vec<String>| {
             prefixes
                 .iter()
-                .filter(|prefix| self.items.as_ref().map_or(true, |it: &Vec<Item>| !it.iter().any(|i| i.name == **prefix)))
+                .filter(|prefix| self.items.as_ref().is_none_or(|it: &Vec<Item>| !it.iter().any(|i| i.name == **prefix)))
                 .map(|prefix| Fileinfo {
                     path: prefix.into(),
                     metadata: ObjectMetadata {

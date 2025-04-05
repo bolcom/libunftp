@@ -6,8 +6,10 @@ use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use dashmap::{mapref::entry::Entry, DashMap};
 use proxy_protocol::{parse, version1::ProxyAddresses, ParseError, ProxyHeader};
-use std::net::{IpAddr, SocketAddr, SocketAddrV4};
-use std::ops::Range;
+use std::{
+    net::{IpAddr, SocketAddr, SocketAddrV4},
+    ops::RangeInclusive,
+};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 
@@ -181,7 +183,7 @@ where
     U: UserDetail,
 {
     switchboard: DashMap<ProxyHashKey, Option<SharedSession<S, U>>>,
-    port_range: Range<u16>,
+    port_range: RangeInclusive<u16>,
     logger: slog::Logger,
 }
 
@@ -198,7 +200,7 @@ where
     S: StorageBackend<U>,
     U: UserDetail + 'static,
 {
-    pub fn new(logger: slog::Logger, passive_ports: Range<u16>) -> Self {
+    pub fn new(logger: slog::Logger, passive_ports: RangeInclusive<u16>) -> Self {
         let board = DashMap::new();
         Self {
             switchboard: board,
@@ -247,7 +249,7 @@ where
     ///
     //#[tracing_attributes::instrument]
     pub async fn reserve_next_free_port(&mut self, session_arc: SharedSession<S, U>) -> Result<u16, ProxyProtocolError> {
-        let range_size = self.port_range.end - self.port_range.start;
+        let range_size = self.port_range.end() - self.port_range.start();
 
         let randomized_initial_port = {
             let mut data = [0; 2];
@@ -261,7 +263,7 @@ where
         // The function returns the first available port it finds or an error if no ports are available.
         let mut session = session_arc.lock().await;
         for i in 0..=range_size {
-            let port = self.port_range.start + ((randomized_initial_port + i) % range_size);
+            let port = self.port_range.start() + ((randomized_initial_port + i) % range_size);
             slog::debug!(self.logger, "Trying if port {} is available", port);
             if let Some(proxy_control_connection) = session.proxy_control {
                 let hash = ProxyHashKey::new(proxy_control_connection.source.ip(), port);

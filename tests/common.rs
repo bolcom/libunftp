@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use async_trait::async_trait;
 use lazy_static::*;
 use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};

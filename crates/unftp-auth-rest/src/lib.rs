@@ -3,7 +3,10 @@
 //!
 
 use async_trait::async_trait;
-use hyper::{http::uri::InvalidUri, Body, Client, Method, Request};
+use http_body_util::BodyExt;
+use hyper::{http::uri::InvalidUri, Method, Request};
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
@@ -56,7 +59,6 @@ impl Builder {
     /// `with_body` .
     ///
     ///
-
     pub fn new() -> Builder {
         Builder { ..Default::default() }
     }
@@ -250,21 +252,32 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
             .method(&self.method)
             .header("Content-type", "application/json")
             .uri(url)
-            .body(Body::from(body))
+            .body(body)
             .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
-        let client = Client::new();
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .expect("no native root CA certificates found")
+            .https_or_http()
+            .enable_http1()
+            .build();
+
+        let client = Client::builder(TokioExecutor::new()).build(https);
 
         let resp = client
             .request(req)
             .await
             .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
 
-        let body_bytes = hyper::body::to_bytes(resp.into_body())
+        let (parts, body) = resp.into_parts();
+        let status_context = format!("http status={}", parts.status.as_str());
+        let body = BodyExt::collect(body)
             .await
-            .map_err(|e| AuthenticationError::with_source("rest authenticator http client error", e))?;
+            .map_err(|e| AuthenticationError::with_source(format!("error while receiving http response ({})", status_context), e))?
+            .to_bytes();
+        let body: Value = serde_json::from_slice(&body)
+            .map_err(|e| AuthenticationError::with_source(format!("rest authenticator unmarshalling error ({})", status_context), e))?;
 
-        let body: Value = serde_json::from_slice(&body_bytes).map_err(|e| AuthenticationError::with_source("rest authenticator unmarshalling error", e))?;
         let parsed = match body.pointer(&self.selector) {
             Some(parsed) => parsed.to_string(),
             None => json!(null).to_string(),

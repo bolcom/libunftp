@@ -1,6 +1,6 @@
 [package]
 name = "unftp-sbe-fs"
-version = "0.2.5"
+version = "0.2.6"
 description = "A storage back-end for libunftp, storing files on local disk"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -24,38 +24,39 @@ aws-ls-rs =  ["libunftp/aws-ls-rs"]
 default = ["aws-ls-rs"] 
 
 [dependencies]
-async-trait = "0.1.80"
+async-trait = "0.1.85"
 cfg-if = "1.0"
-cap-std = "2.0"
-futures = { version = "0.3.30", default-features = false, features = ["std"] }
-lazy_static = "1.4.0"
-libunftp = { version = "0.20.1", path = "../../", default-features = false }
+cap-std = "3.4"
+futures = { version = "0.3.31", default-features = false, features = ["std"] }
+lazy_static = "1.5.0"
+libunftp = { version = "0.20.3", path = "../../", default-features = false }
 path_abs = "0.5.1"
-tokio = { version = "1.38.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
-tokio-stream = "0.1.15"
-tracing = { version = "0.1.40", default-features = false }
-tracing-attributes = "0.1.27"
+tokio = { version = "1.43.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio-stream = "0.1.17"
+tracing = { version = "0.1.41", default-features = false }
+tracing-attributes = "0.1.28"
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-async-trait = "0.1.80"
+async-trait = "0.1.85"
+chrono = "0.4.39"
 more-asserts = "0.3.1"
 nix = { version = "0.29.0", default-features = false, features = ["user"] }
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"
 pretty_env_logger = "0.5.0"
-regex = "1.10.5"
-rstest = "0.18.2"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
+regex = "1.11.1"
+rstest = "0.24.0"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.135"
 slog-async = "2.8.0"
 slog-term = "2.9.1"
-tempfile = "3.10.1"
-tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
-tracing-subscriber = "0.3.18"
+tempfile = "3.15.0"
+tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = "0.3.19"
 getrandom = "0.2.15"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
-capsicum = { version = "0.4.2", features = ["casper"] }
+capsicum = { version = "0.4.4", features = ["casper"] }
 capsicum-net = { version = "0.1.0", features = ["tokio"] }
 
 [lints]

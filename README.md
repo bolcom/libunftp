@@ -71,7 +71,7 @@ add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sb
 
 ```toml
 [dependencies]
-libunftp = "0.20.1"
+libunftp = "0.20.3"
 unftp-sbe-fs = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```
@@ -87,7 +87,7 @@ pub async fn main() {
     let ftp_home = std::env::temp_dir();
     let server = libunftp::Server::with_fs(ftp_home)
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .build()
         .unwrap();
 

@@ -25,7 +25,7 @@ use crate::{
 };
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
 use slog::*;
-use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::RangeInclusive, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
 /// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
 /// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
@@ -59,7 +59,7 @@ where
     authenticator: Arc<dyn Authenticator<User>>,
     data_listener: Arc<dyn DataListener>,
     presence_listener: Arc<dyn PresenceListener>,
-    passive_ports: Range<u16>,
+    passive_ports: RangeInclusive<u16>,
     passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FtpsConfig,
@@ -88,7 +88,7 @@ where
     authenticator: Arc<dyn Authenticator<User>>,
     data_listener: Arc<dyn DataListener>,
     presence_listener: Arc<dyn PresenceListener>,
-    passive_ports: Range<u16>,
+    passive_ports: RangeInclusive<u16>,
     passive_host: PassiveHost,
     collect_metrics: bool,
     ftps_mode: FtpsConfig,
@@ -274,7 +274,6 @@ where
     ///              .ftps_client_auth(FtpsClientAuth::Require)
     ///              .ftps_trust_store("/srv/unftp/trusted.pem");
     /// ```
-
     pub fn ftps_client_auth<C>(mut self, auth: C) -> Self
     where
         C: Into<FtpsClientAuth>,
@@ -491,13 +490,13 @@ where
     ///
     /// // Use it in a builder-like pattern:
     /// let builder = Server::with_fs("/tmp")
-    ///              .passive_ports(49152..65535);
+    ///              .passive_ports(49152..=65535);
     ///
     /// // Or instead if you prefer:
     /// let mut builder = Server::with_fs("/tmp");
-    /// builder.passive_ports(49152..65535);
+    /// builder.passive_ports(49152..=65535);
     /// ```
-    pub fn passive_ports(mut self, range: Range<u16>) -> Self {
+    pub fn passive_ports(mut self, range: RangeInclusive<u16>) -> Self {
         self.passive_ports = range;
         self
     }

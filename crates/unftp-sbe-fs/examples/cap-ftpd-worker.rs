@@ -176,7 +176,7 @@ cfg_if! {
         use std::{
             io,
             net::IpAddr,
-            ops::Range
+            ops::RangeInclusive
         };
         use async_trait::async_trait;
         use capsicum::casper::Casper;
@@ -196,7 +196,7 @@ cfg_if! {
 
         #[async_trait]
         impl libunftp::options::Binder for CapBinder {
-            async fn bind(&mut self, local_addr: IpAddr, passive_ports: Range<u16>) -> io::Result<TcpSocket> {
+            async fn bind(&mut self, local_addr: IpAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpSocket> {
                 const BIND_RETRIES: u8 = 10;
 
                 for _ in 1..BIND_RETRIES {
@@ -241,7 +241,7 @@ async fn main() {
     let auth = Arc::new(JsonFileAuthenticator::from_file(args[1].clone()).unwrap());
     // XXX This would be a lot easier if the libunftp API allowed creating the
     // storage just before calling service.
-    let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir())));
+    let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir()).unwrap()));
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
 
     let mut sb = libunftp::ServerBuilder::with_authenticator(sgen, auth);

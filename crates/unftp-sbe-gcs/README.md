@@ -15,8 +15,8 @@ Add the needed dependencies to Cargo.toml:
 
  ```toml
  [dependencies]
-libunftp = "0.20.1"
-unftp-sbe-gcs = "0.2.6"
+libunftp = "0.20.3"
+unftp-sbe-gcs = "0.2.7"
 tokio = { version = "1", features = ["full"] }
  ```
 
@@ -31,7 +31,7 @@ use std::path::PathBuf;
 pub async fn main() {
     let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None))
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .build()
         .unwrap();
 
@@ -52,7 +52,7 @@ pub async fn main() {
         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
     )
         .greeting("Welcome to my FTP server")
-        .passive_ports(50000..65535)
+        .passive_ports(50000..=65535)
         .build()
         .unwrap();
 

@@ -33,7 +33,7 @@ use crate::{
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::ServerConnection;
-use std::{net::SocketAddr, ops::Range, sync::Arc, time::Duration};
+use std::{net::SocketAddr, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -58,7 +58,7 @@ where
     pub storage: Storage,
     pub greeting: &'static str,
     pub authenticator: Arc<dyn Authenticator<User>>,
-    pub passive_ports: Range<u16>,
+    pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FtpsConfig,
     pub collect_metrics: bool,
@@ -330,7 +330,7 @@ where
     session: SharedSession<Storage, User>,
     authenticator: Arc<dyn Authenticator<User>>,
     tls_configured: bool,
-    passive_ports: Range<u16>,
+    passive_ports: RangeInclusive<u16>,
     passive_host: PassiveHost,
     tx_control_chan: Sender<ControlChanMsg>,
     local_addr: SocketAddr,
@@ -442,6 +442,7 @@ where
             Command::Help => Box::new(commands::Help),
             Command::Noop => Box::new(commands::Noop),
             Command::Pasv => Box::new(commands::Pasv::new()),
+            Command::Epsv => Box::new(commands::Epsv::new()),
             Command::Port { addr } => Box::new(commands::Port::new(addr)),
             Command::Retr { .. } => Box::new(commands::Retr),
             Command::Stor { .. } => Box::new(commands::Stor),
@@ -463,7 +464,7 @@ where
             Command::Rnto { file } => Box::new(commands::Rnto::new(file)),
             Command::Auth { protocol } => Box::new(commands::Auth::new(protocol)),
             Command::Pbsz {} => Box::new(commands::Pbsz),
-            Command::Ccc {} => Box::new(commands::Ccc),
+            Command::Ccc => Box::new(commands::Ccc),
             Command::Prot { param } => Box::new(commands::Prot::new(param)),
             Command::Size { file } => Box::new(commands::Size::new(file)),
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),

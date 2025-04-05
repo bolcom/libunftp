@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 pub mod common;
 use std::io::Error;
 use tokio::net::TcpStream;

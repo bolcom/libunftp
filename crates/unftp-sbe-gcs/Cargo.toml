@@ -1,7 +1,7 @@
 [package]
 name = "unftp-sbe-gcs"
 description = "A storage back-end for libunftp, storing files in Google Cloud Storage (GCS)"
-version = "0.2.6"
+version = "0.2.7"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
     "Dávid Kosztka <dkosztka@bol.com>",
@@ -18,38 +18,40 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gc
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.80"
-base64 = "0.21.7"
-bytes = "1.6.0"
-chrono = { version = "0.4.38", default-features = false, features = ["std", "serde"] }
-futures = { version = "0.3.30", default-features = false, features = ["std"] }
-hyper = { version = "0.14.29", features = ["client", "runtime", "stream", "http1"] }
-hyper-rustls = "0.24.2"
-libunftp = { version = "0.20.1", path = "../../" }
+async-trait = "0.1.85"
+base64 = "0.22.1"
+bytes = "1.9.0"
+chrono = { version = "0.4.39", default-features = false, features = ["std", "serde"] }
+futures = { version = "0.3.31", default-features = false, features = ["std"] }
+http-body-util = "0.1.2"
+hyper = { version = "1.5.2", features = ["client", "http1"] }
+hyper-rustls = "0.27.5"
+hyper-util = "0.1.10"
+libunftp = { version = "0.20.3", path = "../../" }
 mime = "0.3.17"
 percent-encoding = "2.3.1"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
-time = "0.3.36"
-tokio = { version = "1.38.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
-tokio-stream = "0.1.15"
-tokio-util = { version = "0.7.11", features = ["codec", "compat"] }
-tracing = { version = "0.1.40", default-features = false }
-tracing-attributes = "0.1.27"
-yup-oauth2 = "8.3.2"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.135"
+time = "0.3.37"
+tokio = { version = "1.43.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio-stream = "0.1.17"
+tokio-util = { version = "0.7.13", features = ["codec", "compat"] }
+tracing = { version = "0.1.41", default-features = false }
+tracing-attributes = "0.1.28"
+yup-oauth2 = { version = "11.0.0", default-features = false, features = ["hyper-rustls", "service-account", "aws-lc-rs"]}
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-clap = { version = "3.2.25", features = ["env"] }
-lazy_static = "1.4.0"
+clap = { version = "4.5.26", features = ["env"] }
+lazy_static = "1.5.0"
 more-asserts = "0.3.1"
 path_abs = "0.5.1"
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"
 pretty_env_logger = "0.5.0"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-async = "2.8.0"
 slog-stdlog = "4.1.1"
 slog-term = "2.9.1"
-tempfile = "3.10.1"
-tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread"] }
-tracing-subscriber = "0.3.18"
+tempfile = "3.15.0"
+tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = "0.3.19"

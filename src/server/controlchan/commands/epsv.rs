@@ -1,10 +1,9 @@
-//! The RFC 959 Passive (`PASV`) command
+//! The RFC 2428 Passive (`EPSV`) command
 //
-// This command requests the server-DTP to "listen" on a data
-// port (which is not its default data port) and to wait for a
-// connection rather than initiate one upon receipt of a
-// transfer command.  The response to this command includes the
-// host and port address this server is listening on.
+// The EPSV command requests that a server listen on a data port and
+// wait for a connection. The EPSV command takes an optional argument.
+// The response to this command includes only the TCP port number of the
+// listening connection.
 
 use crate::{
     auth::UserDetail,
@@ -16,36 +15,33 @@ use crate::{
             Reply, ReplyCode,
         },
         datachan,
-        ftpserver::options::PassiveHost,
         session::SharedSession,
-        ControlChanErrorKind, ControlChanMsg,
+        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
 use std::{io, net::SocketAddr, ops::RangeInclusive};
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    time::Duration,
+use tokio::{
+    net::TcpListener,
+    sync::mpsc::{channel, Receiver, Sender},
 };
-use tokio::net::TcpSocket;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 const BIND_RETRIES: u8 = 10;
 
 #[derive(Debug)]
-pub struct Pasv {}
+pub struct Epsv {}
 
-impl Pasv {
+impl Epsv {
     pub fn new() -> Self {
-        Pasv {}
+        Epsv {}
     }
 
     #[tracing_attributes::instrument]
-    fn try_port_range(local_addr: IpAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpSocket> {
-        let rng_length = passive_ports.end() - passive_ports.start() + 1;
+    async fn try_port_range(local_addr: SocketAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpListener> {
+        let rng_length = passive_ports.end() - passive_ports.start();
 
-        let mut socket: io::Result<TcpSocket> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
+        let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
 
         for _ in 1..BIND_RETRIES {
             let random_u32 = {
@@ -55,15 +51,13 @@ impl Pasv {
             };
 
             let port = random_u32 % rng_length as u32 + *passive_ports.start() as u32;
-            let s = TcpSocket::new_v4()?;
-            s.set_reuseaddr(true)?;
-            if s.bind(std::net::SocketAddr::new(local_addr, port as u16)).is_ok() {
-                socket = Ok(s);
+            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
+            if listener.is_ok() {
                 break;
             }
         }
 
-        socket
+        listener
     }
 
     // modifies the session by adding channels that are used to communicate with the data connection
@@ -97,37 +91,23 @@ impl Pasv {
     {
         let CommandContext {
             logger,
-            passive_host,
             tx_control_chan: tx,
             session,
             ..
         } = args;
 
-        // obtain the ip address the client is connected to
-        let conn_addr = match args.local_addr {
-            std::net::SocketAddr::V4(addr) => addr,
-            std::net::SocketAddr::V6(_) => {
-                slog::error!(logger, "local address is ipv6! we only listen on ipv4, so this shouldn't happen");
-                return Err(ControlChanErrorKind::InternalServerError.into());
-            }
-        };
+        let listener = Epsv::try_port_range(args.local_addr, args.passive_ports).await;
 
-        let listener = if let Some(ref mut binder) = session.lock().await.binder {
-            binder.bind(args.local_addr.ip(), args.passive_ports).await
-        } else {
-            Pasv::try_port_range(args.local_addr.ip(), args.passive_ports)
-        };
         let listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
             Ok(l) => l,
         };
-        let listener = listener.listen(1024).unwrap();
 
         let port = listener.local_addr()?.port();
 
-        let reply = make_pasv_reply(&logger, passive_host, conn_addr.ip(), port).await;
+        let reply = make_epsv_reply(port);
         if let Reply::CodeAndMsg {
-            code: ReplyCode::EnteringPassiveMode,
+            code: ReplyCode::EnteringExtendedPassiveMode,
             ..
         } = reply
         {
@@ -135,12 +115,8 @@ impl Pasv {
             // Open the data connection in a new task and process it.
             // We cannot await this since we first need to let the client know where to connect :-)
             tokio::spawn(async move {
-                // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
-                let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
-                match r {
-                    Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(logger, session, socket).await,
-                    Ok(Err(e)) => slog::error!(logger, "Error waiting for data connection: {}", e),
-                    Err(_) => slog::warn!(logger, "Client did not connect to data port in time"),
+                if let Ok((socket, _socket_addr)) = listener.accept().await {
+                    datachan::spawn_processing(logger, session, socket).await;
                 }
             });
         }
@@ -164,7 +140,7 @@ impl Pasv {
 }
 
 #[async_trait]
-impl<Storage, User> CommandHandler<Storage, User> for Pasv
+impl<Storage, User> CommandHandler<Storage, User> for Epsv
 where
     User: UserDetail + 'static,
     Storage: StorageBackend<User> + 'static,
@@ -180,33 +156,6 @@ where
     }
 }
 
-pub async fn make_pasv_reply(logger: &slog::Logger, passive_host: PassiveHost, conn_ip: &Ipv4Addr, port: u16) -> Reply {
-    let p1 = port >> 8;
-    let p2 = port - (p1 * 256);
-    let octets = match passive_host {
-        PassiveHost::Ip(ip) => ip.octets(),
-        PassiveHost::FromConnection => conn_ip.octets(),
-        PassiveHost::Dns(ref dns_name) => {
-            let x = dns_name.split(':').take(1).map(|s| format!("{}:2121", s)).next().unwrap();
-            match tokio::net::lookup_host(x).await {
-                Err(e) => {
-                    slog::warn!(logger, "make_pasv_reply: Could not look up host for pasv reply: {}", e);
-
-                    return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name));
-                }
-                Ok(mut ip_iter) => loop {
-                    match ip_iter.next() {
-                        None => return Reply::new_with_string(ReplyCode::CantOpenDataConnection, format!("Could not resolve DNS address '{}'", dns_name)),
-                        Some(SocketAddr::V4(ip)) => break ip.ip().octets(),
-                        Some(SocketAddr::V6(_)) => continue,
-                    }
-                },
-            }
-        }
-    };
-    slog::info!(logger, "Listening on passive port {}:{}", conn_ip, port);
-    Reply::new_with_string(
-        ReplyCode::EnteringPassiveMode,
-        format!("Entering Passive Mode ({},{},{},{},{},{})", octets[0], octets[1], octets[2], octets[3], p1, p2),
-    )
+pub fn make_epsv_reply(port: u16) -> Reply {
+    Reply::new_with_string(ReplyCode::EnteringExtendedPassiveMode, format!("Entering Extended Passive Mode (|||{}|)", port))
 }
