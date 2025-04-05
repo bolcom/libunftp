@@ -464,7 +464,7 @@ where
             Command::Rnto { file } => Box::new(commands::Rnto::new(file)),
             Command::Auth { protocol } => Box::new(commands::Auth::new(protocol)),
             Command::Pbsz {} => Box::new(commands::Pbsz),
-            Command::Ccc {} => Box::new(commands::Ccc),
+            Command::Ccc => Box::new(commands::Ccc),
             Command::Prot { param } => Box::new(commands::Prot::new(param)),
             Command::Size { file } => Box::new(commands::Size::new(file)),
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),

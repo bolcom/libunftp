@@ -131,7 +131,7 @@ where
                 }
             })
             .unwrap_or_else(|_| "--- -- --:--".to_string());
-        let basename = self.path.as_ref().components().last();
+        let basename = self.path.as_ref().components().next_back();
         let path = match basename {
             Some(v) => v.as_os_str().to_string_lossy(),
             None => {
