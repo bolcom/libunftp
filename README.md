@@ -36,6 +36,7 @@ Feature highlights:
 * [Proxy Protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/) support
 * Automatic session timeouts
 * Per user IP allow lists
+* Configurable cryptographic providers (ring or aws-lc-rs)
 
 Known storage back-ends:
 
@@ -52,6 +53,26 @@ Known authentication back-ends:
 * [unftp-auth-pam](https://crates.io/crates/unftp-auth-pam) - Authenticates
   via [PAM](https://en.wikipedia.org/wiki/Linux_PAM).
 * [unftp-auth-rest](https://crates.io/crates/unftp-auth-rest) - Consumes an HTTP API to authenticate.
+
+## Cryptographic Providers
+
+libunftp supports two cryptographic providers through feature flags:
+
+- `aws-lc-rs` (default): Uses AWS-LC through rustls for cryptographic operations
+- `ring`: Uses the ring crate for cryptographic operations
+
+To use a specific provider, enable the corresponding feature in your `Cargo.toml`:
+
+```toml
+[dependencies]
+libunftp = { version = "0.20.3", features = ["ring"] }  # Use ring
+# or
+libunftp = { version = "0.20.3", features = ["aws-lc-rs"] }  # Use aws-lc-rs (default)
+```
+
+The default provider is `aws-lc-rs` for backward compatibility. Choose the provider that best fits your needs:
+- `ring`: More widely used, good for general-purpose applications
+- `aws-lc-rs`: Optimized for AWS environments, good for cloud deployments
 
 ## Prerequisites
 
