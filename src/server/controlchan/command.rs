@@ -62,6 +62,11 @@ pub enum Command {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
     },
+    /// Machine List Single (MLST) command for getting machine-readable information about a single file/directory
+    Mlst {
+        /// The path of the file/directory to get information about
+        path: Option<String>,
+    },
     Feat,
     Pwd,
     Cwd {

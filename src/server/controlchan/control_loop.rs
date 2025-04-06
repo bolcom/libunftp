@@ -470,6 +470,7 @@ where
             Command::Rest { offset } => Box::new(commands::Rest::new(offset)),
             Command::Mdtm { file } => Box::new(commands::Mdtm::new(file)),
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
+            Command::Mlst { path } => Box::new(commands::Mlst::new(path)),
             Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
         };
 

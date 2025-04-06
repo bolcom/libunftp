@@ -1,8 +1,7 @@
 use super::*;
 use libunftp::auth::DefaultUser;
 use pretty_assertions::assert_eq;
-use std::fs::File;
-use std::io::prelude::*;
+use std::{fs::File, io::prelude::*};
 use tokio::runtime::Runtime;
 
 #[test]
