@@ -4,6 +4,7 @@ mod listen;
 mod listen_proxied;
 pub mod options;
 
+use rustls::ServerConfig;
 use super::{
     controlchan,
     failed_logins::FailedLoginsCache,
@@ -256,6 +257,22 @@ where
             certs_file: certs_file.into(),
             key_file: key_file.into(),
         };
+        self
+    }
+
+    /// Enables FTPS by configuring the raw FtpsConfig.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// let server = Server::with_fs("/tmp")
+    ///              .ftps_manual(config);
+    /// ```
+    pub fn ftps_manual<P: Into<PathBuf>>(mut self, config: Arc<ServerConfig>) -> Self {
+        self.ftps_mode = FtpsConfig::On { tls_config: config };
         self
     }
 
