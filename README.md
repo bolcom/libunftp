@@ -56,9 +56,9 @@ Known authentication back-ends:
 
 ## Cryptographic Providers
 
-libunftp supports two cryptographic providers through feature flags:
+These two feature flags can be used to select the cryptographic provider:
 
-- `aws-lc-rs` (default): Uses AWS-LC through rustls for cryptographic operations
+- `aws_lc_rs` (default): Uses AWS-LC through `rustls` for cryptographic operations
 - `ring`: Uses the ring crate for cryptographic operations
 
 To use a specific provider, enable the corresponding feature in your `Cargo.toml`:
@@ -67,12 +67,13 @@ To use a specific provider, enable the corresponding feature in your `Cargo.toml
 [dependencies]
 libunftp = { version = "0.20.3", features = ["ring"] }  # Use ring
 # or
-libunftp = { version = "0.20.3", features = ["aws-lc-rs"] }  # Use aws-lc-rs (default)
+libunftp = { version = "0.20.3", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
 ```
 
 The default provider is `aws-lc-rs` for backward compatibility. Choose the provider that best fits your needs:
-- `ring`: More widely used, good for general-purpose applications
-- `aws-lc-rs`: Optimized for AWS environments, good for cloud deployments
+
+- [`ring`](https://crates.io/crates/ring): More widely used, good for general-purpose applications
+- [`aws-lc-rs`](https://crates.io/crates/aws-lc-rs): Optimized for AWS environments, good for cloud deployments
 
 ## Prerequisites
 
