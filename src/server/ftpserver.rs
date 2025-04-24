@@ -267,6 +267,8 @@ where
     /// # Example
     ///
     /// ```rust
+    /// # let config = Default::default();
+    /// use rustls::ServerConfig;
     /// use libunftp::Server;
     /// use unftp_sbe_fs::ServerExt;
     ///
