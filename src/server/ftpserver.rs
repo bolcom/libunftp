@@ -4,7 +4,6 @@ mod listen;
 mod listen_proxied;
 pub mod options;
 
-use rustls::ServerConfig;
 use super::{
     controlchan,
     failed_logins::FailedLoginsCache,
@@ -12,10 +11,10 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
-use crate::options::ActivePassiveMode;
 use crate::{
     auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
     notification::{nop::NopListener, DataListener, PresenceListener},
+    options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
     server::{
@@ -25,6 +24,8 @@ use crate::{
     storage::{Metadata, StorageBackend},
 };
 use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
+#[cfg(feature = "experimental")]
+use rustls::ServerConfig;
 use slog::*;
 use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::RangeInclusive, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 
@@ -260,7 +261,8 @@ where
         self
     }
 
-    /// Enables FTPS by configuring the raw FtpsConfig.
+    /// Enables FTPS by configuring the raw FtpsConfig. Needs the `experimental` feature to
+    /// be switched on.
     ///
     /// # Example
     ///
@@ -271,6 +273,7 @@ where
     /// let server = Server::with_fs("/tmp")
     ///              .ftps_manual(config);
     /// ```
+    #[cfg(feature = "experimental")]
     pub fn ftps_manual<P: Into<PathBuf>>(mut self, config: Arc<ServerConfig>) -> Self {
         self.ftps_mode = FtpsConfig::On { tls_config: config };
         self
