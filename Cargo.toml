@@ -49,21 +49,21 @@ bytes = "1.10.1"
 chrono = { version = "0.4.40", default-features = false, features = ["clock", "std"] }
 derive_more = { version = "1.0.0", features = ["display"] }
 futures-util = { version = "0.3.31", default-features = false, features = ["alloc", "sink"] }
-getrandom = "0.2.15"
+getrandom = "0.2.16"
 lazy_static = "1.5.0"
 md-5 = "0.10.6"
 moka = { version = "0.12.10", default-features = false, features = ["sync"] }
 nix = { version = "0.29.0", default-features = false, features = ["fs"] }
 prometheus = { version = "0.13.4", default-features = false }
 proxy-protocol = "0.5.0"
-rustls = { version = "0.23.25", default-features = false }
+rustls = { version = "0.23.26", default-features = false }
 rustls-pemfile = "2.2.0"
 slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_info"] }
 slog-stdlog = "4.1.1"
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["macros", "rt", "net", "process", "sync", "io-util", "time"] }
 tokio-rustls = "0.26.2"
-tokio-util = { version = "0.7.14", features = ["codec"] }
+tokio-util = { version = "0.7.15", features = ["codec"] }
 tracing = { version = "0.1.41", default-features = false }
 tracing-attributes = "0.1.28"
 uuid = { version = "1.16.0", features = ["v4"] }

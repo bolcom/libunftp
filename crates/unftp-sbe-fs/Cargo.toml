@@ -53,7 +53,7 @@ slog-term = "2.9.1"
 tempfile = "3.19.1"
 tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.19"
-getrandom = "0.2.15"
+getrandom = "0.2.16"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = { version = "0.4.4", features = ["casper"] }
