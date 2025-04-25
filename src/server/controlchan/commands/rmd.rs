@@ -10,9 +10,9 @@ use crate::{
     server::{
         chancomms::ControlChanMsg,
         controlchan::{
+            Reply,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply,
         },
     },
     storage::{Metadata, StorageBackend},
@@ -46,17 +46,20 @@ where
         let path_str = path.to_string_lossy().to_string();
         let tx = args.tx_control_chan.clone();
         let logger = args.logger;
-        if let Err(err) = storage.rmd((*session.user).as_ref().unwrap(), path).await {
-            slog::warn!(logger, "RMD: Failed to delete directory {}: {}", path_str, err);
-            let r = tx.send(ControlChanMsg::StorageError(err)).await;
-            if let Err(e) = r {
-                slog::warn!(logger, "RMD: Could not send internal message to notify of RMD error: {}", e);
+        match storage.rmd((*session.user).as_ref().unwrap(), path).await {
+            Err(err) => {
+                slog::warn!(logger, "RMD: Failed to delete directory {}: {}", path_str, err);
+                let r = tx.send(ControlChanMsg::StorageError(err)).await;
+                if let Err(e) = r {
+                    slog::warn!(logger, "RMD: Could not send internal message to notify of RMD error: {}", e);
+                }
             }
-        } else {
-            slog::info!(logger, "RMD: Successfully removed directory {:?}", path_str);
-            let r = tx.send(ControlChanMsg::RmDirSuccess { path: path_str }).await;
-            if let Err(e) = r {
-                slog::warn!(logger, "RMD: Could not send internal message to notify of RMD success: {}", e);
+            _ => {
+                slog::info!(logger, "RMD: Successfully removed directory {:?}", path_str);
+                let r = tx.send(ControlChanMsg::RmDirSuccess { path: path_str }).await;
+                if let Err(e) = r {
+                    slog::warn!(logger, "RMD: Could not send internal message to notify of RMD success: {}", e);
+                }
             }
         }
         Ok(Reply::none())

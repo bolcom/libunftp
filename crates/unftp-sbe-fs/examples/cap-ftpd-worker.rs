@@ -106,11 +106,7 @@ mod auth {
 
         fn check_password(given_password: &str, actual_password: &Option<String>) -> Result<(), ()> {
             if let Some(pwd) = actual_password {
-                if pwd == given_password {
-                    Ok(())
-                } else {
-                    Err(())
-                }
+                if pwd == given_password { Ok(()) } else { Err(()) }
             } else {
                 Err(())
             }
@@ -123,7 +119,7 @@ mod auth {
         async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<User, AuthenticationError> {
             let res = if let Some(actual_creds) = self.credentials_map.get(username) {
                 let pass_check_result = match &creds.password {
-                    Some(ref given_password) => {
+                    Some(given_password) => {
                         if Self::check_password(given_password, &actual_creds.password).is_ok() {
                             Some(Ok(User::new(username, &actual_creds.home)))
                         } else {

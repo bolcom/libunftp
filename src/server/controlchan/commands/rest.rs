@@ -9,11 +9,11 @@
 use crate::{
     auth::UserDetail,
     server::controlchan::{
+        Reply, ReplyCode,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
-        Reply, ReplyCode,
     },
-    storage::{Metadata, StorageBackend, FEATURE_RESTART},
+    storage::{FEATURE_RESTART, Metadata, StorageBackend},
 };
 use async_trait::async_trait;
 

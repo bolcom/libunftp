@@ -10,9 +10,9 @@ use crate::{
     server::{
         chancomms::ControlChanMsg,
         controlchan::{
+            Reply,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply,
         },
     },
     storage::{Metadata, StorageBackend},
@@ -49,15 +49,18 @@ where
         let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
         let logger = args.logger;
         tokio::spawn(async move {
-            if let Err(err) = storage.mkd((*user).as_ref().unwrap(), &path).await {
-                slog::warn!(logger, "MKD: Failure creating directory {:?} {}", path_str, err);
-                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
-                    slog::warn!(logger, "MKD: Could not send internal message to notify of MKD failure: {}", err);
+            match storage.mkd((*user).as_ref().unwrap(), &path).await {
+                Err(err) => {
+                    slog::warn!(logger, "MKD: Failure creating directory {:?} {}", path_str, err);
+                    if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                        slog::warn!(logger, "MKD: Could not send internal message to notify of MKD failure: {}", err);
+                    }
                 }
-            } else {
-                slog::info!(logger, "MKD: Successfully created directory {:?}", path_str);
-                if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
-                    slog::warn!(logger, "MKD: Could not send internal message to notify of MKD success: {}", err);
+                _ => {
+                    slog::info!(logger, "MKD: Successfully created directory {:?}", path_str);
+                    if let Err(err) = tx.send(ControlChanMsg::MkDirSuccess { path: path_str }).await {
+                        slog::warn!(logger, "MKD: Could not send internal message to notify of MKD success: {}", err);
+                    }
                 }
             }
         });

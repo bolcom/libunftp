@@ -4,18 +4,18 @@
 use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::{
+    ServerError,
     auth::UserDetail,
     server::{
+        ControlChanMsg, Reply, ReplyCode,
         chancomms::{ProxyLoopMsg, ProxyLoopReceiver, ProxyLoopSender},
         controlchan,
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,
-        proxy_protocol::{spawn_proxy_header_parsing, ProxyConnection, ProxyProtocolSwitchboard},
+        proxy_protocol::{ProxyConnection, ProxyProtocolSwitchboard, spawn_proxy_header_parsing},
         session::SharedSession,
-        ControlChanMsg, Reply, ReplyCode,
     },
     storage::StorageBackend,
-    ServerError,
 };
 use std::{
     net::{IpAddr, SocketAddr},

@@ -17,9 +17,9 @@ use crate::server::chancomms::DataChanCmd;
 use crate::{
     auth::UserDetail,
     server::controlchan::{
+        Command, Reply, ReplyCode,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
-        Command, Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
 };

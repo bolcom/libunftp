@@ -1,6 +1,6 @@
 use crate::server::{
-    controlchan::{error::ControlChanError, Reply},
     Event,
+    controlchan::{Reply, error::ControlChanError},
 };
 use async_trait::async_trait;
 use std::{future::Future, pin::Pin};

@@ -12,8 +12,8 @@ use super::{
     tls::FtpsConfig,
 };
 use crate::{
-    auth::{anonymous::AnonymousAuthenticator, Authenticator, UserDetail},
-    notification::{nop::NopListener, DataListener, PresenceListener},
+    auth::{Authenticator, UserDetail, anonymous::AnonymousAuthenticator},
+    notification::{DataListener, PresenceListener, nop::NopListener},
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
@@ -23,7 +23,7 @@ use crate::{
     },
     storage::{Metadata, StorageBackend},
 };
-use options::{PassiveHost, DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS};
+use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
 #[cfg(feature = "experimental")]
 use rustls::ServerConfig;
 use slog::*;

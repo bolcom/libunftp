@@ -8,15 +8,15 @@
 use crate::{
     auth::UserDetail,
     server::{
+        ControlChanMsg,
         chancomms::{DataChanCmd, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
+            Reply, ReplyCode,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply, ReplyCode,
         },
         datachan,
         session::SharedSession,
-        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use std::{io, net::SocketAddr, ops::RangeInclusive};
 use tokio::{
     net::TcpListener,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{Receiver, Sender, channel},
 };
 
 const BIND_RETRIES: u8 = 10;

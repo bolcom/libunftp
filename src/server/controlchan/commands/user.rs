@@ -3,9 +3,9 @@ use crate::{
     auth::UserDetail,
     server::{
         controlchan::{
+            Reply, ReplyCode,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply, ReplyCode,
         },
         session::SessionState,
     },
@@ -106,8 +106,8 @@ mod tests {
     use std::sync::Arc;
     use std::time::SystemTime;
     use tokio::io::AsyncRead;
-    use tokio::sync::mpsc;
     use tokio::sync::Mutex;
+    use tokio::sync::mpsc;
 
     #[derive(Debug)]
     struct Auth {

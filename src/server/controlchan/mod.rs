@@ -20,7 +20,7 @@ mod middleware;
 mod notify;
 
 use command::Command;
-pub(crate) use control_loop::{spawn as spawn_loop, Config as LoopConfig};
+pub(crate) use control_loop::{Config as LoopConfig, spawn as spawn_loop};
 pub(crate) use error::{ControlChanError, ControlChanErrorKind};
 pub(crate) use event::Event;
 pub(crate) use middleware::ControlChanMiddleware;

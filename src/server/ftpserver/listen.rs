@@ -1,6 +1,6 @@
 //! Contains the code that listens to control channel connections in a non-proxy protocol mode.
 
-use super::{chosen::OptionsHolder, ServerError};
+use super::{ServerError, chosen::OptionsHolder};
 use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::{auth::UserDetail, server::controlchan, storage::StorageBackend};

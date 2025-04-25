@@ -4,7 +4,7 @@ use crate::server::{Command, ControlChanError, ControlChanErrorKind, ControlChan
 
 use async_trait::async_trait;
 use lazy_static::*;
-use prometheus::{opts, register_int_counter, register_int_counter_vec, register_int_gauge, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{IntCounter, IntCounterVec, IntGauge, opts, register_int_counter, register_int_counter_vec, register_int_gauge};
 
 // Control channel middleware that adds metrics
 pub struct MetricsMiddleware<Next>

@@ -168,4 +168,4 @@ pub(crate) mod error;
 pub use error::{Error, ErrorKind};
 
 pub(crate) mod storage_backend;
-pub use storage_backend::{Fileinfo, Metadata, Permissions, Result, StorageBackend, FEATURE_RESTART, FEATURE_SITEMD5};
+pub use storage_backend::{FEATURE_RESTART, FEATURE_SITEMD5, Fileinfo, Metadata, Permissions, Result, StorageBackend};

@@ -19,15 +19,15 @@
 use crate::{
     auth::UserDetail,
     server::{
+        ControlChanMsg,
         chancomms::{DataChanCmd, ProxyLoopSender},
         controlchan::{
+            Reply, ReplyCode,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply, ReplyCode,
         },
         datachan,
         session::SharedSession,
-        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -35,7 +35,7 @@ use async_trait::async_trait;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 #[derive(Debug)]
 pub struct Port {

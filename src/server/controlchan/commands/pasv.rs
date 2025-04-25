@@ -9,16 +9,16 @@
 use crate::{
     auth::UserDetail,
     server::{
+        ControlChanErrorKind, ControlChanMsg,
         chancomms::{DataChanCmd, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
+            Reply, ReplyCode,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply, ReplyCode,
         },
         datachan,
         ftpserver::options::PassiveHost,
         session::SharedSession,
-        ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 use tokio::net::TcpSocket;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 const BIND_RETRIES: u8 = 10;
 
@@ -112,10 +112,9 @@ impl Pasv {
             }
         };
 
-        let listener = if let Some(ref mut binder) = session.lock().await.binder {
-            binder.bind(args.local_addr.ip(), args.passive_ports).await
-        } else {
-            Pasv::try_port_range(args.local_addr.ip(), args.passive_ports)
+        let listener = match session.lock().await.binder {
+            Some(ref mut binder) => binder.bind(args.local_addr.ip(), args.passive_ports).await,
+            _ => Pasv::try_port_range(args.local_addr.ip(), args.passive_ports),
         };
         let listener = match listener {
             Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),

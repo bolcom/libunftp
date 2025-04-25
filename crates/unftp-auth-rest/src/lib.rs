@@ -4,13 +4,13 @@
 
 use async_trait::async_trait;
 use http_body_util::BodyExt;
-use hyper::{http::uri::InvalidUri, Method, Request};
+use hyper::{Method, Request, http::uri::InvalidUri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// A [libunftp](https://crates.io/crates/libunftp) `Authenticator`
 /// implementation that authenticates by consuming a JSON REST API.

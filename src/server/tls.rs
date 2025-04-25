@@ -1,10 +1,10 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
 use rustls::{
+    NoKeyLog, RootCertStore, ServerConfig, SupportedProtocolVersion,
     crypto::{aws_lc_rs, aws_lc_rs::Ticketer},
     pki_types::{CertificateDer, PrivateKeyDer},
     server::{ClientCertVerifierBuilder, NoServerSessionStorage, StoresServerSessions, WebPkiClientVerifier},
     version::{TLS12, TLS13},
-    NoKeyLog, RootCertStore, ServerConfig, SupportedProtocolVersion,
 };
 use std::{
     fmt::{self, Display, Formatter},
@@ -143,7 +143,7 @@ fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<CertificateDer<'static>
 }
 
 fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKeyDer<'static>, ConfigError> {
-    use rustls_pemfile::{read_one, Item};
+    use rustls_pemfile::{Item, read_one};
     use std::iter;
 
     let keyfile = File::open(&filename)?;

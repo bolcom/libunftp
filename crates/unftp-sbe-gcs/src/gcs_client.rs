@@ -3,12 +3,12 @@ use futures::prelude::*;
 use http_body_util::combinators::UnsyncBoxBody;
 use http_body_util::{BodyExt, Either, Empty, StreamBody};
 use hyper::body::{Frame, Incoming};
-use hyper::{body::Body, header, Method, Request, Response, Uri};
+use hyper::{Method, Request, Response, Uri, body::Body, header};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use libunftp::storage::{Error, ErrorKind};
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::de::DeserializeOwned;
 use std::fmt;
 use std::io::Error as StdIoError;
@@ -526,11 +526,7 @@ impl Token {
     }
 
     fn get_if_active(&self) -> Option<Token> {
-        if self.active() {
-            Some(self.clone())
-        } else {
-            None
-        }
+        if self.active() { Some(self.clone()) } else { None }
     }
 }
 

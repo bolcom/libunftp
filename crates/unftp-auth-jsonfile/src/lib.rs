@@ -153,13 +153,13 @@ use iprange::IpRange;
 use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
 use ring::{
     digest::SHA256_OUTPUT_LEN,
-    pbkdf2::{verify, PBKDF2_HMAC_SHA256},
+    pbkdf2::{PBKDF2_HMAC_SHA256, verify},
 };
 use serde::Deserialize;
 use std::io::prelude::*;
 use std::{collections::HashMap, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
-use valid::{constraint::Length, Validate};
+use valid::{Validate, constraint::Length};
 
 #[derive(Deserialize, Clone, Debug)]
 struct ClientCertCredential {
@@ -318,11 +318,7 @@ impl JsonFileAuthenticator {
         match actual_password {
             Password::PlainPassword { password } => {
                 if let Some(pwd) = password {
-                    if pwd == given_password {
-                        Ok(())
-                    } else {
-                        Err(())
-                    }
+                    if pwd == given_password { Ok(()) } else { Err(()) }
                 } else {
                     Err(())
                 }
@@ -382,7 +378,7 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             };
 
             let pass_check_result = match &creds.password {
-                Some(ref given_password) => {
+                Some(given_password) => {
                     if Self::check_password(given_password, &actual_creds.password).is_ok() {
                         Some(Ok(DefaultUser {}))
                     } else {

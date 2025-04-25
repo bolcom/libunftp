@@ -1,5 +1,5 @@
-use crate::options::AuthMethod;
 use crate::CloudStorage;
+use crate::options::AuthMethod;
 use libunftp::auth::DefaultUser;
 use libunftp::{Server, ServerBuilder};
 use std::path::PathBuf;

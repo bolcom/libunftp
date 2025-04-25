@@ -1,6 +1,6 @@
 use crate::server::{
-    controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
     Command, Event, Reply,
+    controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
 };
 
 use async_trait::async_trait;

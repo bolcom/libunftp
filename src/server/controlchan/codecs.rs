@@ -1,4 +1,4 @@
-use super::{command::Command, error::ControlChanError, line_parser, Reply};
+use super::{Reply, command::Command, error::ControlChanError, line_parser};
 
 use bytes::BytesMut;
 use std::io::Write;

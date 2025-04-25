@@ -1,11 +1,11 @@
 use crate::{
     auth::{Authenticator, UserDetail},
     server::{
+        ControlChanMsg,
         chancomms::ProxyLoopSender,
-        controlchan::{command::Command, error::ControlChanError, Reply},
+        controlchan::{Reply, command::Command, error::ControlChanError},
         ftpserver::options::{PassiveHost, SiteMd5},
         session::SharedSession,
-        ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };

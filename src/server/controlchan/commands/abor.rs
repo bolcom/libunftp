@@ -12,9 +12,9 @@
 use crate::auth::UserDetail;
 use crate::{
     server::controlchan::{
+        Reply, ReplyCode,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
-        Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
 };

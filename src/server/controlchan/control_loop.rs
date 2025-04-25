@@ -4,8 +4,10 @@ use crate::{
     notification::{DataListener, PresenceListener},
     options::ActivePassiveMode,
     server::{
+        Event, Session, SessionState,
         chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopSender},
         controlchan::{
+            Reply, ReplyCode,
             active_passive::ActivePassiveEnforcerMiddleware,
             auth::AuthMiddleware,
             codecs::FtpCodec,
@@ -18,7 +20,6 @@ use crate::{
             log::LoggingMiddleware,
             middleware::ControlChanMiddleware,
             notify::EventDispatcherMiddleware,
-            Reply, ReplyCode,
         },
         failed_logins::FailedLoginsCache,
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
@@ -26,7 +27,6 @@ use crate::{
         session::SharedSession,
         shutdown,
         tls::FtpsConfig,
-        Event, Session, SessionState,
     },
     storage::{ErrorKind, Metadata, StorageBackend},
 };
@@ -38,8 +38,8 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
     sync::{
-        mpsc::{channel, Receiver, Sender},
         Mutex,
+        mpsc::{Receiver, Sender, channel},
     },
     task::JoinHandle,
 };

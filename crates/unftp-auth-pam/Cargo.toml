@@ -9,7 +9,7 @@ authors = [
     "Koen Wilde <koen@chillheid.nl>",
     "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
 ]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 keywords = ["libunftp", "unftp", "ftp", "ftps", "pam"]
 categories = ["network-programming"]

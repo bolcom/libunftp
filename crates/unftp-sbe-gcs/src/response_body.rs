@@ -2,7 +2,7 @@ use super::ObjectMetadata;
 use base64::Engine;
 use chrono::prelude::*;
 use libunftp::storage::{Error, ErrorKind, Fileinfo};
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 use std::fmt::{Display, Write};
 use std::path::PathBuf;
 use std::str::FromStr;

@@ -5,8 +5,8 @@ use crate::auth::UserDetail;
 use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::{
-    prelude::{DateTime, Utc},
     Datelike,
+    prelude::{DateTime, Utc},
 };
 use md5::{Digest, Md5};
 use std::{

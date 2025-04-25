@@ -1,6 +1,6 @@
 use std::fmt::Debug;
-use tokio::sync::{broadcast, mpsc};
 use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{broadcast, mpsc};
 
 // Notifier lets other tasks know that we're shutting down.
 #[derive(Debug)]

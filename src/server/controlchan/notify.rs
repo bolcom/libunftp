@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use crate::{
     notification,
-    notification::event::PresenceListener,
     notification::DataListener,
-    server::session::TraceId,
+    notification::event::PresenceListener,
     server::ControlChanMsg,
+    server::session::TraceId,
     server::{
-        controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
         Event, Reply,
+        controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
     },
 };
 

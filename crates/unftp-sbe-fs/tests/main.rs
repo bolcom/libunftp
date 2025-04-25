@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
-use async_ftp::{types::Result, FtpStream};
-use libunftp::{auth::DefaultUser, options::FtpsRequired, ServerBuilder};
+use async_ftp::{FtpStream, types::Result};
+use libunftp::{ServerBuilder, auth::DefaultUser, options::FtpsRequired};
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use std::fmt::Debug;
@@ -252,7 +252,7 @@ mod list {
     #[tokio::test]
     async fn format(#[future] harness: Harness) {
         use regex::Regex;
-        use std::os::unix::fs::{fchown, MetadataExt, OpenOptionsExt};
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, fchown};
 
         // Create a filename in the ftp root that we will look for in the `LIST` output
         let path = harness.root.join("test.txt");

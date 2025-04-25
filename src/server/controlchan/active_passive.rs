@@ -1,8 +1,8 @@
 use crate::{
     options::ActivePassiveMode,
     server::{
-        controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
         Command, Event, Reply, ReplyCode,
+        controlchan::{error::ControlChanError, middleware::ControlChanMiddleware},
     },
 };
 use async_trait::async_trait;

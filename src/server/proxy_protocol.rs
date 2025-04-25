@@ -4,8 +4,8 @@ use super::{
 };
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
-use dashmap::{mapref::entry::Entry, DashMap};
-use proxy_protocol::{parse, version1::ProxyAddresses, ParseError, ProxyHeader};
+use dashmap::{DashMap, mapref::entry::Entry};
+use proxy_protocol::{ParseError, ProxyHeader, parse, version1::ProxyAddresses};
 use std::{
     net::{IpAddr, SocketAddr, SocketAddrV4},
     ops::RangeInclusive,
@@ -298,7 +298,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::ProxyError;
-    use proxy_protocol::{version1::ProxyAddresses, ProxyHeader};
+    use proxy_protocol::{ProxyHeader, version1::ProxyAddresses};
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;

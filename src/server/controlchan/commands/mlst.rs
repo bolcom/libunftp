@@ -7,9 +7,9 @@
 use crate::{
     auth::UserDetail,
     server::controlchan::{
+        Reply, ReplyCode,
         error::ControlChanError,
         handler::{CommandContext, CommandHandler},
-        Reply, ReplyCode,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -50,7 +50,7 @@ where
                 return Ok(Reply::CodeAndMsg {
                     code: ReplyCode::FileError,
                     msg: e.to_string(),
-                })
+                });
             }
         };
 

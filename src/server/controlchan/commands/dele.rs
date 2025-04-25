@@ -10,9 +10,9 @@ use crate::{
     server::{
         chancomms::ControlChanMsg,
         controlchan::{
+            Reply,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply,
         },
     },
     storage::{Metadata, StorageBackend},

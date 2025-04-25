@@ -2,11 +2,11 @@ use crate::{
     auth::UserDetail,
     server::{
         chancomms::ControlChanMsg,
+        controlchan::{Reply, ReplyCode},
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
         },
-        controlchan::{Reply, ReplyCode},
     },
     storage::{Metadata, StorageBackend},
 };

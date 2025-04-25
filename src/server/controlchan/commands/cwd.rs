@@ -12,9 +12,9 @@ use crate::{
     server::{
         chancomms::ControlChanMsg,
         controlchan::{
+            Reply,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
-            Reply,
         },
     },
     storage::{Metadata, StorageBackend},
@@ -49,17 +49,20 @@ where
         let tx_fail = args.tx_control_chan.clone();
         let logger = args.logger;
 
-        if let Err(err) = storage.cwd((*session.user).as_ref().unwrap(), path.clone()).await {
-            slog::warn!(logger, "CWD: Failed to change directory {:?}: {} ", path, err);
-            let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
-            if let Err(e) = r {
-                slog::warn!(logger, "CWD: Could not send internal message to notify of CWD error: {}", e);
+        match storage.cwd((*session.user).as_ref().unwrap(), path.clone()).await {
+            Err(err) => {
+                slog::warn!(logger, "CWD: Failed to change directory {:?}: {} ", path, err);
+                let r = tx_fail.send(ControlChanMsg::StorageError(err)).await;
+                if let Err(e) = r {
+                    slog::warn!(logger, "CWD: Could not send internal message to notify of CWD error: {}", e);
+                }
             }
-        } else {
-            let r = tx_success.send(ControlChanMsg::CwdSuccess).await;
-            session.cwd.push(path);
-            if let Err(e) = r {
-                slog::warn!(logger, "CWD: Could not send internal message to notify of CWD success: {}", e);
+            _ => {
+                let r = tx_success.send(ControlChanMsg::CwdSuccess).await;
+                session.cwd.push(path);
+                if let Err(e) = r {
+                    slog::warn!(logger, "CWD: Could not send internal message to notify of CWD success: {}", e);
+                }
             }
         }
 
