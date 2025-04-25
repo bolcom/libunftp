@@ -1,9 +1,15 @@
 # Changelog
 
-### Upcoming release
+### libunftp 0.21.0
 
-- Upgrade dependencies
+- Upgraded dependencies
 - Compiling against Rust 1.85.0
+- Bumped codebase to Edition 2024
+- [#531](https://github.com/bolcom/libunftp/pull/531) Implement EPSV FTP command
+- [#533](https://github.com/bolcom/libunftp/pull/533) BREAKING: Make passive port range inclusive
+- [#519](https://github.com/bolcom/libunftp/pull/519) Create new `ring` feature to use `ring` over `aws-lc-rs`
+- [#536](https://github.com/bolcom/libunftp/pull/536) Implement MLST command
+- Add `ftps_manual` method to ServerBuilder, hiding it behind a `experimental` feature.
 
 ### libunftp 0.20.3
 
