@@ -253,7 +253,7 @@ where
 
         let randomized_initial_port = {
             let mut data = [0; 2];
-            getrandom::getrandom(&mut data).expect("Error generating random free port to reserve");
+            getrandom::fill(&mut data).expect("Error generating random free port to reserve");
             u16::from_ne_bytes(data)
         };
 

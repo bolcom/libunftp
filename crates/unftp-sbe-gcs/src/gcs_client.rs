@@ -21,7 +21,7 @@ use tokio::io::AsyncRead;
 use tokio::sync::RwLock;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::ReaderStream;
-use yup_oauth2::ServiceAccountAuthenticator;
+use yup_oauth2::{CustomHyperClientBuilder, ServiceAccountAuthenticator};
 
 use crate::{
     options::AuthMethod,
@@ -468,7 +468,8 @@ impl TokenSource {
         match &self.auth {
             AuthMethod::ServiceAccountKey(_) => {
                 let key = self.auth.to_service_account_key()?;
-                let auth = ServiceAccountAuthenticator::builder(key).hyper_client(self.client_body.clone()).build().await?;
+                let cb: CustomHyperClientBuilder<HttpsConnector<HttpConnector>> = self.client_body.clone().into();
+                let auth = ServiceAccountAuthenticator::with_client(key, cb).build().await?;
 
                 auth.token(&["https://www.googleapis.com/auth/devstorage.read_write"])
                     .map_ok(|t| t.into())

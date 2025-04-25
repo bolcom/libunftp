@@ -26,7 +26,7 @@ impl TraceId {
     pub fn new() -> Self {
         let mut id = [0; 8];
         // For now keep it simple. Later we may need something more sophisticated
-        getrandom::getrandom(&mut id).expect("Error generating random TraceId");
+        getrandom::fill(&mut id).expect("Error generating random TraceId");
 
         TraceId(u64::from_ne_bytes(id))
     }

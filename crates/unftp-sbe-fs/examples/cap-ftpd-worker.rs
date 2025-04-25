@@ -201,7 +201,7 @@ cfg_if! {
 
                 for _ in 1..BIND_RETRIES {
                     let mut data = [0u8; 2];
-                    getrandom::getrandom(&mut data).expect("Error generating random port");
+                    getrandom::fill(&mut data).expect("Error generating random port");
                     let r16 = u16::from_ne_bytes(data);
                     let p = passive_ports.start + r16 % (passive_ports.end - passive_ports.start);
                     let socket = TcpSocket::new_v4()?;

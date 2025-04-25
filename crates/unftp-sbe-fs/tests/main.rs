@@ -206,7 +206,7 @@ async fn get(#[future] harness: Harness) {
 
     // Write some random data to our file
     let mut data = vec![0; 1024];
-    getrandom::getrandom(&mut data).expect("Error generating random bytes");
+    getrandom::fill(&mut data).expect("Error generating random bytes");
     f.write_all(&data).unwrap();
 
     // Retrieve the remote file

@@ -45,7 +45,7 @@ nix = { version = "0.29.0", default-features = false, features = ["user"] }
 pretty_assertions = "1.4.1"
 pretty_env_logger = "0.5.0"
 regex = "1.11.1"
-rstest = "0.24.0"
+rstest = "0.25.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 slog-async = "2.8.0"
@@ -53,7 +53,7 @@ slog-term = "2.9.1"
 tempfile = "3.19.1"
 tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.19"
-getrandom = "0.2.16"
+getrandom = "0.3.2"
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = { version = "0.4.4", features = ["casper"] }

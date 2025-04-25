@@ -46,7 +46,7 @@ impl Epsv {
         for _ in 1..BIND_RETRIES {
             let random_u32 = {
                 let mut data = [0; 4];
-                getrandom::getrandom(&mut data).expect("Error generating random port");
+                getrandom::fill(&mut data).expect("Error generating random port");
                 u32::from_ne_bytes(data)
             };
 

@@ -77,7 +77,7 @@ The default provider is `aws-lc-rs` for backward compatibility. Choose the provi
 
 ## Prerequisites
 
-You'll need [Rust](https://rust-lang.org) 1.41 or higher to build libunftp.
+You'll need [Rust](https://rust-lang.org) 1.85.0 or higher to build libunftp.
 
 ## Getting started
 
