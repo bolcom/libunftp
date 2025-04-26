@@ -1,5 +1,21 @@
 # Changelog
 
+### unftp-sbe-gcs v0.2.8
+
+- Upgrade to libunftp v0.21.0
+- Upgrade dependencies
+
+### unftp-sbe-fs v0.3.0
+
+- Upgrade to libunftp v0.21.0
+- Breaking: Don't panic during Filesystem::new
+- Upgrade dependencies
+
+### unftp-auth-jsonfile v0.3.6, unftp-auth-pam v0.2.7, unftp-auth-rest v0.2.8
+
+- Upgrade to libunftp v0.21.0
+- Upgrade dependencies
+
 ### libunftp 0.21.0
 
 - Upgraded dependencies
