@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use std::{
     fmt::{self, Debug, Display, Formatter},
     path::Path,
@@ -26,6 +27,39 @@ pub trait UserDetail: Send + Sync + Display + Debug {
     /// The path should be absolute.
     fn home(&self) -> Option<&Path> {
         None
+    }
+
+    /// Tells what the user is authorised to do in terms of FTP filesystem operations.
+    ///
+    /// The default implementation gives all permissions.
+    fn storage_permissions(&self) -> StoragePermissions {
+        StoragePermissions::all()
+    }
+}
+
+bitflags! {
+    /// The FTP operations that can be enabled/disabled for the storage back-end.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct StoragePermissions: u32 {
+        /// If set allows FTP make directory
+        const MK_DIR = 0b00000001;
+        /// If set allows FTP remove directory
+        const RM_DIR = 0b00000010;
+        /// If set allows FTP GET i.e. clients can download files.
+        const GET    = 0b00000100;
+        /// If set allows FTP PUT i.e. clients can upload files.
+        const PUT    = 0b00001000;
+        /// If set allows FTP DELE i.e. clients can remove files.
+        const DEL    = 0b00010000;
+        /// If set allows FTP RENAME i.e. clients can rename directories and files
+        const RENAME = 0b00100000;
+        /// If set allows the extended SITE MD5 command to calculate checksums
+        const MD5    = 0b01000000;
+        /// If set allows clients to list the contents of a directory.
+        const LIST   = 0b10000000;
+
+        /// Convenience aggregation of all the write operation bits.
+        const WRITE_OPS = Self::MK_DIR.bits() | Self::RM_DIR.bits() | Self::PUT.bits() | Self::DEL.bits() | Self::RENAME.bits();
     }
 }
 
