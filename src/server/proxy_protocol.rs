@@ -1,9 +1,5 @@
 #![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
-
-use super::{
-    chancomms::{ProxyLoopMsg, ProxyLoopSender},
-    session::SharedSession,
-};
+use super::session::SharedSession;
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use dashmap::{DashMap, mapref::entry::Entry};
@@ -15,6 +11,8 @@ use std::{
 };
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
+use tokio::net::TcpStream;
+use tokio::sync::mpsc::Sender;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ProxyMode {
@@ -126,18 +124,14 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
 /// Sends the extracted proxy connection information (source ip+port, destination ip+port) to the proxy loop
 #[cfg(feature = "proxy_protocol")]
 #[tracing_attributes::instrument]
-pub(super) fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
-where
-    User: UserDetail + 'static,
-    Storage: StorageBackend<User> + 'static,
-{
+pub(super) fn spawn_proxy_header_parsing(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: Sender<ProxyHeaderReceived>) {
     tokio::spawn(async move {
         match read_proxy_header(&mut tcp_stream).await {
             Ok(ProxyHeader::Version1 {
                 addresses: ProxyAddresses::Ipv4 { source, destination },
             }) => {
                 if let Err(e) = tx
-                    .send(ProxyLoopMsg::ProxyHeaderReceived(
+                    .send(ProxyHeaderReceived(
                         ProxyConnection {
                             source: SocketAddr::V4(SocketAddrV4::new(*source.ip(), source.port())),
                             destination: SocketAddr::V4(SocketAddrV4::new(*destination.ip(), destination.port())),
@@ -163,6 +157,9 @@ where
         }
     });
 }
+
+/// Upon receiving the header, the connection and tcp stream are passed back to the proxy loop
+pub(crate) struct ProxyHeaderReceived(pub ProxyConnection, pub TcpStream);
 
 /// Identifies a passive listening port entry in the ProxyProtocolSwitchboard that is connected to a specific
 /// client. The key is constructed out of the external source IP of the client and the passive listening port that has

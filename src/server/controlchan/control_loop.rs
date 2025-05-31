@@ -5,7 +5,7 @@ use crate::{
     options::ActivePassiveMode,
     server::{
         Event, Session, SessionState,
-        chancomms::{ControlChanMsg, ProxyLoopMsg, ProxyLoopSender},
+        chancomms::{ControlChanMsg, SwitchboardMessage, SwitchboardSender},
         controlchan::{
             Reply, ReplyCode,
             active_passive::ActivePassiveEnforcerMiddleware,
@@ -79,7 +79,7 @@ pub(crate) async fn spawn<Storage, User>(
     config: Config<Storage, User>,
     tcp_stream: TcpStream,
     proxy_connection: Option<ProxyConnection>,
-    proxyloop_msg_tx: Option<ProxyLoopSender<Storage, User>>,
+    proxyloop_msg_tx: Option<SwitchboardSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
     failed_logins: Option<Arc<FailedLoginsCache>>,
 ) -> Result<JoinHandle<()>, ControlChanError>
@@ -223,11 +223,11 @@ where
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
                     let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
-                    if let Some(tx) = proxyloop_msg_tx
-                        && let Err(err) = tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session.clone())).await
-                    {
-                        slog::warn!(logger, "Could not send CloseDataPortCommand to channel: {}", err);
-                        return;
+                    if let Some(tx) = proxyloop_msg_tx {
+                        if let Err(err) = tx.send(SwitchboardMessage::CloseDataPortCommand(shared_session.clone())).await {
+                            slog::warn!(logger, "Could not send CloseDataPortCommand to channel: {}", err);
+                            return;
+                        }
                     };
                     slog::debug!(logger, "Exiting control loop");
                     return;
@@ -335,7 +335,7 @@ where
     tx_control_chan: Sender<ControlChanMsg>,
     local_addr: SocketAddr,
     storage_features: u32,
-    tx_proxy_loop: Option<ProxyLoopSender<Storage, User>>,
+    tx_proxy_loop: Option<SwitchboardSender<Storage, User>>,
     sitemd5: SiteMd5,
 }
 

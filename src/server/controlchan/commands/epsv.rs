@@ -9,7 +9,7 @@ use crate::{
     auth::UserDetail,
     server::{
         ControlChanMsg,
-        chancomms::{DataChanCmd, ProxyLoopMsg, ProxyLoopSender},
+        chancomms::{DataChanCmd, SwitchboardMessage, SwitchboardSender},
         controlchan::{
             Reply, ReplyCode,
             error::ControlChanError,
@@ -127,14 +127,14 @@ impl Epsv {
     // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
     // should choose a data port and check for connections on it.
     #[tracing_attributes::instrument]
-    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: SwitchboardSender<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
         self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan).await;
-        tx.send(ProxyLoopMsg::AssignDataPortCommand(args.session.clone())).await.unwrap();
+        tx.send(SwitchboardMessage::AssignDataPortCommand(args.session.clone())).await.unwrap();
         Ok(Reply::None)
     }
 }
@@ -148,7 +148,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let sender: Option<ProxyLoopSender<Storage, User>> = args.tx_proxyloop.clone();
+        let sender: Option<SwitchboardSender<Storage, User>> = args.tx_proxyloop.clone();
         match sender {
             Some(tx) => self.handle_proxy_mode(args, tx).await,
             None => self.handle_nonproxy_mode(args).await,

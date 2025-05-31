@@ -1,7 +1,7 @@
 //! Contains code pertaining to the communication between the data and control channels.
 #![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
 
-use super::{proxy_protocol::ProxyConnection, session::SharedSession};
+use super::session::SharedSession;
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
@@ -9,12 +9,9 @@ use crate::{
     storage::{Error, StorageBackend},
 };
 use std::fmt;
-use tokio::{
-    net::TcpStream,
-    sync::mpsc::{Receiver, Sender},
-};
+use tokio::sync::mpsc::{Receiver, Sender};
 
-// Commands that can be send to the data channel / data loop.
+// Commands that can be sent to the data channel / data loop.
 #[derive(PartialEq, Eq, Debug)]
 pub enum DataChanMsg {
     ExternalCommand(DataChanCmd),
@@ -147,18 +144,16 @@ impl fmt::Display for ControlChanMsg {
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
 // Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
 #[derive(Debug)]
-pub(crate) enum ProxyLoopMsg<Storage, User>
+pub(crate) enum SwitchboardMessage<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
-    /// Upon receiving the header, the connection and tcp stream are passed back to the proxy loop
-    ProxyHeaderReceived(ProxyConnection, TcpStream),
     /// Command to assign a data port to a session
     AssignDataPortCommand(SharedSession<Storage, User>),
     /// Command to clean up an active data channel (used when exiting the control loop)
     CloseDataPortCommand(SharedSession<Storage, User>),
 }
 
-pub(crate) type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;
-pub(crate) type ProxyLoopReceiver<Storage, User> = Receiver<ProxyLoopMsg<Storage, User>>;
+pub(crate) type SwitchboardSender<Storage, User> = Sender<SwitchboardMessage<Storage, User>>;
+pub(crate) type SwitchboardReceiver<Storage, User> = Receiver<SwitchboardMessage<Storage, User>>;

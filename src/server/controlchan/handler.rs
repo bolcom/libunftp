@@ -2,7 +2,7 @@ use crate::{
     auth::{AuthenticationPipeline, UserDetail},
     server::{
         ControlChanMsg,
-        chancomms::ProxyLoopSender,
+        chancomms::SwitchboardSender,
         controlchan::{Reply, command::Command, error::ControlChanError},
         ftpserver::options::{PassiveHost, SiteMd5},
         session::SharedSession,
@@ -41,7 +41,7 @@ where
     pub tx_control_chan: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub tx_proxyloop: Option<ProxyLoopSender<Storage, User>>,
+    pub tx_proxyloop: Option<SwitchboardSender<Storage, User>>,
     pub logger: slog::Logger,
     pub sitemd5: SiteMd5,
 }
