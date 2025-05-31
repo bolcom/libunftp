@@ -1,3 +1,4 @@
+use crate::server::switchboard::SocketAddrPair;
 use crate::{
     auth::{AuthenticationPipeline, UserDetail},
     metrics::MetricsMiddleware,
@@ -23,7 +24,6 @@ use crate::{
         },
         failed_logins::FailedLoginsCache,
         ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
-        proxy_protocol::ProxyConnection,
         session::SharedSession,
         shutdown,
         tls::FtpsConfig,
@@ -78,8 +78,8 @@ where
 pub(crate) async fn spawn<Storage, User>(
     config: Config<Storage, User>,
     tcp_stream: TcpStream,
-    proxy_connection: Option<ProxyConnection>,
-    proxyloop_msg_tx: Option<SwitchboardSender<Storage, User>>,
+    control_connection: Option<SocketAddrPair>,
+    switchboard_msg_tx: Option<SwitchboardSender<Storage, User>>,
     mut shutdown: shutdown::Listener,
     failed_logins: Option<Arc<FailedLoginsCache>>,
 ) -> Result<JoinHandle<()>, ControlChanError>
@@ -115,14 +115,14 @@ where
         .ftps(ftps_config.clone())
         .metrics(collect_metrics)
         .control_msg_tx(control_msg_tx.clone())
-        .proxy_connection(proxy_connection)
+        .control_connection(control_connection)
         .failed_logins(failed_logins);
     if let Some(b) = binder.lock().unwrap().take() {
         session = session.binder(b);
     }
 
     let mut logger = logger.new(
-        slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.proxy_control.map(|p| p.source).unwrap_or(session.source))),
+        slog::o!("trace-id" => format!("{}", session.trace_id), "source" => format!("{}", session.control_connection.map(|p| p.source).unwrap_or(session.source))),
     );
 
     let shared_session: SharedSession<Storage, User> = Arc::new(Mutex::new(session));
@@ -137,7 +137,7 @@ where
         tx_control_chan: control_msg_tx,
         local_addr,
         storage_features,
-        tx_proxy_loop: proxyloop_msg_tx.clone(),
+        tx_proxy_loop: switchboard_msg_tx.clone(),
         sitemd5,
     };
 
@@ -216,14 +216,14 @@ where
                         incoming = Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop)))
                         // TODO: Do we want to wait a bit for a data transfer to complete i.e. session.data_busy is true?
                     }
-                };
+                }
                 incoming
             };
             match incoming {
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
                     let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
-                    if let Some(tx) = proxyloop_msg_tx {
+                    if let Some(tx) = switchboard_msg_tx {
                         if let Err(err) = tx.send(SwitchboardMessage::CloseDataPortCommand(shared_session.clone())).await {
                             slog::warn!(logger, "Could not send CloseDataPortCommand to channel: {}", err);
                             return;

@@ -13,7 +13,7 @@ use super::{
     tls::FtpsConfig,
 };
 #[cfg(feature = "proxy_protocol")]
-use crate::server::proxy_protocol::ProxyProtocolSwitchboard;
+use crate::server::switchboard::Switchboard;
 use crate::{
     auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider, anonymous::AnonymousAuthenticator},
     notification::{DataListener, PresenceListener, nop::NopListener},
@@ -835,7 +835,7 @@ where
                     external_control_port,
                     logger: self.logger.clone(),
                     options: (&self).into(),
-                    proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
+                    proxy_protocol_switchboard: Some(Switchboard::new(self.logger.clone(), self.passive_ports.clone())),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                 }

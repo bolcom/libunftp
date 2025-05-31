@@ -9,6 +9,7 @@ mod password;
 mod proxy_protocol;
 mod session;
 pub(crate) mod shutdown;
+mod switchboard;
 mod tls;
 
 pub(crate) use chancomms::ControlChanMsg;

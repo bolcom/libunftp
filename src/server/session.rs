@@ -5,7 +5,8 @@ use super::{chancomms::ControlChanMsg, tls::FtpsConfig};
 use crate::auth::UserDetail;
 use crate::server::chancomms::DataChanCmd;
 use crate::server::failed_logins::FailedLoginsCache;
-use crate::server::proxy_protocol::{ProxyConnection, ProxyHashKey};
+use crate::server::switchboard::SocketAddrPair;
+use crate::server::switchboard::SwitchboardKey;
 use crate::{
     metrics,
     storage::{Metadata, StorageBackend},
@@ -85,10 +86,9 @@ where
     // The socket address of the client on the control channel
     pub source: SocketAddr,
     // The control connection over the proxy protocol
-    pub(crate) proxy_control: Option<ProxyConnection>,
-    // Points to the hashkey of the data connection
-    #[cfg_attr(not(feature = "proxy_protocol"), allow(dead_code))]
-    pub(crate) proxy_active_datachan: Option<ProxyHashKey>,
+    pub(crate) control_connection: Option<SocketAddrPair>,
+    // Points to the key of the active data connection
+    pub(crate) switchboard_active_datachan: Option<SwitchboardKey>,
     // Current working directory
     pub cwd: std::path::PathBuf,
     // After a RNFR command this will hold the source path used by the RNTO command.
@@ -136,8 +136,8 @@ where
             data_abort_rx: None,
             control_msg_tx: None,
             source,
-            proxy_control: None,
-            proxy_active_datachan: None,
+            control_connection: None,
+            switchboard_active_datachan: None,
             cwd: "/".into(),
             rename_from: None,
             state: SessionState::New,
@@ -176,8 +176,9 @@ where
         self
     }
 
-    pub(crate) fn proxy_connection(mut self, proxy_connection: Option<ProxyConnection>) -> Self {
-        self.proxy_control = proxy_connection;
+    // control_connection provides the switchboard with connection info to allocate a passive port
+    pub(crate) fn control_connection(mut self, conn: Option<SocketAddrPair>) -> Self {
+        self.control_connection = conn;
         self
     }
 
