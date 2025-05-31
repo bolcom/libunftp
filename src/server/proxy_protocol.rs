@@ -9,22 +9,6 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 
-#[derive(Clone, Copy, Debug)]
-pub(super) enum ListenerMode {
-    Legacy,
-    Pooled,
-    #[cfg(feature = "proxy_protocol")]
-    ProxyProtocol { external_control_port: Option<u16> },
-}
-
-impl From<u16> for ListenerMode {
-    fn from(port: u16) -> Self {
-        ListenerMode::ProxyProtocol {
-            external_control_port: Some(port),
-        }
-    }
-}
-
 #[derive(Error, Debug)]
 #[error("Proxy Protocol Error")]
 enum ProxyError {

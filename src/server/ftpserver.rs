@@ -19,7 +19,7 @@ use crate::{
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
-    server::{proxy_protocol::ListenerMode, tls},
+    server::tls,
     storage::{Metadata, StorageBackend},
 };
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
@@ -832,6 +832,7 @@ where
                 listen_pooled::PooledListener {
                     bind_address,
                     logger: self.logger.clone(),
+                    proxy_mode: true,
                     external_control_port,
                     options: (&self).into(),
                     switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
@@ -845,6 +846,7 @@ where
                 listen_pooled::PooledListener {
                     bind_address,
                     logger: self.logger.clone(),
+                    proxy_mode: false,
                     external_control_port: None,
                     options: (&self).into(),
                     switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
@@ -1006,5 +1008,20 @@ where
             .field("proxy_protocol_mode", &self.proxy_protocol_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(in crate::server) enum ListenerMode {
+    Legacy,
+    Pooled,
+    ProxyProtocol { external_control_port: Option<u16> },
+}
+
+impl From<u16> for ListenerMode {
+    fn from(port: u16) -> Self {
+        ListenerMode::ProxyProtocol {
+            external_control_port: Some(port),
+        }
     }
 }

@@ -18,6 +18,7 @@ use crate::{
     },
     storage::StorageBackend,
 };
+use std::pin::Pin;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,
@@ -34,6 +35,7 @@ where
 {
     pub bind_address: SocketAddr,
     pub logger: slog::Logger,
+    pub proxy_mode: bool,
     pub external_control_port: Option<u16>,
     pub options: OptionsHolder<Storage, User>,
     pub switchboard: Switchboard<Storage, User>,
@@ -53,22 +55,36 @@ where
         // all sessions use this callback to request for a passive listening port.
         let (switchboard_msg_tx, mut switchboard_msg_rx): (SwitchboardSender<Storage, User>, SwitchboardReceiver<Storage, User>) = channel(1);
         // channel for handling proxy protocol headers
-        let (proxy_msg_tx, mut proxy_msg_rx): (Sender<ProxyHeaderReceived>, Receiver<ProxyHeaderReceived>) = channel(1);
+
+        let (mut proxy_msg_rx, proxy_msg_tx): (Option<Receiver<ProxyHeaderReceived>>, Option<Sender<ProxyHeaderReceived>>) = if self.proxy_mode {
+            let (tx, rx) = channel(1);
+            (Some(rx), Some(tx))
+        } else {
+            (None, None)
+        };
 
         loop {
             // The 'proxy loop' handles two kinds of events:
             // - incoming tcp connections originating from the proxy
             // - channel messages originating from PASV, to handle the passive listening port
 
+            let mut proxy_msg_rx_fut = match proxy_msg_rx.as_mut() {
+                Some(rx) => Box::pin(rx.recv()) as Pin<Box<dyn Future<Output = Option<ProxyHeaderReceived>> + Send>>,
+                None => Box::pin(futures_util::future::pending()) as Pin<Box<dyn Future<Output = Option<ProxyHeaderReceived>> + Send>>,
+            };
+
             tokio::select! {
 
                 Ok((tcp_stream, _socket_addr)) = listener.accept() => {
                     let socket_addr = tcp_stream.peer_addr();
 
-                    slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
-                    spawn_proxy_header_parsing(self.logger.clone(), tcp_stream, proxy_msg_tx.clone());
+                    if self.proxy_mode {
+                        let msg_tx = proxy_msg_tx.as_ref().expect("Expected proxy channel in proxy mode").clone();
+                        slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
+                        spawn_proxy_header_parsing(self.logger.clone(), tcp_stream, msg_tx);
+                    }
                 },
-                Some(msg) = proxy_msg_rx.recv() => match msg {
+                Some(msg) = &mut proxy_msg_rx_fut => match msg {
                     ProxyHeaderReceived (connection, mut tcp_stream) => {
                         let socket_addr = tcp_stream.peer_addr();
                         // Based on the proxy protocol header, and the configured control port number,
