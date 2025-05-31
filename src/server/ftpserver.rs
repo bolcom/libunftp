@@ -835,7 +835,7 @@ where
                     external_control_port,
                     logger: self.logger.clone(),
                     options: (&self).into(),
-                    proxy_protocol_switchboard: Some(Switchboard::new(self.logger.clone(), self.passive_ports.clone())),
+                    switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                 }

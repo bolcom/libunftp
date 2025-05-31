@@ -36,7 +36,7 @@ where
     pub logger: slog::Logger,
     pub external_control_port: u16,
     pub options: OptionsHolder<Storage, User>,
-    pub proxy_protocol_switchboard: Option<Switchboard<Storage, User>>,
+    pub switchboard: Switchboard<Storage, User>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
@@ -100,12 +100,10 @@ where
                     },
                     // This is sent from the control loop when it exits, so that the port is freed
                     SwitchboardMessage::CloseDataPortCommand (session_arc) => {
-                        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-                            let session = session_arc.lock().await;
-                            if let Some(active_datachan) = &session.switchboard_active_datachan {
-                                slog::info!(self.logger, "Unregistering active data channel port because the control channel is closing {:?}", active_datachan);
-                                switchboard.unregister_by_key(active_datachan);
-                            }
+                        let session = session_arc.lock().await;
+                        if let Some(active_datachan) = &session.switchboard_active_datachan {
+                            slog::info!(self.logger, "Unregistering active data channel port because the control channel is closing {:?}", active_datachan);
+                            self.switchboard.unregister_by_key(active_datachan);
                         }
                     },
                 },
@@ -118,17 +116,15 @@ where
     // protocol switchboard hashmap, and then calls the
     // spawn_data_processing function with the tcp_stream
     async fn dispatch_data_connection(&mut self, mut tcp_stream: tokio::net::TcpStream, connection: SocketAddrPair) {
-        if let Some(switchboard) = &mut self.proxy_protocol_switchboard {
-            match switchboard.get_session_by_connection_pair(&connection).await {
-                Some(session) => {
-                    spawn_processing(self.logger.clone(), session, tcp_stream).await;
-                    switchboard.unregister_by_connection_pair(&connection);
-                }
-                None => {
-                    slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
-                    if let Err(e) = tcp_stream.shutdown().await {
-                        slog::error!(self.logger, "Error during tcp_stream shutdown: {:?}", e);
-                    }
+        match self.switchboard.get_session_by_connection_pair(&connection).await {
+            Some(session) => {
+                spawn_processing(self.logger.clone(), session, tcp_stream).await;
+                self.switchboard.unregister_by_connection_pair(&connection);
+            }
+            None => {
+                slog::warn!(self.logger, "Unexpected connection ({:?})", connection);
+                if let Err(e) = tcp_stream.shutdown().await {
+                    slog::error!(self.logger, "Error during tcp_stream shutdown: {:?}", e);
                 }
             }
         }
@@ -138,14 +134,10 @@ where
         slog::info!(self.logger, "Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
-        // 3. put expiry time in the LIFO list
-        // 4. send reply to client: "Entering Passive Mode ({},{},{},{},{},{})"
+        // 3. put expiry time in LIFO list
+        // 4. send reply to the client: "Entering Passive Mode ({},{},{},{},{},{})"
 
-        let port = match &mut self.proxy_protocol_switchboard {
-            Some(switchboard) => switchboard.reserve(session_arc.clone()).await,
-            None => panic!("Proxy protocol switchboard unavailable. This should not happen."),
-        };
-
+        let port = self.switchboard.reserve(session_arc.clone()).await;
         let session = session_arc.lock().await;
         if let Some(proxy_connection) = session.control_connection {
             let destination_ip = match proxy_connection.destination.ip() {
