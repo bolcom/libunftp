@@ -10,18 +10,18 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Clone, Copy, Debug)]
-pub(super) enum ProxyMode {
-    Off,
+pub(super) enum ListenerMode {
+    Legacy,
+    Pooled,
     #[cfg(feature = "proxy_protocol")]
-    On {
-        external_control_port: u16,
-    },
+    ProxyProtocol { external_control_port: Option<u16> },
 }
 
-#[cfg(feature = "proxy_protocol")]
-impl From<u16> for ProxyMode {
+impl From<u16> for ListenerMode {
     fn from(port: u16) -> Self {
-        ProxyMode::On { external_control_port: port }
+        ListenerMode::ProxyProtocol {
+            external_control_port: Some(port),
+        }
     }
 }
 

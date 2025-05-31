@@ -27,21 +27,21 @@ use tokio::{io::AsyncWriteExt, sync::mpsc::channel};
 
 // ProxyProtocolListener binds to a single port and assumes connections multiplexed by the
 // [proxy protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/)
-pub(super) struct ProxyProtocolListener<Storage, User>
+pub(super) struct PooledListener<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
     pub bind_address: SocketAddr,
     pub logger: slog::Logger,
-    pub external_control_port: u16,
+    pub external_control_port: Option<u16>,
     pub options: OptionsHolder<Storage, User>,
     pub switchboard: Switchboard<Storage, User>,
     pub shutdown_topic: Arc<shutdown::Notifier>,
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
 }
 
-impl<Storage, User> ProxyProtocolListener<Storage, User>
+impl<Storage, User> PooledListener<Storage, User>
 where
     Storage: StorageBackend<User> + 'static,
     User: UserDetail + 'static,
@@ -75,7 +75,7 @@ where
                         // we differentiate between connections for the control channel,
                         // and connections for the data channel.
                         let destination_port = connection.destination.port();
-                        if destination_port == self.external_control_port {
+                        if Some(destination_port) == self.external_control_port {
                             slog::info!(self.logger, "Incoming control connection: {:?} ({:?})(control port: {:?})", connection, socket_addr, self.external_control_port);
                             let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
                             let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(connection), Some(switchboard_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;

@@ -1,8 +1,7 @@
 mod chosen;
 pub mod error;
 mod listen;
-#[cfg(feature = "proxy_protocol")]
-mod listen_proxied;
+mod listen_pooled;
 pub mod options;
 
 use super::{
@@ -20,7 +19,7 @@ use crate::{
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
-    server::{proxy_protocol::ProxyMode, tls},
+    server::{proxy_protocol::ListenerMode, tls},
     storage::{Metadata, StorageBackend},
 };
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
@@ -69,7 +68,7 @@ where
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ProxyMode,
+    proxy_protocol_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -102,7 +101,7 @@ where
     ftps_client_auth: FtpsClientAuth,
     ftps_trust_store: PathBuf,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ProxyMode,
+    proxy_protocol_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -264,7 +263,7 @@ where
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: ProxyMode::Off,
+            proxy_protocol_mode: ListenerMode::Legacy,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
@@ -829,11 +828,24 @@ where
 
         let listen_future = match self.proxy_protocol_mode {
             #[cfg(feature = "proxy_protocol")]
-            ProxyMode::On { external_control_port } => Box::pin(
-                listen_proxied::ProxyProtocolListener {
+            ListenerMode::ProxyProtocol { external_control_port } => Box::pin(
+                listen_pooled::PooledListener {
                     bind_address,
-                    external_control_port,
                     logger: self.logger.clone(),
+                    external_control_port,
+                    options: (&self).into(),
+                    switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
+                    shutdown_topic: shutdown_notifier.clone(),
+                    failed_logins: failed_logins.clone(),
+                }
+                .listen(),
+            )
+                as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            ListenerMode::Pooled => Box::pin(
+                listen_pooled::PooledListener {
+                    bind_address,
+                    logger: self.logger.clone(),
+                    external_control_port: None,
                     options: (&self).into(),
                     switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
                     shutdown_topic: shutdown_notifier.clone(),
@@ -841,8 +853,7 @@ where
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
-
-            ProxyMode::Off => Box::pin(
+            ListenerMode::Legacy => Box::pin(
                 listen::Listener {
                     bind_address,
                     logger: self.logger.clone(),
