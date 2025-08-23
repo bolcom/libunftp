@@ -1,53 +1,8 @@
 #![allow(missing_docs)]
 
 pub mod common;
-use std::io::Error;
-use tokio::net::TcpStream;
 
-async fn read_from_server<'a>(buffer: &'a mut [u8], stream: &TcpStream) -> &'a str {
-    loop {
-        stream.readable().await.unwrap();
-        let n = match stream.try_read(buffer) {
-            Ok(n) => n,
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                continue;
-            }
-            Err(e) => panic!("{}", e),
-        };
-        return std::str::from_utf8(&buffer[0..n]).unwrap();
-    }
-}
-
-async fn send_to_server(buffer: &str, stream: &TcpStream) {
-    loop {
-        stream.writable().await.unwrap();
-
-        match stream.try_write(buffer.as_bytes()) {
-            Ok(_) => break,
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                continue;
-            }
-            Err(e) => panic!("{}", e),
-        };
-    }
-}
-
-async fn tcp_connect() -> Result<TcpStream, Error> {
-    let mut errcount: i32 = 0;
-    loop {
-        match TcpStream::connect("127.0.0.1:2150").await {
-            Ok(s) => return Ok(s),
-            Err(e) => {
-                if errcount > 2 {
-                    return Err(e);
-                }
-                errcount += 1;
-                tokio::time::sleep(std::time::Duration::new(1, 0)).await;
-                continue;
-            }
-        }
-    }
-}
+use common::{read_from_server, send_to_server, tcp_connect};
 
 #[tokio::test(flavor = "current_thread")]
 async fn test_pass_command_successful_login() {
