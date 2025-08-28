@@ -14,7 +14,7 @@ use rustls::crypto::{aws_lc_rs as crypto_impl, aws_lc_rs::Ticketer};
 use rustls::crypto::{ring as crypto_impl, ring::Ticketer};
 
 use std::{
-    fmt::{self, Display, Formatter},
+    fmt::{self, Formatter},
     fs::File,
     io::{self, BufReader},
     path::{Path, PathBuf},
@@ -40,17 +40,6 @@ impl fmt::Debug for FtpsConfig {
         }
     }
 }
-
-#[derive(Debug, Copy, Clone)]
-pub struct FtpsNotAvailable;
-
-impl Display for FtpsNotAvailable {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "FTPS not configured/available")
-    }
-}
-
-impl std::error::Error for FtpsNotAvailable {}
 
 // The error returned by new_config
 #[derive(Error, Debug)]
