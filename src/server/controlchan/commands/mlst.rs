@@ -73,7 +73,7 @@ where
         }
 
         if metadata.gid() > 0 {
-            facts.push(format!("unix.gid={}", metadata.uid()));
+            facts.push(format!("unix.gid={}", metadata.gid()));
         }
 
         let facts_str = facts.join(";");
