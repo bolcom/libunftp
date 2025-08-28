@@ -1,11 +1,18 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
 use rustls::{
     NoKeyLog, RootCertStore, ServerConfig, SupportedProtocolVersion,
-    crypto::{aws_lc_rs, aws_lc_rs::Ticketer},
     pki_types::{CertificateDer, PrivateKeyDer},
     server::{ClientCertVerifierBuilder, NoServerSessionStorage, StoresServerSessions, WebPkiClientVerifier},
     version::{TLS12, TLS13},
 };
+
+// Enable aws_lc_rs, unless the flag is disabled (in which case ring has to be enabled).
+// If both are enabled, aws_lc_rs is preferred.
+#[cfg(feature = "aws_lc_rs")]
+use rustls::crypto::{aws_lc_rs as crypto_impl, aws_lc_rs::Ticketer};
+#[cfg(all(not(feature = "aws_lc_rs"), feature = "ring"))]
+use rustls::crypto::{ring as crypto_impl, ring::Ticketer};
+
 use std::{
     fmt::{self, Display, Formatter},
     fs::File,
@@ -96,7 +103,7 @@ pub fn new_config<P: AsRef<Path>>(
         versions.push(&TLS13)
     }
 
-    let provider = Arc::new(aws_lc_rs::default_provider());
+    let provider = Arc::new(crypto_impl::default_provider());
     let mut config = ServerConfig::builder_with_provider(provider)
         .with_protocol_versions(&versions)
         .map_err(ConfigError::RustlsInit)?

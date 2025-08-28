@@ -52,3 +52,6 @@ pub mod storage;
 pub use crate::server::ftpserver::{Server, ServerBuilder, error::ServerError, options};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+
+#[cfg(not(any(feature = "aws_lc_rs", feature = "ring")))]
+compile_error!("Need to enable either aws_lc_rs or ring feature for libunftp");
