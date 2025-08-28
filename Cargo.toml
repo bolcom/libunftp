@@ -62,7 +62,7 @@ slog = { version = "2.7.0", features = ["max_level_trace", "release_max_level_in
 slog-stdlog = "4.1.1"
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["macros", "rt", "net", "process", "sync", "io-util", "time"] }
-tokio-rustls = "0.26.2"
+tokio-rustls = { version = "0.26.2", default-features = false }
 tokio-util = { version = "0.7.15", features = ["codec"] }
 tracing = { version = "0.1.41", default-features = false }
 tracing-attributes = "0.1.28"
