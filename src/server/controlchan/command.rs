@@ -67,6 +67,11 @@ pub enum Command {
         /// The path of the file/directory to get information about
         path: Option<String>,
     },
+    /// Machine List Directory (MLSD) command for getting machine-readable information about directory contents
+    Mlsd {
+        /// The path of the directory to list
+        path: Option<String>,
+    },
     Feat,
     Pwd,
     Cwd {

@@ -155,6 +155,9 @@ where
             DataChanCmd::Nlst { path } => {
                 self.exec_list_variant(path, ListCommand::Nlst).await;
             }
+            DataChanCmd::Mlsd { path } => {
+                self.exec_mlsd(path).await;
+            }
         }
     }
 
@@ -388,6 +391,101 @@ where
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with {}: {:?}", command.as_str(), err);
+                }
+            }
+        }
+    }
+
+    #[tracing_attributes::instrument]
+    async fn exec_mlsd(self, path: Option<String>) {
+        let path = self.resolve_path(path);
+        let tx = self.control_msg_tx.clone();
+        let mut output = Self::writer(self.socket, self.ftps_mode.clone(), "mlsd").await;
+
+        let start_time = Instant::now();
+
+        let list_result = self.storage.list((*self.user).as_ref().unwrap(), path.clone()).await;
+
+        match list_result {
+            Ok(files) => {
+                let mut buffer = String::new();
+                for file_info in files {
+                    let filename = file_info
+                        .path
+                        .as_path()
+                        .components()
+                        .next_back()
+                        .map(|component| component.as_os_str().to_string_lossy())
+                        .unwrap_or("unknown".into());
+
+                    let facts_str = crate::server::controlchan::commands::mlst::format_facts(&file_info.metadata);
+                    let line = format!("{} {}", facts_str, filename);
+                    buffer.push_str(&line);
+                    buffer.push_str("\r\n");
+                }
+
+                // Send the formatted data
+                let mut input = std::io::Cursor::new(buffer.into_bytes());
+                let result = tokio::io::copy(&mut input, &mut output).await;
+
+                if let Err(err) = output.shutdown().await {
+                    match err.kind() {
+                        std::io::ErrorKind::BrokenPipe => {
+                            slog::debug!(self.logger, "Output stream was already closed by peer after MLSD: {:?}", err);
+                        }
+                        std::io::ErrorKind::NotConnected => {
+                            slog::debug!(self.logger, "Output stream was already closed after MLSD: {:?}", err);
+                        }
+                        _ => slog::warn!(self.logger, "Could not shutdown output stream after MLSD: {:?}", err),
+                    }
+                }
+
+                let duration = start_time.elapsed();
+
+                match result {
+                    Ok(bytes) => {
+                        slog::info!(
+                            self.logger,
+                            "Successful MLSD {:?}; Duration {}; Bytes copied {}; Transfer speed {}",
+                            path,
+                            HumanDuration(duration),
+                            HumanBytes(bytes),
+                            TransferSpeed(bytes as f64 / duration.as_secs_f64())
+                        );
+
+                        metrics::inc_transferred("mlsd", "success");
+
+                        if let Err(err) = tx.send(ControlChanMsg::DirectorySuccessfullyListed).await {
+                            slog::error!(self.logger, "Could not notify control channel of successful MLSD: {:?}", err);
+                        }
+                    }
+                    Err(err) => {
+                        slog::warn!(
+                            self.logger,
+                            "Failed to copy MLSD data to client after {}. Error: {:?}",
+                            HumanDuration(duration),
+                            err
+                        );
+                        if let Err(err) = tx.send(ControlChanMsg::WriteFailed).await {
+                            slog::error!(self.logger, "Could not notify control channel of failed MLSD: {:?}", err);
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                let duration = start_time.elapsed();
+                slog::warn!(
+                    self.logger,
+                    "Failed to retrieve directory list for path {:?} (MLSD command) from storage backend after {}: {:?}",
+                    path,
+                    HumanDuration(duration),
+                    err,
+                );
+
+                categorize_and_register_error(&self.logger, &err, "mlsd");
+
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                    slog::error!(self.logger, "Could not notify control channel of error with MLSD: {:?}", err);
                 }
             }
         }

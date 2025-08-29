@@ -26,7 +26,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let mut feat_text = vec![" SIZE", " MDTM", " UTF8", " EPSV", " MLST"];
+        let mut feat_text = vec![" SIZE", " MDTM", " UTF8", " EPSV", " MLST", " MLSD"];
 
         // Add the features. According to the spec each feature line must be
         // indented by a space.
