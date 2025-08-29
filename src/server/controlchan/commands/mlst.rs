@@ -54,30 +54,45 @@ where
             }
         };
 
-        let mut facts = Vec::new();
-
-        facts.push(if metadata.is_dir() { "type=dir" } else { "type=file" }.to_string());
-
-        facts.push(format!("size={}", metadata.len()));
-
-        if let Ok(modified) = metadata.modified() {
-            let dt: DateTime<Utc> = modified.into();
-            facts.push(format!("modify={}", dt.format("%Y%m%d%H%M%S")));
-        }
-
-        // Choosing not to implement create, unique, perm, lang, media-type, charset or most of the
-        // UNIX.*, MACOS.* etc ones.
-
-        if metadata.uid() > 0 {
-            facts.push(format!("unix.uid={}", metadata.uid()));
-        }
-
-        if metadata.gid() > 0 {
-            facts.push(format!("unix.gid={}", metadata.gid()));
-        }
-
-        let facts_str = facts.join(";");
+        let facts_str = format_facts(&metadata);
         let response = format!(" {} {}", facts_str, path.display());
         Ok(Reply::new_multiline(ReplyCode::FileActionOkay, vec![" Listing", &response, "End"]))
     }
+}
+
+/// Format metadata into machine-readable facts string
+///
+/// Returns a semicolon-separated list of facts in the format defined by RFC 3659.
+/// Both MLST and MLSD use the same fact format, so this function provides
+/// consistent formatting for both commands.
+///
+/// # Arguments
+/// * `metadata` - The file/directory metadata to format
+///
+/// # Returns
+/// A string containing semicolon-separated facts like "type=file;size=1234;modify=20231201120000"
+pub fn format_facts<M: Metadata>(metadata: &M) -> String {
+    let mut facts = Vec::new();
+
+    facts.push(if metadata.is_dir() { "type=dir" } else { "type=file" }.to_string());
+
+    facts.push(format!("size={}", metadata.len()));
+
+    if let Ok(modified) = metadata.modified() {
+        let dt: DateTime<Utc> = modified.into();
+        facts.push(format!("modify={}", dt.format("%Y%m%d%H%M%S")));
+    }
+
+    // Choosing not to implement create, unique, perm, lang, media-type, charset or most of the
+    // UNIX.*, MACOS.* etc ones.
+
+    if metadata.uid() > 0 {
+        facts.push(format!("unix.uid={}", metadata.uid()));
+    }
+
+    if metadata.gid() > 0 {
+        facts.push(format!("unix.gid={}", metadata.gid()));
+    }
+
+    facts.join(";")
 }

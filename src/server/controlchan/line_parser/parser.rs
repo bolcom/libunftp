@@ -142,6 +142,15 @@ where
             };
             Command::Mlst { path }
         }
+        "MLSD" => {
+            let path = parse_to_eol(cmd_params)?;
+            let path = if path.is_empty() {
+                None
+            } else {
+                Some(String::from_utf8_lossy(&path).to_string())
+            };
+            Command::Mlsd { path }
+        }
         "FEAT" => {
             let params = parse_to_eol(cmd_params)?;
             if !params.is_empty() {

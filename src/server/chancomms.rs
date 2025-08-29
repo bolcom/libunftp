@@ -40,6 +40,10 @@ pub enum DataChanCmd {
         /// The path of the file/directory the clients wants to list.
         path: Option<String>,
     },
+    Mlsd {
+        /// The path of the directory the clients wants to list.
+        path: Option<String>,
+    },
 }
 
 impl DataChanCmd {
@@ -49,7 +53,8 @@ impl DataChanCmd {
             DataChanCmd::Retr { path, .. } => Some(path.clone()),
             DataChanCmd::Stor { path, .. } => Some(path.clone()),
             DataChanCmd::List { path, .. } => path.clone(),
-            DataChanCmd::Nlst { path, .. } => path.clone(),
+            DataChanCmd::Mlsd { path } => path.clone(),
+            DataChanCmd::Nlst { path } => path.clone(),
         }
     }
 }

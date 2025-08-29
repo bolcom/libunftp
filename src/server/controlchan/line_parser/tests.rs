@@ -314,6 +314,28 @@ fn parse_opts() {
 }
 
 #[test]
+fn parse_mlsd() {
+    let input = "MLSD\r\n";
+    assert_eq!(parse(input).unwrap(), Command::Mlsd { path: None });
+
+    let input = "MLSD /some/path\r\n";
+    assert_eq!(
+        parse(input).unwrap(),
+        Command::Mlsd {
+            path: Some("/some/path".to_string())
+        }
+    );
+
+    let input = "mlsd /path\r\n";
+    assert_eq!(
+        parse(input).unwrap(),
+        Command::Mlsd {
+            path: Some("/path".to_string())
+        }
+    );
+}
+
+#[test]
 fn parse_dele() {
     let input = "DELE\r\n";
     assert_eq!(parse(input), Err(ParseError::from(ParseErrorKind::InvalidCommand)));
