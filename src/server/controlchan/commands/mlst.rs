@@ -78,6 +78,6 @@ where
 
         let facts_str = facts.join(";");
         let response = format!(" {} {}", facts_str, path.display());
-        Ok(Reply::new_multiline(ReplyCode::FileStatus, vec![response]))
+        Ok(Reply::new_multiline(ReplyCode::FileActionOkay, vec![" Listing", &response, "End"]))
     }
 }
