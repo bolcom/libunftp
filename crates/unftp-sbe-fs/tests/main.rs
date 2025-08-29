@@ -654,20 +654,14 @@ mod mlsd {
         }
     }
 
-    async fn read_response(stream: &TcpStream) -> String {
-        let mut buffer = vec![0u8; 4096];
-        loop {
-            stream.readable().await.unwrap();
-            match stream.try_read(&mut buffer) {
-                Ok(n) => return String::from_utf8_lossy(&buffer[0..n]).to_string(),
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(e) => panic!("Failed to read response: {}", e),
-            };
-        }
+    async fn connect(addr: &str) -> FtpStream {
+        let mut ftp_stream = FtpStream::connect(addr).await.unwrap();
+        ftp_stream.login("hoi", "jij").await.unwrap();
+        ftp_stream
     }
 
     fn parse_pasv_response(response: &str) -> u16 {
-        // Parse "227 Entering Passive Mode (127,0,0,1,p1,p2)"
+        // Parse "Entering Passive Mode (127,0,0,1,p1,p2)"
         // Port = p1 * 256 + p2
         let start = response.find('(').unwrap() + 1;
         let end = response.find(')').unwrap();
@@ -678,36 +672,17 @@ mod mlsd {
         p1 * 256 + p2
     }
 
-    async fn connect(addr: &str) -> TcpStream {
-        let stream = TcpStream::connect(addr).await.unwrap();
-
-        let greeting = read_response(&stream).await;
-        assert!(greeting.starts_with("220"), "Expected greeting, got: {}", greeting);
-
-        // Authenticate
-        send_command(&stream, "USER hoi").await;
-        let response = read_response(&stream).await;
-        assert!(response.starts_with("331"), "Expected password request, got: {}", response);
-
-        send_command(&stream, "PASS jij").await;
-        let response = read_response(&stream).await;
-        assert!(response.starts_with("230"), "Expected login success, got: {}", response);
-
-        stream
-    }
-
-    async fn connect_pasv(stream: &TcpStream) -> TcpStream {
-        send_command(&stream, "PASV").await;
-        let pasv_response = read_response(&stream).await;
-        assert!(pasv_response.starts_with("227"), "Expected PASV response, got: {}", pasv_response);
-        let data_port = parse_pasv_response(&pasv_response);
+    async fn connect_pasv(ftp: &mut FtpStream) -> TcpStream {
+        send_command(ftp.get_ref(), "PASV").await;
+        let pasv_response = ftp.read_response(227).await.unwrap();
+        let data_port = parse_pasv_response(&pasv_response.1);
         TcpStream::connect(format!("127.0.0.1:{}", data_port)).await.unwrap()
     }
 
-    async fn read_all_data(stream: &TcpStream) -> String {
+    async fn read_all(stream: &TcpStream, until_eof: bool) -> String {
         let mut data = String::new();
         let mut buffer = vec![0u8; 1024];
-
+        let mut blocks = 0;
         loop {
             match stream.try_read(&mut buffer) {
                 Ok(0) => break, // EOF
@@ -715,6 +690,10 @@ mod mlsd {
                     data.push_str(&String::from_utf8_lossy(&buffer[0..n]));
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    blocks += 1;
+                    if !until_eof && blocks >= 2 {
+                        break;
+                    }
                     // Wait a bit for more data or connection close
                     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                     continue;
@@ -740,20 +719,14 @@ mod mlsd {
         }
     }
 
-    async fn consume_226(stream: &TcpStream) {
-        let response = read_response(&stream).await;
-        let response = response.strip_suffix("\r\n").unwrap();
-        assert!(response.starts_with("226 ") && !response.contains("\r\n"), "Expected 226, got: {}", response);
-    }
-
     #[rstest]
     #[awt]
     #[tokio::test]
     async fn basic_mlsd(#[future] harness: Harness) {
         setup_files(&harness.root);
 
-        let stream = connect(&harness.addr).await;
-        let data_stream = connect_pasv(&stream).await;
+        let mut ftp = connect(&harness.addr).await;
+        let data_stream = connect_pasv(&mut ftp).await;
 
         // MLSD uses data channel. Example from RFC 3659 (truncated):
         //
@@ -764,16 +737,10 @@ mod mlsd {
         // D> Type=file;Size=1830;Modify=19940916055648;Perm=r; hatch.c
         // ...
         // S> 226 MLSD completed
-        send_command(&stream, "MLSD").await;
-        let response = read_response(&stream).await;
-        let response = response.strip_suffix("\r\n").unwrap();
-        assert!(
-            response.starts_with("150 ") && !response.trim().contains("\r\n"),
-            "Expected data connection opening, got: {}",
-            response
-        );
+        send_command(ftp.get_ref(), "MLSD").await;
+        ftp.read_response(150).await.unwrap();
 
-        let data = read_all_data(&data_stream).await;
+        let data = read_all(&data_stream, true).await;
         let mut entries = data.split("\r\n").collect::<Vec<_>>();
         assert!(entries.pop().unwrap().is_empty(), "Last line should be empty due to trailing CRLF");
 
@@ -787,7 +754,7 @@ mod mlsd {
         check_facts(file_line, &["type=file", "size=12"]);
         check_facts(dir_line, &["type=dir"]);
 
-        consume_226(&stream).await;
+        ftp.read_response(226).await.unwrap();
     }
 
     #[rstest]
@@ -796,14 +763,13 @@ mod mlsd {
     async fn mlsd_with_path(#[future] harness: Harness) {
         setup_files(&harness.root);
 
-        let stream = connect(&harness.addr).await;
-        let data_stream = connect_pasv(&stream).await;
+        let mut ftp = connect(&harness.addr).await;
+        let data_stream = connect_pasv(&mut ftp).await;
 
-        send_command(&stream, "MLSD test_dir").await;
-        let response = read_response(&stream).await;
-        assert!(response.starts_with("150 "), "Expected data connection opening, got: {}", response);
+        send_command(ftp.get_ref(), "MLSD test_dir").await;
+        ftp.read_response(150).await.unwrap();
 
-        let data = read_all_data(&data_stream).await;
+        let data = read_all(&data_stream, true).await;
         let mut entries = data.split("\r\n").collect::<Vec<_>>();
         assert!(entries.pop().unwrap().is_empty(), "Last line should be empty due to trailing CRLF");
         assert_eq!(entries.len(), 1);
@@ -815,7 +781,7 @@ mod mlsd {
 
         check_facts(&file_line, &["type=file", "size=0"]);
 
-        consume_226(&stream).await;
+        ftp.read_response(226).await.unwrap();
     }
 
     #[rstest]
@@ -824,15 +790,16 @@ mod mlsd {
     async fn mlst(#[future] harness: Harness) {
         setup_files(&harness.root);
 
-        let stream = connect(&harness.addr).await;
+        let ftp = connect(&harness.addr).await;
 
         // MLST uses control channel, not data channel. Format:
         //
         // 250- Listing
         //  Type=file;Size=1234;... filename.txt
         // 250 End
-        send_command(&stream, "MLST test_file.txt").await;
-        let response = read_response(&stream).await;
+        let stream = ftp.get_ref();
+        send_command(stream, "MLST test_file.txt").await;
+        let response = read_all(stream, false).await;
         let line = response
             .strip_prefix("250- Listing\r\n ")
             .expect("Wrong prefix")
@@ -842,8 +809,8 @@ mod mlsd {
         println!("line {line}");
         check_facts(line, &["type=file", "size=12"]);
 
-        send_command(&stream, "MLST test_dir").await;
-        let response = read_response(&stream).await;
+        send_command(stream, "MLST test_dir").await;
+        let response = read_all(stream, false).await;
 
         let line = response
             .strip_prefix("250- Listing\r\n ")
