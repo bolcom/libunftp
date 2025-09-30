@@ -1,6 +1,7 @@
 mod chosen;
 pub mod error;
 mod listen;
+#[cfg(feature = "proxy")]
 mod listen_proxied;
 pub mod options;
 
@@ -79,7 +80,7 @@ where
     binder: Arc<std::sync::Mutex<Option<Box<dyn crate::options::Binder>>>>,
 }
 
-/// Used to create [`Server`]s.  
+/// Used to create [`Server`]s.
 pub struct ServerBuilder<Storage, User>
 where
     Storage: StorageBackend<User>,
@@ -551,6 +552,7 @@ where
     ///     .proxy_protocol_mode(2121)
     ///     .build();
     /// ```
+    #[cfg(feature = "proxy")]
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
         self
@@ -723,6 +725,7 @@ where
         let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
         let listen_future = match self.proxy_protocol_mode {
+            #[cfg(feature = "proxy")]
             ProxyMode::On { external_control_port } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
                     bind_address,
@@ -735,6 +738,7 @@ where
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+
             ProxyMode::Off => Box::pin(
                 listen::Listener {
                     bind_address,
