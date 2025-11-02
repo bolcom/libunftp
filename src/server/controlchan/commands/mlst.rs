@@ -94,5 +94,5 @@ pub fn format_facts<M: Metadata>(metadata: &M) -> String {
         facts.push(format!("unix.gid={}", metadata.gid()));
     }
 
-    facts.join(";")
+    format!("{};", facts.join(";"))
 }

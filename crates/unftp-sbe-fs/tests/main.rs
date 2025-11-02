@@ -713,6 +713,16 @@ mod mlsd {
     fn check_facts(line: &str, expected: &[&str]) {
         let parts: Vec<&str> = line.split(' ').collect();
         assert_eq!(parts.len(), 2, "Line should have facts and filename separated by space");
+
+        // RFC 3659 section 7.2 requires facts to end with a semicolon
+        // Grammar: facts = 1*( fact ";" )
+        // This means every fact must be followed by a semicolon, including the last one
+        assert!(
+            parts[0].ends_with(';'),
+            "Facts string must end with a semicolon per RFC 3659 section 7.2, got: {}",
+            parts[0]
+        );
+
         let facts = parts[0].split(';').collect::<Vec<_>>();
         for fact in expected {
             assert!(facts.contains(&fact), "Facts part should contain {}, got: {}", fact, parts[0]);
