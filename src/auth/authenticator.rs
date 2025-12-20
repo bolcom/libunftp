@@ -107,7 +107,7 @@ impl ClientCert {
         let client_cert = parse_x509_certificate(&self.0);
         let subject = match client_cert {
             Ok(c) => c.1.subject().to_string(),
-            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+            Err(e) => return Err(std::io::Error::other(e.to_string())),
         };
 
         Ok(subject.contains(allowed_cn))

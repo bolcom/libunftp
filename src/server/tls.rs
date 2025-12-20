@@ -41,6 +41,18 @@ impl fmt::Debug for FtpsConfig {
     }
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Copy, Clone)]
+pub struct FtpsNotAvailable;
+
+impl fmt::Display for FtpsNotAvailable {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "FTPS not configured/available")
+    }
+}
+
+impl std::error::Error for FtpsNotAvailable {}
+
 // The error returned by new_config
 #[derive(Error, Debug)]
 #[error("TLS configuration error")]

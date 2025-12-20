@@ -18,7 +18,7 @@ repository = "https://github.com/bolcom/libunftp/tree/hannes/crates/unftp-auth-r
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.89"
+async-trait = "=0.1.88"
 http-body-util = "0.1.3"
 hyper = { version = "1.8.1", features = ["client", "http1"] }
 hyper-rustls = "0.27.7"
