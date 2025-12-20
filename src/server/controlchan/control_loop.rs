@@ -223,11 +223,11 @@ where
                 None => {} // Loop again
                 Some(Ok(Event::InternalMsg(ControlChanMsg::ExitControlLoop))) => {
                     let _ = event_chain.handle(Event::InternalMsg(ControlChanMsg::ExitControlLoop)).await;
-                    if let Some(tx) = proxyloop_msg_tx {
-                        if let Err(err) = tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session.clone())).await {
-                            slog::warn!(logger, "Could not send CloseDataPortCommand to channel: {}", err);
-                            return;
-                        }
+                    if let Some(tx) = proxyloop_msg_tx
+                        && let Err(err) = tx.send(ProxyLoopMsg::CloseDataPortCommand(shared_session.clone())).await
+                    {
+                        slog::warn!(logger, "Could not send CloseDataPortCommand to channel: {}", err);
+                        return;
                     };
                     slog::debug!(logger, "Exiting control loop");
                     return;

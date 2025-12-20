@@ -66,7 +66,7 @@ pub(crate) struct ProxyConnection {
 /// with the reason for the failure. If there is a problem reading from the TCP stream, the function returns a `ProxyError::ReadError`.
 /// If the header cannot be parsed, the function returns a `ProxyError::DecodeError`.
 #[tracing_attributes::instrument]
-pub(self) async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
+async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
     // Create two vectors to hold the data read from the TCP stream
     let mut pbuf = vec![0; 108]; // peek buffer
     let mut rbuf = vec![0; 108]; // read buffer
@@ -271,11 +271,11 @@ where
                 match &self.try_and_claim(hash.clone(), session_arc.clone()).await {
                     Ok(_) => {
                         // Remove and disassociate existing passive channels
-                        if let Some(active_datachan_hash) = &session.proxy_active_datachan {
-                            if active_datachan_hash != &hash {
-                                slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_hash);
-                                self.unregister_hash(active_datachan_hash);
-                            }
+                        if let Some(active_datachan_hash) = &session.proxy_active_datachan
+                            && active_datachan_hash != &hash
+                        {
+                            slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_hash);
+                            self.unregister_hash(active_datachan_hash);
                         }
 
                         // Associate the new port to the session,

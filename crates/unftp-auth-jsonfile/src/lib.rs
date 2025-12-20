@@ -435,10 +435,10 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
     /// for authentication. If the password is given, then both are
     /// required.
     async fn cert_auth_sufficient(&self, username: &str) -> bool {
-        if let Some(actual_creds) = self.credentials_map.get(username) {
-            if let Password::PlainPassword { password: None } = &actual_creds.password {
-                return actual_creds.client_cert.is_some();
-            }
+        if let Some(actual_creds) = self.credentials_map.get(username)
+            && let Password::PlainPassword { password: None } = &actual_creds.password
+        {
+            return actual_creds.client_cert.is_some();
         }
         false
     }

@@ -18,7 +18,7 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-gc
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.89"
+async-trait = "=0.1.88"
 base64 = "0.22.1"
 bytes = "1.11.0"
 chrono = { version = "0.4.42", default-features = false, features = ["std", "serde"] }

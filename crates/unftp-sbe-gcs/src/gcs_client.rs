@@ -146,7 +146,7 @@ impl GcsClient {
         let reader = response
             .into_body()
             .into_data_stream()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(std::io::Error::other)
             .into_async_read()
             .compat();
 

@@ -96,7 +96,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
         if let Some(path) = user_detail.home() {
             let relpath = match path.strip_prefix(self.root.as_path()) {
                 Ok(r) => r,
-                Err(_) => return Err(io::Error::new(io::ErrorKind::Other, "Path not a descendant of the previous root")),
+                Err(_) => return Err(io::Error::other("Path not a descendant of the previous root")),
             };
             self.root_fd = Arc::new(self.root_fd.open_dir(relpath)?);
         }
