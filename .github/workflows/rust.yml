@@ -70,7 +70,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libpam-dev
       - name: Run tests
         run: >
-          cargo test 
+          cargo test
           --verbose --workspace --exclude 'unftp-sbe-gcs*'
       - name: Doc tests
         run: cargo test --doc --workspace
@@ -78,6 +78,10 @@ jobs:
         run: cargo build --examples --workspace
       - name: Build Code
         run: cargo build  --workspace
+      - name: Check compilation without default features (workspace)
+        run: cargo check --workspace --no-default-features --features aws_lc_rs
+      - name: Check compilation without default features (libunftp only)
+        run: cargo check --workspace --no-default-features --features aws_lc_rs
       - name: Build Docs
         run: cargo doc --workspace --no-deps
 
