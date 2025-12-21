@@ -1,7 +1,10 @@
 use crate::options::{FtpsClientAuth, TlsFlags};
 use rustls::{
     NoKeyLog, RootCertStore, ServerConfig, SupportedProtocolVersion,
-    pki_types::{CertificateDer, PrivateKeyDer},
+    pki_types::{
+        CertificateDer, PrivateKeyDer,
+        pem::{self, PemObject},
+    },
     server::{ClientCertVerifierBuilder, NoServerSessionStorage, StoresServerSessions, WebPkiClientVerifier},
     version::{TLS12, TLS13},
 };
@@ -62,6 +65,9 @@ pub enum ConfigError {
 
     #[error("error reading key/cert input")]
     Load(#[from] io::Error),
+
+    #[error("error reading PEM file")]
+    LoadPem(#[from] pem::Error),
 
     #[error("error building root certs")]
     RootCerts(rustls::Error),
@@ -140,33 +146,16 @@ fn root_cert_store<P: AsRef<Path>>(trust_pem: P) -> Result<RootCertStore, Config
 fn load_certs<P: AsRef<Path>>(filename: P) -> Result<Vec<CertificateDer<'static>>, ConfigError> {
     let certfile: File = File::open(filename)?;
     let mut reader: BufReader<File> = BufReader::new(certfile);
-    let certs = rustls_pemfile::certs(&mut reader);
-    let mut res = Vec::new();
-    for cert in certs {
-        let cert = cert.map_err(ConfigError::Load)?;
-        res.push(cert);
-    }
-
-    Ok(res)
+    Ok(CertificateDer::pem_reader_iter(&mut reader).collect::<Result<_, pem::Error>>()?)
 }
 
 fn load_private_key<P: AsRef<Path>>(filename: P) -> Result<PrivateKeyDer<'static>, ConfigError> {
-    use rustls_pemfile::{Item, read_one};
-    use std::iter;
-
     let keyfile = File::open(&filename)?;
     let mut reader = BufReader::new(keyfile);
 
-    for item in iter::from_fn(|| read_one(&mut reader).transpose()) {
-        match item {
-            Ok(Item::Pkcs1Key(key)) => return Ok(PrivateKeyDer::Pkcs1(key)),
-            Ok(Item::Pkcs8Key(key)) => return Ok(PrivateKeyDer::Pkcs8(key)),
-            Ok(Item::Sec1Key(key)) => return Ok(PrivateKeyDer::Sec1(key)),
-            Err(e) => return Err(ConfigError::Load(e)),
-            _ => {}
-        }
+    if let Some(key) = PrivateKeyDer::pem_reader_iter(&mut reader).next() {
+        return Ok(key?);
     }
-
     Err(ConfigError::NoPrivateKey)
 }
 
