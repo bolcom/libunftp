@@ -40,7 +40,7 @@ where
                 let path_clone = path.clone();
                 (DataChanCmd::Stor { path }, path_clone)
             }
-            _ => panic!("Programmer error, expected command to be LIST"),
+            _ => panic!("Programmer error, expected command to be STOR"),
         };
 
         let logger = args.logger;

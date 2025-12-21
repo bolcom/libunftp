@@ -39,7 +39,7 @@ where
                 let path_clone = path.clone();
                 (DataChanCmd::Retr { path }, path_clone)
             }
-            _ => panic!("Programmer error, expected command to be LIST"),
+            _ => panic!("Programmer error, expected command to be RETR"),
         };
 
         let logger = args.logger;
