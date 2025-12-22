@@ -49,7 +49,7 @@ use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range
 /// });
 /// ```
 ///
-/// [`Authenticator`]: auth::Authenticator
+/// [`Authenticator`]: crate::auth::Authenticator
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
 pub struct Server<Storage, User>
 where
