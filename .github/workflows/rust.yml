@@ -55,6 +55,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Dwarnings
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
@@ -79,17 +81,17 @@ jobs:
       - name: Build Code
         run: cargo build  --workspace
       - name: Check compilation without default features (workspace)
-        run: RUSTFLAGS=-Dwarnings cargo check --workspace --no-default-features --features aws_lc_rs
+        run: cargo check --workspace --no-default-features --features aws_lc_rs
       - name: Check compilation without default features (libunftp only)
-        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs
+        run: cargo check --no-default-features --features aws_lc_rs
       - name: Check compilation with all features (workspace)
-        run: RUSTFLAGS=-Dwarnings cargo check --workspace --no-default-features --features all
+        run: cargo check --workspace --no-default-features --features all
       - name: Check compilation with all features (libunftp only)
-        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features all
+        run: cargo check --no-default-features --features all
       - name: Check compilation with 'prometheus' feature only
-        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs,prometheus
+        run: cargo check --no-default-features --features aws_lc_rs,prometheus
       - name: Check compilation with 'proxy_protocol' feature only
-        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs,proxy_protocol
+        run: cargo check --no-default-features --features aws_lc_rs,proxy_protocol
       - name: Build Docs
         run: cargo doc --workspace --no-deps
 
