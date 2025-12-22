@@ -79,17 +79,17 @@ jobs:
       - name: Build Code
         run: cargo build  --workspace
       - name: Check compilation without default features (workspace)
-        run: cargo check --workspace --no-default-features --features aws_lc_rs
+        run: RUSTFLAGS=-Dwarnings cargo check --workspace --no-default-features --features aws_lc_rs
       - name: Check compilation without default features (libunftp only)
-        run: cargo check --no-default-features --features aws_lc_rs
+        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs
       - name: Check compilation with all features (workspace)
-        run: cargo check --workspace --no-default-features --features all
+        run: RUSTFLAGS=-Dwarnings cargo check --workspace --no-default-features --features all
       - name: Check compilation with all features (libunftp only)
-        run: cargo check --no-default-features --features all
+        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features all
       - name: Check compilation with 'prometheus' feature only
-        run: cargo check --no-default-features --features aws_lc_rs,prometheus
+        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs,prometheus
       - name: Check compilation with 'proxy_protocol' feature only
-        run: cargo check --no-default-features --features aws_lc_rs,proxy_protocol
+        run: RUSTFLAGS=-Dwarnings cargo check --no-default-features --features aws_lc_rs,proxy_protocol
       - name: Build Docs
         run: cargo doc --workspace --no-deps
 
