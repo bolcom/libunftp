@@ -176,7 +176,7 @@ fn fileinfo_fmt() {
 
 #[test]
 fn fs_mkd() {
-    let root = tempfile::TempDir::new().unwrap().into_path();
+    let root = tempfile::TempDir::new().unwrap().keep();
     let fs = Filesystem::new(&root).unwrap();
     let new_dir_name = "bla";
 
@@ -193,7 +193,7 @@ fn fs_mkd() {
 
 #[test]
 fn fs_rename_file() {
-    let root = tempfile::TempDir::new().unwrap().into_path();
+    let root = tempfile::TempDir::new().unwrap().keep();
     let file = tempfile::NamedTempFile::new_in(&root).unwrap();
     let old_filename = file.path().file_name().unwrap().to_str().unwrap();
     let new_filename = "hello.txt";
@@ -215,7 +215,7 @@ fn fs_rename_file() {
 
 #[test]
 fn fs_rename_dir() {
-    let root = tempfile::TempDir::new().unwrap().into_path();
+    let root = tempfile::TempDir::new().unwrap().keep();
     let dir = tempfile::TempDir::new_in(&root).unwrap();
     let old_dir = dir.path().file_name().unwrap().to_str().unwrap();
     let new_dir = "new-dir";

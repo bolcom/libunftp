@@ -1,9 +1,11 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
+#![cfg_attr(not(feature = "prometheus"), allow(unused_imports, unused_variables, dead_code))]
 
 use crate::server::{Command, ControlChanError, ControlChanErrorKind, ControlChanMiddleware, ControlChanMsg, Event, Reply, ReplyCode};
 
 use async_trait::async_trait;
 use lazy_static::*;
+#[cfg(feature = "prometheus")]
 use prometheus::{IntCounter, IntCounterVec, IntGauge, opts, register_int_counter, register_int_counter_vec, register_int_gauge};
 
 // Control channel middleware that adds metrics
@@ -36,6 +38,7 @@ where
     }
 }
 
+#[cfg(feature = "prometheus")]
 lazy_static! {
     static ref FTP_AUTH_FAILURES: IntCounter = register_int_counter!(opts!("ftp_auth_failures", "Total number of authentication failures.")).unwrap();
     static ref FTP_SESSIONS: IntGauge = register_int_gauge!(opts!("ftp_sessions_total", "Total number of FTP sessions.")).unwrap();
@@ -76,6 +79,7 @@ lazy_static! {
 
 /// Add a metric for an event.
 fn add_event_metric(event: &Event) {
+    #[cfg(feature = "prometheus")]
     match event {
         Event::Command(cmd) => {
             add_command_metric(cmd);
@@ -99,40 +103,53 @@ fn add_event_metric(event: &Event) {
 
 /// Increase the amount of bytes sent (/downloaded/ from client perspective)
 pub fn inc_sent_bytes(bytes: usize, command: &'static str) {
+    #[cfg(feature = "prometheus")]
     FTP_SENT_BYTES.with_label_values(&[command]).inc_by(bytes.try_into().unwrap());
 }
 
 /// Increase the amount of bytes received (/uploaded/ from client perspective)
 pub fn inc_received_bytes(bytes: usize, command: &'static str) {
+    #[cfg(feature = "prometheus")]
     FTP_RECEIVED_BYTES.with_label_values(&[command]).inc_by(bytes.try_into().unwrap());
 }
 
 /// Increase the number of file and directory listing transfer attempts
 pub fn inc_transferred(command: &'static str, status: &'static str) {
+    #[cfg(feature = "prometheus")]
     FTP_TRANSFERRED_TOTAL.with_label_values(&[command, status]).inc();
 }
 
 /// Increase the metrics gauge for client sessions
 pub fn inc_session() {
-    FTP_SESSIONS.inc();
-    FTP_SESSIONS_COUNT.inc();
+    #[cfg(feature = "prometheus")]
+    {
+        FTP_SESSIONS.inc();
+        FTP_SESSIONS_COUNT.inc();
+    }
 }
 
 /// Decrease the metrics gauge for client sessions
 pub fn dec_session() {
+    #[cfg(feature = "prometheus")]
     FTP_SESSIONS.dec();
 }
 
 fn add_command_metric(cmd: &Command) {
-    let label = command_to_label(cmd);
-    FTP_COMMAND_TOTAL.with_label_values(&[&label]).inc();
+    #[cfg(feature = "prometheus")]
+    {
+        let label = command_to_label(cmd);
+        FTP_COMMAND_TOTAL.with_label_values(&[&label]).inc();
+    }
 }
 
 /// Error during command processing
 fn add_error_metric(error: &ControlChanErrorKind, evt_type_label: String, evt_label: String) {
-    let error_str = error.to_string();
-    let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
-    FTP_ERROR_TOTAL.with_label_values(&[&label, &evt_type_label, &evt_label]).inc();
+    #[cfg(feature = "prometheus")]
+    {
+        let error_str = error.to_string();
+        let label = error_str.split_whitespace().next().unwrap_or("unknown").to_lowercase();
+        FTP_ERROR_TOTAL.with_label_values(&[&label, &evt_type_label, &evt_label]).inc();
+    }
 }
 
 /// Add a metric for an FTP reply.
@@ -145,8 +162,11 @@ fn add_reply_metric(reply: &Reply, evt_type_label: String, evt_label: String) {
 }
 
 fn add_replycode_metric(code: ReplyCode, evt_type_label: String, evt_label: String) {
-    let range = format!("{}xx", code as u32 / 100 % 10);
-    FTP_REPLY_TOTAL.with_label_values(&[&range, &evt_type_label, &evt_label]).inc();
+    #[cfg(feature = "prometheus")]
+    {
+        let range = format!("{}xx", code as u32 / 100 % 10);
+        FTP_REPLY_TOTAL.with_label_values(&[&range, &evt_type_label, &evt_label]).inc();
+    }
 }
 
 fn event_to_labels(evt: &Event) -> (String, String) {

@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
+
 use super::{
     chancomms::{ProxyLoopMsg, ProxyLoopSender},
     session::SharedSession,
@@ -5,6 +7,7 @@ use super::{
 use crate::{auth::UserDetail, storage::StorageBackend};
 use bytes::Bytes;
 use dashmap::{DashMap, mapref::entry::Entry};
+#[cfg(feature = "proxy_protocol")]
 use proxy_protocol::{ParseError, ProxyHeader, parse, version1::ProxyAddresses};
 use std::{
     net::{IpAddr, SocketAddr, SocketAddrV4},
@@ -16,9 +19,13 @@ use tokio::io::AsyncReadExt;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ProxyMode {
     Off,
-    On { external_control_port: u16 },
+    #[cfg(feature = "proxy_protocol")]
+    On {
+        external_control_port: u16,
+    },
 }
 
+#[cfg(feature = "proxy_protocol")]
 impl From<u16> for ProxyMode {
     fn from(port: u16) -> Self {
         ProxyMode::On { external_control_port: port }
@@ -34,6 +41,7 @@ enum ProxyError {
     HeaderSize,
     #[error("header does not match the supported proxy protocol v1")]
     NotProxyHdr,
+    #[cfg(feature = "proxy_protocol")]
     #[error("proxy protocol parse error")]
     DecodeError(#[from] ParseError),
     #[error("only IPv4 is supported")]
@@ -65,6 +73,7 @@ pub(crate) struct ProxyConnection {
 /// If the header size is invalid, or the header does not end with a CR-LF sequence, the function returns a `ProxyError`
 /// with the reason for the failure. If there is a problem reading from the TCP stream, the function returns a `ProxyError::ReadError`.
 /// If the header cannot be parsed, the function returns a `ProxyError::DecodeError`.
+#[cfg(feature = "proxy_protocol")]
 #[tracing_attributes::instrument]
 async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
     // Create two vectors to hold the data read from the TCP stream
@@ -115,6 +124,7 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
 
 /// Takes a tcp stream and reads the proxy protocol header
 /// Sends the extracted proxy connection information (source ip+port, destination ip+port) to the proxy loop
+#[cfg(feature = "proxy_protocol")]
 #[tracing_attributes::instrument]
 pub(super) fn spawn_proxy_header_parsing<Storage, User>(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: ProxyLoopSender<Storage, User>)
 where

@@ -1,4 +1,5 @@
 //! Contains code pertaining to the communication between the data and control channels.
+#![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
 
 use super::{proxy_protocol::ProxyConnection, session::SharedSession};
 use crate::{

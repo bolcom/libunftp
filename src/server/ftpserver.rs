@@ -1,6 +1,7 @@
 mod chosen;
 pub mod error;
 mod listen;
+#[cfg(feature = "proxy_protocol")]
 mod listen_proxied;
 pub mod options;
 
@@ -11,16 +12,15 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
+#[cfg(feature = "proxy_protocol")]
+use crate::server::proxy_protocol::ProxyProtocolSwitchboard;
 use crate::{
     auth::{Authenticator, UserDetail, anonymous::AnonymousAuthenticator},
     notification::{DataListener, PresenceListener, nop::NopListener},
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
-    server::{
-        proxy_protocol::{ProxyMode, ProxyProtocolSwitchboard},
-        tls,
-    },
+    server::{proxy_protocol::ProxyMode, tls},
     storage::{Metadata, StorageBackend},
 };
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
@@ -49,7 +49,7 @@ use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range
 /// });
 /// ```
 ///
-/// [`Authenticator`]: auth::Authenticator
+/// [`Authenticator`]: crate::auth::Authenticator
 /// [`StorageBackend`]: storage/trait.StorageBackend.html
 pub struct Server<Storage, User>
 where
@@ -79,7 +79,7 @@ where
     binder: Arc<std::sync::Mutex<Option<Box<dyn crate::options::Binder>>>>,
 }
 
-/// Used to create [`Server`]s.  
+/// Used to create [`Server`]s.
 pub struct ServerBuilder<Storage, User>
 where
     Storage: StorageBackend<User>,
@@ -551,6 +551,7 @@ where
     ///     .proxy_protocol_mode(2121)
     ///     .build();
     /// ```
+    #[cfg(feature = "proxy_protocol")]
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
         self
@@ -723,6 +724,7 @@ where
         let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
         let listen_future = match self.proxy_protocol_mode {
+            #[cfg(feature = "proxy_protocol")]
             ProxyMode::On { external_control_port } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
                     bind_address,
@@ -735,6 +737,7 @@ where
                 }
                 .listen(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+
             ProxyMode::Off => Box::pin(
                 listen::Listener {
                     bind_address,
