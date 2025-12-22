@@ -1,4 +1,5 @@
 //! Contains the `add...metric` functions that are used for gathering metrics.
+#![cfg_attr(not(feature = "prometheus"), allow(unused_imports, unused_variables, dead_code))]
 
 use crate::server::{Command, ControlChanError, ControlChanErrorKind, ControlChanMiddleware, ControlChanMsg, Event, Reply, ReplyCode};
 

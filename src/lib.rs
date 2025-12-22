@@ -1,5 +1,4 @@
 #![doc(html_root_url = "https://docs.rs/libunftp/0.21.0")]
-#![allow(dead_code, unused)]
 
 //! libunftp is an extensible, async, cloud orientated FTP(S) server library.
 //!

@@ -87,6 +87,7 @@ where
     // The control connection over the proxy protocol
     pub(crate) proxy_control: Option<ProxyConnection>,
     // Points to the hashkey of the data connection
+    #[cfg_attr(not(feature = "proxy_protocol"), allow(dead_code))]
     pub(crate) proxy_active_datachan: Option<ProxyHashKey>,
     // Current working directory
     pub cwd: std::path::PathBuf,

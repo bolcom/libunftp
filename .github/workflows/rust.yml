@@ -86,6 +86,10 @@ jobs:
         run: cargo check --workspace --no-default-features --features all
       - name: Check compilation with all features (libunftp only)
         run: cargo check --no-default-features --features all
+      - name: Check compilation with 'prometheus' feature only
+        run: cargo check --no-default-features --features aws_lc_rs,prometheus
+      - name: Check compilation with 'proxy_protocol' feature only
+        run: cargo check --no-default-features --features aws_lc_rs,proxy_protocol
       - name: Build Docs
         run: cargo doc --workspace --no-deps
 

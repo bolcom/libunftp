@@ -12,16 +12,15 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
+#[cfg(feature = "proxy_protocol")]
+use crate::server::proxy_protocol::ProxyProtocolSwitchboard;
 use crate::{
     auth::{Authenticator, UserDetail, anonymous::AnonymousAuthenticator},
     notification::{DataListener, PresenceListener, nop::NopListener},
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
-    server::{
-        proxy_protocol::{ProxyMode, ProxyProtocolSwitchboard},
-        tls,
-    },
+    server::{proxy_protocol::ProxyMode, tls},
     storage::{Metadata, StorageBackend},
 };
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};

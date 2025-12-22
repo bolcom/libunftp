@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
+
 use super::{
     chancomms::{ProxyLoopMsg, ProxyLoopSender},
     session::SharedSession,
