@@ -81,7 +81,11 @@ jobs:
       - name: Check compilation without default features (workspace)
         run: cargo check --workspace --no-default-features --features aws_lc_rs
       - name: Check compilation without default features (libunftp only)
-        run: cargo check --workspace --no-default-features --features aws_lc_rs
+        run: cargo check --no-default-features --features aws_lc_rs
+      - name: Check compilation with all features (workspace)
+        run: cargo check --workspace --no-default-features --features all
+      - name: Check compilation with all features (libunftp only)
+        run: cargo check --no-default-features --features all
       - name: Build Docs
         run: cargo doc --workspace --no-deps
 

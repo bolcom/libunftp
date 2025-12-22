@@ -1,7 +1,7 @@
 mod chosen;
 pub mod error;
 mod listen;
-#[cfg(feature = "proxy")]
+#[cfg(feature = "proxy_protocol")]
 mod listen_proxied;
 pub mod options;
 
@@ -552,7 +552,7 @@ where
     ///     .proxy_protocol_mode(2121)
     ///     .build();
     /// ```
-    #[cfg(feature = "proxy")]
+    #[cfg(feature = "proxy_protocol")]
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
         self.proxy_protocol_mode = external_control_port.into();
         self
@@ -725,7 +725,7 @@ where
         let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
         let listen_future = match self.proxy_protocol_mode {
-            #[cfg(feature = "proxy")]
+            #[cfg(feature = "proxy_protocol")]
             ProxyMode::On { external_control_port } => Box::pin(
                 listen_proxied::ProxyProtocolListener {
                     bind_address,
