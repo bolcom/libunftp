@@ -23,10 +23,10 @@ base64 = "0.22.1"
 bytes = "1.11.0"
 ipnet = "2.11.0"
 iprange = "0.6.7"
-libunftp = { version = "0.21.0", path = "../../", default-features = false }
+libunftp = { version = "0.21.1", path = "../../", default-features = false }
 ring = "0.17.14"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+serde_json = "1.0.146"
 tokio = { version = "1.48.0", features = ["rt", "time"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-attributes = "0.1.31"

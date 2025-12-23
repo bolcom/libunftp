@@ -10,8 +10,7 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP
-**](https://github.com/bolcom/unFTP)
+[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP**](https://github.com/bolcom/unFTP)
 
 The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's an extensible, async, cloud orientated FTP(S)
 server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
@@ -25,27 +24,31 @@ possible.
 
 Feature highlights:
 
-* 39 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
+* 41 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
 * Ability to implement own storage back-ends
 * Ability to implement own authentication back-ends
 * Explicit FTPS (TLS)
 * Mutual TLS (Client certificates)
 * TLS session resumption
-* Prometheus integration
+* Prometheus integration (enabled by default, can be disabled)
 * Structured Logging
-* [Proxy Protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/) support
+* [Proxy Protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/) support (enabled by default, can be disabled)
 * Automatic session timeouts
 * Per user IP allow lists
 * Configurable cryptographic providers (ring or aws-lc-rs)
 
 Known storage back-ends:
 
+* [unftp-sbe-fatfs](https://crates.io/crates/unftp-sbe-fatfs) - Provides read-only access to FAT filesystem images
 * [unftp-sbe-fs](https://crates.io/crates/unftp-sbe-fs) - Stores files on the local filesystem
 * [unftp-sbe-gcs](https://crates.io/crates/unftp-sbe-gcs) - Stores files in Google Cloud Storage
+* [unftp-sbe-iso](https://crates.io/crates/unftp-sbe-iso) - Provides FTP access to ISO 9660 files
+* [unftp-sbe-opendal](https://crates.io/crates/unftp-sbe-opendal) - Provides access to various storage services through Apache OpenDAL (supports S3, Azure Blob Storage, and more)
+* [unftp-sbe-restrict](https://crates.io/crates/unftp-sbe-restrict) - Wraps another storage back-end in order to restrict
+  the FTP operations a user can do i.e. provide authorization.
 * [unftp-sbe-rooter](https://crates.io/crates/unftp-sbe-rooter) - Wraps another storage back-end in order to root a user
   to a specific home directory.
-* [unftp-sbe-restrict](https://crates.io/crates/unftp-sbe-rooter) - Wraps another storage back-end in order to restrict
-  the FTP operations a user can do i.e. provide authorization.
+* [unftp-sbe-webdav](https://crates.io/crates/unftp-sbe-webdav) - A WebDAV storage back-end providing translation between FTP & WebDAV
 
 Known authentication back-ends:
 
@@ -65,15 +68,37 @@ To use a specific provider, enable the corresponding feature in your `Cargo.toml
 
 ```toml
 [dependencies]
-libunftp = { version = "0.21.0", features = ["ring"] }  # Use ring
+libunftp = { version = "0.21.1", features = ["ring"] }  # Use ring
 # or
-libunftp = { version = "0.21.0", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
+libunftp = { version = "0.21.1", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
 ```
 
 The default provider is `aws-lc-rs` for backward compatibility. Choose the provider that best fits your needs:
 
 - [`ring`](https://crates.io/crates/ring): More widely used, good for general-purpose applications
 - [`aws-lc-rs`](https://crates.io/crates/aws-lc-rs): Optimized for AWS environments, good for cloud deployments
+
+## Optional Features
+
+The following feature flags are included in the default features but can be disabled to reduce dependencies:
+
+- `prometheus`: Enables Prometheus metrics integration. When enabled, you can collect metrics about FTP operations, sessions, and transfers using the `.metrics()` method on the server builder. **Enabled by default.**
+
+- `proxy_protocol`: Enables [Proxy Protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/) support. This allows the server to receive client connection information (IP address and port) when behind a proxy or load balancer. **Enabled by default.**
+
+To disable these features and reduce dependencies, use `default-features = false` and explicitly enable only what you need:
+
+```toml
+[dependencies]
+libunftp = { version = "0.21.1", default-features = false, features = ["aws_lc_rs"] }
+```
+
+Or enable all features explicitly:
+
+```toml
+[dependencies]
+libunftp = { version = "0.21.1", features = ["all"] }
+```
 
 ## Prerequisites
 
@@ -93,7 +118,7 @@ add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sb
 
 ```toml
 [dependencies]
-libunftp = "0.21.0"
+libunftp = "0.21.1"
 unftp-sbe-fs = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```

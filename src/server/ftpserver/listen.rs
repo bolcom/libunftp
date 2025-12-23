@@ -79,7 +79,7 @@ where
         socket_addr: SocketAddr,
     ) {
         let fd = tcp_stream.as_raw_fd();
-        nix::fcntl::fcntl(fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty())).unwrap();
+        nix::fcntl::fcntl(tcp_stream, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty())).unwrap();
         let result = tokio::process::Command::new(helper)
             .args(connection_helper_args.iter())
             .arg(fd.to_string())

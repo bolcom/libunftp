@@ -1,15 +1,17 @@
 # Changelog
 
-### libunftp upcoming (unreleased)
+### libunftp 0.22.0
 
+- Compile against Rust 1.92.0 in CI
+- [#547](https://github.com/bolcom/libunftp/pull/547) Put metrics and proxy-protocol functionality behind features (`prometheus` and `proxy_protocol`).
+- [#548](https://github.com/bolcom/libunftp/pull/548) Fix error message typos
 - [#541](https://github.com/bolcom/libunftp/pull/541) Initial MLSD (Machine List Directory) command implementation (RFC 3659)
-- [#541](https://github.com/bolcom/libunftp/pull/541)Fix MLST output formatting
-- [#541](https://github.com/bolcom/libunftp/pull/541)Fix: MLSx facts must have a terminating semicolon according to RFC 3659 section 7.2
-- [#541](https://github.com/bolcom/libunftp/pull/541)Fix wrong use of metadata.uid() instead of metadata.gid()
+- [#541](https://github.com/bolcom/libunftp/pull/541) Fix MLST output formatting
+- [#541](https://github.com/bolcom/libunftp/pull/541) Fix MLSx facts must have a terminating semicolon according to RFC 3659 section 7.2
+- [#541](https://github.com/bolcom/libunftp/pull/541) Fix wrong use of metadata.uid() instead of metadata.gid()
 - [#540](https://github.com/bolcom/libunftp/pull/540) Fix build with "ring" instead of "aws_lc_rs" feature
 - Implement 550 error code for RNFR command
-- Bump dependencies (async-trait pinned to =0.1.88)
-- [#545](https://github.com/bolcom/libunftp/pull/545) Make Clippy happy
+- Bump dependencies
 
 ### unftp-sbe-gcs v0.2.8
 
