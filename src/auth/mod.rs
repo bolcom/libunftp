@@ -63,4 +63,4 @@ pub(crate) mod authenticator;
 pub use authenticator::{AuthenticationError, Authenticator, ClientCert, Credentials};
 
 mod user;
-pub use user::{DefaultUser, UserDetail};
+pub use user::{DefaultUser, StoragePermissions, UserDetail};
