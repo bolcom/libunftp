@@ -4,8 +4,7 @@ use crate::notification::{DataListener, PresenceListener};
 use crate::options::ActivePassiveMode;
 use crate::storage::Metadata;
 use crate::{
-    auth::Authenticator,
-    auth::UserDetail,
+    auth::{AuthenticationPipeline, Authenticator, UserDetail, UserDetailProvider},
     options::{FtpsRequired, PassiveHost, SiteMd5},
     server::controlchan,
     server::tls::FtpsConfig,
@@ -22,7 +21,8 @@ where
 {
     pub storage: Arc<dyn (Fn() -> Storage) + Send + Sync>,
     pub greeting: &'static str,
-    pub authenticator: Arc<dyn Authenticator<User>>,
+    pub authenticator: Arc<dyn Authenticator>,
+    pub user_detail_provider: Arc<dyn UserDetailProvider<User = User> + Send + Sync>,
     pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FtpsConfig,
@@ -47,8 +47,11 @@ where
     fn from(server: &OptionsHolder<Storage, User>) -> Self {
         // So this is when you create a new storage backend?
         // XXX Shouldn't instantiate storage until _after_ successful auth.
+        // Build the authentication pipeline from authenticator and user_detail_provider
+        let auth_pipeline = Arc::new(AuthenticationPipeline::new(server.authenticator.clone(), server.user_detail_provider.clone()));
+
         controlchan::LoopConfig {
-            authenticator: server.authenticator.clone(),
+            auth_pipeline,
             storage: (server.storage)(),
             ftps_config: server.ftps_config.clone(),
             collect_metrics: server.collect_metrics,

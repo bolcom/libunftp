@@ -6,7 +6,7 @@
 //! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 
 use async_trait::async_trait;
-use libunftp::auth::*;
+use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
@@ -26,10 +26,10 @@ impl PamAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for PamAuthenticator {
+impl Authenticator for PamAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<Principal, AuthenticationError> {
         let username = username.to_string();
         let password = creds.password.as_ref().ok_or(AuthenticationError::BadPassword)?;
         let service = self.service.clone();
@@ -38,6 +38,6 @@ impl Authenticator<DefaultUser> for PamAuthenticator {
 
         auth.get_handler().set_credentials(&username, password);
         auth.authenticate().map_err(|e| AuthenticationError::with_source("pam error", e))?;
-        Ok(DefaultUser {})
+        Ok(Principal { username })
     }
 }

@@ -23,7 +23,7 @@ mod auth {
     };
 
     use async_trait::async_trait;
-    use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser, UserDetail};
+    use libunftp::auth::{AuthenticationError, Authenticator, Principal, UserDetail, UserDetailError, UserDetailProvider};
     use serde::Deserialize;
     use tokio::time::sleep;
 
@@ -114,14 +114,14 @@ mod auth {
     }
 
     #[async_trait]
-    impl Authenticator<User> for JsonFileAuthenticator {
+    impl Authenticator for JsonFileAuthenticator {
         #[tracing_attributes::instrument]
-        async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<User, AuthenticationError> {
+        async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<Principal, AuthenticationError> {
             let res = if let Some(actual_creds) = self.credentials_map.get(username) {
                 let pass_check_result = match &creds.password {
                     Some(given_password) => {
                         if Self::check_password(given_password, &actual_creds.password).is_ok() {
-                            Some(Ok(User::new(username, &actual_creds.home)))
+                            Some(Ok(()))
                         } else {
                             Some(Err(AuthenticationError::BadPassword))
                         }
@@ -133,9 +133,11 @@ mod auth {
                     None => Err(AuthenticationError::BadPassword),
                     Some(pass_res) => {
                         if pass_res.is_ok() {
-                            Ok(User::new(username, &actual_creds.home))
+                            Ok(Principal {
+                                username: username.to_string(),
+                            })
                         } else {
-                            pass_res
+                            Err(AuthenticationError::BadPassword)
                         }
                     }
                 }
@@ -156,11 +158,17 @@ mod auth {
     }
 
     #[async_trait]
-    impl Authenticator<DefaultUser> for JsonFileAuthenticator {
-        #[tracing_attributes::instrument]
-        async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<DefaultUser, AuthenticationError> {
-            let _: User = self.authenticate(username, creds).await?;
-            Ok(DefaultUser {})
+    impl UserDetailProvider for JsonFileAuthenticator {
+        type User = User;
+
+        async fn provide_user_detail(&self, principal: &Principal) -> Result<User, UserDetailError> {
+            if let Some(creds) = self.credentials_map.get(&principal.username) {
+                Ok(User::new(&principal.username, &creds.home))
+            } else {
+                Err(UserDetailError::UserNotFound {
+                    username: principal.username.clone(),
+                })
+            }
         }
     }
 }
@@ -234,13 +242,14 @@ async fn main() {
 
     let control_sock = TcpStream::from_std(std_stream).unwrap();
 
-    let auth = Arc::new(JsonFileAuthenticator::from_file(args[1].clone()).unwrap());
+    let authenticator = Arc::new(JsonFileAuthenticator::from_file(args[1].clone()).unwrap());
+    let user_provider = authenticator.clone();
     // XXX This would be a lot easier if the libunftp API allowed creating the
     // storage just before calling service.
     let storage = Mutex::new(Some(Filesystem::new(std::env::temp_dir()).unwrap()));
     let sgen = Box::new(move || storage.lock().unwrap().take().unwrap());
 
-    let mut sb = libunftp::ServerBuilder::with_authenticator(sgen, auth);
+    let mut sb = libunftp::ServerBuilder::with_authenticator(sgen, authenticator).user_detail_provider(user_provider);
     cfg_if! {
         if #[cfg(target_os = "freebsd")] {
             // Safe because we're single-threaded

@@ -1,5 +1,5 @@
 use crate::{
-    auth::{Authenticator, UserDetail},
+    auth::{AuthenticationPipeline, UserDetail},
     server::{
         ControlChanMsg,
         chancomms::ProxyLoopSender,
@@ -34,7 +34,7 @@ where
 {
     pub parsed_command: Command,
     pub session: SharedSession<Storage, User>,
-    pub authenticator: Arc<dyn Authenticator<User>>,
+    pub auth_pipeline: Arc<AuthenticationPipeline<User>>,
     pub tls_configured: bool,
     pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,

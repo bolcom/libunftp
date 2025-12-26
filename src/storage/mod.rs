@@ -159,7 +159,9 @@
 //! # struct Vfs{};
 //! # impl Vfs { fn new() -> Filesystem { Filesystem::new("/").unwrap() } }
 //! let vfs_provider = Box::new(|| Vfs::new());
-//! let server = libunftp::Server::new(vfs_provider);
+//! let server = libunftp::ServerBuilder::new(vfs_provider)
+//!     .build()
+//!     .unwrap();
 //! ```
 //!
 //! [`Server`]: ../struct.Server.html

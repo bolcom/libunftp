@@ -11,10 +11,10 @@ use async_trait::async_trait;
 /// ```rust
 /// # #[tokio::main]
 /// # async fn main() {
-/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, DefaultUser};
+/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, Principal};
 ///
 /// let my_auth = AnonymousAuthenticator{};
-/// assert_eq!(my_auth.authenticate("Finn", &"I ❤️ PB".into()).await.unwrap(), DefaultUser{});
+/// assert_eq!(my_auth.authenticate("Finn", &"I ❤️ PB".into()).await.unwrap().username, "Finn");
 /// # }
 /// ```
 ///
@@ -22,11 +22,13 @@ use async_trait::async_trait;
 pub struct AnonymousAuthenticator;
 
 #[async_trait]
-impl Authenticator<DefaultUser> for AnonymousAuthenticator {
+impl Authenticator for AnonymousAuthenticator {
     #[allow(clippy::type_complexity)]
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, _username: &str, _password: &Credentials) -> Result<DefaultUser, AuthenticationError> {
-        Ok(DefaultUser {})
+    async fn authenticate(&self, username: &str, _password: &Credentials) -> Result<Principal, AuthenticationError> {
+        Ok(Principal {
+            username: username.to_string(),
+        })
     }
 
     async fn cert_auth_sufficient(&self, _username: &str) -> bool {

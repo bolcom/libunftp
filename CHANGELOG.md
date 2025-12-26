@@ -1,5 +1,15 @@
 # Changelog
 
+### Upcoming release
+
+- **BREAKING**: Refactored `Authenticator` trait to be non-generic and return `Principal` instead of a generic `User` type. This decouples authentication (verifying credentials) from user detail retrieval (obtaining full user information).
+- Introduced `Principal` struct representing an authenticated user's identity (username). This is the minimal information returned by authentication.
+- Introduced `UserDetailProvider` trait to convert a `Principal` into a full `UserDetail` implementation. This allows authentication and user detail lookup to be separated.
+- Introduced `AuthenticationPipeline` struct that combines an `Authenticator` and a `UserDetailProvider` to provide a complete authentication flow.
+- Added `DefaultUserDetailProvider` implementation that returns `DefaultUser` for convenience.
+- **BREAKING**: Updated all `unftp-auth-*` crates (`unftp-auth-jsonfile`, `unftp-auth-pam`, `unftp-auth-rest`) to use the new non-generic `Authenticator` trait.
+- Updated all examples and tests to use the new authentication pattern.
+
 ### libunftp 0.22.0
 
 - Compile against Rust 1.92.0 in CI

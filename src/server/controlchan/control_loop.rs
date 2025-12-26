@@ -1,5 +1,5 @@
 use crate::{
-    auth::{Authenticator, UserDetail},
+    auth::{AuthenticationPipeline, UserDetail},
     metrics::MetricsMiddleware,
     notification::{DataListener, PresenceListener},
     options::ActivePassiveMode,
@@ -57,7 +57,7 @@ where
 {
     pub storage: Storage,
     pub greeting: &'static str,
-    pub authenticator: Arc<dyn Authenticator<User>>,
+    pub auth_pipeline: Arc<AuthenticationPipeline<User>>,
     pub passive_ports: RangeInclusive<u16>,
     pub passive_host: PassiveHost,
     pub ftps_config: FtpsConfig,
@@ -90,7 +90,7 @@ where
 {
     let Config {
         storage,
-        authenticator,
+        auth_pipeline,
         passive_ports,
         passive_host,
         ftps_config,
@@ -130,7 +130,7 @@ where
     let event_chain = PrimaryEventHandler {
         logger: logger.clone(),
         session: shared_session.clone(),
-        authenticator: authenticator.clone(),
+        auth_pipeline: auth_pipeline.clone(),
         tls_configured,
         passive_ports,
         passive_host,
@@ -328,7 +328,7 @@ where
 {
     logger: slog::Logger,
     session: SharedSession<Storage, User>,
-    authenticator: Arc<dyn Authenticator<User>>,
+    auth_pipeline: Arc<AuthenticationPipeline<User>>,
     tls_configured: bool,
     passive_ports: RangeInclusive<u16>,
     passive_host: PassiveHost,
@@ -418,7 +418,7 @@ where
         let args = CommandContext {
             parsed_command: cmd.clone(),
             session: self.session.clone(),
-            authenticator: self.authenticator.clone(),
+            auth_pipeline: self.auth_pipeline.clone(),
             tls_configured: self.tls_configured,
             passive_ports: self.passive_ports.clone(),
             passive_host: self.passive_host.clone(),

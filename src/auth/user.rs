@@ -152,3 +152,39 @@ impl Display for DefaultUser {
         write!(f, "DefaultUser")
     }
 }
+
+/// A default implementation of [`UserDetailProvider`] that converts any [`Principal`] to a [`DefaultUser`].
+///
+/// This provider is useful when you don't need any additional user information beyond the authenticated
+/// username. It simply returns a [`DefaultUser`] for any principal.
+///
+/// # Example
+///
+/// ```rust
+/// # #[tokio::main]
+/// # async fn main() {
+/// use libunftp::auth::{DefaultUserDetailProvider, Principal, UserDetailProvider};
+///
+/// let provider = DefaultUserDetailProvider;
+/// let principal = Principal {
+///     username: "alice".to_string(),
+/// };
+/// let user = provider.provide_user_detail(&principal).await.unwrap();
+/// # }
+/// ```
+///
+/// [`UserDetailProvider`]: trait.UserDetailProvider.html
+/// [`Principal`]: ../struct.Principal.html
+/// [`DefaultUser`]: struct.DefaultUser.html
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DefaultUserDetailProvider;
+
+#[async_trait]
+impl UserDetailProvider for DefaultUserDetailProvider {
+    type User = DefaultUser;
+
+    async fn provide_user_detail(&self, _principal: &Principal) -> Result<DefaultUser, UserDetailError> {
+        // DefaultUser doesn't hold any information, so we can just return it for any principal
+        Ok(DefaultUser)
+    }
+}
