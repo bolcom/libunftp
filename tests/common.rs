@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use lazy_static::*;
-use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
+use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 use libunftp::options::{FailedLoginsBlock, FailedLoginsPolicy};
 use std::io::Error;
 use std::net::SocketAddr;
@@ -119,12 +119,14 @@ pub async fn tcp_pasv_connect(addr: SocketAddr) -> Result<TcpStream, Error> {
 pub struct TestAuthenticator;
 
 #[async_trait]
-impl Authenticator<DefaultUser> for TestAuthenticator {
-    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+impl Authenticator for TestAuthenticator {
+    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<Principal, AuthenticationError> {
         return match (username, &creds.password) {
             ("test" | "testpol", Some(pwd)) => {
                 if pwd == "test" {
-                    Ok(DefaultUser {})
+                    Ok(Principal {
+                        username: username.to_string(),
+                    })
                 } else {
                     Err(AuthenticationError::BadPassword)
                 }

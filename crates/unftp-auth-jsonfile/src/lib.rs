@@ -150,7 +150,7 @@ use bytes::Bytes;
 use flate2::read::GzDecoder;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
-use libunftp::auth::{AuthenticationError, Authenticator, DefaultUser};
+use libunftp::auth::{AuthenticationError, Authenticator, Principal};
 use ring::{
     digest::SHA256_OUTPUT_LEN,
     pbkdf2::{PBKDF2_HMAC_SHA256, verify},
@@ -343,9 +343,9 @@ impl JsonFileAuthenticator {
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for JsonFileAuthenticator {
+impl Authenticator for JsonFileAuthenticator {
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<Principal, AuthenticationError> {
         let res = if let Some(actual_creds) = self.credentials_map.get(username) {
             let client_cert = &actual_creds.client_cert;
             let certificate = &creds.certificate_chain.as_ref().and_then(|x| x.first());
@@ -353,7 +353,9 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             let ip_check_result = if !Self::ip_ok(creds, actual_creds) {
                 Err(AuthenticationError::IpDisallowed)
             } else {
-                Ok(DefaultUser {})
+                Ok(Principal {
+                    username: username.to_string(),
+                })
             };
 
             let cn_check_result = match (&client_cert, certificate) {
@@ -364,14 +366,18 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
                     (Some(cn), cert) => match cert.verify_cn(cn) {
                         Ok(is_authorized) => {
                             if is_authorized {
-                                Some(Ok(DefaultUser {}))
+                                Some(Ok(Principal {
+                                    username: username.to_string(),
+                                }))
                             } else {
                                 Some(Err(AuthenticationError::CnDisallowed))
                             }
                         }
                         Err(e) => Some(Err(AuthenticationError::with_source("verify_cn", e))),
                     },
-                    (None, _) => Some(Ok(DefaultUser {})),
+                    (None, _) => Some(Ok(Principal {
+                        username: username.to_string(),
+                    })),
                 },
                 (Some(_), None) => Some(Err(AuthenticationError::CnDisallowed)),
                 _ => None,
@@ -380,7 +386,9 @@ impl Authenticator<DefaultUser> for JsonFileAuthenticator {
             let pass_check_result = match &creds.password {
                 Some(given_password) => {
                     if Self::check_password(given_password, &actual_creds.password).is_ok() {
-                        Some(Ok(DefaultUser {}))
+                        Some(Ok(Principal {
+                            username: username.to_string(),
+                        }))
                     } else {
                         Some(Err(AuthenticationError::BadPassword))
                     }
@@ -484,18 +492,23 @@ mod test {
             json_authenticator
                 .authenticate("alice", &"this is the correct password for alice".into())
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "alice"
         );
         assert_eq!(
             json_authenticator
                 .authenticate("bella", &"this is the correct password for bella".into())
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "bella"
         );
-        assert_eq!(json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap(), DefaultUser);
-        assert_eq!(json_authenticator.authenticate("dan", &"".into()).await.unwrap(), DefaultUser);
+        assert_eq!(
+            json_authenticator.authenticate("carol", &"not so secure".into()).await.unwrap().username,
+            "carol"
+        );
+        assert_eq!(json_authenticator.authenticate("dan", &"".into()).await.unwrap().username, "dan");
         assert!(matches!(
             json_authenticator.authenticate("carol", &"this is the wrong password".into()).await,
             Err(AuthenticationError::BadPassword)
@@ -520,8 +533,9 @@ mod test {
                     },
                 )
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "dan"
         );
 
         match json_authenticator
@@ -679,8 +693,9 @@ mod test {
                     },
                 )
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "alice"
         );
 
         // correct password but missing certificate fails
@@ -711,8 +726,9 @@ mod test {
                     },
                 )
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "bob"
         );
 
         // certificate with incorrect CN and no password needed according to json file fails to authenticate
@@ -743,8 +759,9 @@ mod test {
                     },
                 )
                 .await
-                .unwrap(),
-            DefaultUser
+                .unwrap()
+                .username,
+            "dean"
         );
     }
 }

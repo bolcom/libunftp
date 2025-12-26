@@ -37,12 +37,12 @@ where
     async fn handle(&self, args: CommandContext<Storage, Usr>) -> Result<Reply, ControlChanError> {
         let mut session = args.session.lock().await;
         let username_str = std::str::from_utf8(&self.username)?;
-        let cert_auth_sufficient = args.authenticator.cert_auth_sufficient(username_str).await;
+        let cert_auth_sufficient = args.auth_pipeline.cert_auth_sufficient(username_str).await;
         match (session.state, &session.cert_chain, cert_auth_sufficient) {
             (SessionState::New, Some(_), true) => {
                 let auth_result: Result<Usr, AuthenticationError> = args
-                    .authenticator
-                    .authenticate(
+                    .auth_pipeline
+                    .authenticate_and_get_user(
                         username_str,
                         &Credentials {
                             certificate_chain: session.cert_chain.clone(),
@@ -91,7 +91,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::auth::{AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, UserDetail};
+    use crate::auth::{AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, DefaultUserDetailProvider, Principal, UserDetail};
     use crate::server::controlchan::handler::CommandHandler;
     use crate::server::session::SharedSession;
     use crate::server::{Command, ControlChanMsg, Reply, ReplyCode, Session, SessionState};
@@ -117,10 +117,12 @@ mod tests {
 
     #[async_trait]
     #[allow(unused)]
-    impl Authenticator<DefaultUser> for Auth {
-        async fn authenticate(&self, username: &str, creds: &Credentials) -> std::result::Result<DefaultUser, AuthenticationError> {
+    impl Authenticator for Auth {
+        async fn authenticate(&self, username: &str, creds: &Credentials) -> std::result::Result<Principal, AuthenticationError> {
             if self.auth_ok {
-                Ok(DefaultUser {})
+                Ok(Principal {
+                    username: username.to_string(),
+                })
             } else {
                 Err(AuthenticationError::new("bad credentials"))
             }
@@ -233,14 +235,18 @@ mod tests {
         Storage::Metadata: Metadata + Sync,
         User: UserDetail + 'static,
     {
-        fn test(session_arc: SharedSession<Storage, User>, auther: Arc<dyn Authenticator<User>>) -> super::CommandContext<Storage, User> {
+        fn test<P>(session_arc: SharedSession<Storage, User>, auther: Arc<dyn Authenticator>, user_provider: Arc<P>) -> super::CommandContext<Storage, User>
+        where
+            P: crate::auth::UserDetailProvider<User = User> + Send + Sync + 'static,
+        {
             let (tx, _) = mpsc::channel::<ControlChanMsg>(1);
+            let auth_pipeline = Arc::new(crate::auth::AuthenticationPipeline::new(auther, user_provider));
             super::CommandContext {
                 parsed_command: Command::User {
                     username: Bytes::from("test-user"),
                 },
                 session: session_arc,
-                authenticator: auther,
+                auth_pipeline,
                 tls_configured: true,
                 passive_ports: 0..=0,
                 passive_host: Default::default(),
@@ -275,6 +281,7 @@ mod tests {
                 short_auth: test.short_auth,
                 auth_ok: test.auth_ok,
             }),
+            Arc::new(DefaultUserDetailProvider {}),
         );
         let reply = user_cmd.handle(ctx).await.unwrap();
         assert_eq!(reply.matches_code(test.expected_reply), true, "Reply code must match");

@@ -61,7 +61,7 @@ where
                     "server status:".to_string(),
                     format!("powered by libunftp: {}", env!("CARGO_PKG_VERSION")),
                     format!("sbe: {}", session.storage.name()),
-                    format!("authenticator: {}", args.authenticator.name()),
+                    format!("authenticator: {}", args.auth_pipeline.name()),
                     format!("user: {}", session.username.as_ref().unwrap()),
                     format!("client addr: {}", session.source),
                     format!("ftps configured: {}", args.tls_configured),

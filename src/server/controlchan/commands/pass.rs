@@ -66,7 +66,7 @@ where
                 };
                 let tx: Sender<ControlChanMsg> = args.tx_control_chan.clone();
 
-                let auther = args.authenticator.clone();
+                let auth_pipeline = args.auth_pipeline.clone();
 
                 // without this, the REST authenticator hangs when
                 // performing a http call through Hyper
@@ -79,7 +79,7 @@ where
                 let failed_logins = session.failed_logins.clone();
                 let source_ip = session.source.ip();
                 tokio::spawn(async move {
-                    let msg = match auther.authenticate(&username, &creds).await {
+                    let msg = match auth_pipeline.authenticate_and_get_user(&username, &creds).await {
                         Ok(user) => {
                             let is_locked = match failed_logins {
                                 Some(failed_logins) => {

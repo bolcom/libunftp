@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use hyper::{Method, Request, http::uri::InvalidUri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use libunftp::auth::{AuthenticationError, Authenticator, Credentials, DefaultUser};
+use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use regex::Regex;
 use serde_json::{Value, json};
@@ -222,9 +222,9 @@ impl TrimQuotes for String {
 }
 
 #[async_trait]
-impl Authenticator<DefaultUser> for RestAuthenticator {
+impl Authenticator for RestAuthenticator {
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<DefaultUser, AuthenticationError> {
+    async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<Principal, AuthenticationError> {
         let username_url = utf8_percent_encode(username, NON_ALPHANUMERIC).collect::<String>();
         let password = creds.password.as_ref().ok_or(AuthenticationError::BadPassword)?.as_ref();
         let password_url = utf8_percent_encode(password, NON_ALPHANUMERIC).collect::<String>();
@@ -284,7 +284,9 @@ impl Authenticator<DefaultUser> for RestAuthenticator {
         };
 
         if self.regex.is_match(&parsed) {
-            Ok(DefaultUser {})
+            Ok(Principal {
+                username: username.to_string(),
+            })
         } else {
             Err(AuthenticationError::BadPassword)
         }

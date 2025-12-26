@@ -37,13 +37,14 @@
 //! constructors of `Server` e.g.
 //!
 //! ```no_run
-//! use libunftp::Server;
+//! use libunftp::ServerBuilder;
 //! use unftp_sbe_gcs::{CloudStorage, options::AuthMethod};
 //! use std::path::PathBuf;
+//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! pub async fn main() {
-//!     let server = libunftp::Server::new(
+//!     let server = libunftp::ServerBuilder::new(
 //!         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
 //!       )
 //!       .greeting("Welcome to my FTP server")
