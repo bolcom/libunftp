@@ -28,6 +28,34 @@ where
     }
 }
 
+/// Represents an authenticated principal (user identity) returned by an [`Authenticator`].
+///
+/// A `Principal` contains the authenticated username and is the result of successful authentication.
+/// It represents the minimal identity information needed after authentication. To obtain additional
+/// user information such as home directory and account settings, use a [`UserDetailProvider`] to
+/// convert the `Principal` into a full [`UserDetail`] implementation.
+///
+/// # Example
+///
+/// ```rust
+/// use libunftp::auth::Principal;
+///
+/// let principal = Principal {
+///     username: "alice".to_string(),
+/// };
+///
+/// assert_eq!(principal.username, "alice");
+/// ```
+///
+/// [`Authenticator`]: trait.Authenticator.html
+/// [`UserDetail`]: ../trait.UserDetail.html
+/// [`UserDetailProvider`]: ../trait.UserDetailProvider.html
+#[derive(Debug, Clone)]
+pub struct Principal {
+    /// The authenticated username
+    pub username: String,
+}
+
 /// The error type returned by `Authenticator.authenticate`
 #[derive(Error, Debug)]
 pub enum AuthenticationError {
