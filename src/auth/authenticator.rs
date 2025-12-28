@@ -115,6 +115,8 @@ pub struct Credentials {
     pub certificate_chain: Option<Vec<ClientCert>>,
     /// The IP address of the user's connection
     pub source_ip: std::net::IpAddr,
+    /// Indicates the security state of the FTP server command channel
+    pub command_channel_security: ChannelEncryptionState,
 }
 
 impl From<&str> for Credentials {
@@ -123,6 +125,7 @@ impl From<&str> for Credentials {
             password: Some(String::from(s)),
             certificate_chain: None,
             source_ip: [127, 0, 0, 1].into(),
+            command_channel_security: ChannelEncryptionState::Plaintext,
         }
     }
 }
@@ -156,4 +159,13 @@ impl AsRef<[u8]> for ClientCert {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
+}
+
+/// Represents the encryption state of a channel (command or data).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelEncryptionState {
+    /// The channel is using plaintext (unencrypted)
+    Plaintext,
+    /// The channel is using TLS encryption
+    Tls,
 }

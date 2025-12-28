@@ -2,22 +2,38 @@
 
 ### Upcoming release
 
-- **BREAKING**: Refactored `Authenticator` trait to be non-generic and return `Principal` instead of a generic `User` type. This decouples authentication (verifying credentials) from user detail retrieval (obtaining full user information).
-- Introduced `Principal` struct representing an authenticated user's identity (username). This is the minimal information returned by authentication.
-- Introduced `UserDetailProvider` trait to convert a `Principal` into a full `UserDetail` implementation. This allows authentication and user detail lookup to be separated.
-- Introduced `AuthenticationPipeline` struct that combines an `Authenticator` and a `UserDetailProvider` to provide a complete authentication flow.
-- Added `DefaultUserDetailProvider` implementation that returns `DefaultUser` for convenience.
-- **BREAKING**: Updated all `unftp-auth-*` crates (`unftp-auth-jsonfile`, `unftp-auth-pam`, `unftp-auth-rest`) to use the new non-generic `Authenticator` trait.
-- Updated all examples and tests to use the new authentication pattern.
+- [#550](https://github.com/bolcom/libunftp/pull/550) Split Authenticators from the Subject Resolving (UserDetail
+  Providing) concern:
+    - **BREAKING**: Refactored `Authenticator` trait to be non-generic and return `Principal` instead of a generic
+      `User`
+      type. This decouples authentication (verifying credentials) from user detail retrieval (obtaining full user
+      information).
+    - Introduced `Principal` struct representing an authenticated user's identity (username). This is the minimal
+      information returned by authentication.
+    - Introduced `UserDetailProvider` trait to convert a `Principal` into a full `UserDetail` implementation. This
+      allows
+      authentication and user detail lookup to be separated.
+    - Introduced `AuthenticationPipeline` struct that combines an `Authenticator` and a `UserDetailProvider` to provide
+      a
+      complete authentication flow.
+    - Added `DefaultUserDetailProvider` implementation that returns `DefaultUser` for convenience.
+    - **BREAKING**: Updated all `unftp-auth-*` crates (`unftp-auth-jsonfile`, `unftp-auth-pam`, `unftp-auth-rest`) to
+      use
+      the new non-generic `Authenticator` trait.
+    - Updated all examples and tests to use the new authentication pattern.
+- [#551](https://github.com/bolcom/libunftp/pull/551) Let authenticators know the FTP Command channel TLS state
 
 ### libunftp 0.22.0
 
 - Compile against Rust 1.92.0 in CI
-- [#547](https://github.com/bolcom/libunftp/pull/547) Put metrics and proxy-protocol functionality behind features (`prometheus` and `proxy_protocol`).
+- [#547](https://github.com/bolcom/libunftp/pull/547) Put metrics and proxy-protocol functionality behind features (
+  `prometheus` and `proxy_protocol`).
 - [#548](https://github.com/bolcom/libunftp/pull/548) Fix error message typos
-- [#541](https://github.com/bolcom/libunftp/pull/541) Initial MLSD (Machine List Directory) command implementation (RFC 3659)
+- [#541](https://github.com/bolcom/libunftp/pull/541) Initial MLSD (Machine List Directory) command implementation (RFC
+    3659)
 - [#541](https://github.com/bolcom/libunftp/pull/541) Fix MLST output formatting
-- [#541](https://github.com/bolcom/libunftp/pull/541) Fix MLSx facts must have a terminating semicolon according to RFC 3659 section 7.2
+- [#541](https://github.com/bolcom/libunftp/pull/541) Fix MLSx facts must have a terminating semicolon according to RFC
+  3659 section 7.2
 - [#541](https://github.com/bolcom/libunftp/pull/541) Fix wrong use of metadata.uid() instead of metadata.gid()
 - [#540](https://github.com/bolcom/libunftp/pull/540) Fix build with "ring" instead of "aws_lc_rs" feature
 - Implement 550 error code for RNFR command

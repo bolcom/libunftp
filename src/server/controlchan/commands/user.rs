@@ -1,6 +1,5 @@
-use crate::auth::{AuthenticationError, Credentials};
 use crate::{
-    auth::UserDetail,
+    auth::{AuthenticationError, ChannelEncryptionState, Credentials, UserDetail},
     server::{
         controlchan::{
             Reply, ReplyCode,
@@ -48,6 +47,11 @@ where
                             certificate_chain: session.cert_chain.clone(),
                             password: None,
                             source_ip: session.source.ip(),
+                            command_channel_security: if session.cmd_tls {
+                                ChannelEncryptionState::Tls
+                            } else {
+                                ChannelEncryptionState::Plaintext
+                            },
                         },
                     )
                     .await;
@@ -118,7 +122,7 @@ mod tests {
     #[async_trait]
     #[allow(unused)]
     impl Authenticator for Auth {
-        async fn authenticate(&self, username: &str, creds: &Credentials) -> std::result::Result<Principal, AuthenticationError> {
+        async fn authenticate(&self, username: &str, _creds: &Credentials) -> std::result::Result<Principal, AuthenticationError> {
             if self.auth_ok {
                 Ok(Principal {
                     username: username.to_string(),
