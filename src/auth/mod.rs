@@ -77,7 +77,7 @@ pub use anonymous::AnonymousAuthenticator;
 
 pub(crate) mod authenticator;
 #[allow(unused_imports)]
-pub use authenticator::{AuthenticationError, Authenticator, ClientCert, Credentials, Principal};
+pub use authenticator::{AuthenticationError, Authenticator, ChannelEncryptionState, ClientCert, Credentials, Principal};
 
 mod user;
 pub use user::{DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailError, UserDetailProvider};

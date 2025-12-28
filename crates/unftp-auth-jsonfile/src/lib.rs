@@ -458,6 +458,8 @@ impl Authenticator for JsonFileAuthenticator {
 
 mod test {
     #[allow(unused_imports)]
+    use libunftp::auth::ChannelEncryptionState;
+    #[allow(unused_imports)]
     use libunftp::auth::ClientCert;
 
     #[tokio::test]
@@ -530,6 +532,7 @@ mod test {
                         certificate_chain: None,
                         password: Some("".into()),
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                        command_channel_security: ChannelEncryptionState::Plaintext,
                     },
                 )
                 .await
@@ -545,6 +548,7 @@ mod test {
                     certificate_chain: None,
                     password: Some("".into()),
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(128, 0, 0, 1)),
+                    command_channel_security: ChannelEncryptionState::Plaintext,
                 },
             )
             .await
@@ -690,6 +694,7 @@ mod test {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: Some("has a password".into()),
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                        command_channel_security: ChannelEncryptionState::Plaintext,
                     },
                 )
                 .await
@@ -706,6 +711,7 @@ mod test {
                     certificate_chain: None,
                     password: Some("has a password".into()),
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    command_channel_security: ChannelEncryptionState::Plaintext,
                 },
             )
             .await
@@ -723,6 +729,7 @@ mod test {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: None,
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                        command_channel_security: ChannelEncryptionState::Plaintext,
                     },
                 )
                 .await
@@ -739,6 +746,7 @@ mod test {
                     certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                     password: None,
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                    command_channel_security: ChannelEncryptionState::Plaintext,
                 },
             )
             .await
@@ -756,6 +764,7 @@ mod test {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: None,
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                        command_channel_security: ChannelEncryptionState::Plaintext,
                     },
                 )
                 .await

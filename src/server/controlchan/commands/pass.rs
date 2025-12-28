@@ -10,9 +10,8 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
-use crate::server::failed_logins::LockState;
 use crate::{
-    auth::UserDetail,
+    auth::{ChannelEncryptionState, UserDetail},
     server::{
         chancomms::ControlChanMsg,
         controlchan::{
@@ -20,16 +19,15 @@ use crate::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
         },
+        failed_logins::LockState,
         password,
         session::SessionState,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
+use std::{sync::Arc, time::Duration};
+use tokio::{sync::mpsc::Sender, time::sleep};
 
 #[derive(Debug)]
 pub struct Pass {
@@ -75,6 +73,11 @@ where
                     password: Some(pass),
                     source_ip: session.source.ip(),
                     certificate_chain: session.cert_chain.clone(),
+                    command_channel_security: if session.cmd_tls {
+                        ChannelEncryptionState::Tls
+                    } else {
+                        ChannelEncryptionState::Plaintext
+                    },
                 };
                 let failed_logins = session.failed_logins.clone();
                 let source_ip = session.source.ip();
