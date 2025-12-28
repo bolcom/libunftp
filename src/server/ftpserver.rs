@@ -831,28 +831,26 @@ where
                 listen_pooled::PooledListener {
                     bind_address,
                     logger: self.logger.clone(),
-                    proxy_mode: true,
                     external_control_port,
                     options: (&self).into(),
                     switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                 }
-                .listen(),
+                .listen_proxy_protocol(),
             )
                 as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
             ListenerMode::Pooled => Box::pin(
                 listen_pooled::PooledListener {
                     bind_address,
                     logger: self.logger.clone(),
-                    proxy_mode: false,
                     external_control_port: None,
                     options: (&self).into(),
                     switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
                     shutdown_topic: shutdown_notifier.clone(),
                     failed_logins: failed_logins.clone(),
                 }
-                .listen(),
+                .listen_pooled(),
             ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
             ListenerMode::Legacy => Box::pin(
                 listen::Listener {

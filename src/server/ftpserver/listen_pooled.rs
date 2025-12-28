@@ -36,7 +36,6 @@ where
 {
     pub bind_address: SocketAddr,
     pub logger: slog::Logger,
-    pub proxy_mode: bool,
     pub external_control_port: Option<u16>,
     pub options: OptionsHolder<Storage, User>,
     pub switchboard: Switchboard<Storage, User>,
@@ -49,16 +48,7 @@ where
     Storage: StorageBackend<User> + 'static,
     User: UserDetail + 'static,
 {
-    // Starts listening, returning an error if the TCP address could not be bound to.
-    pub async fn listen(self) -> std::result::Result<(), ServerError> {
-        if self.proxy_mode {
-            self.listen_proxy_protocol().await
-        } else {
-            self.listen_pooled().await
-        }
-    }
-
-    async fn listen_pooled(mut self) -> std::result::Result<(), ServerError> {
+    pub async fn listen_pooled(mut self) -> std::result::Result<(), ServerError> {
         let listener = tokio::net::TcpListener::bind(self.bind_address).await?;
 
         // all sessions use this callback to request for a passive listening port.
@@ -81,7 +71,7 @@ where
         }
     }
 
-    async fn listen_proxy_protocol(mut self) -> std::result::Result<(), ServerError> {
+    pub async fn listen_proxy_protocol(mut self) -> std::result::Result<(), ServerError> {
         let listener = tokio::net::TcpListener::bind(self.bind_address).await?;
 
         // all sessions use this callback to request for a passive listening port.
