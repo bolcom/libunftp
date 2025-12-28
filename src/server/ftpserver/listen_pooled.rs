@@ -5,26 +5,27 @@ use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::shutdown;
 use crate::server::switchboard::{SocketAddrPair, Switchboard};
 use crate::{
-    ServerError,
     auth::UserDetail,
     server::{
-        ControlChanMsg, Reply, ReplyCode,
         chancomms::{SwitchboardMessage, SwitchboardReceiver, SwitchboardSender},
         controlchan,
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,
-        proxy_protocol::{ProxyHeaderReceived, spawn_proxy_header_parsing},
+        proxy_protocol::{spawn_proxy_header_parsing, ProxyHeaderReceived},
         session::SharedSession,
+        ControlChanMsg, Reply, ReplyCode,
     },
     storage::StorageBackend,
+    ServerError,
 };
-use std::pin::Pin;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::{io::AsyncWriteExt, sync::mpsc::channel};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 // ProxyProtocolListener binds to a single port and assumes connections multiplexed by the
 // [proxy protocol](https://www.haproxy.com/blog/haproxy/proxy-protocol/)
@@ -49,42 +50,57 @@ where
     User: UserDetail + 'static,
 {
     // Starts listening, returning an error if the TCP address could not be bound to.
-    pub async fn listen(mut self) -> std::result::Result<(), ServerError> {
+    pub async fn listen(self) -> std::result::Result<(), ServerError> {
+        if self.proxy_mode {
+            self.listen_proxy_protocol().await
+        } else {
+            self.listen_pooled().await
+        }
+    }
+
+    async fn listen_pooled(mut self) -> std::result::Result<(), ServerError> {
+        let listener = tokio::net::TcpListener::bind(self.bind_address).await?;
+
+        // all sessions use this callback to request for a passive listening port.
+        let (switchboard_msg_tx, mut switchboard_msg_rx): (SwitchboardSender<Storage, User>, SwitchboardReceiver<Storage, User>) = channel(1);
+
+        loop {
+            tokio::select! {
+                Ok((tcp_stream, socket_addr)) = listener.accept() => {
+                    slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
+                    let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
+                    let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, None, Some(switchboard_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
+                    if let Err(e) = result {
+                        slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", e);
+                    }
+                },
+                Some(msg) = switchboard_msg_rx.recv() => {
+                    self.handle_switchboard_message(msg).await;
+                },
+            }
+        }
+    }
+
+    async fn listen_proxy_protocol(mut self) -> std::result::Result<(), ServerError> {
         let listener = tokio::net::TcpListener::bind(self.bind_address).await?;
 
         // all sessions use this callback to request for a passive listening port.
         let (switchboard_msg_tx, mut switchboard_msg_rx): (SwitchboardSender<Storage, User>, SwitchboardReceiver<Storage, User>) = channel(1);
         // channel for handling proxy protocol headers
-
-        let (mut proxy_msg_rx, proxy_msg_tx): (Option<Receiver<ProxyHeaderReceived>>, Option<Sender<ProxyHeaderReceived>>) = if self.proxy_mode {
-            let (tx, rx) = channel(1);
-            (Some(rx), Some(tx))
-        } else {
-            (None, None)
-        };
+        let (proxy_msg_tx, mut proxy_msg_rx): (Sender<ProxyHeaderReceived>, Receiver<ProxyHeaderReceived>) = channel(1);
 
         loop {
             // The 'proxy loop' handles two kinds of events:
             // - incoming tcp connections originating from the proxy
             // - channel messages originating from PASV, to handle the passive listening port
 
-            let mut proxy_msg_rx_fut = match proxy_msg_rx.as_mut() {
-                Some(rx) => Box::pin(rx.recv()) as Pin<Box<dyn Future<Output = Option<ProxyHeaderReceived>> + Send>>,
-                None => Box::pin(futures_util::future::pending()) as Pin<Box<dyn Future<Output = Option<ProxyHeaderReceived>> + Send>>,
-            };
-
             tokio::select! {
-
                 Ok((tcp_stream, _socket_addr)) = listener.accept() => {
                     let socket_addr = tcp_stream.peer_addr();
-
-                    if self.proxy_mode {
-                        let msg_tx = proxy_msg_tx.as_ref().expect("Expected proxy channel in proxy mode").clone();
-                        slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
-                        spawn_proxy_header_parsing(self.logger.clone(), tcp_stream, msg_tx);
-                    }
+                    slog::info!(self.logger, "Incoming proxy connection from {:?}", socket_addr);
+                    spawn_proxy_header_parsing(self.logger.clone(), tcp_stream, proxy_msg_tx.clone());
                 },
-                Some(msg) = &mut proxy_msg_rx_fut => match msg {
+                Some(msg) = proxy_msg_rx.recv() => match msg {
                     ProxyHeaderReceived (connection, mut tcp_stream) => {
                         let socket_addr = tcp_stream.peer_addr();
                         // Based on the proxy protocol header, and the configured control port number,
@@ -110,19 +126,25 @@ where
                         }
                     },
                 },
-                Some(msg) = switchboard_msg_rx.recv() => match msg {
-                    SwitchboardMessage::AssignDataPortCommand (session_arc) => {
-                        self.select_and_register_passive_port(session_arc).await;
-                    },
-                    // This is sent from the control loop when it exits, so that the port is freed
-                    SwitchboardMessage::CloseDataPortCommand (session_arc) => {
-                        let session = session_arc.lock().await;
-                        if let Some(active_datachan) = &session.switchboard_active_datachan {
-                            slog::info!(self.logger, "Unregistering active data channel port because the control channel is closing {:?}", active_datachan);
-                            self.switchboard.unregister_by_key(active_datachan);
-                        }
-                    },
+                Some(msg) = switchboard_msg_rx.recv() => {
+                    self.handle_switchboard_message(msg).await;
                 },
+            }
+        }
+    }
+
+    async fn handle_switchboard_message(&mut self, msg: SwitchboardMessage<Storage, User>) {
+        match msg {
+            SwitchboardMessage::AssignDataPortCommand(session_arc) => {
+                self.select_and_register_passive_port(session_arc).await;
+            }
+            // This is sent from the control loop when it exits, so that the port is freed
+            SwitchboardMessage::CloseDataPortCommand(session_arc) => {
+                let session = session_arc.lock().await;
+                if let Some(active_datachan) = &session.switchboard_active_datachan {
+                    slog::info!(self.logger, "Unregistering active data channel port because the control channel is closing {:?}", active_datachan);
+                    self.switchboard.unregister_by_key(active_datachan);
+                }
             }
         }
     }

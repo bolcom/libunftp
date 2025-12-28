@@ -11,7 +11,6 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
-#[cfg(feature = "proxy_protocol")]
 use crate::server::switchboard::Switchboard;
 use crate::{
     auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider, anonymous::AnonymousAuthenticator},
