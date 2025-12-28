@@ -4,3 +4,4 @@ Cargo.lock
 /.idea
 .DS_Store
 cargo-timing*.html
+/.vscode

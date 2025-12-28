@@ -14,22 +14,6 @@ use std::sync::Arc;
 /// 1. Authenticate the user (returns `Principal`)
 /// 2. Retrieve user details (converts `Principal` to `User: UserDetail`)
 ///
-/// # Example
-///
-/// ```rust
-/// use libunftp::auth::{AuthenticationPipeline, Authenticator, UserDetailProvider, Principal, DefaultUser};
-/// use async_trait::async_trait;
-/// use std::sync::Arc;
-///
-/// // Assuming you have a non-generic Authenticator and a UserDetailProvider
-/// // let authenticator = Arc::new(MyAuthenticator);
-/// // let user_provider = Arc::new(MyUserDetailProvider);
-/// // let pipeline = AuthenticationPipeline::new(authenticator, user_provider);
-/// ```
-///
-/// [`Authenticator`]: trait.Authenticator.html
-/// [`UserDetailProvider`]: trait.UserDetailProvider.html
-/// [`UserDetail`]: trait.UserDetail.html
 #[derive(Debug)]
 pub struct AuthenticationPipeline<User>
 where
@@ -44,20 +28,8 @@ where
     User: UserDetail,
 {
     /// Creates a new `AuthenticationPipeline` combining the given authenticator and user provider.
-    ///
-    /// The authenticator returns a `Principal` and the provider converts it to a full `UserDetail`.
     pub fn new(authenticator: Arc<dyn Authenticator + Send + Sync>, user_provider: Arc<dyn UserDetailProvider<User = User> + Send + Sync>) -> Self {
         Self { authenticator, user_provider }
-    }
-
-    /// Returns a reference to the underlying authenticator.
-    pub fn authenticator(&self) -> &Arc<dyn Authenticator + Send + Sync> {
-        &self.authenticator
-    }
-
-    /// Returns a reference to the underlying user detail provider.
-    pub fn user_provider(&self) -> &Arc<dyn UserDetailProvider<User = User> + Send + Sync> {
-        &self.user_provider
     }
 
     /// Authenticates the user and returns the full user detail.

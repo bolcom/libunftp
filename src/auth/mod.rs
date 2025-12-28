@@ -83,4 +83,4 @@ mod user;
 pub use user::{DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailError, UserDetailProvider};
 
 mod pipeline;
-pub use pipeline::AuthenticationPipeline;
+pub(crate) use pipeline::AuthenticationPipeline;
