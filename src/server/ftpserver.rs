@@ -68,7 +68,7 @@ where
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ListenerMode,
+    listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -346,7 +346,7 @@ where
             ftps_required_control_chan: self.ftps_required_control_chan,
             ftps_required_data_chan: self.ftps_required_data_chan,
             idle_session_timeout: self.idle_session_timeout,
-            proxy_protocol_mode: self.listener_mode,
+            listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
             shutdown: self.shutdown,
@@ -848,7 +848,7 @@ where
 
         let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
-        let listen_future = match self.proxy_protocol_mode {
+        let listen_future = match self.listener_mode {
             #[cfg(feature = "proxy_protocol")]
             ListenerMode::ProxyProtocol { external_control_port } => {
                 let switchboard = Switchboard::new(self.logger.clone(), self.passive_ports.clone());
@@ -1006,7 +1006,7 @@ where
             .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
-            .field("proxy_protocol_mode", &self.listener_mode)
+            .field("listener_mode", &self.listener_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }
@@ -1032,7 +1032,7 @@ where
             .field("ftps_required_control_chan", &self.ftps_required_control_chan)
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("idle_session_timeout", &self.idle_session_timeout)
-            .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("listener_mode", &self.listener_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }
