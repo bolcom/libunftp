@@ -11,7 +11,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{Sender, channel};
 
 fn spawn_data_acceptors(listeners: Vec<TcpListener>, tx: Sender<Result<(TcpStream, SocketAddrPair), ServerError>>) {
-    for (_, listener) in listeners.into_iter().enumerate() {
+    for listener in listeners.into_iter() {
         let tx = tx.clone();
 
         tokio::spawn(async move {
@@ -61,7 +61,7 @@ where
         let listener_ip = control_listener.local_addr()?.ip();
 
         for port in self.options.passive_ports.clone() {
-            let addr = SocketAddr::new(listener_ip.clone(), port);
+            let addr = SocketAddr::new(listener_ip, port);
             passive_listeners.push(tokio::net::TcpListener::bind(addr).await?);
         }
 

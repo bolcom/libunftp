@@ -100,12 +100,12 @@ where
                 Err(_) => Err(PortAllocationError),
             };
 
-            if let Err(_) = tx.send(result) {
+            if tx.send(result).is_err() {
                 slog::error!(self.logger, "Could not send port allocation reply to PASV handler");
             }
         } else {
             slog::error!(self.logger, "Could not allocate port for session without connection details");
-            if let Err(_) = tx.send(Err(PortAllocationError)) {
+            if tx.send(Err(PortAllocationError)).is_err() {
                 slog::error!(self.logger, "Could not send port allocation error to PASV handler");
             }
         }
