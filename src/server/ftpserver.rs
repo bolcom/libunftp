@@ -640,15 +640,11 @@ where
         self
     }
 
-    /// Enables pooled listener mode.
+    /// Enables the pooled listener mode for passive data connections.
     ///
-    /// In Pooled mode, all passive ports are continuously listening
-    /// allows very high connection concurrency.
-    ///
-    /// Where in the legacy listener mode, each passive port requested
-    /// via PASV leads to a port bind, in Pooled mode, all ports
-    /// are already bound and listening, and a PASV simply assigns
-    /// one to the session.
+    /// In Pooled mode, all passive ports are bound at startup and listen continuously.
+    /// This allows for very high connection concurrency and is recommended for
+    /// high-traffic servers.
     ///
     /// # Example
     ///
@@ -658,7 +654,7 @@ where
     ///
     /// // Use it in a builder-like pattern:
     /// let mut server = Server::with_fs("/tmp")
-    ///     .pooled_listener_mode(2121)
+    ///     .pooled_listener_mode()
     ///     .build();
     /// ```
     pub fn pooled_listener_mode(mut self) -> Self {
