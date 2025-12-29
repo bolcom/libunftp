@@ -1,9 +1,13 @@
 use crate::auth::UserDetail;
-use crate::server::session::SharedSession;
+use crate::server::session::{Session, SharedSession};
+use crate::server::shutdown::Notifier;
 use crate::storage::StorageBackend;
 use dashmap::{DashMap, Entry};
 use std::net::{IpAddr, SocketAddr};
 use std::ops::RangeInclusive;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tokio::sync::Mutex;
 
 /// Identifies a passive listening port entry in the Switchboard that is associated with a specific
 /// session. The key is constructed out of the external source IP of the client and the passive listening port that has
@@ -26,6 +30,8 @@ impl From<&SocketAddrPair> for SwitchboardKey {
     }
 }
 
+type SessionHandle<S, U> = Weak<Mutex<Session<S, U>>>;
+
 /// Connect clients to the right data channel
 #[derive(Debug)]
 pub(in crate::server) struct Switchboard<S, U>
@@ -33,7 +39,7 @@ where
     S: StorageBackend<U>,
     U: UserDetail,
 {
-    switchboard: DashMap<SwitchboardKey, Option<SharedSession<S, U>>>,
+    switchboard: Arc<DashMap<SwitchboardKey, SessionHandle<S, U>>>,
     port_range: RangeInclusive<u16>,
     logger: slog::Logger,
 }
@@ -48,11 +54,11 @@ pub(in crate::server) enum SwitchboardError {
 
 impl<S, U> Switchboard<S, U>
 where
-    S: StorageBackend<U>,
+    S: StorageBackend<U> + 'static,
     U: UserDetail + 'static,
 {
     pub fn new(logger: slog::Logger, passive_ports: RangeInclusive<u16>) -> Self {
-        let board = DashMap::new();
+        let board = Arc::new(DashMap::new());
         Self {
             switchboard: board,
             port_range: passive_ports,
@@ -60,12 +66,38 @@ where
         }
     }
 
+    pub fn start_scavenger(&self, shutdown_topic: Arc<Notifier>) {
+        let board = self.switchboard.clone();
+        let logger = self.logger.clone();
+        tokio::spawn(async move {
+            let mut shutdown_listener = shutdown_topic.subscribe().await;
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(60)) => {
+                        slog::debug!(logger, "Scavenging switchboard");
+                        board.retain(|_, session| {
+                            let session_exists = session.upgrade().is_some();
+                            if !session_exists {
+                                slog::info!(logger, "Scavenging zombie switchboard entry (session gone)");
+                            }
+                            session_exists
+                        });
+                    }
+                    _ = shutdown_listener.listen() => {
+                        slog::info!(logger, "Switchboard scavenger shutting down.");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
     pub async fn try_and_claim(&mut self, key: SwitchboardKey, session_arc: SharedSession<S, U>) -> Result<(), SwitchboardError> {
         // Atomically insert the key and value into the switchboard hashmap
         match self.switchboard.entry(key) {
             Entry::Occupied(_) => Err(SwitchboardError::EntryNotAvailable),
             Entry::Vacant(entry) => {
-                entry.insert(Some(session_arc));
+                entry.insert(Arc::downgrade(&session_arc));
                 Ok(())
             }
         }
@@ -87,10 +119,7 @@ where
     pub async fn get_session_by_connection_pair(&mut self, connection: &SocketAddrPair) -> Option<SharedSession<S, U>> {
         let key: SwitchboardKey = connection.into();
 
-        match self.switchboard.get(&key) {
-            Some(session) => session.clone(),
-            None => None,
-        }
+        self.switchboard.get(&key).and_then(|entry| entry.value().upgrade())
     }
 
     /// Find the next available port within the specified range (inclusive of the upper limit).
@@ -110,18 +139,22 @@ where
         // The search starts at randomized_initial_port.
         // If a port is already claimed, the loop continues to the next port until an available port is found.
         // The function returns the first available port it finds or an error if no ports are available.
-        let mut session = session_arc.lock().await;
-        let control_connection = session
-            .control_connection
-            .expect("BUG: reserve() called on a session with no control_connection details");
+        let control_ip = {
+            let session = session_arc.lock().await;
+            let control_connection = session
+                .control_connection
+                .expect("BUG: reserve() called on a session with no control_connection details");
+            control_connection.source.ip()
+        };
         for i in 0..=range_size {
             let port = self.port_range.start() + ((randomized_initial_port + i) % range_size);
             slog::debug!(self.logger, "Trying if port {} is available", port);
-            let key = SwitchboardKey::new(control_connection.source.ip(), port);
+            let key = SwitchboardKey::new(control_ip, port);
 
             match &self.try_and_claim(key.clone(), session_arc.clone()).await {
                 Ok(_) => {
                     // Remove and disassociate existing passive channels
+                    let mut session = session_arc.lock().await;
                     if let Some(active_datachan_key) = &session.switchboard_active_datachan {
                         if active_datachan_key != &key {
                             slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_key);

@@ -850,31 +850,38 @@ where
 
         let listen_future = match self.proxy_protocol_mode {
             #[cfg(feature = "proxy_protocol")]
-            ListenerMode::ProxyProtocol { external_control_port } => Box::pin(
-                listen_prebound::PreboundListener {
-                    bind_address,
-                    logger: self.logger.clone(),
-                    external_control_port,
-                    options: (&self).into(),
-                    switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
-                    shutdown_topic: shutdown_notifier.clone(),
-                    failed_logins: failed_logins.clone(),
-                }
-                .listen_proxy_protocol(),
-            )
-                as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
-            ListenerMode::Pooled => Box::pin(
-                listen_prebound::PreboundListener {
-                    bind_address,
-                    logger: self.logger.clone(),
-                    external_control_port: None,
-                    options: (&self).into(),
-                    switchboard: Switchboard::new(self.logger.clone(), self.passive_ports.clone()),
-                    shutdown_topic: shutdown_notifier.clone(),
-                    failed_logins: failed_logins.clone(),
-                }
-                .listen_pooled(),
-            ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
+            ListenerMode::ProxyProtocol { external_control_port } => {
+                let switchboard = Switchboard::new(self.logger.clone(), self.passive_ports.clone());
+                switchboard.start_scavenger(shutdown_notifier.clone());
+                Box::pin(
+                    listen_prebound::PreboundListener {
+                        bind_address,
+                        logger: self.logger.clone(),
+                        external_control_port,
+                        options: (&self).into(),
+                        switchboard,
+                        shutdown_topic: shutdown_notifier.clone(),
+                        failed_logins: failed_logins.clone(),
+                    }
+                    .listen_proxy_protocol(),
+                ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>
+            }
+            ListenerMode::Pooled => {
+                let switchboard = Switchboard::new(self.logger.clone(), self.passive_ports.clone());
+                switchboard.start_scavenger(shutdown_notifier.clone());
+                Box::pin(
+                    listen_prebound::PreboundListener {
+                        bind_address,
+                        logger: self.logger.clone(),
+                        external_control_port: None,
+                        options: (&self).into(),
+                        switchboard,
+                        shutdown_topic: shutdown_notifier.clone(),
+                        failed_logins: failed_logins.clone(),
+                    }
+                    .listen_pooled(),
+                ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>
+            }
             ListenerMode::Legacy => Box::pin(
                 listen::Listener {
                     bind_address,
