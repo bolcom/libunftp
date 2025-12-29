@@ -1,4 +1,4 @@
-//! Showing how to use proxy protocol mode.
+//! Showing how to use pooled mode.
 
 use unftp_sbe_fs::ServerExt;
 
