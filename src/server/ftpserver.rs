@@ -100,7 +100,7 @@ where
     ftps_client_auth: FtpsClientAuth,
     ftps_trust_store: PathBuf,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ListenerMode,
+    listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -144,7 +144,7 @@ where
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: ProxyMode::Off,
+            listener_mode: ListenerMode::Legacy,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
@@ -211,7 +211,7 @@ where
             ftps_client_auth: self.ftps_client_auth,
             ftps_trust_store: self.ftps_trust_store,
             idle_session_timeout: self.idle_session_timeout,
-            proxy_protocol_mode: self.proxy_protocol_mode,
+            listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
             shutdown: self.shutdown,
@@ -262,7 +262,7 @@ where
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: ListenerMode::Legacy,
+            listener_mode: ListenerMode::Legacy,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
@@ -345,7 +345,7 @@ where
             ftps_required_control_chan: self.ftps_required_control_chan,
             ftps_required_data_chan: self.ftps_required_data_chan,
             idle_session_timeout: self.idle_session_timeout,
-            proxy_protocol_mode: self.proxy_protocol_mode,
+            proxy_protocol_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
             shutdown: self.shutdown,
@@ -639,6 +639,32 @@ where
         self
     }
 
+    /// Enables pooled listener mode.
+    ///
+    /// In Pooled mode, all passive ports are continuously listening
+    /// allows very high connection concurrency.
+    ///
+    /// Where in the legacy listener mode, each passive port requested
+    /// via PASV leads to a port bind, in Pooled mode, all ports
+    /// are already bound and listening, and a PASV simply assigns
+    /// one to the session.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp")
+    ///     .pooled_listener_mode(2121)
+    ///     .build();
+    /// ```
+    pub fn pooled_listener_mode(mut self) -> Self {
+        self.listener_mode = ListenerMode::Pooled;
+        self
+    }
+
     /// Enables PROXY protocol mode.
     ///
     /// If you use a proxy such as haproxy or nginx, you can enable
@@ -669,7 +695,7 @@ where
     /// ```
     #[cfg(feature = "proxy_protocol")]
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
-        self.proxy_protocol_mode = external_control_port.into();
+        self.listener_mode = external_control_port.into();
         self
     }
 
@@ -976,7 +1002,7 @@ where
             .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
-            .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("proxy_protocol_mode", &self.listener_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }

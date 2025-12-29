@@ -52,3 +52,15 @@ impl From<ShutdownError> for ServerError {
         ServerError::new("shutdown error", e)
     }
 }
+
+#[derive(Error, Debug)]
+#[error("listener error: {msg}")]
+pub struct ListenerError {
+    pub msg: String,
+}
+
+impl From<ListenerError> for ServerError {
+    fn from(e: ListenerError) -> Self {
+        ServerError::new("listener error", e)
+    }
+}
