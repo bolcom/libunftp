@@ -3,29 +3,19 @@
 use crate::{
     auth::UserDetail,
     server::{
+        ControlChanErrorKind, ControlChanMsg,
         chancomms::{DataChanCmd, PortAllocationError, SwitchboardMessage, SwitchboardSender},
-        controlchan::{
-            error::ControlChanError,
-            handler::CommandContext,
-            Reply, ReplyCode,
-        },
+        controlchan::{Reply, ReplyCode, error::ControlChanError, handler::CommandContext},
         datachan,
         session::SharedSession,
-        ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{
-    fmt::Debug,
-    io,
-    net::SocketAddr,
-    ops::RangeInclusive,
-    time::Duration,
-};
+use std::{fmt::Debug, io, net::SocketAddr, ops::RangeInclusive, time::Duration};
 use tokio::net::TcpSocket;
 use tokio::sync::{
-    mpsc::{channel, Receiver, Sender},
+    mpsc::{Receiver, Sender, channel},
     oneshot,
 };
 

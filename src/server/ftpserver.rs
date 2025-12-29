@@ -2,8 +2,8 @@ mod chosen;
 pub mod error;
 mod listen;
 mod listen_prebound;
-pub mod options;
 mod mode;
+pub mod options;
 
 use super::{
     controlchan,

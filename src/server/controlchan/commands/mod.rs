@@ -27,6 +27,7 @@ mod nlst;
 mod noop;
 mod opts;
 mod pass;
+pub(crate) mod passive_common;
 mod pasv;
 mod pbsz;
 mod port;
@@ -46,7 +47,6 @@ mod stru;
 mod syst;
 mod type_;
 mod user;
-pub(crate) mod passive_common;
 
 pub use self::md5::Md5;
 pub use abor::Abor;

@@ -1,19 +1,16 @@
-use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::{channel, Sender};
+use crate::ServerError;
 use crate::auth::UserDetail;
 use crate::server::chancomms::{SwitchboardReceiver, SwitchboardSender};
 use crate::server::controlchan;
 use crate::server::ftpserver::error::ListenerError;
 use crate::server::ftpserver::listen_prebound::PreboundListener;
 use crate::server::switchboard::SocketAddrPair;
-use crate::ServerError;
 use crate::storage::StorageBackend;
+use std::net::SocketAddr;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc::{Sender, channel};
 
-fn spawn_data_acceptors(
-    listeners: Vec<TcpListener>,
-    tx: Sender<Result<(TcpStream, SocketAddrPair), ServerError>>,
-) {
+fn spawn_data_acceptors(listeners: Vec<TcpListener>, tx: Sender<Result<(TcpStream, SocketAddrPair), ServerError>>) {
     for (_, listener) in listeners.into_iter().enumerate() {
         let tx = tx.clone();
 
@@ -69,8 +66,7 @@ where
         }
 
         // Channel for incoming data connections
-        let (data_tx, mut data_rx) =
-            channel::<Result<(TcpStream, SocketAddrPair), ServerError>>(128);
+        let (data_tx, mut data_rx) = channel::<Result<(TcpStream, SocketAddrPair), ServerError>>(128);
 
         spawn_data_acceptors(passive_listeners, data_tx);
 

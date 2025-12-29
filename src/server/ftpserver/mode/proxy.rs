@@ -1,12 +1,12 @@
-use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use crate::ServerError;
 use crate::auth::UserDetail;
 use crate::server::chancomms::{SwitchboardReceiver, SwitchboardSender};
 use crate::server::controlchan;
 use crate::server::ftpserver::listen_prebound::PreboundListener;
-use crate::server::proxy_protocol::{spawn_proxy_header_parsing, ProxyHeaderReceived};
-use crate::ServerError;
+use crate::server::proxy_protocol::{ProxyHeaderReceived, spawn_proxy_header_parsing};
 use crate::storage::StorageBackend;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 
 impl<Storage, User> PreboundListener<Storage, User>
 where
