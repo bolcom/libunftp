@@ -1,8 +1,9 @@
 mod chosen;
 pub mod error;
 mod listen;
-mod listen_pooled;
+mod listen_prebound;
 pub mod options;
+mod mode;
 
 use super::{
     controlchan,
@@ -854,7 +855,7 @@ where
         let listen_future = match self.proxy_protocol_mode {
             #[cfg(feature = "proxy_protocol")]
             ListenerMode::ProxyProtocol { external_control_port } => Box::pin(
-                listen_pooled::PooledListener {
+                listen_prebound::PreboundListener {
                     bind_address,
                     logger: self.logger.clone(),
                     external_control_port,
@@ -867,7 +868,7 @@ where
             )
                 as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
             ListenerMode::Pooled => Box::pin(
-                listen_pooled::PooledListener {
+                listen_prebound::PreboundListener {
                     bind_address,
                     logger: self.logger.clone(),
                     external_control_port: None,
