@@ -6,10 +6,12 @@ use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
     server::session::TraceId,
-    storage::{Error, StorageBackend},
+    storage::{self, StorageBackend},
 };
 use std::fmt;
+use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::oneshot;
 
 // Commands that can be sent to the data channel / data loop.
 #[derive(PartialEq, Eq, Debug)]
@@ -130,7 +132,7 @@ pub enum ControlChanMsg {
     /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
     PlaintextControlChannel,
     /// Errors coming from the storage backend
-    StorageError(Error),
+    StorageError(storage::Error),
     /// Reply on the command channel
     CommandChannelReply(Reply),
 }
@@ -141,6 +143,11 @@ impl fmt::Display for ControlChanMsg {
     }
 }
 
+/// An error that occurred during port allocation
+#[derive(Error, Debug)]
+#[error("Could not allocate port")]
+pub struct PortAllocationError;
+
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
 // Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
 #[derive(Debug)]
@@ -150,7 +157,7 @@ where
     User: UserDetail,
 {
     /// Command to assign a data port to a session
-    AssignDataPortCommand(SharedSession<Storage, User>),
+    AssignDataPortCommand(SharedSession<Storage, User>, oneshot::Sender<Result<Reply, PortAllocationError>>),
     /// Command to clean up an active data channel (used when exiting the control loop)
     CloseDataPortCommand(SharedSession<Storage, User>),
 }

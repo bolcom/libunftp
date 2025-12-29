@@ -7,7 +7,7 @@ use crate::{
     auth::UserDetail,
     server::{
         ControlChanMsg, Reply, ReplyCode,
-        chancomms::SwitchboardMessage,
+        chancomms::{PortAllocationError, SwitchboardMessage},
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,
         session::SharedSession,
@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
 };
 use tokio::io::AsyncWriteExt;
+use tokio::sync::oneshot;
 
 // PreboundListener binds to port(s) in advance including passive ports
 pub(super) struct PreboundListener<Storage, User>
@@ -40,11 +41,10 @@ where
     Storage: StorageBackend<User> + 'static,
     User: UserDetail + 'static,
 {
-
     pub(crate) async fn handle_switchboard_message(&mut self, msg: SwitchboardMessage<Storage, User>) {
         match msg {
-            SwitchboardMessage::AssignDataPortCommand(session_arc) => {
-                self.select_and_register_passive_port(session_arc).await;
+            SwitchboardMessage::AssignDataPortCommand(session_arc, tx) => {
+                self.select_and_register_passive_port(session_arc, tx).await;
             }
             // This is sent from the control loop when it exits, so that the port is freed
             SwitchboardMessage::CloseDataPortCommand(session_arc) => {
@@ -80,7 +80,7 @@ where
         }
     }
 
-    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<Storage, User>) {
+    async fn select_and_register_passive_port(&mut self, session_arc: SharedSession<Storage, User>, tx: oneshot::Sender<Result<Reply, PortAllocationError>>) {
         slog::info!(self.logger, "Received internal message to allocate data port");
         // 1. reserve a port
         // 2. put the session_arc and tx in the hashmap with srcip+dstport as key
@@ -95,21 +95,18 @@ where
                 IpAddr::V6(_) => panic!("Won't happen since PASV only does IP V4."),
             };
 
-            let reply = match port {
-                Ok(port) => super::controlchan::commands::make_pasv_reply(&self.logger, self.options.passive_host.clone(), &destination_ip, port).await,
-                Err(_) => Reply::new_with_string(ReplyCode::CantOpenDataConnection, "Local error".to_string()),
+            let result = match port {
+                Ok(port) => Ok(super::controlchan::commands::make_pasv_reply(&self.logger, self.options.passive_host.clone(), &destination_ip, port).await),
+                Err(_) => Err(PortAllocationError),
             };
 
-            let tx_some = session.control_msg_tx.clone();
-            if let Some(tx) = tx_some {
-                let tx = tx.clone();
-                if let Err(err) = tx.send(ControlChanMsg::CommandChannelReply(reply)).await {
-                    slog::warn!(
-                        self.logger,
-                        "PASV (listen_prebound): Could not send internal message to reply to the client: {}",
-                        err
-                    );
-                }
+            if let Err(_) = tx.send(result) {
+                slog::error!(self.logger, "Could not send port allocation reply to PASV handler");
+            }
+        } else {
+            slog::error!(self.logger, "Could not allocate port for session without connection details");
+            if let Err(_) = tx.send(Err(PortAllocationError)) {
+                slog::error!(self.logger, "Could not send port allocation error to PASV handler");
             }
         }
     }

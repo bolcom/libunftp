@@ -8,15 +8,15 @@
 use crate::{
     auth::UserDetail,
     server::{
-        ControlChanMsg,
-        chancomms::{DataChanCmd, SwitchboardMessage, SwitchboardSender},
+        chancomms::{DataChanCmd, PortAllocationError, SwitchboardMessage, SwitchboardSender},
         controlchan::{
-            Reply, ReplyCode,
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
+            Reply, ReplyCode,
         },
         datachan,
         session::SharedSession,
+        ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
@@ -24,7 +24,8 @@ use async_trait::async_trait;
 use std::{io, net::SocketAddr, ops::RangeInclusive};
 use tokio::{
     net::TcpListener,
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::mpsc::{channel, Receiver, Sender},
+    sync::oneshot,
 };
 
 const BIND_RETRIES: u8 = 10;
@@ -80,10 +81,10 @@ impl Epsv {
         session.control_msg_tx = Some(control_loop_tx);
     }
 
-    // For non-proxy mode we choose a data port here and start listening on it while letting the control
+    // For legacy mode we choose a data port here and start listening on it while letting the control
     // channel know (via method return) what the address is that the client should connect to.
     #[tracing_attributes::instrument]
-    async fn handle_nonproxy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_legacy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
@@ -124,18 +125,28 @@ impl Epsv {
         Ok(reply)
     }
 
-    // For proxy mode we prepare the session and let the proxy loop know (via channel) that it
+    // For delegated mode we prepare the session and let the listener loop know (via channel) that it
     // should choose a data port and check for connections on it.
     #[tracing_attributes::instrument]
-    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: SwitchboardSender<S, U>) -> Result<Reply, ControlChanError>
+    async fn handle_delegated_mode<S, U>(&self, args: CommandContext<S, U>, tx: SwitchboardSender<S, U>) -> Result<Reply, ControlChanError>
     where
         U: UserDetail + 'static,
         S: StorageBackend<U> + 'static,
         S::Metadata: Metadata,
     {
         self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan).await;
-        tx.send(SwitchboardMessage::AssignDataPortCommand(args.session.clone())).await.unwrap();
-        Ok(Reply::None)
+
+        let (oneshot_tx, oneshot_rx) = oneshot::channel::<Result<Reply, PortAllocationError>>();
+
+        tx.send(SwitchboardMessage::AssignDataPortCommand(args.session.clone(), oneshot_tx))
+            .await
+            .map_err(|_| ControlChanErrorKind::InternalServerError)?;
+
+        match oneshot_rx.await {
+            Ok(Ok(reply)) => Ok(reply),
+            Ok(Err(_)) => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "Could not allocate passive port")),
+            Err(_) => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "Internal error: Channel closed")),
+        }
     }
 }
 
@@ -150,8 +161,8 @@ where
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
         let sender: Option<SwitchboardSender<Storage, User>> = args.tx_proxyloop.clone();
         match sender {
-            Some(tx) => self.handle_proxy_mode(args, tx).await,
-            None => self.handle_nonproxy_mode(args).await,
+            Some(tx) => self.handle_delegated_mode(args, tx).await,
+            None => self.handle_legacy_mode(args).await,
         }
     }
 }
