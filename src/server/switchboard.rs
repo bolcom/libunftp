@@ -111,30 +111,29 @@ where
         // If a port is already claimed, the loop continues to the next port until an available port is found.
         // The function returns the first available port it finds or an error if no ports are available.
         let mut session = session_arc.lock().await;
+        let control_connection = session.control_connection.expect("BUG: reserve() called on a session with no control_connection details");
         for i in 0..=range_size {
             let port = self.port_range.start() + ((randomized_initial_port + i) % range_size);
             slog::debug!(self.logger, "Trying if port {} is available", port);
-            if let Some(control_connection) = session.control_connection {
-                let key = SwitchboardKey::new(control_connection.source.ip(), port);
+            let key = SwitchboardKey::new(control_connection.source.ip(), port);
 
-                match &self.try_and_claim(key.clone(), session_arc.clone()).await {
-                    Ok(_) => {
-                        // Remove and disassociate existing passive channels
-                        if let Some(active_datachan_key) = &session.switchboard_active_datachan {
-                            if active_datachan_key != &key {
-                                slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_key);
-                                self.unregister_by_key(active_datachan_key);
-                            }
+            match &self.try_and_claim(key.clone(), session_arc.clone()).await {
+                Ok(_) => {
+                    // Remove and disassociate existing passive channels
+                    if let Some(active_datachan_key) = &session.switchboard_active_datachan {
+                        if active_datachan_key != &key {
+                            slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_key);
+                            self.unregister_by_key(active_datachan_key);
                         }
+                    }
 
-                        // Associate the new port with the session,
-                        session.switchboard_active_datachan = Some(key);
-                        return Ok(port);
-                    }
-                    Err(_) => {
-                        slog::debug!(self.logger, "Port entry is occupied (key: {:?}), trying to find a vacant one", &key);
-                        continue;
-                    }
+                    // Associate the new port with the session,
+                    session.switchboard_active_datachan = Some(key);
+                    return Ok(port);
+                }
+                Err(_) => {
+                    slog::debug!(self.logger, "Port entry is occupied (key: {:?}), trying to find a vacant one", &key);
+                    continue;
                 }
             }
         }

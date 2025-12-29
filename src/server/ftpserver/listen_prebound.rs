@@ -6,7 +6,7 @@ use crate::server::switchboard::{SocketAddrPair, Switchboard};
 use crate::{
     auth::UserDetail,
     server::{
-        ControlChanMsg, Reply, ReplyCode,
+        Reply,
         chancomms::{PortAllocationError, SwitchboardMessage},
         datachan::spawn_processing,
         ftpserver::chosen::OptionsHolder,

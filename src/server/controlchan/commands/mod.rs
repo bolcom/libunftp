@@ -46,6 +46,7 @@ mod stru;
 mod syst;
 mod type_;
 mod user;
+pub(crate) mod passive_common;
 
 pub use self::md5::Md5;
 pub use abor::Abor;

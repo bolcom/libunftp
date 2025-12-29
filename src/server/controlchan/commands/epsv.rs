@@ -8,27 +8,18 @@
 use crate::{
     auth::UserDetail,
     server::{
-        chancomms::{DataChanCmd, PortAllocationError, SwitchboardMessage, SwitchboardSender},
+        chancomms::SwitchboardSender,
         controlchan::{
             error::ControlChanError,
             handler::{CommandContext, CommandHandler},
             Reply, ReplyCode,
         },
-        datachan,
-        session::SharedSession,
-        ControlChanErrorKind, ControlChanMsg,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{io, net::SocketAddr, ops::RangeInclusive};
-use tokio::{
-    net::TcpListener,
-    sync::mpsc::{channel, Receiver, Sender},
-    sync::oneshot,
-};
 
-const BIND_RETRIES: u8 = 10;
+use super::passive_common::{self, LegacyReplyProducer};
 
 #[derive(Debug)]
 pub struct Epsv {}
@@ -37,116 +28,16 @@ impl Epsv {
     pub fn new() -> Self {
         Epsv {}
     }
+}
 
-    #[tracing_attributes::instrument]
-    async fn try_port_range(local_addr: SocketAddr, passive_ports: RangeInclusive<u16>) -> io::Result<TcpListener> {
-        let rng_length = passive_ports.end() - passive_ports.start();
-
-        let mut listener: io::Result<TcpListener> = Err(io::Error::new(io::ErrorKind::InvalidInput, "Bind retries cannot be 0"));
-
-        for _ in 1..BIND_RETRIES {
-            let random_u32 = {
-                let mut data = [0; 4];
-                getrandom::fill(&mut data).expect("Error generating random port");
-                u32::from_ne_bytes(data)
-            };
-
-            let port = random_u32 % rng_length as u32 + *passive_ports.start() as u32;
-            listener = TcpListener::bind(std::net::SocketAddr::new(local_addr.ip(), port as u16)).await;
-            if listener.is_ok() {
-                break;
-            }
-        }
-
-        listener
-    }
-
-    // modifies the session by adding channels that are used to communicate with the data connection
-    // processing loop.
-    #[tracing_attributes::instrument]
-    async fn setup_inter_loop_comms<S, U>(&self, session: SharedSession<S, U>, control_loop_tx: Sender<ControlChanMsg>)
-    where
-        U: UserDetail + 'static,
-        S: StorageBackend<U> + 'static,
-        S::Metadata: Metadata,
-    {
-        let (cmd_tx, cmd_rx): (Sender<DataChanCmd>, Receiver<DataChanCmd>) = channel(1);
-        let (data_abort_tx, data_abort_rx): (Sender<()>, Receiver<()>) = channel(1);
-
-        let mut session = session.lock().await;
-        session.data_cmd_tx = Some(cmd_tx);
-        session.data_cmd_rx = Some(cmd_rx);
-        session.data_abort_tx = Some(data_abort_tx);
-        session.data_abort_rx = Some(data_abort_rx);
-        session.control_msg_tx = Some(control_loop_tx);
-    }
-
-    // For legacy mode we choose a data port here and start listening on it while letting the control
-    // channel know (via method return) what the address is that the client should connect to.
-    #[tracing_attributes::instrument]
-    async fn handle_legacy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
-    where
-        U: UserDetail + 'static,
-        S: StorageBackend<U> + 'static,
-        S::Metadata: Metadata,
-    {
-        let CommandContext {
-            logger,
-            tx_control_chan: tx,
-            session,
-            ..
-        } = args;
-
-        let listener = Epsv::try_port_range(args.local_addr, args.passive_ports).await;
-
-        let listener = match listener {
-            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
-            Ok(l) => l,
-        };
-
-        let port = listener.local_addr()?.port();
-
-        let reply = make_epsv_reply(port);
-        if let Reply::CodeAndMsg {
-            code: ReplyCode::EnteringExtendedPassiveMode,
-            ..
-        } = reply
-        {
-            self.setup_inter_loop_comms(session.clone(), tx).await;
-            // Open the data connection in a new task and process it.
-            // We cannot await this since we first need to let the client know where to connect :-)
-            tokio::spawn(async move {
-                if let Ok((socket, _socket_addr)) = listener.accept().await {
-                    datachan::spawn_processing(logger, session, socket).await;
-                }
-            });
-        }
-
-        Ok(reply)
-    }
-
-    // For delegated mode we prepare the session and let the listener loop know (via channel) that it
-    // should choose a data port and check for connections on it.
-    #[tracing_attributes::instrument]
-    async fn handle_delegated_mode<S, U>(&self, args: CommandContext<S, U>, tx: SwitchboardSender<S, U>) -> Result<Reply, ControlChanError>
-    where
-        U: UserDetail + 'static,
-        S: StorageBackend<U> + 'static,
-        S::Metadata: Metadata,
-    {
-        self.setup_inter_loop_comms(args.session.clone(), args.tx_control_chan).await;
-
-        let (oneshot_tx, oneshot_rx) = oneshot::channel::<Result<Reply, PortAllocationError>>();
-
-        tx.send(SwitchboardMessage::AssignDataPortCommand(args.session.clone(), oneshot_tx))
-            .await
-            .map_err(|_| ControlChanErrorKind::InternalServerError)?;
-
-        match oneshot_rx.await {
-            Ok(Ok(reply)) => Ok(reply),
-            Ok(Err(_)) => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "Could not allocate passive port")),
-            Err(_) => Ok(Reply::new(ReplyCode::CantOpenDataConnection, "Internal error: Channel closed")),
-        }
+#[async_trait]
+impl<Storage, User> LegacyReplyProducer<Storage, User> for Epsv
+where
+    User: UserDetail + 'static,
+    Storage: StorageBackend<User> + 'static,
+{
+    async fn build_reply(&self, _args: &CommandContext<Storage, User>, port: u16) -> Result<Reply, ControlChanError> {
+        Ok(make_epsv_reply(port))
     }
 }
 
@@ -159,10 +50,10 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let sender: Option<SwitchboardSender<Storage, User>> = args.tx_proxyloop.clone();
+        let sender: Option<SwitchboardSender<Storage, User>> = args.tx_prebound_loop.clone();
         match sender {
-            Some(tx) => self.handle_delegated_mode(args, tx).await,
-            None => self.handle_legacy_mode(args).await,
+            Some(_) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "EPSV not supported in this mode")),
+            None => passive_common::handle_legacy_mode(self, args).await,
         }
     }
 }

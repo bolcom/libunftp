@@ -425,7 +425,7 @@ where
             tx_control_chan: self.tx_control_chan.clone(),
             local_addr: self.local_addr,
             storage_features: self.storage_features,
-            tx_proxyloop: self.tx_proxy_loop.clone(),
+            tx_prebound_loop: self.tx_proxy_loop.clone(),
             logger: self.logger.clone(),
             sitemd5: self.sitemd5,
         };

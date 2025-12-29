@@ -41,7 +41,7 @@ where
     pub tx_control_chan: Sender<ControlChanMsg>,
     pub local_addr: std::net::SocketAddr,
     pub storage_features: u32,
-    pub tx_proxyloop: Option<SwitchboardSender<Storage, User>>,
+    pub tx_prebound_loop: Option<SwitchboardSender<Storage, User>>,
     pub logger: slog::Logger,
     pub sitemd5: SiteMd5,
 }

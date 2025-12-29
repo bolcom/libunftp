@@ -124,7 +124,7 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let sender: Option<SwitchboardSender<Storage, User>> = args.tx_proxyloop.clone();
+        let sender: Option<SwitchboardSender<Storage, User>> = args.tx_prebound_loop.clone();
         match sender {
             Some(tx) => self.handle_proxy_mode(args, tx).await,
             None => self.handle_nonproxy_mode(args).await,
