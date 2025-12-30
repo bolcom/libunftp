@@ -22,6 +22,11 @@ readme = "README.md"
 ring = ["libunftp/ring"]
 aws_lc_rs = ["libunftp/aws_lc_rs"]
 default = ["aws_lc_rs"]
+proxy_protocol = ["libunftp/proxy_protocol"]
+
+[[example]]
+name = "proxyprotocol"
+required-features = ["proxy_protocol"]
 
 [dependencies]
 async-trait = "=0.1.88"
@@ -29,7 +34,7 @@ cfg-if = "1.0"
 cap-std = "4.0"
 futures = { version = "0.3.31", default-features = false, features = ["std"] }
 lazy_static = "1.5.0"
-libunftp = { version = "0.21.1", path = "../../", default-features = false, features = ["proxy_protocol"] }
+libunftp = { version = "0.21.1", path = "../../", default-features = false }
 path_abs = "0.5.1"
 tokio = { version = "1.48.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream = "0.1.17"
