@@ -22,11 +22,6 @@ readme = "README.md"
 ring = ["libunftp/ring"]
 aws_lc_rs = ["libunftp/aws_lc_rs"]
 default = ["aws_lc_rs"]
-proxy_protocol = ["libunftp/proxy_protocol"]
-
-[[example]]
-name = "proxyprotocol"
-required-features = ["proxy_protocol"]
 
 [dependencies]
 async-trait = "=0.1.88"
@@ -45,6 +40,7 @@ tracing-attributes = "0.1.31"
 async_ftp = "6.0.0"
 async-trait = "=0.1.88"
 chrono = "0.4.42"
+libunftp = { path = "../../", features = ["proxy_protocol"] }
 more-asserts = "0.3.1"
 nix = { version = "0.30.1", default-features = false, features = ["user"] }
 pretty_assertions = "1.4.1"
