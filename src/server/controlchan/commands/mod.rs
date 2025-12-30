@@ -72,7 +72,6 @@ pub use noop::Noop;
 pub use opts::{Opt, Opts};
 pub use pass::Pass;
 pub use pasv::Pasv;
-#[cfg(feature = "proxy_protocol")]
 pub use pasv::make_pasv_reply;
 pub use pbsz::Pbsz;
 pub use port::Port;

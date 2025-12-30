@@ -1,7 +1,5 @@
-#![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
 use crate::server::switchboard::SocketAddrPair;
 use bytes::Bytes;
-#[cfg(feature = "proxy_protocol")]
 use proxy_protocol::{ParseError, ProxyHeader, parse, version1::ProxyAddresses};
 use std::net::{SocketAddr, SocketAddrV4};
 use thiserror::Error;
@@ -44,7 +42,6 @@ impl PartialEq for ProxyError {
 /// If the header size is invalid, or the header does not end with a CR-LF sequence, the function returns a `ProxyError`
 /// with the reason for the failure. If there is a problem reading from the TCP stream, the function returns a `ProxyError::ReadError`.
 /// If the header cannot be parsed, the function returns a `ProxyError::DecodeError`.
-#[cfg(feature = "proxy_protocol")]
 #[tracing_attributes::instrument]
 async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<ProxyHeader, ProxyError> {
     // Create two vectors to hold the data read from the TCP stream
@@ -95,7 +92,6 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
 
 /// Takes a tcp stream and reads the proxy protocol header
 /// Sends the extracted proxy connection information (source ip+port, destination ip+port) to the proxy loop
-#[cfg(feature = "proxy_protocol")]
 #[tracing_attributes::instrument]
 pub(super) fn spawn_proxy_header_parsing(logger: slog::Logger, mut tcp_stream: tokio::net::TcpStream, tx: Sender<ProxyHeaderReceived>) {
     tokio::spawn(async move {

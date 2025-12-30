@@ -1042,9 +1042,13 @@ where
 pub(in crate::server) enum ListenerMode {
     Legacy,
     Pooled,
-    ProxyProtocol { external_control_port: Option<u16> },
+    #[cfg(feature = "proxy_protocol")]
+    ProxyProtocol {
+        external_control_port: Option<u16>,
+    },
 }
 
+#[cfg(feature = "proxy_protocol")]
 impl From<u16> for ListenerMode {
     fn from(port: u16) -> Self {
         ListenerMode::ProxyProtocol {

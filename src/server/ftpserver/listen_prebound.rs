@@ -29,6 +29,7 @@ where
 {
     pub bind_address: SocketAddr,
     pub logger: slog::Logger,
+    #[cfg_attr(not(feature = "proxy_protocol"), allow(dead_code))]
     pub external_control_port: Option<u16>,
     pub options: OptionsHolder<Storage, User>,
     pub switchboard: Switchboard<Storage, User>,

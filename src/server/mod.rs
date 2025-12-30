@@ -6,6 +6,7 @@ mod datachan;
 mod failed_logins;
 pub(crate) mod ftpserver;
 mod password;
+#[cfg(feature = "proxy_protocol")]
 mod proxy_protocol;
 mod session;
 pub(crate) mod shutdown;
