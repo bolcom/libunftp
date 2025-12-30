@@ -155,11 +155,11 @@ where
                 Ok(_) => {
                     // Remove and disassociate existing passive channels
                     let mut session = session_arc.lock().await;
-                    if let Some(active_datachan_key) = &session.switchboard_active_datachan {
-                        if active_datachan_key != &key {
-                            slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_key);
-                            self.unregister_by_key(active_datachan_key);
-                        }
+                    if let Some(active_datachan_key) = &session.switchboard_active_datachan
+                        && active_datachan_key != &key
+                    {
+                        slog::info!(self.logger, "Removing stale session data channel {:?}", &active_datachan_key);
+                        self.unregister_by_key(active_datachan_key);
                     }
 
                     // Associate the new port with the session,
