@@ -114,6 +114,14 @@ where
             let path = String::from_utf8_lossy(&path);
             Command::Stor { path: path.to_string() }
         }
+        "APPE" => {
+            let path = parse_to_eol(cmd_params)?;
+            if path.is_empty() {
+                return Err(ParseErrorKind::InvalidCommand.into());
+            }
+            let path = String::from_utf8_lossy(&path);
+            Command::Appe { path: path.to_string() }
+        }
         "LIST" => {
             let line = parse_to_eol(cmd_params)?;
             let path = line

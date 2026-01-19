@@ -149,6 +149,9 @@ where
             DataChanCmd::Stor { path } => {
                 self.exec_stor(path, start_pos).await;
             }
+            DataChanCmd::Appe { path } => {
+                self.exec_appe(path).await;
+            }
             DataChanCmd::List { path, .. } => {
                 self.exec_list_variant(path, ListCommand::List).await;
             }
@@ -303,6 +306,60 @@ where
 
                 if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
                     slog::error!(self.logger, "Could not notify control channel of error with STOR: {:?}", err);
+                }
+            }
+        }
+    }
+
+    #[tracing_attributes::instrument]
+    async fn exec_appe(self, path: String) {
+        let path_copy = path.clone();
+        let full_path = self.cwd.join(&path);
+        let tx = self.control_msg_tx.clone();
+
+        // Get current file size, or 0 if file doesn't exist
+        let start_pos = match self.storage.metadata((*self.user).as_ref().unwrap(), &full_path).await {
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        };
+
+        let start_time = Instant::now();
+        let put_result = self
+            .storage
+            .put(
+                (*self.user).as_ref().unwrap(),
+                Self::reader(self.socket, self.ftps_mode, "appe").await,
+                full_path,
+                start_pos,
+            )
+            .await;
+        let duration = start_time.elapsed();
+
+        match put_result {
+            Ok(bytes) => {
+                slog::info!(
+                    self.logger,
+                    "Successful APPE {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
+                    &path_copy,
+                    HumanDuration(duration),
+                    HumanBytes(bytes),
+                    TransferSpeed(bytes as f64 / duration.as_secs_f64()),
+                    start_pos,
+                );
+
+                metrics::inc_transferred("appe", "success");
+
+                if let Err(err) = tx.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
+                    slog::error!(self.logger, "Could not notify control channel of successful APPE: {:?}", err);
+                }
+            }
+            Err(err) => {
+                slog::warn!(self.logger, "Error during APPE transfer after {}: {:?}", HumanDuration(duration), err);
+
+                categorize_and_register_error(&self.logger, &err, "appe");
+
+                if let Err(err) = tx.send(ControlChanMsg::StorageError(err)).await {
+                    slog::error!(self.logger, "Could not notify control channel of error with APPE: {:?}", err);
                 }
             }
         }

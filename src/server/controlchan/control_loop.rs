@@ -472,6 +472,7 @@ where
             Command::Md5 { file } => Box::new(commands::Md5::new(file)),
             Command::Mlst { path } => Box::new(commands::Mlst::new(path)),
             Command::Mlsd { .. } => Box::new(commands::Mlsd),
+            Command::Appe { .. } => Box::new(commands::Appe),
             Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
         };
 
