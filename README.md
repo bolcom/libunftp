@@ -24,7 +24,7 @@ possible.
 
 Feature highlights:
 
-* 41 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
+* 42 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
 * Ability to implement own storage back-ends
 * Ability to implement own authentication back-ends
 * Explicit FTPS (TLS)

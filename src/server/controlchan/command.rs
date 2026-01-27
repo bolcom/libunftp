@@ -52,6 +52,10 @@ pub enum Command {
         /// The path to the file the client would like to store.
         path: String,
     },
+    Appe {
+        /// The path to the file the client would like to append to.
+        path: String,
+    },
     List {
         /// Arguments passed along with the list command.
         options: Option<String>,

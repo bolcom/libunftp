@@ -600,3 +600,38 @@ fn parse_site() {
         assert_eq!(parse(test.input), test.expected);
     }
 }
+
+#[test]
+fn parse_appe() {
+    struct Test {
+        input: &'static str,
+        expected: Result<Command>,
+    }
+    let tests = [
+        Test {
+            input: "APPE\r\n",
+            expected: Err(ParseErrorKind::InvalidCommand.into()),
+        },
+        Test {
+            input: "APPE \r\n",
+            expected: Err(ParseErrorKind::InvalidCommand.into()),
+        },
+        Test {
+            input: "APPE file.txt\r\n",
+            expected: Ok(Command::Appe { path: "file.txt".into() }),
+        },
+        Test {
+            input: "APPE path/to/file.txt\r\n",
+            expected: Ok(Command::Appe {
+                path: "path/to/file.txt".into(),
+            }),
+        },
+        Test {
+            input: "appe file.txt\r\n",
+            expected: Ok(Command::Appe { path: "file.txt".into() }),
+        },
+    ];
+    for test in tests.iter() {
+        assert_eq!(parse(test.input), test.expected);
+    }
+}

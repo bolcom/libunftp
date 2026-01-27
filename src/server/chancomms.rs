@@ -31,6 +31,10 @@ pub enum DataChanCmd {
         /// The path to the file the client would like to store.
         path: String,
     },
+    Appe {
+        /// The path to the file the client would like to append to.
+        path: String,
+    },
     List {
         /// Arguments passed along with the list command.
         options: Option<String>,
@@ -53,6 +57,7 @@ impl DataChanCmd {
         match self {
             DataChanCmd::Retr { path, .. } => Some(path.clone()),
             DataChanCmd::Stor { path, .. } => Some(path.clone()),
+            DataChanCmd::Appe { path, .. } => Some(path.clone()),
             DataChanCmd::List { path, .. } => path.clone(),
             DataChanCmd::Mlsd { path } => path.clone(),
             DataChanCmd::Nlst { path } => path.clone(),

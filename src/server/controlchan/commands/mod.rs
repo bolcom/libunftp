@@ -7,6 +7,7 @@
 mod abor;
 mod acct;
 mod allo;
+mod appe;
 mod auth;
 mod ccc;
 mod cdup;
@@ -50,6 +51,7 @@ pub use self::md5::Md5;
 pub use abor::Abor;
 pub use acct::Acct;
 pub use allo::Allo;
+pub use appe::Appe;
 pub use auth::{Auth, AuthParam};
 pub use ccc::Ccc;
 pub use cdup::Cdup;
