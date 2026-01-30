@@ -1,20 +1,19 @@
 //! Contains code pertaining to the communication between the data and control channels.
 #![cfg_attr(not(feature = "proxy_protocol"), allow(dead_code, unused_imports))]
 
-use super::{proxy_protocol::ProxyConnection, session::SharedSession};
+use super::session::SharedSession;
 use crate::{
     auth::UserDetail,
     server::controlchan::Reply,
     server::session::TraceId,
-    storage::{Error, StorageBackend},
+    storage::{self, StorageBackend},
 };
 use std::fmt;
-use tokio::{
-    net::TcpStream,
-    sync::mpsc::{Receiver, Sender},
-};
+use thiserror::Error;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::oneshot;
 
-// Commands that can be send to the data channel / data loop.
+// Commands that can be sent to the data channel / data loop.
 #[derive(PartialEq, Eq, Debug)]
 pub enum DataChanMsg {
     ExternalCommand(DataChanCmd),
@@ -133,7 +132,7 @@ pub enum ControlChanMsg {
     /// Sent to switch the control channel from TLS/SSL mode back to plaintext.
     PlaintextControlChannel,
     /// Errors coming from the storage backend
-    StorageError(Error),
+    StorageError(storage::Error),
     /// Reply on the command channel
     CommandChannelReply(Reply),
 }
@@ -144,21 +143,24 @@ impl fmt::Display for ControlChanMsg {
     }
 }
 
+/// An error that occurred during port allocation
+#[derive(Error, Debug)]
+#[error("Could not allocate port")]
+pub struct PortAllocationError;
+
 // ProxyLoopMsg is sent to the proxy loop when proxy protocol mode is enabled. See the
 // Server::proxy_protocol_mode and Server::listen_proxy_protocol_mode methods.
 #[derive(Debug)]
-pub(crate) enum ProxyLoopMsg<Storage, User>
+pub(crate) enum SwitchboardMessage<Storage, User>
 where
     Storage: StorageBackend<User>,
     User: UserDetail,
 {
-    /// Upon receiving the header, the connection and tcp stream are passed back to the proxy loop
-    ProxyHeaderReceived(ProxyConnection, TcpStream),
     /// Command to assign a data port to a session
-    AssignDataPortCommand(SharedSession<Storage, User>),
+    AssignDataPortCommand(SharedSession<Storage, User>, oneshot::Sender<Result<Reply, PortAllocationError>>),
     /// Command to clean up an active data channel (used when exiting the control loop)
     CloseDataPortCommand(SharedSession<Storage, User>),
 }
 
-pub(crate) type ProxyLoopSender<Storage, User> = Sender<ProxyLoopMsg<Storage, User>>;
-pub(crate) type ProxyLoopReceiver<Storage, User> = Receiver<ProxyLoopMsg<Storage, User>>;
+pub(crate) type SwitchboardSender<Storage, User> = Sender<SwitchboardMessage<Storage, User>>;
+pub(crate) type SwitchboardReceiver<Storage, User> = Receiver<SwitchboardMessage<Storage, User>>;

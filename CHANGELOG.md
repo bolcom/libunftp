@@ -22,6 +22,13 @@
       the new non-generic `Authenticator` trait.
     - Updated all examples and tests to use the new authentication pattern.
 - [#551](https://github.com/bolcom/libunftp/pull/551) Let authenticators know the FTP Command channel TLS state
+- [#553](https://github.com/bolcom/libunftp/pull/553) Introduced a new "pooled listener" mode
+      (.pooled_listener_mode()) for high-traffic servers.
+    - This mode improves passive connection performance and security by pre-binding all passive ports.
+    - Fixed a memory leak in the passive port Switchboard (used by Pooled and Proxy modes). A new scavenger task now
+      cleans up expired and orphaned port reservations.
+    - Fixed the PORT command (Active Mode) so that it now works correctly in all listener modes.
+    - Fixed that the EPSV command is now correctly disabled in Proxy Protocol mode where it is not (yet) supported.
 
 ### libunftp 0.22.0
 

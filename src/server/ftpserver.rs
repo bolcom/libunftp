@@ -1,8 +1,8 @@
 mod chosen;
 pub mod error;
 mod listen;
-#[cfg(feature = "proxy_protocol")]
-mod listen_proxied;
+mod listen_prebound;
+mod mode;
 pub mod options;
 
 use super::{
@@ -12,15 +12,14 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
-#[cfg(feature = "proxy_protocol")]
-use crate::server::proxy_protocol::ProxyProtocolSwitchboard;
+use crate::server::switchboard::Switchboard;
 use crate::{
     auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider, anonymous::AnonymousAuthenticator},
     notification::{DataListener, PresenceListener, nop::NopListener},
     options::ActivePassiveMode,
     options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
     server::shutdown::Notifier,
-    server::{proxy_protocol::ProxyMode, tls},
+    server::tls,
     storage::{Metadata, StorageBackend},
 };
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
@@ -69,7 +68,7 @@ where
     ftps_required_control_chan: FtpsRequired,
     ftps_required_data_chan: FtpsRequired,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ProxyMode,
+    listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -102,7 +101,7 @@ where
     ftps_client_auth: FtpsClientAuth,
     ftps_trust_store: PathBuf,
     idle_session_timeout: std::time::Duration,
-    proxy_protocol_mode: ProxyMode,
+    listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
@@ -146,7 +145,7 @@ where
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: ProxyMode::Off,
+            listener_mode: ListenerMode::Legacy,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
@@ -213,7 +212,7 @@ where
             ftps_client_auth: self.ftps_client_auth,
             ftps_trust_store: self.ftps_trust_store,
             idle_session_timeout: self.idle_session_timeout,
-            proxy_protocol_mode: self.proxy_protocol_mode,
+            listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
             shutdown: self.shutdown,
@@ -264,7 +263,7 @@ where
             ftps_mode: FtpsConfig::Off,
             collect_metrics: false,
             idle_session_timeout: Duration::from_secs(DEFAULT_IDLE_SESSION_TIMEOUT_SECS),
-            proxy_protocol_mode: ProxyMode::Off,
+            listener_mode: ListenerMode::Legacy,
             logger: slog::Logger::root(slog_stdlog::StdLog {}.fuse(), slog::o!()),
             ftps_required_control_chan: options::DEFAULT_FTPS_REQUIRE,
             ftps_required_data_chan: options::DEFAULT_FTPS_REQUIRE,
@@ -347,7 +346,7 @@ where
             ftps_required_control_chan: self.ftps_required_control_chan,
             ftps_required_data_chan: self.ftps_required_data_chan,
             idle_session_timeout: self.idle_session_timeout,
-            proxy_protocol_mode: self.proxy_protocol_mode,
+            listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
             shutdown: self.shutdown,
@@ -641,6 +640,28 @@ where
         self
     }
 
+    /// Enables the pooled listener mode for passive data connections.
+    ///
+    /// In Pooled mode, all passive ports are bound at startup and listen continuously.
+    /// This allows for very high connection concurrency and is recommended for
+    /// high-traffic servers.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libunftp::Server;
+    /// use unftp_sbe_fs::ServerExt;
+    ///
+    /// // Use it in a builder-like pattern:
+    /// let mut server = Server::with_fs("/tmp")
+    ///     .pooled_listener_mode()
+    ///     .build();
+    /// ```
+    pub fn pooled_listener_mode(mut self) -> Self {
+        self.listener_mode = ListenerMode::Pooled;
+        self
+    }
+
     /// Enables PROXY protocol mode.
     ///
     /// If you use a proxy such as haproxy or nginx, you can enable
@@ -671,7 +692,7 @@ where
     /// ```
     #[cfg(feature = "proxy_protocol")]
     pub fn proxy_protocol_mode(mut self, external_control_port: u16) -> Self {
-        self.proxy_protocol_mode = external_control_port.into();
+        self.listener_mode = external_control_port.into();
         self
     }
 
@@ -827,22 +848,41 @@ where
 
         let failed_logins = self.failed_logins_policy.as_ref().map(|policy| FailedLoginsCache::new(policy.clone()));
 
-        let listen_future = match self.proxy_protocol_mode {
+        let listen_future = match self.listener_mode {
             #[cfg(feature = "proxy_protocol")]
-            ProxyMode::On { external_control_port } => Box::pin(
-                listen_proxied::ProxyProtocolListener {
-                    bind_address,
-                    external_control_port,
-                    logger: self.logger.clone(),
-                    options: (&self).into(),
-                    proxy_protocol_switchboard: Some(ProxyProtocolSwitchboard::new(self.logger.clone(), self.passive_ports.clone())),
-                    shutdown_topic: shutdown_notifier.clone(),
-                    failed_logins: failed_logins.clone(),
-                }
-                .listen(),
-            ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>,
-
-            ProxyMode::Off => Box::pin(
+            ListenerMode::ProxyProtocol { external_control_port } => {
+                let switchboard = Switchboard::new(self.logger.clone(), self.passive_ports.clone());
+                switchboard.start_scavenger(shutdown_notifier.clone());
+                Box::pin(
+                    listen_prebound::PreboundListener {
+                        bind_address,
+                        logger: self.logger.clone(),
+                        external_control_port,
+                        options: (&self).into(),
+                        switchboard,
+                        shutdown_topic: shutdown_notifier.clone(),
+                        failed_logins: failed_logins.clone(),
+                    }
+                    .listen_proxy_protocol(),
+                ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>
+            }
+            ListenerMode::Pooled => {
+                let switchboard = Switchboard::new(self.logger.clone(), self.passive_ports.clone());
+                switchboard.start_scavenger(shutdown_notifier.clone());
+                Box::pin(
+                    listen_prebound::PreboundListener {
+                        bind_address,
+                        logger: self.logger.clone(),
+                        external_control_port: None,
+                        options: (&self).into(),
+                        switchboard,
+                        shutdown_topic: shutdown_notifier.clone(),
+                        failed_logins: failed_logins.clone(),
+                    }
+                    .listen_pooled(),
+                ) as Pin<Box<dyn Future<Output = std::result::Result<(), ServerError>> + Send>>
+            }
+            ListenerMode::Legacy => Box::pin(
                 listen::Listener {
                     bind_address,
                     logger: self.logger.clone(),
@@ -966,7 +1006,7 @@ where
             .field("ftps_tls_flags", &self.ftps_tls_flags)
             .field("ftps_trust_store", &self.ftps_trust_store)
             .field("idle_session_timeout", &self.idle_session_timeout)
-            .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("listener_mode", &self.listener_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
     }
@@ -992,8 +1032,27 @@ where
             .field("ftps_required_control_chan", &self.ftps_required_control_chan)
             .field("ftps_required_data_chan", &self.ftps_required_data_chan)
             .field("idle_session_timeout", &self.idle_session_timeout)
-            .field("proxy_protocol_mode", &self.proxy_protocol_mode)
+            .field("listener_mode", &self.listener_mode)
             .field("failed_logins_policy", &self.failed_logins_policy)
             .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(in crate::server) enum ListenerMode {
+    Legacy,
+    Pooled,
+    #[cfg(feature = "proxy_protocol")]
+    ProxyProtocol {
+        external_control_port: Option<u16>,
+    },
+}
+
+#[cfg(feature = "proxy_protocol")]
+impl From<u16> for ListenerMode {
+    fn from(port: u16) -> Self {
+        ListenerMode::ProxyProtocol {
+            external_control_port: Some(port),
+        }
     }
 }

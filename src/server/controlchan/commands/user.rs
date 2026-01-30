@@ -257,7 +257,7 @@ mod tests {
                 tx_control_chan: tx,
                 local_addr: "127.0.0.1:8080".parse().unwrap(),
                 storage_features: 0,
-                tx_proxyloop: None,
+                tx_prebound_loop: None,
                 logger: slog::Logger::root(slog::Discard {}, o!()),
                 sitemd5: Default::default(),
             }

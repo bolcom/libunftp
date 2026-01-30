@@ -20,7 +20,7 @@ use crate::{
     auth::UserDetail,
     server::{
         ControlChanMsg,
-        chancomms::{DataChanCmd, ProxyLoopSender},
+        chancomms::DataChanCmd,
         controlchan::{
             Reply, ReplyCode,
             error::ControlChanError,
@@ -66,53 +66,6 @@ impl Port {
         session.data_abort_rx = Some(data_abort_rx);
         session.control_msg_tx = Some(control_loop_tx);
     }
-
-    // For non-proxy mode we choose a data port here and start listening on it while letting the control
-    // channel know (via method return) what the address is that the client should connect to.
-    #[tracing_attributes::instrument]
-    async fn handle_nonproxy_mode<S, U>(&self, args: CommandContext<S, U>) -> Result<Reply, ControlChanError>
-    where
-        U: UserDetail + 'static,
-        S: StorageBackend<U> + 'static,
-        S::Metadata: Metadata,
-    {
-        let CommandContext {
-            logger,
-            passive_host: _passive_host,
-            tx_control_chan: tx,
-            session,
-            ..
-        } = args;
-
-        let bytes: Vec<u8> = self.addr.split(',').map(|x| x.parse::<u8>()).filter_map(Result::ok).collect();
-        let port = ((bytes[4] as u16) << 8) | bytes[5] as u16;
-        let addr = SocketAddrV4::new(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]), port);
-
-        let stream: io::Result<TcpStream> = TcpStream::connect(addr).await;
-
-        let stream = match stream {
-            Err(_) => return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "No data connection established")),
-            Ok(s) => s,
-        };
-
-        self.setup_inter_loop_comms(session.clone(), tx).await;
-        datachan::spawn_processing(logger, session, stream).await;
-
-        Ok(Reply::new(ReplyCode::CommandOkay, "Entering Active mode"))
-    }
-
-    #[tracing_attributes::instrument]
-    async fn handle_proxy_mode<S, U>(&self, args: CommandContext<S, U>, tx: ProxyLoopSender<S, U>) -> Result<Reply, ControlChanError>
-    where
-        U: UserDetail + 'static,
-        S: StorageBackend<U> + 'static,
-        S::Metadata: Metadata,
-    {
-        Ok(Reply::new(
-            ReplyCode::CommandNotImplemented,
-            "ACTIVE mode is not supported with Proxy - use PASSIVE instead",
-        ))
-    }
 }
 
 #[async_trait]
@@ -124,10 +77,33 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let sender: Option<ProxyLoopSender<Storage, User>> = args.tx_proxyloop.clone();
-        match sender {
-            Some(tx) => self.handle_proxy_mode(args, tx).await,
-            None => self.handle_nonproxy_mode(args).await,
+        let CommandContext {
+            logger,
+            tx_control_chan: tx,
+            session,
+            ..
+        } = args;
+
+        let bytes: Vec<u8> = self.addr.split(',').map(|x| x.parse::<u8>()).filter_map(Result::ok).collect();
+        if bytes.len() != 6 {
+            return Ok(Reply::new(ReplyCode::ParameterSyntaxError, "Invalid address format"));
         }
+        let port = ((bytes[4] as u16) << 8) | bytes[5] as u16;
+        let addr = SocketAddrV4::new(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]), port);
+
+        let stream: io::Result<TcpStream> = TcpStream::connect(addr).await;
+
+        let stream = match stream {
+            Err(e) => {
+                slog::error!(logger, "Could not connect to client for active mode: {}", e);
+                return Ok(Reply::new(ReplyCode::CantOpenDataConnection, "Could not establish data connection"));
+            }
+            Ok(s) => s,
+        };
+
+        self.setup_inter_loop_comms(session.clone(), tx).await;
+        datachan::spawn_processing(logger, session, stream).await;
+
+        Ok(Reply::new(ReplyCode::CommandOkay, "PORT command successful"))
     }
 }

@@ -143,4 +143,15 @@ impl Reply {
     pub fn none() -> Self {
         Reply::None
     }
+
+    /// Returns true if the reply code is a positive completion code (2xx or 3xx).
+    pub fn is_positive(&self) -> bool {
+        match self {
+            Reply::None => true, // Or false, depending on desired behavior for no-reply
+            Reply::CodeAndMsg { code, .. } | Reply::MultiLine { code, .. } => {
+                let code_val = *code as u32;
+                (200..=399).contains(&code_val)
+            }
+        }
+    }
 }

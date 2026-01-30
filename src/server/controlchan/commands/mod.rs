@@ -27,6 +27,7 @@ mod nlst;
 mod noop;
 mod opts;
 mod pass;
+pub(crate) mod passive_common;
 mod pasv;
 mod pbsz;
 mod port;
@@ -71,7 +72,6 @@ pub use noop::Noop;
 pub use opts::{Opt, Opts};
 pub use pass::Pass;
 pub use pasv::Pasv;
-#[cfg(feature = "proxy_protocol")]
 pub use pasv::make_pasv_reply;
 pub use pbsz::Pbsz;
 pub use port::Port;
