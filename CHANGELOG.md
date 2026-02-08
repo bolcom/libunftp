@@ -1,6 +1,6 @@
 # Changelog
 
-### Upcoming release
+### libunftp 0.22.0
 
 - [#550](https://github.com/bolcom/libunftp/pull/550) Split Authenticators from the Subject Resolving (UserDetail
   Providing) concern:

@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/libunftp/0.21.1")]
+#![doc(html_root_url = "https://docs.rs/libunftp/0.22.0")]
 
 //! libunftp is an extensible, async, cloud orientated FTP(S) server library.
 //!
@@ -17,7 +17,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.21.1"
+//! libunftp = "0.22.0"
 //! unftp-sbe-fs = "0.3.0"
 //! tokio = { version = "1", features = ["full"] }
 //! ```
