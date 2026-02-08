@@ -19,7 +19,7 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-p
 readme = "README.md"
 
 [dependencies]
-async-trait = "=0.1.88"
+async-trait = "0.1.88"
 libunftp = { version = "0.21.1", path = "../../", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
 tracing-attributes = "0.1.31"

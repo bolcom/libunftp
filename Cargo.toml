@@ -46,7 +46,7 @@ default = ["aws_lc_rs", "prometheus", "proxy_protocol"]
 all = ["aws_lc_rs", "prometheus", "proxy_protocol"]
 
 [dependencies]
-async-trait = "=0.1.88"
+async-trait = "0.1.88"
 bitflags = "2.10.0"
 bytes = "1.11.1"
 chrono = { version = "0.4.43", default-features = false, features = ["clock", "std"] }

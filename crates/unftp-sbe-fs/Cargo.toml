@@ -24,7 +24,7 @@ aws_lc_rs = ["libunftp/aws_lc_rs"]
 default = ["aws_lc_rs"]
 
 [dependencies]
-async-trait = "=0.1.88"
+async-trait = "0.1.88"
 cfg-if = "1.0"
 cap-std = "4.0"
 futures = { version = "0.3.31", default-features = false, features = ["std"] }
@@ -38,7 +38,7 @@ tracing-attributes = "0.1.31"
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-async-trait = "=0.1.88"
+async-trait = "0.1.88"
 chrono = "0.4.43"
 libunftp = { path = "../../", features = ["proxy_protocol"] }
 more-asserts = "0.3.1"
