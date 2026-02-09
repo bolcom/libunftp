@@ -6,10 +6,11 @@
 //!
 //! To create a new storage back-end:
 //!
-//! 1. Declare a dependency on the async-trait crate
+//! 1. Declare dependencies on the async-trait and libunftp crates
 //!
 //! ```toml
-//! async-trait = "0.1.50"
+//! async-trait = { workspace = true }
+//! libunftp = { workspace = true }
 //! ```
 //!
 //! 2. Implement the [`StorageBackend`] trait and optionally the [`Metadata`] trait:
