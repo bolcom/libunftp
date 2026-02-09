@@ -19,16 +19,16 @@ repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-p
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.88"
-libunftp = { version = "0.22.0", path = "../../", default-features = false }
-tracing = { version = "0.1.44", default-features = false }
-tracing-attributes = "0.1.31"
+async-trait.workspace = true
+libunftp.workspace = true
+tracing.workspace = true
+tracing-attributes.workspace = true
 
 [target.'cfg(target_family = "unix")'.dependencies]
 pam-auth = { package = "pam", version = "0.7.0" }
 
 [dev-dependencies]
-tokio = { version = "1.49.0", features = ["macros"] }
+tokio = { workspace = true, features = ["macros"] }
 
 [lints]
 workspace = true

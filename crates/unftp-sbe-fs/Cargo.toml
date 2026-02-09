@@ -24,21 +24,21 @@ aws_lc_rs = ["libunftp/aws_lc_rs"]
 default = ["aws_lc_rs"]
 
 [dependencies]
-async-trait = "0.1.88"
+async-trait.workspace = true
 cfg-if = "1.0"
 cap-std = "4.0"
-futures = { version = "0.3.31", default-features = false, features = ["std"] }
-lazy_static = "1.5.0"
-libunftp = { version = "0.22.0", path = "../../", default-features = false }
+futures.workspace = true
+lazy_static.workspace = true
+libunftp.workspace = true
 path_abs = "0.5.1"
-tokio = { version = "1.49.0", features = ["rt", "net", "sync", "io-util", "time", "fs"] }
-tokio-stream = "0.1.18"
-tracing = { version = "0.1.44", default-features = false }
-tracing-attributes = "0.1.31"
+tokio = { workspace = true, features = ["rt", "net", "sync", "io-util", "time", "fs"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+tracing-attributes.workspace = true
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-async-trait = "0.1.88"
+async-trait.workspace = true
 chrono = "0.4.43"
 libunftp = { path = "../../", features = ["proxy_protocol"] }
 more-asserts = "0.3.1"
@@ -47,14 +47,14 @@ pretty_assertions = "1.4.1"
 pretty_env_logger = "0.5.0"
 regex = "1.12.3"
 rstest = "0.26.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde.workspace = true
+serde_json.workspace = true
 slog-async = "2.8.0"
 slog-term = "2.9.2"
 tempfile = "3.24.0"
-tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3.22"
-getrandom = "0.3.4"
+getrandom.workspace = true
 
 [target.'cfg(target_os = "freebsd")'.dev-dependencies]
 capsicum = { version = "0.4.4", features = ["casper"] }
