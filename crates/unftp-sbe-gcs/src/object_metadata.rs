@@ -1,8 +1,8 @@
 //! The Metadata for the CloudStorage
 
-use libunftp::storage::Error;
-use libunftp::storage::Metadata;
 use std::time::SystemTime;
+use unftp_core::storage::Error;
+use unftp_core::storage::Metadata;
 
 /// The struct that implements the Metadata trait for the CloudStorage
 #[derive(Clone, Debug)]

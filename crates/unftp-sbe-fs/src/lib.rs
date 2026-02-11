@@ -4,12 +4,13 @@
 //!
 //! ```no_run
 
-//! use unftp_sbe_fs::ServerExt;
+//! use libunftp::ServerBuilder;
+//! use unftp_sbe_fs::Filesystem;
 //!
 //! #[tokio::main]
 //! pub async fn main() {
 //!     let ftp_home = std::env::temp_dir();
-//!     let server = libunftp::Server::with_fs(ftp_home)
+//!     let server = ServerBuilder::new(Box::new(move || Filesystem::new(ftp_home.clone()).unwrap()))
 //!         .greeting("Welcome to my FTP server")
 //!         .passive_ports(50000..=65535)
 //!         .build()
@@ -19,17 +20,12 @@
 //! }
 //! ```
 
-mod ext;
-pub use ext::ServerExt;
-
 mod cap_fs;
 
 use async_trait::async_trait;
 use cfg_if::cfg_if;
 use futures::{future::TryFutureExt, stream::TryStreamExt};
 use lazy_static::lazy_static;
-use libunftp::auth::UserDetail;
-use libunftp::storage::{Error, ErrorKind, Fileinfo, Metadata, Permissions, Result, StorageBackend};
 use std::{
     fmt::Debug,
     io,
@@ -38,6 +34,8 @@ use std::{
     time::SystemTime,
 };
 use tokio::io::AsyncSeekExt;
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::{Error, ErrorKind, Fileinfo, Metadata, Permissions, Result, StorageBackend};
 
 #[cfg(unix)]
 use cap_std::fs::{MetadataExt, PermissionsExt};
@@ -104,7 +102,7 @@ impl<User: UserDetail> StorageBackend<User> for Filesystem {
     }
 
     fn supported_features(&self) -> u32 {
-        libunftp::storage::FEATURE_RESTART | libunftp::storage::FEATURE_SITEMD5
+        unftp_core::storage::FEATURE_RESTART | unftp_core::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]

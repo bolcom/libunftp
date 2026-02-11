@@ -1,9 +1,10 @@
 //! Shows how to use the REST authenticator
 
+use libunftp::ServerBuilder;
 use std::env;
 use std::sync::Arc;
 use unftp_auth_rest::{Builder, RestAuthenticator};
-use unftp_sbe_fs::ServerExt;
+use unftp_sbe_fs::Filesystem;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let addr = "127.0.0.1:2121";
-    let server = libunftp::Server::with_fs(std::env::temp_dir())
+    let root = std::env::temp_dir();
+    let server = ServerBuilder::new(Box::new(move || Filesystem::new(root.clone()).unwrap()))
         .authenticator(Arc::new(authenticator))
         .build()
         .unwrap();

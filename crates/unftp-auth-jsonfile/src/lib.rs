@@ -150,7 +150,6 @@ use bytes::Bytes;
 use flate2::read::GzDecoder;
 use ipnet::Ipv4Net;
 use iprange::IpRange;
-use libunftp::auth::{AuthenticationError, Authenticator, Principal};
 use ring::{
     digest::SHA256_OUTPUT_LEN,
     pbkdf2::{PBKDF2_HMAC_SHA256, verify},
@@ -159,6 +158,7 @@ use serde::Deserialize;
 use std::io::prelude::*;
 use std::{collections::HashMap, fs, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
+use unftp_core::auth::{AuthenticationError, Authenticator, Principal};
 use valid::{Validate, constraint::Length};
 
 #[derive(Deserialize, Clone, Debug)]
@@ -331,7 +331,7 @@ impl JsonFileAuthenticator {
         }
     }
 
-    fn ip_ok(creds: &libunftp::auth::Credentials, actual_creds: &UserCreds) -> bool {
+    fn ip_ok(creds: &unftp_core::auth::Credentials, actual_creds: &UserCreds) -> bool {
         match &actual_creds.allowed_ip_ranges {
             Some(allowed) => match creds.source_ip {
                 std::net::IpAddr::V4(ref ip) => allowed.contains(ip),
@@ -345,7 +345,7 @@ impl JsonFileAuthenticator {
 #[async_trait]
 impl Authenticator for JsonFileAuthenticator {
     #[tracing_attributes::instrument]
-    async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<Principal, AuthenticationError> {
+    async fn authenticate(&self, username: &str, creds: &unftp_core::auth::Credentials) -> Result<Principal, AuthenticationError> {
         let res = if let Some(actual_creds) = self.credentials_map.get(username) {
             let client_cert = &actual_creds.client_cert;
             let certificate = &creds.certificate_chain.as_ref().and_then(|x| x.first());
@@ -458,9 +458,9 @@ impl Authenticator for JsonFileAuthenticator {
 
 mod test {
     #[allow(unused_imports)]
-    use libunftp::auth::ChannelEncryptionState;
+    use unftp_core::auth::ChannelEncryptionState;
     #[allow(unused_imports)]
-    use libunftp::auth::ClientCert;
+    use unftp_core::auth::ClientCert;
 
     #[tokio::test]
     async fn test_json_auth() {
@@ -528,7 +528,7 @@ mod test {
             json_authenticator
                 .authenticate(
                     "dan",
-                    &libunftp::auth::Credentials {
+                    &unftp_core::auth::Credentials {
                         certificate_chain: None,
                         password: Some("".into()),
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
@@ -544,7 +544,7 @@ mod test {
         match json_authenticator
             .authenticate(
                 "dan",
-                &libunftp::auth::Credentials {
+                &unftp_core::auth::Credentials {
                     certificate_chain: None,
                     password: Some("".into()),
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(128, 0, 0, 1)),
@@ -690,7 +690,7 @@ mod test {
             json_authenticator
                 .authenticate(
                     "alice",
-                    &libunftp::auth::Credentials {
+                    &unftp_core::auth::Credentials {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: Some("has a password".into()),
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
@@ -707,7 +707,7 @@ mod test {
         match json_authenticator
             .authenticate(
                 "alice",
-                &libunftp::auth::Credentials {
+                &unftp_core::auth::Credentials {
                     certificate_chain: None,
                     password: Some("has a password".into()),
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
@@ -725,7 +725,7 @@ mod test {
             json_authenticator
                 .authenticate(
                     "bob",
-                    &libunftp::auth::Credentials {
+                    &unftp_core::auth::Credentials {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: None,
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
@@ -742,7 +742,7 @@ mod test {
         match json_authenticator
             .authenticate(
                 "carol",
-                &libunftp::auth::Credentials {
+                &unftp_core::auth::Credentials {
                     certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                     password: None,
                     source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
@@ -760,7 +760,7 @@ mod test {
             json_authenticator
                 .authenticate(
                     "dean",
-                    &libunftp::auth::Credentials {
+                    &unftp_core::auth::Credentials {
                         certificate_chain: Some(vec![ClientCert(client_cert.clone())]),
                         password: None,
                         source_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),

@@ -15,46 +15,27 @@ Add the needed dependencies to Cargo.toml:
 
  ```toml
  [dependencies]
-libunftp = "0.22.0"
-unftp-sbe-gcs = "0.2.7"
+libunftp = "0.23.0"
+unftp-sbe-gcs = "0.3.0"
 tokio = { version = "1", features = ["full"] }
  ```
 
 And add to src/main.rs:
 
 ```rust
- use libunftp::Server;
-use unftp_sbe_gcs::{ServerExt, options::AuthMethod};
-use std::path::PathBuf;
-
-#[tokio::main]
-pub async fn main() {
-    let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None))
-        .greeting("Welcome to my FTP server")
-        .passive_ports(50000..=65535)
-        .build()
-        .unwrap();
-
-    server.listen("127.0.0.1:2121").await;
-}
- ```
-
-The above example uses the `ServerExt` extension trait. You can also call one of the other constructors of `Server` e.g.
-
- ```rust
- use libunftp::Server;
+use libunftp::ServerBuilder;
 use unftp_sbe_gcs::{CloudStorage, options::AuthMethod};
 use std::path::PathBuf;
 
 #[tokio::main]
 pub async fn main() {
-    let server = libunftp::Server::new(
-        Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
+    let server = ServerBuilder::new(
+        Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None)))
     )
-        .greeting("Welcome to my FTP server")
-        .passive_ports(50000..=65535)
-        .build()
-        .unwrap();
+    .greeting("Welcome to my FTP server")
+    .passive_ports(50000..=65535)
+    .build()
+    .unwrap();
 
     server.listen("127.0.0.1:2121").await;
 }

@@ -1,14 +1,15 @@
 #![allow(missing_docs)]
 
 use async_ftp::{FtpStream, types::Result};
-use libunftp::{ServerBuilder, auth::DefaultUser, options::FtpsRequired};
+use libunftp::{ServerBuilder, options::FtpsRequired};
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str;
 use std::sync::atomic::{AtomicU16, Ordering};
-use unftp_sbe_fs::{Filesystem, ServerExt};
+use unftp_core::auth::DefaultUser;
+use unftp_sbe_fs::Filesystem;
 
 fn ensure_login_required<T: Debug>(r: Result<T>) {
     let err = r.unwrap_err().to_string();
@@ -32,6 +33,10 @@ struct Harness {
     addr: String,
 }
 
+fn fs_builder(root: PathBuf) -> ServerBuilder<Filesystem, DefaultUser> {
+    ServerBuilder::new(Box::new(move || Filesystem::new(root.clone()).unwrap()))
+}
+
 async fn custom_server_harness<S>(s: S) -> Harness
 where
     S: Fn(PathBuf) -> ServerBuilder<Filesystem, DefaultUser>,
@@ -53,7 +58,7 @@ where
 
 #[fixture]
 async fn harness() -> Harness {
-    custom_server_harness(libunftp::Server::with_fs).await
+    custom_server_harness(fs_builder).await
 }
 
 #[rstest]
@@ -172,7 +177,7 @@ struct FtpsRequireWorksConfig {
 #[awt]
 #[tokio::test]
 async fn ftps_require_works(config: FtpsRequireWorksConfig) {
-    let s = |path| libunftp::Server::with_fs(path).ftps_required(config.mode_control_chan, config.mode_data_chan);
+    let s = |path| fs_builder(path).ftps_required(config.mode_control_chan, config.mode_data_chan);
     let h = custom_server_harness(s).await;
     let mut ftp_stream = async_ftp::FtpStream::connect(h.addr).await.unwrap();
     let result = ftp_stream.login(config.username, "blah").await;

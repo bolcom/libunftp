@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-jsonfile"
-version = "0.3.7"
+version = "0.4.0"
 description = "An authentication back-end for libunftp that authenticates against credentials in JSON format"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -17,18 +17,13 @@ homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jso
 repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
 readme = "README.md"
 
-[features]
-default = ["aws_lc_rs"]
-aws_lc_rs = ["libunftp/aws_lc_rs"]
-ring = ["libunftp/ring"]
-
 [dependencies]
 async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true
 ipnet = "2.11.0"
 iprange = "0.6.7"
-libunftp.workspace = true
+unftp-core.workspace = true
 ring = "0.17.14"
 serde.workspace = true
 serde_json.workspace = true
@@ -39,9 +34,10 @@ valid = "0.3.1"
 flate2 = "1.1.9"
 
 [dev-dependencies]
+libunftp.workspace = true
 pretty_env_logger = "0.5.0"
 tokio = { workspace = true, features = ["macros"] }
-unftp-sbe-fs = { version = "0.3.0", path = "../unftp-sbe-fs" }
+unftp-sbe-fs = { version = "0.4.0", path = "../unftp-sbe-fs" }
 
 [lints]
 workspace = true

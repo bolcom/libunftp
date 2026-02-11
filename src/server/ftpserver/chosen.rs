@@ -2,16 +2,16 @@
 
 use crate::notification::{DataListener, PresenceListener};
 use crate::options::ActivePassiveMode;
-use crate::storage::Metadata;
 use crate::{
-    auth::{AuthenticationPipeline, Authenticator, UserDetail, UserDetailProvider},
+    auth::AuthenticationPipeline,
     options::{FtpsRequired, PassiveHost, SiteMd5},
     server::controlchan,
     server::tls::FtpsConfig,
-    storage::StorageBackend,
 };
 use std::ops::RangeInclusive;
 use std::{sync::Arc, time::Duration};
+use unftp_core::auth::{Authenticator, UserDetail, UserDetailProvider};
+use unftp_core::storage::{Metadata, StorageBackend};
 
 // Holds the options the libunftp user opted for.
 pub struct OptionsHolder<Storage, User>

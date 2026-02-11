@@ -2,15 +2,11 @@
 //! implements the handling for the *data* channel.
 
 use super::{chancomms::ControlChanMsg, tls::FtpsConfig};
-use crate::auth::UserDetail;
+use crate::metrics;
 use crate::server::chancomms::DataChanCmd;
 use crate::server::failed_logins::FailedLoginsCache;
 use crate::server::switchboard::SocketAddrPair;
 use crate::server::switchboard::SwitchboardKey;
-use crate::{
-    metrics,
-    storage::{Metadata, StorageBackend},
-};
 use std::{
     fmt::{Debug, Formatter},
     net::SocketAddr,
@@ -18,6 +14,8 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::{Metadata, StorageBackend};
 
 // TraceId is an identifier used to correlate logs statements together.
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -111,7 +109,7 @@ where
     // busy so that it doesn't time out while the session is still in progress.
     pub data_busy: bool,
     // The client certificate chain if it was received.
-    pub cert_chain: Option<Vec<crate::auth::ClientCert>>,
+    pub cert_chain: Option<Vec<unftp_core::auth::ClientCert>>,
     // The failed logins cache can monitor successive failed logins and apply a policy to deter brute force attacks.
     pub failed_logins: Option<Arc<FailedLoginsCache>>,
     // An optional functor that can bind a socket

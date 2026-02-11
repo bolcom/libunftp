@@ -9,43 +9,22 @@
 //!
 //! ```toml
 //! [dependencies]
-//! libunftp = "0.22.0"
-//! unftp-sbe-gcs = "0.2.8"
+//! libunftp = "0.23.0"
+//! unftp-sbe-gcs = "0.3.0"
 //! tokio = { version = "1", features = ["full"] }
 //! ```
 //!
 //! And add to src/main.rs:
 //!
 //! ```no_run
-//! use libunftp::Server;
-//! use unftp_sbe_gcs::{ServerExt, options::AuthMethod};
-//! use std::path::PathBuf;
-//!
-//! #[tokio::main]
-//! pub async fn main() {
-//!     let server = Server::with_gcs("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None))
-//!       .greeting("Welcome to my FTP server")
-//!       .passive_ports(50000..=65535)
-//!       .build()
-//!       .unwrap();
-//!
-//!     server.listen("127.0.0.1:2121").await;
-//! }
-//! ```
-//!
-//! This example uses the `ServerExt` extension trait. You can also call one of the other
-//! constructors of `Server` e.g.
-//!
-//! ```no_run
 //! use libunftp::ServerBuilder;
 //! use unftp_sbe_gcs::{CloudStorage, options::AuthMethod};
 //! use std::path::PathBuf;
-//! use std::sync::Arc;
 //!
 //! #[tokio::main]
 //! pub async fn main() {
-//!     let server = libunftp::ServerBuilder::new(
-//!         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/ftp-root"), AuthMethod::WorkloadIdentity(None)))
+//!     let server = ServerBuilder::new(
+//!         Box::new(move || CloudStorage::with_bucket_root("my-bucket", PathBuf::from("/unftp"), AuthMethod::WorkloadIdentity(None)))
 //!       )
 //!       .greeting("Welcome to my FTP server")
 //!       .passive_ports(50000..=65535)
@@ -59,27 +38,22 @@
 
 // FIXME: error mapping from GCS/hyper is minimalistic, mostly PermanentError. Do proper mapping and better reporting (temporary failures too!)
 
-mod ext;
 mod gcs_client;
 pub mod object_metadata;
 pub mod options;
 mod response_body;
 mod workload_identity;
 
-pub use ext::ServerExt;
-
 use async_trait::async_trait;
 use gcs_client::GcsClient;
-use libunftp::{
-    auth::UserDetail,
-    storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend},
-};
 use object_metadata::ObjectMetadata;
 use options::AuthMethod;
 use std::{
     fmt::Debug,
     path::{Path, PathBuf},
 };
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::{Error, ErrorKind, Fileinfo, Metadata, StorageBackend};
 
 /// A [`StorageBackend`] that uses Cloud storage from Google.
 /// cloned for each controlchan!
@@ -130,7 +104,7 @@ impl<User: UserDetail> StorageBackend<User> for CloudStorage {
     type Metadata = ObjectMetadata;
 
     fn supported_features(&self) -> u32 {
-        libunftp::storage::FEATURE_SITEMD5
+        unftp_core::storage::FEATURE_SITEMD5
     }
 
     #[tracing_attributes::instrument]

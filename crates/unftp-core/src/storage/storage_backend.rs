@@ -1,8 +1,7 @@
 //! Defines the service provider interface for storage back-end implementors.
 
-use super::error::Error;
+use super::error::{Error, ErrorKind};
 use crate::auth::UserDetail;
-use crate::storage::ErrorKind;
 use async_trait::async_trait;
 use chrono::{
     Datelike,
@@ -240,7 +239,6 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
 
     /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
     #[allow(clippy::type_complexity)]
-    #[tracing_attributes::instrument]
     async fn list_fmt<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, Error>
     where
         P: AsRef<Path> + Send + Debug,
@@ -259,7 +257,6 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     }
 
     /// Returns directory listing as a vec of strings used for multi line response in the control channel.
-    #[tracing_attributes::instrument]
     async fn list_vec<P>(&self, user: &User, path: P) -> std::result::Result<Vec<String>, Error>
     where
         P: AsRef<Path> + Send + Debug,
@@ -274,7 +271,6 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// Returns some bytes that make up a NLST directory listing (only the basename) that can
     /// immediately be sent to the client.
     #[allow(clippy::type_complexity)]
-    #[tracing_attributes::instrument]
     async fn nlst<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
         P: AsRef<Path> + Send + Debug,

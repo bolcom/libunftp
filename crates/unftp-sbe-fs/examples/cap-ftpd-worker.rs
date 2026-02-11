@@ -23,9 +23,9 @@ mod auth {
     };
 
     use async_trait::async_trait;
-    use libunftp::auth::{AuthenticationError, Authenticator, Principal, UserDetail, UserDetailError, UserDetailProvider};
     use serde::Deserialize;
     use tokio::time::sleep;
+    use unftp_core::auth::{AuthenticationError, Authenticator, Principal, UserDetail, UserDetailError, UserDetailProvider};
 
     #[derive(Debug)]
     pub struct User {
@@ -116,7 +116,7 @@ mod auth {
     #[async_trait]
     impl Authenticator for JsonFileAuthenticator {
         #[tracing_attributes::instrument]
-        async fn authenticate(&self, username: &str, creds: &libunftp::auth::Credentials) -> Result<Principal, AuthenticationError> {
+        async fn authenticate(&self, username: &str, creds: &unftp_core::auth::Credentials) -> Result<Principal, AuthenticationError> {
             let res = if let Some(actual_creds) = self.credentials_map.get(username) {
                 let pass_check_result = match &creds.password {
                     Some(given_password) => {

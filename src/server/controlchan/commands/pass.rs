@@ -10,24 +10,22 @@
 // therefore the responsibility of the user-FTP process to hide
 // the sensitive password information.
 
-use crate::{
-    auth::{ChannelEncryptionState, UserDetail},
-    server::{
-        chancomms::ControlChanMsg,
-        controlchan::{
-            Reply, ReplyCode,
-            error::ControlChanError,
-            handler::{CommandContext, CommandHandler},
-        },
-        failed_logins::LockState,
-        password,
-        session::SessionState,
+use crate::server::{
+    chancomms::ControlChanMsg,
+    controlchan::{
+        Reply, ReplyCode,
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
     },
-    storage::{Metadata, StorageBackend},
+    failed_logins::LockState,
+    password,
+    session::SessionState,
 };
 use async_trait::async_trait;
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc::Sender, time::sleep};
+use unftp_core::auth::{ChannelEncryptionState, UserDetail};
+use unftp_core::storage::{Metadata, StorageBackend};
 
 #[derive(Debug)]
 pub struct Pass {
@@ -69,7 +67,7 @@ where
                 // without this, the REST authenticator hangs when
                 // performing a http call through Hyper
                 let session2clone = args.session.clone();
-                let creds = crate::auth::Credentials {
+                let creds = unftp_core::auth::Credentials {
                     password: Some(pass),
                     source_ip: session.source.ip(),
                     certificate_chain: session.cert_chain.clone(),
@@ -134,7 +132,7 @@ where
                                 ControlChanMsg::AuthFailed
                             }
                         }
-                        Err(crate::auth::AuthenticationError::BadUser) => {
+                        Err(unftp_core::auth::AuthenticationError::BadUser) => {
                             slog::warn!(logger, "PASS: Login attempt for unknown user {}", username);
                             ControlChanMsg::AuthFailed
                         }

@@ -5,7 +5,7 @@
 use http_body_util::{BodyExt, Empty};
 use hyper::http::header;
 use hyper::{Method, Request, body::Bytes};
-use libunftp::storage::{Error, ErrorKind};
+use unftp_core::storage::{Error, ErrorKind};
 
 use crate::gcs_client::HttpClientEmpty;
 

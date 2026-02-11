@@ -1,17 +1,15 @@
 //! The RFC 959 Rename To (`RNTO`) command
 
 use crate::server::ControlChanMsg;
-use crate::storage::{Metadata, StorageBackend};
-use crate::{
-    auth::UserDetail,
-    server::controlchan::{
-        Reply, ReplyCode,
-        error::ControlChanError,
-        handler::{CommandContext, CommandHandler},
-    },
+use crate::server::controlchan::{
+    Reply, ReplyCode,
+    error::ControlChanError,
+    handler::{CommandContext, CommandHandler},
 };
 use async_trait::async_trait;
 use std::{path::PathBuf, sync::Arc};
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::{Metadata, StorageBackend};
 
 #[derive(Debug)]
 pub struct Rnto {

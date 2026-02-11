@@ -1,4 +1,4 @@
-//! The service provider interface (SPI) for auth
+//! Core authentication interfaces.
 
 use crate::BoxError;
 
@@ -42,7 +42,7 @@ pub trait Authenticator: Sync + Send + Debug {
 /// # Example
 ///
 /// ```rust
-/// use libunftp::auth::Principal;
+/// use unftp_core::auth::Principal;
 ///
 /// let principal = Principal {
 ///     username: "alice".to_string(),

@@ -2,15 +2,15 @@
 
 //! [`Authenticator`] implementation that authenticates against [`PAM`].
 //!
-//! [`Authenticator`]: libunftp::auth::Authenticator
+//! [`Authenticator`]: unftp_core::auth::Authenticator
 //! [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 
 use async_trait::async_trait;
-use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 /// [`Authenticator`] implementation that authenticates against [`PAM`].
 ///
-/// [`Authenticator`]: libunftp::auth::Authenticator
+/// [`Authenticator`]: unftp_core::auth::Authenticator
 /// [`PAM`]: https://en.wikipedia.org/wiki/Pluggable_authentication_module
 #[derive(Debug)]
 pub struct PamAuthenticator {

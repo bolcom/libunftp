@@ -42,7 +42,7 @@ pub trait UserDetail: Send + Sync + Display + Debug {
 /// # Example
 ///
 /// ```rust
-/// use libunftp::auth::{Principal, UserDetail, UserDetailProvider, UserDetailError};
+/// use unftp_core::auth::{Principal, UserDetail, UserDetailProvider, UserDetailError};
 /// use async_trait::async_trait;
 ///
 /// #[derive(Debug)]
@@ -163,7 +163,7 @@ impl Display for DefaultUser {
 /// ```rust
 /// # #[tokio::main]
 /// # async fn main() {
-/// use libunftp::auth::{DefaultUserDetailProvider, Principal, UserDetailProvider};
+/// use unftp_core::auth::{DefaultUserDetailProvider, Principal, UserDetailProvider};
 ///
 /// let provider = DefaultUserDetailProvider;
 /// let principal = Principal {

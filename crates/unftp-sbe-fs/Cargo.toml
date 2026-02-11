@@ -1,6 +1,6 @@
 [package]
 name = "unftp-sbe-fs"
-version = "0.3.1"
+version = "0.4.0"
 description = "A storage back-end for libunftp, storing files on local disk"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -18,19 +18,13 @@ homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-fs"
 repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-fs"
 readme = "README.md"
 
-[features]
-ring = ["libunftp/ring"]
-aws_lc_rs = ["libunftp/aws_lc_rs"]
-default = ["aws_lc_rs"]
-
 [dependencies]
 async-trait.workspace = true
 cfg-if = "1.0"
 cap-std = "4.0"
 futures.workspace = true
 lazy_static.workspace = true
-libunftp.workspace = true
-path_abs = "0.5.1"
+unftp-core.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-stream.workspace = true
 tracing.workspace = true
