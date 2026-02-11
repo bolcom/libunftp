@@ -1,5 +1,13 @@
 # Changelog
 
+### libunftp 0.23.0
+
+- **BREAKING**: Introduced `unftp-core` and moved backend-facing auth/storage traits and types there.
+  Backends now depend on `unftp-core` directly and `libunftp` depends on this core crate.
+- **BREAKING**: Updated backend crates to use `unftp-core` and removed `ServerExt` helpers in the
+  `unftp-sbe-*` crates. Examples now use `ServerBuilder` directly.
+- Bump versions for `unftp-auth-*` and `unftp-sbe-*` crates to reflect the API split.
+
 ### libunftp 0.22.0
 
 - [#550](https://github.com/bolcom/libunftp/pull/550) Split Authenticators from the Subject Resolving (UserDetail

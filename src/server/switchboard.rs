@@ -1,13 +1,13 @@
-use crate::auth::UserDetail;
 use crate::server::session::{Session, SharedSession};
 use crate::server::shutdown::Notifier;
-use crate::storage::StorageBackend;
 use dashmap::{DashMap, Entry};
 use std::net::{IpAddr, SocketAddr};
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::Mutex;
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::StorageBackend;
 
 /// Identifies a passive listening port entry in the Switchboard that is associated with a specific
 /// session. The key is constructed out of the external source IP of the client and the passive listening port that has

@@ -1,7 +1,7 @@
 //! This module provides an anonymous authenticator
 
-use crate::auth::*;
 use async_trait::async_trait;
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 /// [`Authenticator`] implementation that simply allows everyone.
 ///
@@ -10,7 +10,8 @@ use async_trait::async_trait;
 /// ```rust
 /// # #[tokio::main]
 /// # async fn main() {
-/// use libunftp::auth::{Authenticator, AnonymousAuthenticator, Principal};
+/// use unftp_core::auth::{Authenticator, Principal};
+/// use libunftp::auth::AnonymousAuthenticator;
 ///
 /// let my_auth = AnonymousAuthenticator{};
 /// assert_eq!(my_auth.authenticate("Finn", &"I ❤️ PB".into()).await.unwrap().username, "Finn");

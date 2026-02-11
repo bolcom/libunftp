@@ -2,14 +2,15 @@
 
 use async_trait::async_trait;
 use lazy_static::*;
-use libunftp::auth::{AuthenticationError, Authenticator, Credentials, Principal};
+use libunftp::ServerBuilder;
 use libunftp::options::{FailedLoginsBlock, FailedLoginsPolicy};
 use std::io::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use unftp_sbe_fs::ServerExt;
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
+use unftp_sbe_fs::Filesystem;
 
 lazy_static! {
     static ref CONSUMERS: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
@@ -17,7 +18,8 @@ lazy_static! {
 
 pub async fn run_with_auth() {
     let addr = "127.0.0.1:2150";
-    let server = libunftp::Server::with_fs(std::env::temp_dir())
+    let root = std::env::temp_dir();
+    let server = ServerBuilder::new(Box::new(move || Filesystem::new(root.clone()).unwrap()))
         .authenticator(Arc::new(TestAuthenticator {}))
         .greeting("Welcome test")
         .failed_logins_policy(FailedLoginsPolicy::new(3, std::time::Duration::new(5, 0), FailedLoginsBlock::User))

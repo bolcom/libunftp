@@ -1,7 +1,8 @@
 //! A server that jails each connected session with Capsicum.
 use std::{ffi::OsString, path::Path, str::FromStr};
 
-use unftp_sbe_fs::ServerExt;
+use libunftp::ServerBuilder;
+use unftp_sbe_fs::Filesystem;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -18,7 +19,8 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     let helper = Path::new(&args[0]).parent().unwrap().join("cap-ftpd-worker");
     let helper_args = vec![OsString::from_str(auth_file).unwrap()];
-    let server = libunftp::Server::with_fs(std::env::temp_dir())
+    let root = std::env::temp_dir();
+    let server = ServerBuilder::new(Box::new(move || Filesystem::new(root.clone()).unwrap()))
         .connection_helper(helper.into(), helper_args)
         .build()
         .unwrap();

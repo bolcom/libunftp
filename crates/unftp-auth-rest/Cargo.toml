@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-rest"
-version = "0.2.9"
+version = "0.3.0"
 description = "An authentication back-end for libunftp that consumes an HTTP API to authenticate"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -17,30 +17,25 @@ homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-res
 repository = "https://github.com/bolcom/libunftp/tree/hannes/crates/unftp-auth-rest"
 readme = "README.md"
 
-[features]
-default = ["aws_lc_rs"]
-aws_lc_rs = ["libunftp/aws_lc_rs"]
-ring = ["libunftp/ring"]
-
 [dependencies]
 async-trait.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-rustls.workspace = true
 hyper-util.workspace = true
-libunftp.workspace = true
+unftp-core.workspace = true
 percent-encoding.workspace = true
 regex = "1.12.3"
-serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "sync", "io-util", "time"] }
 tracing.workspace = true
 tracing-attributes.workspace = true
 
 [dev-dependencies]
+libunftp.workspace = true
 pretty_env_logger = "0.5.0"
 tokio = { workspace = true, features = ["macros"] }
-unftp-sbe-fs = { version = "0.3.0", path = "../unftp-sbe-fs" }
+unftp-sbe-fs = { version = "0.4.0", path = "../unftp-sbe-fs" }
 
 [lints]
 workspace = true

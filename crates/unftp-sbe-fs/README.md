@@ -21,8 +21,8 @@ Add the libunftp and tokio crates to your project's dependencies in `Cargo.toml`
 
 ```toml
 [dependencies]
-libunftp = "0.22.0"
-unftp-sbe-fs = "0.2.6"
+libunftp = "0.23.0"
+unftp-sbe-fs = "0.4.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -30,12 +30,13 @@ Now you're ready to develop your server!
 Add the following to `src/main.rs`:
 
 ```rust
-use unftp_sbe_fs::ServerExt;
+use libunftp::ServerBuilder;
+use unftp_sbe_fs::Filesystem;
 
 #[tokio::main]
 pub async fn main() {
     let ftp_home = std::env::temp_dir();
-    let server = libunftp::Server::with_fs(ftp_home)
+    let server = ServerBuilder::new(Box::new(move || Filesystem::new(ftp_home.clone()).unwrap()))
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..=65535)
         .build()

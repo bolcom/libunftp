@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use libunftp::auth::Authenticator;
 use std::path::PathBuf;
 use unftp_auth_jsonfile::JsonFileAuthenticator;
+use unftp_core::auth::Authenticator;
 
 fn input_file_path(filename: String) -> String {
     let root_dir = std::env::var("CARGO_MANIFEST_DIR").expect("Could not find CARGO_MANIFEST_DIR in environment");

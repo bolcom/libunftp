@@ -1,18 +1,16 @@
-use crate::{
-    auth::{AuthenticationError, ChannelEncryptionState, Credentials, UserDetail},
-    server::{
-        controlchan::{
-            Reply, ReplyCode,
-            error::ControlChanError,
-            handler::{CommandContext, CommandHandler},
-        },
-        session::SessionState,
+use crate::server::{
+    controlchan::{
+        Reply, ReplyCode,
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
     },
-    storage::{Metadata, StorageBackend},
+    session::SessionState,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::sync::Arc;
+use unftp_core::auth::{AuthenticationError, ChannelEncryptionState, Credentials, UserDetail};
+use unftp_core::storage::{Metadata, StorageBackend};
 
 #[derive(Debug)]
 pub struct User {
@@ -95,12 +93,9 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::auth::{AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, DefaultUserDetailProvider, Principal, UserDetail};
     use crate::server::controlchan::handler::CommandHandler;
     use crate::server::session::SharedSession;
     use crate::server::{Command, ControlChanMsg, Reply, ReplyCode, Session, SessionState};
-    use crate::storage::{Fileinfo, Result};
-    use crate::storage::{Metadata, StorageBackend};
     use async_trait::async_trait;
     use bytes::Bytes;
     use pretty_assertions::assert_eq;
@@ -112,6 +107,8 @@ mod tests {
     use tokio::io::AsyncRead;
     use tokio::sync::Mutex;
     use tokio::sync::mpsc;
+    use unftp_core::auth::{AuthenticationError, Authenticator, ClientCert, Credentials, DefaultUser, DefaultUserDetailProvider, Principal, UserDetail};
+    use unftp_core::storage::{Fileinfo, Metadata, Result, StorageBackend};
 
     #[derive(Debug)]
     struct Auth {
@@ -241,7 +238,7 @@ mod tests {
     {
         fn test<P>(session_arc: SharedSession<Storage, User>, auther: Arc<dyn Authenticator>, user_provider: Arc<P>) -> super::CommandContext<Storage, User>
         where
-            P: crate::auth::UserDetailProvider<User = User> + Send + Sync + 'static,
+            P: unftp_core::auth::UserDetailProvider<User = User> + Send + Sync + 'static,
         {
             let (tx, _) = mpsc::channel::<ControlChanMsg>(1);
             let auth_pipeline = Arc::new(crate::auth::AuthenticationPipeline::new(auther, user_provider));
@@ -267,7 +264,7 @@ mod tests {
     struct Test {
         short_auth: bool,
         auth_ok: bool,
-        cert: Option<Vec<crate::auth::ClientCert>>,
+        cert: Option<Vec<unftp_core::auth::ClientCert>>,
         expected_reply: ReplyCode,
         expected_state: SessionState,
     }

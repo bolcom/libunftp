@@ -1,8 +1,8 @@
 use super::*;
-use libunftp::auth::DefaultUser;
 use pretty_assertions::assert_eq;
 use std::{fs::File, io::prelude::*};
 use tokio::runtime::Runtime;
+use unftp_core::auth::DefaultUser;
 
 #[test]
 fn fs_strip_prefixes() {

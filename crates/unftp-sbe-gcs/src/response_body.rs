@@ -1,12 +1,12 @@
 use super::ObjectMetadata;
 use base64::Engine;
 use chrono::prelude::*;
-use libunftp::storage::{Error, ErrorKind, Fileinfo};
 use serde::{Deserialize, de};
 use std::fmt::{Display, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::SystemTime;
+use unftp_core::storage::{Error, ErrorKind, Fileinfo};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct ResponseBody {
@@ -142,7 +142,7 @@ impl Item {
 #[cfg(test)]
 mod test {
     use super::*;
-    use libunftp::storage::Metadata;
+    use unftp_core::storage::Metadata;
 
     #[test]
     fn to_metadata() {

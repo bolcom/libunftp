@@ -12,24 +12,23 @@ use super::{
     shutdown,
     tls::FtpsConfig,
 };
+use crate::auth::anonymous::AnonymousAuthenticator;
+use crate::notification::{DataListener, PresenceListener, nop::NopListener};
+use crate::options::ActivePassiveMode;
+use crate::options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags};
+use crate::server::shutdown::Notifier;
 use crate::server::switchboard::Switchboard;
-use crate::{
-    auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider, anonymous::AnonymousAuthenticator},
-    notification::{DataListener, PresenceListener, nop::NopListener},
-    options::ActivePassiveMode,
-    options::{FailedLoginsPolicy, FtpsClientAuth, TlsFlags},
-    server::shutdown::Notifier,
-    server::tls,
-    storage::{Metadata, StorageBackend},
-};
+use crate::server::tls;
 use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
 #[cfg(feature = "experimental")]
 use rustls::ServerConfig;
 use slog::*;
 use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::RangeInclusive, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use unftp_core::auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider};
+use unftp_core::storage::{Metadata, StorageBackend};
 
-/// An instance of an FTP(S) server. It aggregates an [`Authenticator`](crate::auth::Authenticator)
-/// implementation that will be used for authentication, and a [`StorageBackend`](crate::storage::StorageBackend)
+/// An instance of an FTP(S) server. It aggregates an [`Authenticator`](unftp_core::auth::Authenticator)
+/// implementation that will be used for authentication, and a [`StorageBackend`](unftp_core::storage::StorageBackend)
 /// implementation that will be used as the virtual file system.
 ///
 /// The server can be started with the [`listen`](crate::Server::listen()) method.
@@ -37,19 +36,21 @@ use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::Range
 /// # Example
 ///
 /// ```rust
-/// use libunftp::Server;
-/// use unftp_sbe_fs::ServerExt;
+/// use libunftp::ServerBuilder;
+/// use unftp_sbe_fs::Filesystem;
 /// use tokio::runtime::Runtime;
 ///
 /// let mut rt = Runtime::new().unwrap();
 /// rt.spawn(async {
-///     let server = Server::with_fs("/srv/ftp").build().unwrap();
+///     let server = ServerBuilder::new(Box::new(|| Filesystem::new("/srv/ftp").unwrap()))
+///         .build()
+///         .unwrap();
 ///     server.listen("127.0.0.1:2121").await.unwrap()
 /// });
 /// ```
 ///
-/// [`Authenticator`]: crate::auth::Authenticator
-/// [`StorageBackend`]: storage/trait.StorageBackend.html
+/// [`Authenticator`]: unftp_core::auth::Authenticator
+/// [`StorageBackend`]: unftp_core::storage::StorageBackend
 pub struct Server<Storage, User>
 where
     Storage: StorageBackend<User>,
@@ -176,11 +177,12 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::{auth::DefaultUserDetailProvider, Server};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_core::auth::DefaultUserDetailProvider;
+    /// use unftp_sbe_fs::Filesystem;
     /// use std::sync::Arc;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .user_detail_provider(Arc::new(DefaultUserDetailProvider))
     ///     .build();
     /// ```
@@ -285,12 +287,12 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::{auth, auth::AnonymousAuthenticator, Server};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::{auth, ServerBuilder};
+    /// use unftp_sbe_fs::Filesystem;
     /// use std::sync::Arc;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///                  .authenticator(Arc::new(auth::AnonymousAuthenticator{}))
     ///                  .build();
     /// ```
@@ -310,10 +312,10 @@ where
     ///
     /// ```rust
     /// use libunftp::options::ActivePassiveMode;
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .active_passive_mode(ActivePassiveMode::ActiveAndPassive)
     ///              .build();
     /// ```
@@ -364,10 +366,10 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key");
     /// ```
     pub fn ftps<P: Into<PathBuf>>(mut self, certs_file: P, key_file: P) -> Self {
@@ -386,10 +388,10 @@ where
     /// ```rust
     /// # let config = Default::default();
     /// use rustls::ServerConfig;
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .ftps_manual(config);
     /// ```
     #[cfg(feature = "experimental")]
@@ -404,11 +406,11 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     /// use libunftp::options::FtpsClientAuth;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
     ///              .ftps_client_auth(FtpsClientAuth::Require)
     ///              .ftps_trust_store("/srv/unftp/trusted.pem");
@@ -438,10 +440,10 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
     ///              .ftps_client_auth(true)
     ///              .ftps_trust_store("/srv/unftp/trusted.pem");
@@ -461,11 +463,11 @@ where
     /// This example enables only TLS v1.3 and allows TLS session resumption with tickets.
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     /// use libunftp::options::TlsFlags;
     ///
-    /// let mut server = Server::with_fs("/tmp")
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///                  .greeting("Welcome to my FTP Server")
     ///                  .ftps("/srv/unftp/server.certs", "/srv/unftp/server.key")
     ///                  .ftps_tls_flags(TlsFlags::V1_3 | TlsFlags::RESUMPTION_TICKETS);
@@ -480,16 +482,16 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .greeting("Welcome to my FTP Server")
     ///     .build();
     //
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_fs("/tmp");
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()));
     /// server.greeting("Welcome to my FTP Server").build();
     /// ```
     pub fn greeting(mut self, greeting: &'static str) -> Self {
@@ -502,14 +504,14 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp").idle_session_timeout(600);
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap())).idle_session_timeout(600);
     ///
     /// // Or instead if you prefer:
-    /// let mut server = Server::with_fs("/tmp");
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()));
     /// server.idle_session_timeout(600);
     /// ```
     pub fn idle_session_timeout(mut self, secs: u64) -> Self {
@@ -528,14 +530,14 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut builder = Server::with_fs("/tmp").metrics();
+    /// let mut builder = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap())).metrics();
     ///
     /// // Or instead if you prefer:
-    /// let mut builder = Server::with_fs("/tmp");
+    /// let mut builder = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()));
     /// builder.metrics();
     /// ```
     pub fn metrics(mut self) -> Self {
@@ -565,21 +567,21 @@ where
     /// Using a fixed IP specified as a numeric array:
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .passive_host([127,0,0,1])
     ///              .build();
     /// ```
     /// Or the same but more explicitly:
     ///
     /// ```rust
-    /// use libunftp::{Server,options};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::{ServerBuilder, options};
+    /// use unftp_sbe_fs::Filesystem;
     /// use std::net::Ipv4Addr;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .passive_host(options::PassiveHost::Ip(Ipv4Addr::new(127, 0, 0, 1)))
     ///              .build();
     /// ```
@@ -587,10 +589,10 @@ where
     /// To determine the passive IP from the incoming control connection:
     ///
     /// ```rust
-    /// use libunftp::{Server,options};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::{ServerBuilder, options};
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .passive_host(options::PassiveHost::FromConnection)
     ///              .build();
     /// ```
@@ -598,10 +600,10 @@ where
     /// Get the IP by resolving a DNS name:
     ///
     /// ```rust
-    /// use libunftp::{Server,options};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::{ServerBuilder, options};
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .passive_host("ftp.myserver.org")
     ///              .build();
     /// ```
@@ -624,15 +626,15 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let builder = Server::with_fs("/tmp")
+    /// let builder = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///              .passive_ports(49152..=65535);
     ///
     /// // Or instead if you prefer:
-    /// let mut builder = Server::with_fs("/tmp");
+    /// let mut builder = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()));
     /// builder.passive_ports(49152..=65535);
     /// ```
     pub fn passive_ports(mut self, range: RangeInclusive<u16>) -> Self {
@@ -649,11 +651,11 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp")
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .pooled_listener_mode()
     ///     .build();
     /// ```
@@ -682,11 +684,11 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let mut server = Server::with_fs("/tmp")
+    /// let mut server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .proxy_protocol_mode(2121)
     ///     .build();
     /// ```
@@ -705,10 +707,10 @@ where
     ///
     /// ```rust
     /// use std::time::Duration;
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     ///
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .shutdown_indicator(async {
     ///         // Shut the server down after 10 seconds.
     ///         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -734,12 +736,12 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
+    /// use libunftp::ServerBuilder;
     /// use libunftp::options::SiteMd5;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // Use it in a builder-like pattern:
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .sitemd5(SiteMd5::None)
     ///     .build();
     /// ```
@@ -792,13 +794,13 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use libunftp::Server;
+    /// use libunftp::ServerBuilder;
     /// use libunftp::options::{FailedLoginsPolicy,FailedLoginsBlock};
-    /// use unftp_sbe_fs::ServerExt;
+    /// use unftp_sbe_fs::Filesystem;
     ///
     /// // With default policy
     /// let server =
-    /// Server::with_fs("/tmp")
+    /// ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .failed_logins_policy(FailedLoginsPolicy::default())
     ///     .build();
     ///
@@ -806,7 +808,7 @@ where
     /// // longer block (maximum 3 attempts, 5 minutes, IP based
     /// // blocking)
     /// use std::time::Duration;
-    /// let server = Server::with_fs("/tmp")
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
     ///     .failed_logins_policy(FailedLoginsPolicy::new(3, Duration::from_secs(300), FailedLoginsBlock::IP))
     ///     .build();
     /// ```
@@ -827,13 +829,13 @@ where
     /// # Example
     ///
     /// ```rust
-    /// use libunftp::Server;
-    /// use unftp_sbe_fs::ServerExt;
+    /// use libunftp::ServerBuilder;
+    /// use unftp_sbe_fs::Filesystem;
     /// use tokio::runtime::Runtime;
     ///
     /// let mut rt = Runtime::new().unwrap();
     /// rt.spawn(async {
-    ///     let server = Server::with_fs("/srv/ftp").build().unwrap();
+    ///     let server = ServerBuilder::new(Box::new(|| Filesystem::new("/srv/ftp").unwrap())).build().unwrap();
     ///     server.listen("127.0.0.1:2121").await
     /// });
     /// // ...

@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-pam"
-version = "0.2.8"
+version = "0.3.0"
 description = "An authentication back-end for libunftp that authenticates using PAM"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -18,14 +18,9 @@ homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-pam
 repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-pam"
 readme = "README.md"
 
-[features]
-default = ["aws_lc_rs"]
-aws_lc_rs = ["libunftp/aws_lc_rs"]
-ring = ["libunftp/ring"]
-
 [dependencies]
 async-trait.workspace = true
-libunftp.workspace = true
+unftp-core.workspace = true
 tracing.workspace = true
 tracing-attributes.workspace = true
 

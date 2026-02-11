@@ -1,0 +1,29 @@
+[package]
+name = "unftp-core"
+version = "0.1.0"
+description = "Core traits and types for unFTP backends"
+authors = [
+    "Hannes de Jager <hdejager@bol.com>",
+    "Rob klein Gunnewiek <rkleingunnewiek@bol.com>",
+]
+edition = "2024"
+license = "Apache-2.0"
+keywords = ["libunftp", "unftp", "ftp", "ftps"]
+categories = ["network-programming"]
+documentation = "https://docs.rs/unftp-core"
+homepage = "https://unftp.rs/"
+repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-core"
+readme = "README.md"
+
+[dependencies]
+async-trait.workspace = true
+chrono = { workspace = true, default-features = false, features = ["clock", "std"] }
+derive_more.workspace = true
+libc = "0.2"
+md-5 = "0.10.6"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+x509-parser = "0.18.1"
+
+[lints]
+workspace = true

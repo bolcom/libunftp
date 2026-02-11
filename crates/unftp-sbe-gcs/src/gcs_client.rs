@@ -7,7 +7,6 @@ use hyper::{Method, Request, Response, Uri, body::Body, header};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
-use libunftp::storage::{Error, ErrorKind};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -21,6 +20,7 @@ use tokio::io::AsyncRead;
 use tokio::sync::RwLock;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::io::ReaderStream;
+use unftp_core::storage::{Error, ErrorKind};
 use yup_oauth2::{CustomHyperClientBuilder, ServiceAccountAuthenticator};
 
 use crate::{

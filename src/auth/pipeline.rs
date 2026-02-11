@@ -1,11 +1,8 @@
 //! Authentication pipeline that combines authentication and user detail retrieval.
 
-use super::{
-    authenticator::{AuthenticationError, Authenticator, Credentials},
-    user::{UserDetail, UserDetailProvider},
-};
 use std::fmt::Debug;
 use std::sync::Arc;
+use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, UserDetail, UserDetailProvider};
 
 /// Combines an [`Authenticator`] and a [`UserDetailProvider`] to provide a complete
 /// authentication flow that returns a full [`UserDetail`] implementation.
@@ -47,9 +44,9 @@ where
 
         // Use the provider to convert Principal to User
         self.user_provider.provide_user_detail(&principal).await.map_err(|e| match e {
-            super::user::UserDetailError::UserNotFound { .. } => AuthenticationError::BadUser,
-            super::user::UserDetailError::Generic(msg) => AuthenticationError::new(msg),
-            super::user::UserDetailError::ImplPropagated(msg, source) => AuthenticationError::ImplPropagated(msg, source),
+            unftp_core::auth::UserDetailError::UserNotFound { .. } => AuthenticationError::BadUser,
+            unftp_core::auth::UserDetailError::Generic(msg) => AuthenticationError::new(msg),
+            unftp_core::auth::UserDetailError::ImplPropagated(msg, source) => AuthenticationError::ImplPropagated(msg, source),
         })
     }
 

@@ -71,9 +71,9 @@ To use a specific provider, enable the corresponding feature in your `Cargo.toml
 
 ```toml
 [dependencies]
-libunftp = { version = "0.22.0", features = ["ring"] }  # Use ring
+libunftp = { version = "0.23.0", features = ["ring"] }  # Use ring
 # or
-libunftp = { version = "0.22.0", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
+libunftp = { version = "0.23.0", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
 ```
 
 The default provider is `aws-lc-rs` for backward compatibility. Choose the provider that best fits your needs:
@@ -125,8 +125,8 @@ add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sb
 
 ```toml
 [dependencies]
-libunftp = "0.22.0"
-unftp-sbe-fs = "0.2"
+libunftp = "0.23.0"
+unftp-sbe-fs = "0.4.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -134,12 +134,13 @@ Now you're ready to develop your server!
 Add the following to `src/main.rs`:
 
 ```rust
-use unftp_sbe_fs::ServerExt;
+use libunftp::ServerBuilder;
+use unftp_sbe_fs::Filesystem;
 
 #[tokio::main]
 pub async fn main() {
     let ftp_home = std::env::temp_dir();
-    let server = libunftp::Server::with_fs(ftp_home)
+    let server = ServerBuilder::new(Box::new(move || Filesystem::new(ftp_home.clone()).unwrap()))
         .greeting("Welcome to my FTP server")
         .passive_ports(50000..=65535)
         .build()

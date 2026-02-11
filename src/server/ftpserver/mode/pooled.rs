@@ -1,14 +1,14 @@
 use crate::ServerError;
-use crate::auth::UserDetail;
 use crate::server::chancomms::{SwitchboardReceiver, SwitchboardSender};
 use crate::server::controlchan;
 use crate::server::ftpserver::error::ListenerError;
 use crate::server::ftpserver::listen_prebound::PreboundListener;
 use crate::server::switchboard::SocketAddrPair;
-use crate::storage::StorageBackend;
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{Sender, channel};
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::StorageBackend;
 
 fn spawn_data_acceptors(listeners: Vec<TcpListener>, tx: Sender<Result<(TcpStream, SocketAddrPair), ServerError>>) {
     for listener in listeners.into_iter() {

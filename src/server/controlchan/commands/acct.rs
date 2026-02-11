@@ -17,16 +17,14 @@
 // (pending receipt of the ACCounT command) or discards the
 // command, respectively.
 
-use crate::auth::UserDetail;
-use crate::{
-    server::controlchan::{
-        Reply, ReplyCode,
-        error::ControlChanError,
-        handler::{CommandContext, CommandHandler},
-    },
-    storage::{Metadata, StorageBackend},
+use crate::server::controlchan::{
+    Reply, ReplyCode,
+    error::ControlChanError,
+    handler::{CommandContext, CommandHandler},
 };
 use async_trait::async_trait;
+use unftp_core::auth::UserDetail;
+use unftp_core::storage::{Metadata, StorageBackend};
 
 #[derive(Debug)]
 pub struct Acct;
