@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-rest"
-version = "0.2.8"
+version = "0.2.9"
 description = "An authentication back-end for libunftp that consumes an HTTP API to authenticate"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -16,6 +16,11 @@ documentation = "https://docs.rs/unftp-auth-rest"
 homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-rest"
 repository = "https://github.com/bolcom/libunftp/tree/hannes/crates/unftp-auth-rest"
 readme = "README.md"
+
+[features]
+default = ["aws_lc_rs"]
+aws_lc_rs = ["libunftp/aws_lc_rs"]
+ring = ["libunftp/ring"]
 
 [dependencies]
 async-trait = "0.1.88"

@@ -10,8 +10,7 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP
-**](https://github.com/bolcom/unFTP)
+[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP**](https://github.com/bolcom/unFTP)
 
 The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's an extensible, async, cloud orientated FTP(S)
 server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).

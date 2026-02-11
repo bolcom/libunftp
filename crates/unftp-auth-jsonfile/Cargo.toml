@@ -1,6 +1,6 @@
 [package]
 name = "unftp-auth-jsonfile"
-version = "0.3.6"
+version = "0.3.7"
 description = "An authentication back-end for libunftp that authenticates against credentials in JSON format"
 authors = [
     "Agoston Horvath <ahorvath@bol.com>",
@@ -16,6 +16,11 @@ documentation = "https://docs.rs/unftp-auth-jsonfile"
 homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
 repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-jsonfile"
 readme = "README.md"
+
+[features]
+default = ["aws_lc_rs"]
+aws_lc_rs = ["libunftp/aws_lc_rs"]
+ring = ["libunftp/ring"]
 
 [dependencies]
 async-trait = "0.1.88"
