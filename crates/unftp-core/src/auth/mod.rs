@@ -56,9 +56,8 @@
 //!
 //! ```no_run
 //! # use unftp_core::auth::Principal;
-//! # #[tokio::main]
-//! # async fn main() {
-//! # let _principal = Principal { username: "alice".to_string() };
+//! # async fn demo() {
+//! let _principal = Principal { username: "alice".to_string() };
 //! # }
 //! ```
 //!

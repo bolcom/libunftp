@@ -161,8 +161,7 @@ impl Display for DefaultUser {
 /// # Example
 ///
 /// ```rust
-/// # #[tokio::main]
-/// # async fn main() {
+/// # async fn demo() {
 /// use unftp_core::auth::{DefaultUserDetailProvider, Principal, UserDetailProvider};
 ///
 /// let provider = DefaultUserDetailProvider;
