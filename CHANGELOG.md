@@ -1,11 +1,14 @@
 # Changelog
 
-### libunftp 0.23.0
+### libunftp 0.23.0, unftp-auth-jsonfile v0.4.0, unftp-auth-pam v0.3.0, unftp-auth-rest v0.3.0, unftp-sbe-fs v0.4.0, unftp-sbe-gcs v0.3.0
 
 - **BREAKING**: Introduced `unftp-core` and moved backend-facing auth/storage traits and types there.
-  Backends now depend on `unftp-core` directly and `libunftp` depends on this core crate.
-- **BREAKING**: Updated backend crates to use `unftp-core` and removed `ServerExt` helpers in the
-  `unftp-sbe-*` crates. Examples now use `ServerBuilder` directly.
+  Backends now depend on `unftp-core` directly and `libunftp` depends on this core crate. Backends
+  depending on `libunftp` will no longer compile. For those, updating Cargo.toml to use `unftp-core` should be
+  sufficient though, as no other code level breaking changes were introduced.
+- **BREAKING**: Updated backend crates in this repository to use `unftp-core` and removed the `ServerExt`
+  helpers in the `unftp-sbe-*` crates. Examples now use `ServerBuilder` directly. This was needed to avoid
+  these back-ends to depend on `libunftp`.
 - Bump versions for `unftp-auth-*` and `unftp-sbe-*` crates to reflect the API split.
 
 ### libunftp 0.22.0

@@ -155,8 +155,7 @@ use ring::{
     pbkdf2::{PBKDF2_HMAC_SHA256, verify},
 };
 use serde::Deserialize;
-use std::io::prelude::*;
-use std::{collections::HashMap, fs, num::NonZeroU32, path::Path, time::Duration};
+use std::{collections::HashMap, fs, io::prelude::*, num::NonZeroU32, path::Path, time::Duration};
 use tokio::time::sleep;
 use unftp_core::auth::{AuthenticationError, Authenticator, Principal};
 use valid::{Validate, constraint::Length};

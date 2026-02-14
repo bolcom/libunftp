@@ -4,10 +4,7 @@
 pub mod anonymous;
 pub use anonymous::AnonymousAuthenticator;
 
-pub use unftp_core::auth::{
-    AuthenticationError, Authenticator, ChannelEncryptionState, ClientCert, Credentials, DefaultUser, DefaultUserDetailProvider, Principal, UserDetail,
-    UserDetailError, UserDetailProvider,
-};
+pub(crate) use unftp_core::auth::UserDetail;
 
 mod pipeline;
 pub(crate) use pipeline::AuthenticationPipeline;
