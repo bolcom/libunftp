@@ -207,7 +207,7 @@ cfg_if! {
                     let mut data = [0u8; 2];
                     getrandom::fill(&mut data).expect("Error generating random port");
                     let r16 = u16::from_ne_bytes(data);
-                    let p = passive_ports.start + r16 % (passive_ports.end - passive_ports.start);
+                    let p = passive_ports.start() + r16 % (passive_ports.end() + 1 - passive_ports.start());
                     let socket = TcpSocket::new_v4()?;
                     let addr = std::net::SocketAddr::new(local_addr, p);
                     match socket.cap_bind(&mut self.agent, addr) {
