@@ -78,7 +78,8 @@ where
                 Ok((tcp_stream, socket_addr)) = control_listener.accept() => {
                     slog::info!(self.logger, "Incoming control connection from {:?}", socket_addr);
                     let params: controlchan::LoopConfig<Storage,User> = (&self.options).into();
-                    let conn = SocketAddrPair { source: socket_addr, destination: self.bind_address };
+                    let destination = tcp_stream.local_addr().unwrap_or(self.bind_address);
+                    let conn = SocketAddrPair { source: socket_addr, destination };
                     let result = controlchan::spawn_loop::<Storage,User>(params, tcp_stream, Some(conn), Some(switchboard_msg_tx.clone()), self.shutdown_topic.subscribe().await, self.failed_logins.clone()).await;
                     if let Err(e) = result {
                         slog::warn!(self.logger, "Could not spawn control channel loop for connection: {:?}", e);
