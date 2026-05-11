@@ -166,13 +166,15 @@ where
 
     #[tracing_attributes::instrument]
     async fn exec_retr(self, path: String, start_pos: u64) {
-        let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx: Sender<ControlChanMsg> = self.control_msg_tx.clone();
         let mut output = Self::writer(self.socket, self.ftps_mode, "retr").await;
 
         let start_time = Instant::now();
-        let result = self.storage.get_into((*self.user).as_ref().unwrap(), path, start_pos, &mut output).await;
+        let result = self
+            .storage
+            .get_into((*self.user).as_ref().unwrap(), path.clone(), start_pos, &mut output)
+            .await;
 
         if let Err(err) = output.shutdown().await {
             match err.kind() {
@@ -192,7 +194,7 @@ where
                 slog::info!(
                     self.logger,
                     "Successful RETR {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
-                    &path_copy,
+                    &path,
                     HumanDuration(duration),
                     HumanBytes(bytes_copied),
                     TransferSpeed(bytes_copied as f64 / duration.as_secs_f64()),
@@ -207,7 +209,7 @@ where
                 if let Err(err) = tx
                     .send(ControlChanMsg::SentData {
                         bytes: bytes_copied,
-                        path: path_copy,
+                        path: path.to_string_lossy().to_string(),
                     })
                     .await
                 {
@@ -222,14 +224,14 @@ where
                         slog::warn!(
                             self.logger,
                             "Client halted RETR transfer (BrokenPipe). Certain FTP clients may do this to download file sections separately, in which case RESTarts may occur and will be logged at DEBUG level. Refer to your FTP client's documentation if this causes issues. Path {:?}; Duration {} (number of bytes copied unknown).",
-                            &path_copy,
+                            &path,
                             HumanDuration(duration)
                         );
                     } else {
                         slog::debug!(
                             self.logger,
                             "RETR transfer stopped by client (BrokenPipe). Remember, this could be standard for some FTP clients. Path {:?}; Duration {} (number of bytes copied unknown); start_pos {}",
-                            &path_copy,
+                            &path,
                             HumanDuration(duration),
                             start_pos
                         );
@@ -238,7 +240,7 @@ where
                     slog::warn!(
                         self.logger,
                         "Error during RETR {:?} transfer after {}: {:?}; start_pos={}",
-                        &path_copy,
+                        &path,
                         HumanDuration(duration),
                         err,
                         start_pos
@@ -259,7 +261,6 @@ where
 
     #[tracing_attributes::instrument]
     async fn exec_stor(self, path: String, start_pos: u64) {
-        let path_copy = path.clone();
         let path = self.cwd.join(path);
         let tx = self.control_msg_tx.clone();
 
@@ -269,7 +270,7 @@ where
             .put(
                 (*self.user).as_ref().unwrap(),
                 Self::reader(self.socket, self.ftps_mode, "stor").await,
-                path,
+                path.clone(),
                 start_pos,
             )
             .await;
@@ -280,7 +281,7 @@ where
                 slog::info!(
                     self.logger,
                     "Successful STOR {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
-                    &path_copy,
+                    &path,
                     HumanDuration(duration),
                     HumanBytes(bytes),
                     TransferSpeed(bytes as f64 / duration.as_secs_f64()),
@@ -292,7 +293,13 @@ where
                     metrics::inc_transferred("stor", "success");
                 }
 
-                if let Err(err) = tx.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
+                if let Err(err) = tx
+                    .send(ControlChanMsg::WrittenData {
+                        bytes,
+                        path: path.to_string_lossy().to_string(),
+                    })
+                    .await
+                {
                     slog::error!(self.logger, "Could not notify control channel of successful STOR: {:?}", err);
                 }
             }
@@ -313,12 +320,11 @@ where
 
     #[tracing_attributes::instrument]
     async fn exec_appe(self, path: String) {
-        let path_copy = path.clone();
-        let full_path = self.cwd.join(&path);
+        let path = self.cwd.join(&path);
         let tx = self.control_msg_tx.clone();
 
         // Get current file size, or 0 if file doesn't exist
-        let start_pos = match self.storage.metadata((*self.user).as_ref().unwrap(), &full_path).await {
+        let start_pos = match self.storage.metadata((*self.user).as_ref().unwrap(), &path).await {
             Ok(meta) => meta.len(),
             Err(_) => 0,
         };
@@ -329,7 +335,7 @@ where
             .put(
                 (*self.user).as_ref().unwrap(),
                 Self::reader(self.socket, self.ftps_mode, "appe").await,
-                full_path,
+                path.clone(),
                 start_pos,
             )
             .await;
@@ -340,7 +346,7 @@ where
                 slog::info!(
                     self.logger,
                     "Successful APPE {:?}; Duration {}; Bytes copied {}; Transfer speed {}; start_pos={}",
-                    &path_copy,
+                    &path,
                     HumanDuration(duration),
                     HumanBytes(bytes),
                     TransferSpeed(bytes as f64 / duration.as_secs_f64()),
@@ -349,7 +355,13 @@ where
 
                 metrics::inc_transferred("appe", "success");
 
-                if let Err(err) = tx.send(ControlChanMsg::WrittenData { bytes, path: path_copy }).await {
+                if let Err(err) = tx
+                    .send(ControlChanMsg::WrittenData {
+                        bytes,
+                        path: path.to_string_lossy().to_string(),
+                    })
+                    .await
+                {
                     slog::error!(self.logger, "Could not notify control channel of successful APPE: {:?}", err);
                 }
             }
