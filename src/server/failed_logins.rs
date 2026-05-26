@@ -122,12 +122,9 @@ impl FailedLoginsCache {
         let key = self.getkey(ip, user);
         let entry = map.get(&key);
         // if there's an existing entry, we need to check if allowed to log in
-        let (is_expired, is_locked) = if let Some(entry) = entry {
-            let entry = entry.lock().await;
+        let (is_expired, is_locked) = {
+            let entry = entry?.lock().await;
             (self.is_expired(entry.time_elapsed()), self.is_locked(entry.attempts))
-        } else {
-            // there is no entry, nothing to administrate
-            return None;
         };
 
         drop(map);
