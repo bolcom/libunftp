@@ -8,7 +8,7 @@ pub mod options;
 use super::{
     controlchan,
     failed_logins::FailedLoginsCache,
-    ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteMd5},
+    ftpserver::{error::ServerError, error::ShutdownError, options::FtpsRequired, options::SiteCommandHandler, options::SiteMd5},
     shutdown,
     tls::FtpsConfig,
 };
@@ -23,7 +23,9 @@ use options::{DEFAULT_GREETING, DEFAULT_IDLE_SESSION_TIMEOUT_SECS, PassiveHost};
 #[cfg(feature = "experimental")]
 use rustls::ServerConfig;
 use slog::*;
-use std::{ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::RangeInclusive, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, ffi::OsString, fmt::Debug, future::Future, net::SocketAddr, ops::RangeInclusive, path::PathBuf, pin::Pin, sync::Arc, time::Duration,
+};
 use unftp_core::auth::{Authenticator, DefaultUser, DefaultUserDetailProvider, UserDetail, UserDetailProvider};
 use unftp_core::storage::{Metadata, StorageBackend};
 
@@ -72,6 +74,7 @@ where
     listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
+    site_handlers: Arc<HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>>,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
     failed_logins_policy: Option<FailedLoginsPolicy>,
     active_passive_mode: ActivePassiveMode,
@@ -105,6 +108,7 @@ where
     listener_mode: ListenerMode,
     logger: slog::Logger,
     site_md5: SiteMd5,
+    site_handlers: HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
     failed_logins_policy: Option<FailedLoginsPolicy>,
     active_passive_mode: ActivePassiveMode,
@@ -154,6 +158,7 @@ where
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
+            site_handlers: HashMap::new(),
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
             active_passive_mode: ActivePassiveMode::default(),
@@ -173,6 +178,16 @@ where
     /// This method changes the `User` type parameter of the `ServerBuilder` to match the
     /// `User` type provided by the `UserDetailProvider`. This allows the builder to work with
     /// the specific user type throughout the server configuration.
+    ///
+    /// Because [`SiteCommandHandler`](options::SiteCommandHandler) is generic over `User`, this
+    /// method cannot carry over handlers registered earlier via
+    /// [`site_command`](ServerBuilder::site_command). Call `site_command` after this method
+    /// instead; calling it before will panic.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any [`site_command`](ServerBuilder::site_command) handlers have already been
+    /// registered with this builder.
     ///
     /// # Example
     ///
@@ -197,6 +212,10 @@ where
         P: UserDetailProvider<User = U> + Send + Sync + 'static,
         Storage: StorageBackend<U>,
     {
+        assert!(
+            self.site_handlers.is_empty(),
+            "user_detail_provider() must be called before any site_command() registrations, since it discards handlers registered for the previous User type"
+        );
         ServerBuilder {
             storage: self.storage,
             greeting: self.greeting,
@@ -217,6 +236,7 @@ where
             listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
+            site_handlers: HashMap::new(),
             shutdown: self.shutdown,
             failed_logins_policy: self.failed_logins_policy,
             active_passive_mode: self.active_passive_mode,
@@ -273,6 +293,7 @@ where
             ftps_client_auth: FtpsClientAuth::default(),
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
+            site_handlers: HashMap::new(),
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
             active_passive_mode: ActivePassiveMode::default(),
@@ -351,6 +372,7 @@ where
             listener_mode: self.listener_mode,
             logger: self.logger,
             site_md5: self.site_md5,
+            site_handlers: Arc::new(self.site_handlers),
             shutdown: self.shutdown,
             failed_logins_policy: self.failed_logins_policy,
             active_passive_mode: self.active_passive_mode,
@@ -750,6 +772,55 @@ where
         self
     }
 
+    /// Register a handler for a custom `SITE` subcommand.
+    ///
+    /// Clients send `SITE <NAME> [arguments]` and the server will call `handler.handle()` with a
+    /// [`SiteCommandContext`](options::SiteCommandContext) containing the arguments, the current
+    /// username, and access to the storage back-end. The `name` is case-insensitive; it is
+    /// normalised to uppercase internally.
+    ///
+    /// The built-in `SITE MD5` subcommand is unaffected by this method — registering a handler
+    /// named `"MD5"` has no effect because the parser routes `SITE MD5` to the built-in handler
+    /// before consulting the custom handler map.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use async_trait::async_trait;
+    /// use libunftp::ServerBuilder;
+    /// use libunftp::options::{Reply, ReplyCode, SiteCommandContext, SiteCommandHandler};
+    /// use unftp_core::auth::UserDetail;
+    /// use unftp_core::storage::{Metadata, StorageBackend};
+    /// use unftp_sbe_fs::Filesystem;
+    ///
+    /// #[derive(Debug)]
+    /// struct EchoHandler;
+    ///
+    /// #[async_trait]
+    /// impl<Storage, User> SiteCommandHandler<Storage, User> for EchoHandler
+    /// where
+    ///     Storage: StorageBackend<User> + 'static,
+    ///     Storage::Metadata: Metadata,
+    ///     User: UserDetail + 'static,
+    /// {
+    ///     async fn handle(&self, ctx: &SiteCommandContext<Storage, User>) -> Reply {
+    ///         Reply::new(ReplyCode::CommandOkay, &ctx.arguments)
+    ///     }
+    /// }
+    ///
+    /// let server = ServerBuilder::new(Box::new(|| Filesystem::new("/tmp").unwrap()))
+    ///     .site_command("ECHO", EchoHandler)
+    ///     .build();
+    /// ```
+    pub fn site_command<N, H>(mut self, name: N, handler: H) -> Self
+    where
+        N: Into<String>,
+        H: SiteCommandHandler<Storage, User> + 'static,
+    {
+        self.site_handlers.insert(name.into().to_uppercase(), Arc::new(handler));
+        self
+    }
+
     /// Assign a connection helper to the server.
     ///
     /// Rather than listening for and servicing connections in the same binary, this option allows
@@ -977,6 +1048,7 @@ where
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
             site_md5: server.site_md5,
+            site_handlers: server.site_handlers.clone(),
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,

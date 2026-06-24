@@ -257,6 +257,7 @@ mod tests {
                 tx_prebound_loop: None,
                 logger: slog::Logger::root(slog::Discard {}, o!()),
                 sitemd5: Default::default(),
+                site_handlers: Default::default(),
             }
         }
     }

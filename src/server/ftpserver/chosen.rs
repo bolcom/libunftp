@@ -4,10 +4,11 @@ use crate::notification::{DataListener, PresenceListener};
 use crate::options::ActivePassiveMode;
 use crate::{
     auth::AuthenticationPipeline,
-    options::{FtpsRequired, PassiveHost, SiteMd5},
+    options::{FtpsRequired, PassiveHost, SiteCommandHandler, SiteMd5},
     server::controlchan,
     server::tls::FtpsConfig,
 };
+use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::{sync::Arc, time::Duration};
 use unftp_core::auth::{Authenticator, UserDetail, UserDetailProvider};
@@ -32,6 +33,7 @@ where
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
     pub site_md5: SiteMd5,
+    pub site_handlers: Arc<HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>>,
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
@@ -63,6 +65,7 @@ where
             ftps_required_control_chan: server.ftps_required_control_chan,
             ftps_required_data_chan: server.ftps_required_data_chan,
             site_md5: server.site_md5,
+            site_handlers: server.site_handlers.clone(),
             data_listener: server.data_listener.clone(),
             presence_listener: server.presence_listener.clone(),
             active_passive_mode: server.active_passive_mode,

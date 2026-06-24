@@ -23,7 +23,7 @@ use crate::{
             notify::EventDispatcherMiddleware,
         },
         failed_logins::FailedLoginsCache,
-        ftpserver::options::{FtpsRequired, PassiveHost, SiteMd5},
+        ftpserver::options::{FtpsRequired, PassiveHost, SiteCommandHandler, SiteMd5},
         session::SharedSession,
         shutdown,
         tls::FtpsConfig,
@@ -33,7 +33,7 @@ use crate::{
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
 use rustls::ServerConnection;
-use std::{net::SocketAddr, ops::RangeInclusive, sync::Arc, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -67,6 +67,7 @@ where
     pub ftps_required_control_chan: FtpsRequired,
     pub ftps_required_data_chan: FtpsRequired,
     pub site_md5: SiteMd5,
+    pub site_handlers: Arc<HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>>,
     pub data_listener: Arc<dyn DataListener>,
     pub presence_listener: Arc<dyn PresenceListener>,
     pub active_passive_mode: ActivePassiveMode,
@@ -100,6 +101,7 @@ where
         idle_session_timeout,
         logger,
         site_md5: sitemd5,
+        site_handlers,
         data_listener,
         presence_listener,
         active_passive_mode,
@@ -139,6 +141,7 @@ where
         storage_features,
         tx_proxy_loop: switchboard_msg_tx.clone(),
         sitemd5,
+        site_handlers,
     };
 
     let event_chain = EventDispatcherMiddleware::new(data_listener, presence_listener, event_chain);
@@ -337,6 +340,7 @@ where
     storage_features: u32,
     tx_proxy_loop: Option<SwitchboardSender<Storage, User>>,
     sitemd5: SiteMd5,
+    site_handlers: Arc<HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>>,
 }
 
 impl<Storage, User> PrimaryEventHandler<Storage, User>
@@ -428,6 +432,7 @@ where
             tx_prebound_loop: self.tx_proxy_loop.clone(),
             logger: self.logger.clone(),
             sitemd5: self.sitemd5,
+            site_handlers: self.site_handlers.clone(),
         };
 
         let handler: Box<dyn CommandHandler<Storage, User>> = match cmd {
@@ -473,6 +478,7 @@ where
             Command::Mlst { path } => Box::new(commands::Mlst::new(path)),
             Command::Mlsd { .. } => Box::new(commands::Mlsd),
             Command::Appe { .. } => Box::new(commands::Appe),
+            Command::Site { command, arguments } => Box::new(commands::Site::new(command, arguments)),
             Command::Other { .. } => return Ok(Reply::new(ReplyCode::CommandSyntaxError, "Command not implemented")),
         };
 

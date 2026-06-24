@@ -1,8 +1,12 @@
 //! Contains code pertaining to the setup options that can be given to the [`ServerBuilder`](crate::ServerBuilder)
 
+use crate::auth::UserDetail;
+pub use crate::server::controlchan::reply::{Reply, ReplyCode};
+use crate::storage::{Metadata, StorageBackend};
 use async_trait::async_trait;
 use bitflags::bitflags;
 use std::ops::RangeInclusive;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{
     fmt::Formatter,
@@ -170,6 +174,88 @@ pub enum SiteMd5 {
     Accounts,
     /// Disabled
     None, // would be nice to have a per-user setting also.
+}
+
+/// Context passed to a custom [`SiteCommandHandler`].
+pub struct SiteCommandContext<Storage, User>
+where
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
+{
+    /// The SITE subcommand name, normalised to uppercase, e.g. for `SITE FOO bar baz` this is `"FOO"`.
+    pub command: String,
+    /// The arguments provided after the SITE subcommand name, e.g. for `SITE FOO bar baz` this
+    /// will be `"bar baz"`.
+    pub arguments: String,
+    /// The username of the currently authenticated user, or `None` if the session is not yet
+    /// logged in.
+    pub username: Option<String>,
+    /// The storage back-end instance for the session.
+    pub storage: Arc<Storage>,
+    /// The user detail of the currently authenticated user, or `None` if the session is not yet
+    /// logged in.
+    pub user: Arc<Option<User>>,
+    /// Bitflags describing which optional storage features are enabled (see [`crate::storage`]).
+    pub storage_features: u32,
+    /// The logger associated with the session.
+    pub logger: slog::Logger,
+}
+
+impl<Storage, User> std::fmt::Debug for SiteCommandContext<Storage, User>
+where
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SiteCommandContext")
+            .field("command", &self.command)
+            .field("arguments", &self.arguments)
+            .field("username", &self.username)
+            .field("storage_features", &self.storage_features)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Handler for a custom `SITE` subcommand registered via
+/// [`ServerBuilder::site_command`](crate::ServerBuilder::site_command).
+///
+/// Implement this trait to handle a custom `SITE` subcommand. The handler receives a
+/// [`SiteCommandContext`] and must return a [`Reply`].
+///
+/// # Example
+///
+/// ```rust
+/// use async_trait::async_trait;
+/// use libunftp::options::{Reply, ReplyCode, SiteCommandContext, SiteCommandHandler};
+/// use unftp_core::auth::UserDetail;
+/// use unftp_core::storage::{Metadata, StorageBackend};
+///
+/// #[derive(Debug)]
+/// struct EchoHandler;
+///
+/// #[async_trait]
+/// impl<Storage, User> SiteCommandHandler<Storage, User> for EchoHandler
+/// where
+///     Storage: StorageBackend<User> + 'static,
+///     Storage::Metadata: Metadata,
+///     User: UserDetail + 'static,
+/// {
+///     async fn handle(&self, ctx: &SiteCommandContext<Storage, User>) -> Reply {
+///         Reply::new(ReplyCode::CommandOkay, &ctx.arguments)
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait SiteCommandHandler<Storage, User>: Send + Sync + std::fmt::Debug
+where
+    Storage: StorageBackend<User> + 'static,
+    Storage::Metadata: Metadata,
+    User: UserDetail + 'static,
+{
+    /// Called when the client issues the `SITE <NAME> [arguments]` command.
+    async fn handle(&self, context: &SiteCommandContext<Storage, User>) -> Reply;
 }
 
 /// Tells how graceful shutdown should happen. An instance of this struct should be returned from

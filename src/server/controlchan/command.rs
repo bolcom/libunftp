@@ -136,6 +136,15 @@ pub enum Command {
     Md5 {
         file: PathBuf,
     },
+    /// A SITE subcommand that is not built-in (i.e. not SITE MD5). When a developer registers a
+    /// handler via [`ServerBuilder::site_command`](crate::ServerBuilder::site_command) the
+    /// `command` field will match the registered name.
+    Site {
+        /// The SITE subcommand name, normalised to uppercase.
+        command: String,
+        /// The raw arguments following the subcommand name.
+        arguments: String,
+    },
     Other {
         command_name: String,
         arguments: String,

@@ -4,13 +4,13 @@ use crate::{
         ControlChanMsg,
         chancomms::SwitchboardSender,
         controlchan::{Reply, command::Command, error::ControlChanError},
-        ftpserver::options::{PassiveHost, SiteMd5},
+        ftpserver::options::{PassiveHost, SiteCommandHandler, SiteMd5},
         session::SharedSession,
     },
     storage::{Metadata, StorageBackend},
 };
 use async_trait::async_trait;
-use std::{ops::RangeInclusive, sync::Arc};
+use std::{collections::HashMap, ops::RangeInclusive, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
 // Common interface for all handlers of `Commands`
@@ -44,4 +44,5 @@ where
     pub tx_prebound_loop: Option<SwitchboardSender<Storage, User>>,
     pub logger: slog::Logger,
     pub sitemd5: SiteMd5,
+    pub site_handlers: Arc<HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>>,
 }
