@@ -371,8 +371,8 @@ where
                 }
                 _ => {
                     let params = parse_to_eol(cmd_params)?;
-                    Command::Other {
-                        command_name: cmd_token,
+                    Command::Site {
+                        command: cmd_token,
                         arguments: String::from_utf8_lossy(&params).to_string(),
                     }
                 }

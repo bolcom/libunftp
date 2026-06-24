@@ -583,15 +583,15 @@ fn parse_site() {
     let tests = [
         Test {
             input: "SITE\r\n",
-            expected: Ok(Command::Other {
-                command_name: "".to_string(),
+            expected: Ok(Command::Site {
+                command: "".to_string(),
                 arguments: "".to_string(),
             }),
         },
         Test {
             input: "SITE \r\n",
-            expected: Ok(Command::Other {
-                command_name: "".to_string(),
+            expected: Ok(Command::Site {
+                command: "".to_string(),
                 arguments: "".to_string(),
             }),
         },
