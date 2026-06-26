@@ -32,7 +32,7 @@ impl Site {
             let session = context.session.lock().await;
             (session.username.clone(), session.storage.clone(), session.user.clone())
         };
-        let site_context = SiteCommandContext {
+        SiteCommandContext {
             command: self.command.clone(),
             arguments: self.arguments.clone(),
             username,
@@ -40,8 +40,7 @@ impl Site {
             user,
             storage_features: context.storage_features,
             logger: context.logger.clone(),
-        };
-        site_context
+        }
     }
 }
 

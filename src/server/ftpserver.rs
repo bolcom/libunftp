@@ -779,9 +779,8 @@ where
     /// username, and access to the storage back-end. The `name` is case-insensitive; it is
     /// normalised to uppercase internally.
     ///
-    /// The built-in `SITE MD5` subcommand is unaffected by this method — registering a handler
-    /// named `"MD5"` has no effect because the parser routes `SITE MD5` to the built-in handler
-    /// before consulting the custom handler map.
+    /// Subcommands cannot be registered more than once. This includes the the built-in `SITE MD5`
+    /// subcommand. Attempting to register a site subcommand more than once will throw a panic.
     ///
     /// # Example
     ///
@@ -817,7 +816,11 @@ where
         N: Into<String>,
         H: SiteCommandHandler<Storage, User> + 'static,
     {
-        self.site_handlers.insert(name.into().to_uppercase(), Arc::new(handler));
+        let key = name.into().to_ascii_uppercase();
+        if self.site_handlers.contains_key(&key) || key == "MD5" {
+            panic!("Cannot register site command {} more than once", key);
+        }
+        self.site_handlers.insert(key, Arc::new(handler));
         self
     }
 
@@ -1128,5 +1131,56 @@ impl From<u16> for ListenerMode {
         ListenerMode::ProxyProtocol {
             external_control_port: Some(port),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::options::{Reply, ReplyCode, SiteCommandContext};
+    use async_trait::async_trait;
+    use unftp_sbe_fs::Filesystem;
+
+    #[derive(Debug)]
+    struct NoopHandler;
+
+    #[async_trait]
+    impl<Storage, User> SiteCommandHandler<Storage, User> for NoopHandler
+    where
+        Storage: StorageBackend<User> + 'static,
+        Storage::Metadata: Metadata,
+        User: UserDetail + 'static,
+    {
+        async fn handle(&self, ctx: &SiteCommandContext<Storage, User>) -> Reply {
+            Reply::new(ReplyCode::CommandOkay, &ctx.arguments)
+        }
+    }
+
+    fn builder() -> ServerBuilder<Filesystem, DefaultUser> {
+        ServerBuilder::new(Box::new(|| Filesystem::new(std::env::temp_dir()).unwrap()))
+    }
+
+    #[test]
+    fn site_command_registers_distinct_names() {
+        // Should not panic.
+        let _ = builder().site_command("ECHO", NoopHandler).site_command("PING", NoopHandler);
+    }
+
+    #[test]
+    #[should_panic(expected = "ECHO")]
+    fn site_command_panics_on_duplicate_registration() {
+        let _ = builder().site_command("ECHO", NoopHandler).site_command("ECHO", NoopHandler);
+    }
+
+    #[test]
+    #[should_panic(expected = "ECHO")]
+    fn site_command_duplicate_detection_is_case_insensitive() {
+        let _ = builder().site_command("echo", NoopHandler).site_command("ECHO", NoopHandler);
+    }
+
+    #[test]
+    #[should_panic(expected = "MD5")]
+    fn site_command_panics_when_registering_md5() {
+        let _ = builder().site_command("md5", NoopHandler);
     }
 }
