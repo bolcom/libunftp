@@ -62,7 +62,7 @@ impl Encoder<Reply> for FtpCodec {
 
                 // Lines starting with a digit should be indented
                 for it in lines.iter_mut() {
-                    if it.chars().next().unwrap().is_ascii_digit() {
+                    if it.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                         it.insert(0, ' ');
                     }
                 }
@@ -75,5 +75,25 @@ impl Encoder<Reply> for FtpCodec {
         }
         buf.extend(&buffer);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::ReplyCode;
+
+    #[test]
+    fn encode_multiline_reply_with_blank_line_does_not_panic() {
+        let mut codec = FtpCodec::new();
+        let mut buf = BytesMut::new();
+        let reply = Reply::new_multiline(ReplyCode::HelpMessage, vec![
+            "Usage: foo", 
+            "", 
+            "Options:"]);
+
+        codec.encode(reply, &mut buf).unwrap();
+
+        assert_eq!(buf, "214-Usage: foo\r\n\r\n214 Options:\r\n".as_bytes());
     }
 }
