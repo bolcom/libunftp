@@ -176,7 +176,8 @@ pub enum SiteMd5 {
     None, // would be nice to have a per-user setting also.
 }
 
-/// Context passed to a custom [`SiteCommandHandler`].
+/// Context passed to a custom [`SiteCommandHandler`]. Custom SITE commands are dispatched only
+/// after the client has authenticated successfully.
 pub struct SiteCommandContext<Storage, User>
 where
     Storage: StorageBackend<User> + 'static,
@@ -188,16 +189,12 @@ where
     /// The arguments provided after the SITE subcommand name, e.g. for `SITE FOO bar baz` this
     /// will be `"bar baz"`.
     pub arguments: String,
-    /// The username of the currently authenticated user, or `None` if the session is not yet
-    /// logged in.
+    /// The username of the authenticated user.
     pub username: Option<String>,
     /// The storage back-end instance for the session.
     pub storage: Arc<Storage>,
-    /// The user detail of the currently authenticated user, or `None` if the session is not yet
-    /// logged in.
+    /// The authenticated user's details.
     pub user: Arc<Option<User>>,
-    /// Bitflags describing which optional storage features are enabled (see [`crate::storage`]).
-    pub storage_features: u32,
     /// The logger associated with the session.
     pub logger: slog::Logger,
 }
@@ -213,7 +210,6 @@ where
             .field("command", &self.command)
             .field("arguments", &self.arguments)
             .field("username", &self.username)
-            .field("storage_features", &self.storage_features)
             .finish_non_exhaustive()
     }
 }

@@ -109,6 +109,7 @@ where
     logger: slog::Logger,
     site_md5: SiteMd5,
     site_handlers: HashMap<String, Arc<dyn SiteCommandHandler<Storage, User>>>,
+    configuration_error: Option<String>,
     shutdown: Pin<Box<dyn Future<Output = options::Shutdown> + Send + Sync>>,
     failed_logins_policy: Option<FailedLoginsPolicy>,
     active_passive_mode: ActivePassiveMode,
@@ -159,6 +160,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             site_handlers: HashMap::new(),
+            configuration_error: None,
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
             active_passive_mode: ActivePassiveMode::default(),
@@ -181,13 +183,8 @@ where
     ///
     /// Because [`SiteCommandHandler`](options::SiteCommandHandler) is generic over `User`, this
     /// method cannot carry over handlers registered earlier via
-    /// [`site_command`](ServerBuilder::site_command). Call `site_command` after this method
-    /// instead; calling it before will panic.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any [`site_command`](ServerBuilder::site_command) handlers have already been
-    /// registered with this builder.
+    /// [`site_command`](ServerBuilder::site_command). Call `site_command` after this method.
+    /// Calling it before records a configuration error that is returned by [`build`](Self::build).
     ///
     /// # Example
     ///
@@ -212,10 +209,11 @@ where
         P: UserDetailProvider<User = U> + Send + Sync + 'static,
         Storage: StorageBackend<U>,
     {
-        assert!(
-            self.site_handlers.is_empty(),
-            "user_detail_provider() must be called before any site_command() registrations, since it discards handlers registered for the previous User type"
-        );
+        let configuration_error = if !self.site_handlers.is_empty() && self.configuration_error.is_none() {
+            Some("user_detail_provider() must be called before any site_command() registrations".to_string())
+        } else {
+            self.configuration_error
+        };
         ServerBuilder {
             storage: self.storage,
             greeting: self.greeting,
@@ -237,6 +235,7 @@ where
             logger: self.logger,
             site_md5: self.site_md5,
             site_handlers: HashMap::new(),
+            configuration_error,
             shutdown: self.shutdown,
             failed_logins_policy: self.failed_logins_policy,
             active_passive_mode: self.active_passive_mode,
@@ -294,6 +293,7 @@ where
             ftps_trust_store: options::DEFAULT_FTPS_TRUST_STORE.into(),
             site_md5: SiteMd5::default(),
             site_handlers: HashMap::new(),
+            configuration_error: None,
             shutdown: Box::pin(futures_util::future::pending()),
             failed_logins_policy: None,
             active_passive_mode: ActivePassiveMode::default(),
@@ -347,6 +347,9 @@ where
 
     /// Finalize the options and build a [`Server`].
     pub fn build(self) -> std::result::Result<Server<Storage, User>, ServerError> {
+        if let Some(error) = self.configuration_error {
+            return Err(ServerError::configuration(error));
+        }
         let ftps_mode = match self.ftps_mode {
             FtpsConfig::Off => FtpsConfig::Off,
             FtpsConfig::Building { certs_file, key_file } => FtpsConfig::On {
@@ -779,8 +782,9 @@ where
     /// username, and access to the storage back-end. The `name` is case-insensitive; it is
     /// normalised to uppercase internally.
     ///
-    /// Subcommands cannot be registered more than once. This includes the the built-in `SITE MD5`
-    /// subcommand. Attempting to register a site subcommand more than once will throw a panic.
+    /// Names must contain only ASCII letters, digits, `-`, or `_`. Subcommands cannot be
+    /// registered more than once, and the built-in `SITE MD5` cannot be replaced. Invalid or
+    /// duplicate registrations are reported by [`build`](Self::build).
     ///
     /// # Example
     ///
@@ -817,10 +821,24 @@ where
         H: SiteCommandHandler<Storage, User> + 'static,
     {
         let key = name.into().to_ascii_uppercase();
-        if self.site_handlers.contains_key(&key) || key == "MD5" {
-            panic!("Cannot register site command {} more than once", key);
+        let valid = !key.is_empty() && key.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+        if !valid {
+            self.configuration_error.get_or_insert_with(|| format!("Invalid SITE command name: {key:?}"));
+        } else if key == "MD5" {
+            self.configuration_error
+                .get_or_insert_with(|| "Cannot replace built-in SITE command MD5".to_string());
+        } else {
+            match self.site_handlers.entry(key) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    let key = entry.key();
+                    self.configuration_error
+                        .get_or_insert_with(|| format!("Cannot register SITE command {key} more than once"));
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(Arc::new(handler));
+                }
+            }
         }
-        self.site_handlers.insert(key, Arc::new(handler));
         self
     }
 
@@ -1162,25 +1180,46 @@ mod tests {
 
     #[test]
     fn site_command_registers_distinct_names() {
-        // Should not panic.
-        let _ = builder().site_command("ECHO", NoopHandler).site_command("PING", NoopHandler);
+        let result = builder().site_command("ECHO", NoopHandler).site_command("PING", NoopHandler).build();
+        assert!(result.is_ok());
     }
 
     #[test]
-    #[should_panic(expected = "ECHO")]
-    fn site_command_panics_on_duplicate_registration() {
-        let _ = builder().site_command("ECHO", NoopHandler).site_command("ECHO", NoopHandler);
+    fn site_command_rejects_duplicate_registration_at_build() {
+        let result = builder().site_command("ECHO", NoopHandler).site_command("ECHO", NoopHandler).build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("ECHO"));
     }
 
     #[test]
-    #[should_panic(expected = "ECHO")]
     fn site_command_duplicate_detection_is_case_insensitive() {
-        let _ = builder().site_command("echo", NoopHandler).site_command("ECHO", NoopHandler);
+        let result = builder().site_command("echo", NoopHandler).site_command("ECHO", NoopHandler).build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("ECHO"));
     }
 
     #[test]
-    #[should_panic(expected = "MD5")]
-    fn site_command_panics_when_registering_md5() {
-        let _ = builder().site_command("md5", NoopHandler);
+    fn site_command_rejects_md5_at_build() {
+        let result = builder().site_command("md5", NoopHandler).build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("MD5"));
+    }
+
+    #[test]
+    fn site_command_rejects_invalid_names_at_build() {
+        for name in ["", "TWO WORDS", "NONASCIIé", "LINE\rBREAK"] {
+            let result = builder().site_command(name, NoopHandler).build();
+            assert!(result.is_err(), "SITE command name {name:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn site_command_must_follow_user_detail_provider() {
+        let result = builder()
+            .site_command("ECHO", NoopHandler)
+            .user_detail_provider(Arc::new(DefaultUserDetailProvider))
+            .build();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("user_detail_provider"));
     }
 }

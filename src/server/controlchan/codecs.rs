@@ -80,17 +80,14 @@ impl Encoder<Reply> for FtpCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ReplyCode;
+    use super::*;
 
     #[test]
     fn encode_multiline_reply_with_blank_line_does_not_panic() {
         let mut codec = FtpCodec::new();
         let mut buf = BytesMut::new();
-        let reply = Reply::new_multiline(ReplyCode::HelpMessage, vec![
-            "Usage: foo", 
-            "", 
-            "Options:"]);
+        let reply = Reply::new_multiline(ReplyCode::HelpMessage, vec!["Usage: foo", "", "Options:"]);
 
         codec.encode(reply, &mut buf).unwrap();
 

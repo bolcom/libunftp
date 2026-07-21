@@ -21,6 +21,17 @@ impl ServerError {
             source: Box::new(source),
         }
     }
+
+    pub(super) fn configuration(msg: impl Into<String>) -> ServerError {
+        let msg = msg.into();
+        ServerError::new(msg.clone(), ConfigurationError { msg })
+    }
+}
+
+#[derive(Error, Debug)]
+#[error("{msg}")]
+struct ConfigurationError {
+    msg: String,
 }
 
 impl From<AddrParseError> for ServerError {

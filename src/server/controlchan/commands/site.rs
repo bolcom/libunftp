@@ -38,7 +38,6 @@ impl Site {
             username,
             storage,
             user,
-            storage_features: context.storage_features,
             logger: context.logger.clone(),
         }
     }
