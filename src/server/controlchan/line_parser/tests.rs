@@ -233,6 +233,34 @@ fn parse_list() {
             input: "LIST -la -x tmp*\r\n",
             expected_path: Some("tmp*"),
         },
+        Test {
+            input: "LIST test with space\r\n",
+            expected_path: Some("test with space"),
+        },
+        Test {
+            input: "LIST -la test with space\r\n",
+            expected_path: Some("test with space"),
+        },
+        Test {
+            input: "LIST -la -x test with space/sub folder*\r\n",
+            expected_path: Some("test with space/sub folder*"),
+        },
+        Test {
+            input: "LIST -- -folder with leading dash\r\n",
+            expected_path: Some("-folder with leading dash"),
+        },
+        Test {
+            input: "LIST -la -- folder with space\r\n",
+            expected_path: Some("folder with space"),
+        },
+        Test {
+            input: "LIST --\r\n",
+            expected_path: None,
+        },
+        Test {
+            input: "LIST   \r\n",
+            expected_path: None,
+        },
     ];
 
     for test in tests.iter() {
