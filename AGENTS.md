@@ -2,6 +2,8 @@
 
 ## Repository overview
 
+The GitHub repository is [bolcom/libunftp](https://github.com/bolcom/libunftp).
+
 This repository is a Rust Cargo workspace for libunftp, an asynchronous and extensible FTP(S) server library.
 
 Workspace members:
@@ -290,9 +292,17 @@ Follow `RELEASE-CHECKLIST.md`.
 For a release:
 
 - Update the affected crate versions.
+- For pre-1.0 releases (`0.y.z` with `y > 0`), increment `z` for backwards-compatible
+  changes, including additive features; increment `y` for breaking changes. This follows Cargo's
+  compatibility convention rather than a strict requirement imposed by SemVer for pre-1.0 crates.
+  Review changes against the previous release tag before choosing the version, including public
+  APIs, protocol behavior, dependency requirements, and supported platforms/toolchains.
 - When releasing `unftp-core` APIs, update its version and affected dependants.
 - Search for old version strings, including `html_root_url` and documentation examples.
 - Update the relevant changelog entries.
+- When updating changelogs or release notes, look up the associated merged GitHub pull requests
+  (PRs/MRs) and link entries to them where available, following the existing `[#123](https://github.com/bolcom/libunftp/pull/123)` style.
+  Verify the association using GitHub metadata or commit history; do not invent PR numbers.
 - Run `make pr-prep`.
 - Use release commits naming the crate and version.
 - Tags use `{component}-{version}`, for example `libunftp-0.23.0`.

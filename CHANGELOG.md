@@ -1,5 +1,23 @@
 # Changelog
 
+### libunftp 0.23.1
+
+- [#571](https://github.com/bolcom/libunftp/pull/571) Add custom `SITE` subcommands through `ServerBuilder::site_command` and the public
+  `SiteCommandHandler`, `SiteCommandContext`, `Reply`, and `ReplyCode` types in `libunftp::options`.
+  Handlers run after authentication and receive the command arguments, user details, storage backend,
+  and session logger. The built-in `SITE MD5` remains available. Unknown `SITE` subcommands
+  now return `502` instead of `500`.
+- [#576](https://github.com/bolcom/libunftp/pull/576) Validate custom `SITE` registrations when building the server: reject invalid names, duplicate
+  names (case-insensitive), attempts to replace `MD5`, and registrations made before calling
+  `user_detail_provider`.
+- [#573](https://github.com/bolcom/libunftp/pull/573) Fix a panic when encoding multiline replies containing blank lines.
+- [#568](https://github.com/bolcom/libunftp/pull/568) Use the accepted control connection's local address in pooled listener mode, including when the
+  listener binds to a wildcard address.
+- Update dependencies, including [#567](https://github.com/bolcom/libunftp/pull/567) and
+  [#574](https://github.com/bolcom/libunftp/pull/574), and expand tests and documentation for custom
+  `SITE` commands ([#571](https://github.com/bolcom/libunftp/pull/571)).
+  Consumers pinning `async-trait` below 0.1.92 must update that pin to resolve dependencies.
+
 ### libunftp 0.23.0, unftp-auth-jsonfile v0.4.0, unftp-auth-pam v0.3.0, unftp-auth-rest v0.3.0, unftp-sbe-fs v0.4.0, unftp-sbe-gcs v0.3.0
 
 - **BREAKING**: Introduced `unftp-core` and moved backend-facing auth/storage traits and types there.
@@ -43,7 +61,7 @@
 - **BREAKING**: Removed the deprecated `Server::new` and `Server::with_authenticator` methods. The `ServerBuilder`
   struct should be used instead.
 
-### libunftp 0.22.0
+### libunftp 0.21.1
 
 - Compile against Rust 1.92.0 in CI
 - [#547](https://github.com/bolcom/libunftp/pull/547) Put metrics and proxy-protocol functionality behind features (

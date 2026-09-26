@@ -32,7 +32,7 @@ mime = "0.3.17"
 percent-encoding.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-time = "0.3.53"
+time = "0.3.55"
 tokio = { workspace = true, features = ["rt", "net", "sync", "io-util", "time", "fs"] }
 tokio-util = { workspace = true, features = ["codec", "compat"] }
 tracing.workspace = true
@@ -41,7 +41,7 @@ yup-oauth2 = { version = "12.1.2", default-features = false, features = ["hyper-
 
 [dev-dependencies]
 async_ftp = "6.0.0"
-clap = { version = "4.6.2", features = ["env"] }
+clap = { version = "4.6.7", features = ["env"] }
 libunftp.workspace = true
 lazy_static.workspace = true
 more-asserts = "0.3.1"
