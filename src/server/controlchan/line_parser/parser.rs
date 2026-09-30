@@ -124,11 +124,24 @@ where
         }
         "LIST" => {
             let line = parse_to_eol(cmd_params)?;
-            let path = line
-                .split(|&b| b == b' ')
-                .filter(|s| !line.is_empty() && !s.starts_with(b"-"))
-                .map(|s| String::from_utf8_lossy(s).to_string())
-                .next();
+            let line_str = String::from_utf8_lossy(&line);
+            let mut remaining = line_str.trim_start();
+            while remaining.starts_with('-') {
+                if remaining == "--" {
+                    remaining = "";
+                    break;
+                }
+                if let Some(rest) = remaining.strip_prefix("-- ") {
+                    remaining = rest.trim_start();
+                    break;
+                }
+                if let Some(pos) = remaining.find(' ') {
+                    remaining = remaining[pos..].trim_start();
+                } else {
+                    remaining = "";
+                }
+            }
+            let path = if remaining.is_empty() { None } else { Some(remaining.to_string()) };
             // Note that currently we just throw arguments away.
             Command::List { options: None, path }
         }

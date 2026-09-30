@@ -102,7 +102,7 @@ dashmap = "6.2.1"
 libunftp = { path = "." }
 pretty_assertions = "1.4.1"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs" }
+unftp-sbe-fs = { path = "crates/unftp-sbe-fs" }
 
 [lints]
 workspace = true
