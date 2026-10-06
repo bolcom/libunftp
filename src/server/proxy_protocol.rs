@@ -54,6 +54,13 @@ async fn read_proxy_header(tcp_stream: &mut tokio::net::TcpStream) -> Result<Pro
         // Peek at the next data in the stream and map the error to a `ProxyError`
         let n = tcp_stream.peek(&mut pbuf).await.map_err(ProxyError::ReadError)?;
 
+        // `peek` returns `Ok(0)` only at EOF. Without this check no newline is ever found and the
+        // zero-length `read` below also returns `Ok(0)`, so the loop would spin forever on a
+        // connection that is closed before its header is complete.
+        if n == 0 {
+            return Err(ProxyError::ReadError(std::io::ErrorKind::UnexpectedEof.into()));
+        }
+
         match pbuf.iter().position(|b| *b == b'\n') {
             // If a newline character is found, the proxy header should be complete
             Some(pos) => {
@@ -179,6 +186,34 @@ mod tests {
                 }
             }
         );
+    }
+
+    #[tokio::test]
+    async fn eof_before_header_returns_error() {
+        let (mut s, c) = get_connected_tcp_streams().await;
+        drop(c);
+
+        let res = tokio::time::timeout(Duration::from_secs(5), super::read_proxy_header(&mut s))
+            .await
+            .expect("read_proxy_header must return at EOF instead of spinning");
+
+        assert!(matches!(res, Err(ProxyError::ReadError(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof));
+    }
+
+    #[tokio::test]
+    async fn eof_after_partial_header_returns_error() {
+        let (mut s, mut c) = get_connected_tcp_streams().await;
+
+        let server = tokio::spawn(async move { tokio::time::timeout(Duration::from_secs(5), super::read_proxy_header(&mut s)).await });
+        let client = tokio::spawn(async move {
+            c.write_all("PROXY TCP4 127.0.0.1".as_ref()).await.unwrap();
+            c.shutdown().await.unwrap();
+        });
+
+        let res = tokio::join!(server, client);
+        let res = res.0.unwrap().expect("read_proxy_header must return at EOF instead of spinning");
+
+        assert!(matches!(res, Err(ProxyError::ReadError(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof));
     }
 
     #[tokio::test]
