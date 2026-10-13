@@ -15,6 +15,7 @@ we can ask that you prefix your crate names:
 
 - unftp-auth-* for authentication implementations
 - unftp-sbe-* for storage back-end implementations
+- unftp-site-* for `SITE` command implementations
 
 Keeping this naming convention will allow a consistent and easy way for people to find libunftp extentions on crates.io
 

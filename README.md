@@ -27,6 +27,8 @@ Feature highlights:
 * 42 Supported FTP commands (see [commands directory](./src/server/controlchan/commands)) and growing
 * Ability to implement own storage back-ends
 * Ability to implement own authentication back-ends
+* Ability to implement own `SITE` commands
+  (see [`ServerBuilder::site_command`](https://docs.rs/libunftp/latest/libunftp/struct.ServerBuilder.html#method.site_command))
 * Explicit FTPS (TLS)
 * Mutual TLS (Client certificates)
 * TLS session resumption
@@ -59,6 +61,11 @@ Known authentication back-ends:
 * [unftp-auth-pam](https://crates.io/crates/unftp-auth-pam) - Authenticates
   via [PAM](https://en.wikipedia.org/wiki/Linux_PAM).
 * [unftp-auth-rest](https://crates.io/crates/unftp-auth-rest) - Consumes an HTTP API to authenticate.
+
+Known `SITE` command extensions:
+
+* [unftp-site-hash](https://crates.io/crates/unftp-site-hash) - Adds a `SITE HASH` command, supporting SHA-256, SHA-1,
+  MD5 and CRC32 file hashing.
 
 ## Cryptographic Providers
 
