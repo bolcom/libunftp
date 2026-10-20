@@ -104,9 +104,10 @@ where
     let reply = cmd.build_reply(&args, port).await?;
     if reply.is_positive() {
         setup_inter_loop_comms(args.session.clone(), args.tx_control_chan.clone()).await;
+        let session = args.session.clone();
         // Open the data connection in a new task and process it.
         // We cannot await this since we first need to let the client know where to connect :-)
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
             let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
             match r {
@@ -115,6 +116,11 @@ where
                 Err(_) => slog::warn!(args.logger, "Client did not connect to data port in time"),
             }
         });
+        // A session has one passive port at a time: asking for another closes the one that was waiting, instead of leaving it open
+        // until its timeout.
+        if let Some(earlier) = session.lock().await.passive_task.replace(task.abort_handle()) {
+            earlier.abort();
+        }
     }
 
     Ok(reply)
