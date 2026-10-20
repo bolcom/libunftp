@@ -11,6 +11,7 @@ use crate::{
 };
 
 use crate::server::chancomms::DataChanCmd;
+use crate::server::tls_upload_reader::TlsUploadReader;
 use std::{path::PathBuf, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
@@ -571,10 +572,16 @@ where
             FtpsConfig::Off => Box::new(MeasuringReader::new(socket, command)) as Box<dyn AsyncRead + Send + Unpin + Sync>,
             FtpsConfig::Building { .. } => panic!("Illegal state"),
             FtpsConfig::On { tls_config } => {
+                // An upload's data connection is used once, and a client that only writes may never read the session tickets the server
+                // sends after the handshake: closing the connection with them unread can reset it, and the client takes the upload for
+                // failed. The shared session cache is kept (resumption is still accepted), but no new tickets are issued.
+                let mut upload_config = tls_config.as_ref().clone();
+                upload_config.send_tls13_tickets = 0;
                 let io = async move {
-                    let acceptor: TlsAcceptor = tls_config.into();
+                    let acceptor: TlsAcceptor = Arc::new(upload_config).into();
                     let tls_stream = acceptor.accept(socket).await.unwrap();
-                    MeasuringReader::new(tls_stream, command)
+                    // Ends the upload only after our own close_notify has been sent
+                    MeasuringReader::new(TlsUploadReader::new(tls_stream), command)
                 }
                 .await;
                 Box::new(io) as Box<dyn AsyncRead + Send + Unpin + Sync>

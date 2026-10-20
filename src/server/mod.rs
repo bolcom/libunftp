@@ -12,6 +12,7 @@ mod session;
 pub(crate) mod shutdown;
 mod switchboard;
 mod tls;
+mod tls_upload_reader;
 
 pub(crate) use chancomms::ControlChanMsg;
 pub(crate) use controlchan::ControlChanMiddleware;
