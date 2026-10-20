@@ -104,15 +104,31 @@ where
     let reply = cmd.build_reply(&args, port).await?;
     if reply.is_positive() {
         setup_inter_loop_comms(args.session.clone(), args.tx_control_chan.clone()).await;
+        // Only the address of the client's control connection may use the data connection (`datachan::spawn_processing` checks that too)
+        let expected = args.session.lock().await.source.ip().to_canonical();
         // Open the data connection in a new task and process it.
         // We cannot await this since we first need to let the client know where to connect :-)
         tokio::spawn(async move {
             // Timeout if the client doesn't connect to the socket in a while, to avoid leaving the socket hanging open permanently.
-            let r = tokio::time::timeout(Duration::from_secs(15), listener.accept()).await;
-            match r {
-                Ok(Ok((socket, _socket_addr))) => datachan::spawn_processing(args.logger, args.session, socket).await,
-                Ok(Err(e)) => slog::error!(args.logger, "Error waiting for data connection: {}", e),
-                Err(_) => slog::warn!(args.logger, "Client did not connect to data port in time"),
+            // A connection from another address is closed and the port goes on waiting for the client's own, until the timeout:
+            // otherwise whoever connected first would use up the only connection the port takes, and the client would be refused.
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+            loop {
+                match tokio::time::timeout_at(deadline, listener.accept()).await {
+                    Ok(Ok((socket, from))) if from.ip().to_canonical() == expected => {
+                        break datachan::spawn_processing(args.logger, args.session, socket).await;
+                    }
+                    Ok(Ok((socket, from))) => {
+                        slog::warn!(
+                            args.logger,
+                            "Closing a data connection from {}, which is not the address of the client",
+                            from.ip()
+                        );
+                        drop(socket);
+                    }
+                    Ok(Err(e)) => break slog::error!(args.logger, "Error waiting for data connection: {}", e),
+                    Err(_) => break slog::warn!(args.logger, "Client did not connect to data port in time"),
+                }
             }
         });
     }
