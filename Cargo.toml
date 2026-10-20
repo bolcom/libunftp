@@ -101,6 +101,7 @@ dashmap = "6.2.1"
 [dev-dependencies]
 libunftp = { path = "." }
 pretty_assertions = "1.4.1"
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "pem"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 unftp-sbe-fs = { path = "../libunftp/crates/unftp-sbe-fs" }
 

@@ -110,7 +110,18 @@ where
         match (self.ftps_requirement, event) {
             (FtpsRequired::None, event) => self.next.handle(event).await,
             (FtpsRequired::All, event) => match event {
-                Event::Command(Command::Pasv) => {
+                // EPSV opens a data socket like PASV does. The commands that use a data socket are checked too, because PROT can
+                // be changed back to clear after the socket was opened, and the transfer would then be in plaintext.
+                Event::Command(
+                    Command::Pasv
+                    | Command::Epsv
+                    | Command::Stor { .. }
+                    | Command::Appe { .. }
+                    | Command::Retr { .. }
+                    | Command::List { .. }
+                    | Command::Nlst { .. }
+                    | Command::Mlsd { .. },
+                ) => {
                     let is_tls = async {
                         let session = self.session.lock().await;
                         session.data_tls
