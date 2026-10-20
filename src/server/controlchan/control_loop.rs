@@ -236,42 +236,6 @@ where
                     return;
                 }
                 Some(Ok(event)) => {
-                    if let Event::InternalMsg(ControlChanMsg::SecureControlChannel) = event {
-                        slog::info!(logger, "Upgrading control channel to TLS");
-
-                        // Get back the original TCP Stream
-                        let codec_io = reply_sink.reunite(command_source).unwrap();
-                        let io = codec_io.into_inner();
-
-                        // Wrap in TLS Stream
-                        let acceptor: tokio_rustls::TlsAcceptor = match ftps_config.clone() {
-                            FtpsConfig::On { tls_config } => tls_config.into(),
-                            _ => panic!("Could not create TLS acceptor. Illegal program state"),
-                        };
-                        let accepted = acceptor.accept(io).await;
-                        let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = match accepted {
-                            Ok(stream) => {
-                                let s: &ServerConnection = stream.get_ref().1;
-                                if let Some(certs) = s.peer_certificates() {
-                                    let mut session = shared_session.lock().await;
-                                    session.cert_chain = Some(certs.iter().map(|c| unftp_core::auth::ClientCert(c.as_ref().to_vec())).collect());
-                                }
-                                Box::new(stream)
-                            }
-                            Err(err) => {
-                                slog::warn!(logger, "Closing control channel. Could not upgrade to TLS: {}", err);
-                                return;
-                            }
-                        };
-
-                        // Wrap in codec again and get sink + source
-                        let codec = FtpCodec::new();
-                        let cmd_and_reply_stream = codec.framed(io);
-                        let (sink, src) = cmd_and_reply_stream.split();
-                        reply_sink = sink;
-                        command_source = src;
-                    }
-
                     if let Event::Command(Command::User { username }) = &event {
                         let s: String = String::from_utf8_lossy(username).into();
                         logger = logger.new(slog::o!("username" => s));
@@ -279,14 +243,70 @@ where
 
                     // TODO: Handle Event::InternalMsg(InternalMsg::PlaintextControlChannel)
 
+                    // AUTH TLS accepted (its 234 reply is sent): upgrade the connection now, before reading anything more from the client
+                    let auth = matches!(&event, Event::Command(Command::Auth { .. }));
                     let handle_result = match event_chain.handle(event).await {
                         Err(e) => Err(e),
-                        Ok(reply) => reply_sink.send(reply).await,
+                        Ok(reply) => {
+                            let upgrade = auth
+                                && matches!(
+                                    &reply,
+                                    Reply::CodeAndMsg {
+                                        code: ReplyCode::AuthOkayNoDataNeeded,
+                                        ..
+                                    }
+                                );
+                            reply_sink.send(reply).await.map(|()| upgrade)
+                        }
                     };
 
-                    if let Err(chan_err) = handle_result {
-                        slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", chan_err);
-                        return;
+                    match handle_result {
+                        Err(chan_err) => {
+                            slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", chan_err);
+                            return;
+                        }
+                        Ok(false) => {}
+                        Ok(true) => {
+                            slog::info!(logger, "Upgrading control channel to TLS");
+
+                            // Get back the original TCP Stream
+                            let codec_io = reply_sink.reunite(command_source).unwrap();
+                            let io = codec_io.into_inner();
+
+                            // Wrap in TLS Stream
+                            let acceptor: tokio_rustls::TlsAcceptor = match ftps_config.clone() {
+                                FtpsConfig::On { tls_config } => tls_config.into(),
+                                _ => panic!("Could not create TLS acceptor. Illegal program state"),
+                            };
+                            let accepted = acceptor.accept(io).await;
+                            let io: Box<dyn AsyncReadAsyncWriteSendUnpin> = match accepted {
+                                Ok(stream) => {
+                                    let s: &ServerConnection = stream.get_ref().1;
+                                    if let Some(certs) = s.peer_certificates() {
+                                        let mut session = shared_session.lock().await;
+                                        session.cert_chain = Some(certs.iter().map(|c| unftp_core::auth::ClientCert(c.as_ref().to_vec())).collect());
+                                    }
+                                    Box::new(stream)
+                                }
+                                Err(err) => {
+                                    slog::warn!(logger, "Closing control channel. Could not upgrade to TLS: {}", err);
+                                    return;
+                                }
+                            };
+
+                            // Wrap in codec again and get sink + source
+                            let codec = FtpCodec::new();
+                            let cmd_and_reply_stream = codec.framed(io);
+                            let (sink, src) = cmd_and_reply_stream.split();
+                            reply_sink = sink;
+                            command_source = src;
+
+                            // The session now knows its control channel is encrypted
+                            if let Err(chan_err) = event_chain.handle(Event::InternalMsg(ControlChanMsg::SecureControlChannel)).await {
+                                slog::warn!(logger, "Event handler chain error: {:?}. Closing control connection", chan_err);
+                                return;
+                            }
+                        }
                     }
                 }
                 Some(Err(e)) => {

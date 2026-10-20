@@ -6,13 +6,10 @@
 
 use crate::{
     auth::UserDetail,
-    server::{
-        chancomms::ControlChanMsg,
-        controlchan::{
-            Reply, ReplyCode,
-            error::ControlChanError,
-            handler::{CommandContext, CommandHandler},
-        },
+    server::controlchan::{
+        Reply, ReplyCode,
+        error::ControlChanError,
+        handler::{CommandContext, CommandHandler},
     },
     storage::{Metadata, StorageBackend},
 };
@@ -45,17 +42,11 @@ where
 {
     #[tracing_attributes::instrument]
     async fn handle(&self, args: CommandContext<Storage, User>) -> Result<Reply, ControlChanError> {
-        let tx = args.tx_control_chan.clone();
-        let logger = args.logger;
+        // The control loop upgrades the connection to TLS as soon as this reply has been sent, before it reads anything more
+        // from the client. Telling it from a spawned task left a window in which the client's ClientHello could be read as a
+        // command, and answered in plaintext.
         match (args.tls_configured, self.protocol.clone()) {
-            (true, AuthParam::Tls) => {
-                tokio::spawn(async move {
-                    if let Err(err) = tx.send(ControlChanMsg::SecureControlChannel).await {
-                        slog::warn!(logger, "AUTH: Could not send internal message to notify of TLS upgrade: {}", err);
-                    }
-                });
-                Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS"))
-            }
+            (true, AuthParam::Tls) => Ok(Reply::new(ReplyCode::AuthOkayNoDataNeeded, "Upgrading to TLS")),
             (true, AuthParam::Ssl) => Ok(Reply::new(ReplyCode::CommandNotImplementedForParameter, "Auth SSL not implemented")),
             (false, _) => Ok(Reply::new(ReplyCode::CommandNotImplemented, "TLS/SSL not configured")),
         }
