@@ -112,8 +112,16 @@ where
         // TODO: Use configured timeout
         tokio::select! {
             Some(command) = data_cmd_rx.recv() => {
-                let session = session_arc.lock().await;
-                self.handle_incoming(DataChanMsg::ExternalCommand(command), session.start_pos).await;
+                // Don't hold the session while the transfer runs: the control channel needs it to handle ABOR.
+                let start_pos = session_arc.lock().await.start_pos;
+                let logger = self.logger.clone();
+                // ABOR stops a transfer that is in progress, not only a data connection that is still waiting for its
+                // command. Dropping the transfer also drops what the storage back-end holds for it.
+                tokio::select! {
+                    biased;
+                    Some(_) = data_abort_rx.recv() => slog::info!(logger, "Data channel abort received during a transfer"),
+                    _ = self.handle_incoming(DataChanMsg::ExternalCommand(command), start_pos) => (),
+                }
             },
             Some(_) = data_abort_rx.recv() => {
                 self.handle_incoming(DataChanMsg::Abort, 0).await;
