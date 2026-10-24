@@ -323,3 +323,17 @@ Do not publish crates or create tags unless explicitly requested.
 - Format only intended files when unrelated worktree changes exist.
 - Report which checks ran, which were skipped, and why.
 - Do not update versions, changelogs, lockfiles, generated fixtures, release tags, or published crates unless the task explicitly requires it.
+
+## Git Commit messages
+
+- No conventional commits please
+- Separate subject from body with a blank line
+- Limit the subject line to roughly 50 characters
+- Capitalize the subject line
+- Do not end the subject line with a period
+- Use the imperative mood in the subject line
+- Wrap the body at 72 characters
+- Use the body to explain what and why and context vs. how
+- Write thoughtful commit messages like David Tolnay
+- Write for the next person reading git log: A good commit title should let you scan history quickly without needing to run git show for every minor bump
+
