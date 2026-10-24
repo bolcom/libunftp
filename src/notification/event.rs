@@ -15,6 +15,16 @@ pub enum PresenceEvent {
 
 /// An event signalling a change in data on the storage back-end. To identify the corresponding user
 /// or session see the [`EventMeta`](crate::notification::EventMeta) struct.
+///
+/// Paths are in the FTP namespace, rooted at the user's FTP root. Relative command arguments
+/// include the working directory used for the operation: for example, `STOR photo.jpg` in
+/// `/uploads` produces a [`DataEvent::Put`] with path `/uploads/photo.jpg`. At the FTP root,
+/// the same command produces `/photo.jpg`. Absolute command arguments are not prefixed with
+/// the working directory.
+///
+/// These are the paths supplied to the storage backend, not host filesystem paths or object
+/// URLs. They are not canonicalized: parent-directory components such as `..` may remain,
+/// and symlinks are not resolved. Path separators follow the server platform's path handling.
 #[derive(Debug, Clone)]
 pub enum DataEvent {
     /// A RETR command finished successfully
@@ -25,9 +35,9 @@ pub enum DataEvent {
         /// The amount of bytes transferred to the client
         bytes: u64,
     },
-    /// A STOR command finished successfully
+    /// A STOR or APPE command finished successfully
     Put {
-        /// The path to the file that was obtained
+        /// The path to the file that was written
         path: String,
 
         /// The amount of bytes stored

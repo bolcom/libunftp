@@ -1,5 +1,23 @@
 # Changelog
 
+### Unreleased
+
+- [#583](https://github.com/bolcom/libunftp/pull/583) Document custom `SITE` commands in the README,
+  list `unftp-site-hash` as an extension, and recommend the `unftp-site-*` prefix for extension crates.
+- [#592](https://github.com/bolcom/libunftp/pull/592) Require patched `rustls-webpki` 0.103.16 or later in
+  libunftp, the REST authenticator, and the GCS backend to reject compromised eMudhra intermediate
+  CA keys ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382)).
+- [#582](https://github.com/bolcom/libunftp/pull/582) End a PROXY protocol header read with an
+  unexpected EOF error when the peer closes before sending a complete header, avoiding an endless
+  read loop.
+- **BREAKING**: [#569](https://github.com/bolcom/libunftp/pull/569) Include the FTP working directory in
+  `DataEvent::Got` (`RETR`) and `DataEvent::Put` (`STOR` and `APPE`) paths. For example, uploading
+  `photo.jpg` in `/uploads` now reports `/uploads/photo.jpg` instead of `photo.jpg`; at the FTP root
+  it reports `/photo.jpg`. Listeners that compare paths or construct storage keys from them must
+  handle paths rooted at the user's FTP root rather than raw command arguments. These paths are
+  not backend filesystem paths or object URLs, and are not canonicalized. Delete, rename, and
+  directory events already use this convention.
+
 ### libunftp 0.23.1
 
 - [#571](https://github.com/bolcom/libunftp/pull/571) Add custom `SITE` subcommands through `ServerBuilder::site_command` and the public
