@@ -80,8 +80,8 @@ pub trait UserDetail: Send + Sync + Display + Debug {
 /// }
 /// ```
 ///
-/// [`Principal`]: ../struct.Principal.html
-/// [`UserDetail`]: trait.UserDetail.html
+/// [`Principal`]: crate::auth::Principal
+/// [`UserDetail`]: crate::auth::UserDetail
 #[async_trait]
 pub trait UserDetailProvider: Send + Sync + Debug {
     /// The `UserDetail` type that this provider returns
@@ -97,16 +97,16 @@ pub trait UserDetailProvider: Send + Sync + Debug {
     /// Returns [`UserDetailError`] if the user details cannot be retrieved, for example if the
     /// user is not found in the user database.
     ///
-    /// [`Principal`]: ../struct.Principal.html
-    /// [`UserDetail`]: trait.UserDetail.html
-    /// [`UserDetailError`]: enum.UserDetailError.html
+    /// [`Principal`]: crate::auth::Principal
+    /// [`UserDetail`]: crate::auth::UserDetail
+    /// [`UserDetailError`]: crate::auth::UserDetailError
     async fn provide_user_detail(&self, principal: &Principal) -> Result<Self::User, UserDetailError>;
 }
 
 /// The error type returned by [`UserDetailProvider::provide_user_detail`]
 ///
-/// [`UserDetailProvider`]: trait.UserDetailProvider.html
-/// [`UserDetailProvider::provide_user_detail`]: trait.UserDetailProvider.html#tymethod.provide_user_detail
+/// [`UserDetailProvider`]: crate::auth::UserDetailProvider
+/// [`UserDetailProvider::provide_user_detail`]: crate::auth::UserDetailProvider::provide_user_detail
 #[derive(Debug, Error)]
 pub enum UserDetailError {
     /// A generic error occurred while retrieving user details
@@ -172,9 +172,9 @@ impl Display for DefaultUser {
 /// # }
 /// ```
 ///
-/// [`UserDetailProvider`]: trait.UserDetailProvider.html
-/// [`Principal`]: ../struct.Principal.html
-/// [`DefaultUser`]: struct.DefaultUser.html
+/// [`UserDetailProvider`]: crate::auth::UserDetailProvider
+/// [`Principal`]: crate::auth::Principal
+/// [`DefaultUser`]: crate::auth::DefaultUser
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DefaultUserDetailProvider;
 
