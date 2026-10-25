@@ -7,13 +7,24 @@
 
 When you need to FTP, but don't want to.
 
-![logo](../../logo.png)
+![unFTP logo](https://raw.githubusercontent.com/bolcom/libunftp/master/logo.png)
 
-[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/unftp-core) | [**libunftp**](https://github.com/bolcom/libunftp) | [**unFTP**](https://github.com/bolcom/unFTP)
+[**Website**](https://unftp.rs) | [**API docs**](https://docs.rs/unftp-core) |
+[**libunftp**](https://github.com/bolcom/libunftp) | [**unFTP server**](https://github.com/bolcom/unFTP)
 
-This crate contains the core traits and types for [unFTP](https://unftp.rs/) backends.
+This crate contains the core traits and types for [unFTP](https://unftp.rs/) backends (extensions).
 
-This crate was split of from `libunftp` and defines an API that authentication and storage backend (extention/plug-in) implementations in
-the unFTP ecosystem should implement. The [`libunftp`](https://unftp.rs/libunftp/) crate provides the server implementation and depends on this core crate too.
+## About the wider unFTP project
 
-Existing backend implementations exists on crates.io ([search for `unftp-`](https://crates.io/search?q=unftp-)). To implement your own follow the [API Documentation](https://docs.rs/unftp-core).
+unFTP is an open-source, cloud-focused FTP and FTPS server project. It is an FTP server, not an SFTP server. You can run
+the standalone [unFTP server](https://github.com/bolcom/unFTP), embed the [libunftp library](https://github.com/bolcom/libunftp) in your application and add existing extensions or create your own extensions. Its pluggable authentication, storage, user-detail providers and other extensions let you connect the server to the systems your application uses.
+
+## About `unftp-core`
+
+`unftp-core` defines the shared Rust traits and types used to write extensions in the unFTP ecosystem. Authentication and storage backend crates implement these interfaces, and `libunftp` uses them to implement a server. This crate provides the interfaces; it is not itself an FTP server or a storage backend.
+
+Use `unftp-core` when building an authentication or storage backend for the unFTP ecosystem. Browse existing
+[authentication backends](https://crates.io/search?q=unftp-auth-) and [storage backends](https://crates.io/search?q=unftp-sbe-),
+or follow the [API documentation](https://docs.rs/unftp-core) to implement your own.
+
+The unFTP ecosystem has more extension points, which will, as they mature be moved to `unftp-core`.

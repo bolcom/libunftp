@@ -15,18 +15,26 @@ pub trait Authenticator: Sync + Send + Debug {
     /// To obtain full user details, use a [`UserDetailProvider`] to convert the `Principal`
     /// into a full [`UserDetail`] implementation.
     ///
-    /// [`Principal`]: struct.Principal.html
-    /// [`UserDetailProvider`]: ../trait.UserDetailProvider.html
-    /// [`UserDetail`]: ../trait.UserDetail.html
+    /// # Errors
+    ///
+    /// Return [`AuthenticationError`] when the credentials are rejected or authentication fails.
+    ///
+    /// [`UserDetailProvider`]: crate::auth::UserDetailProvider
+    /// [`UserDetail`]: crate::auth::UserDetail
     async fn authenticate(&self, username: &str, creds: &Credentials) -> Result<Principal, AuthenticationError>;
 
-    /// Tells whether its OK to not ask for a password when a valid client cert
-    /// was presented.
+    /// Returns whether a valid client certificate is sufficient to authenticate this username
+    /// without a password.
+    ///
+    /// The default is `false`, so authenticators must opt in to certificate-only authentication.
     async fn cert_auth_sufficient(&self, _username: &str) -> bool {
         false
     }
 
-    /// Implement to set the name of the authenticator. By default it returns the type signature.
+    /// Returns the name used to identify this authenticator in server diagnostics.
+    ///
+    /// Override this to provide a stable, human-readable name. By default, the Rust type name is
+    /// returned.
     fn name(&self) -> &str {
         std::any::type_name::<Self>()
     }
@@ -51,9 +59,9 @@ pub trait Authenticator: Sync + Send + Debug {
 /// assert_eq!(principal.username, "alice");
 /// ```
 ///
-/// [`Authenticator`]: trait.Authenticator.html
-/// [`UserDetail`]: ../trait.UserDetail.html
-/// [`UserDetailProvider`]: ../trait.UserDetailProvider.html
+/// [`Authenticator`]: crate::auth::Authenticator
+/// [`UserDetail`]: crate::auth::UserDetail
+/// [`UserDetailProvider`]: crate::auth::UserDetailProvider
 #[derive(Debug, Clone)]
 pub struct Principal {
     /// The authenticated username
@@ -105,8 +113,8 @@ impl AuthenticationError {
 
 /// Credentials passed to an [Authenticator](crate::auth::Authenticator)
 ///
-/// [Authenticator](crate::auth::Authenticator) implementations can assume that either `certificate_chain` or `password`
-/// will not be `None`.
+/// At least one of `password` or `certificate_chain` is present. Both may be present when a client
+/// supplies a password and a certificate.
 #[derive(Clone, Debug)]
 pub struct Credentials {
     /// The password that the client sent.
@@ -130,14 +138,17 @@ impl From<&str> for Credentials {
     }
 }
 
-/// Contains a single DER-encoded X.509 client certificate.
+/// Wraps a single DER-encoded X.509 client certificate.
 #[derive(Clone, Eq, PartialEq)]
 pub struct ClientCert(pub Vec<u8>);
 
 use x509_parser::prelude::parse_x509_certificate;
 
 impl ClientCert {
-    /// Returns true if the Common Name from the client certificate matches the allowed_cn
+    /// Returns whether the rendered certificate subject contains `allowed_cn`.
+    ///
+    /// This is a case-sensitive substring check of the full subject, not an exact comparison of
+    /// the certificate's Common Name field. Returns an error if the certificate cannot be parsed.
     pub fn verify_cn(&self, allowed_cn: &str) -> Result<bool, std::io::Error> {
         let client_cert = parse_x509_certificate(&self.0);
         let subject = match client_cert {

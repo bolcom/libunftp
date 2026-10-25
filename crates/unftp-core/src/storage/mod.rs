@@ -1,6 +1,6 @@
 //! Contains the [`StorageBackend`] trait that can be implemented to create virtual file systems for libunftp.
 //!
-//! Pre-made implementations exists on crates.io (search for `unftp-sbe-`) and you can define your
+//! Pre-made implementations exist on crates.io (search for `unftp-sbe-`) and you can define your
 //! own implementation to integrate your FTP(S) server with whatever storage mechanism you prefer.
 //!
 //! To create a new storage back-end:
@@ -10,7 +10,7 @@
 //! ```toml
 //! async-trait = "0.1.89"
 //! tokio = { version = "1.49.0", features = ["full"] }
-//! unftp-core = { path = "../path/to/unftp-core" }
+//! unftp-core = "0.1"
 //! ```
 //!
 //! 2. Implement the [`StorageBackend`] trait and optionally the [`Metadata`] trait:
@@ -157,8 +157,7 @@
 //! }
 //! ```
 //!
-//! 3. Initialize it with the server in your application.
-//!
+//! 3. Register the backend when constructing a server with [`libunftp::ServerBuilder`](https://docs.rs/libunftp/latest/libunftp/struct.ServerBuilder.html).
 
 mod error;
 pub use error::{Error, ErrorKind};

@@ -17,13 +17,14 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
-/// Tells if STOR/RETR restarts are supported by the storage back-end
-/// i.e. starting from a different byte offset.
+/// Indicates that the backend supports FTP `REST` offsets for both `RETR` downloads and `STOR`
+/// uploads. Implementations must honor nonzero offsets in [`StorageBackend::get`] and
+/// [`StorageBackend::put`] before advertising this feature.
 pub const FEATURE_RESTART: u32 = 0b0000_0001;
-/// Whether or not this storage backend supports the SITE MD5 command
+/// Indicates that the backend supports the FTP `SITE MD5` command.
 pub const FEATURE_SITEMD5: u32 = 0b0000_0010;
 
-/// Result type used by traits in this module
+/// Result type returned by storage backend operations.
 pub type Result<T> = result::Result<T, Error>;
 
 /// Represents the metadata of a _FTP File_
@@ -59,8 +60,9 @@ pub trait Metadata {
         1
     }
 
-    /// Returns the `permissions` of the file. The default implementation assumes unix permissions
-    /// and defaults to "rwxr-xr-x" (octal 7755)
+    /// Returns the Unix-style read, write, and execute permission bits for the path. The default
+    /// displays as `rwxr-xr-x` (`0755`). Special permission bits are not represented by
+    /// [`Permissions`]' display format.
     fn permissions(&self) -> Permissions {
         Permissions(0o7755)
     }
@@ -71,8 +73,14 @@ pub trait Metadata {
     }
 }
 
-/// Represents the permissions of a _FTP File_
-pub struct Permissions(pub u32);
+/// Unix-style read, write, and execute permission bits used when formatting a file listing.
+///
+/// The value uses the conventional octal permission-bit layout. Its [`std::fmt::Display`] implementation
+/// prints the user, group, and other `rwx` bits; special permission bits are ignored.
+pub struct Permissions(
+    /// The Unix-style permission bits.
+    pub u32,
+);
 
 const PERM_READ: u32 = 0b100100100;
 const PERM_WRITE: u32 = 0b010010010;
@@ -98,7 +106,7 @@ impl std::fmt::Display for Permissions {
 
 /// Fileinfo contains the path and `Metadata` of a file.
 ///
-/// [`Metadata`]: ./trait.Metadata.html
+/// [`Metadata`]: crate::storage::Metadata
 #[derive(Clone)]
 pub struct Fileinfo<P, M>
 where
@@ -170,17 +178,14 @@ where
     }
 }
 
-/// The `StorageBackend` trait can be implemented to create custom FTP virtual file systems. Once
-/// implemented it needs to be registered with the [`Server`] on construction.
-///
-/// [`Server`]: ../struct.Server.html
+/// Implement this trait to provide a custom FTP virtual filesystem, then register it when
+/// constructing a server with [`libunftp::ServerBuilder`](https://docs.rs/libunftp/latest/libunftp/struct.ServerBuilder.html).
 #[async_trait]
 pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
     /// The concrete type of the _metadata_ used by this storage backend.
     type Metadata: Metadata + Sync + Send;
 
-    /// Restrict the backend's capabilities commensurate with the provided
-    /// [`UserDetail`](crate::auth::UserDetail).
+    /// Restricts this backend instance using the authenticated user's details.
     ///
     /// Once restricted, it may never be unrestricted.
     fn enter(&mut self, _user_detail: &User) -> io::Result<()> {
@@ -192,28 +197,27 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         std::any::type_name::<Self>()
     }
 
-    /// Tells which optional features are supported by the storage back-end
-    /// Return a value with bits set according to the FEATURE_* constants.
+    /// Returns the optional features supported by this backend.
+    ///
+    /// Set the corresponding bits from the `FEATURE_*` constants. The default advertises no
+    /// optional features.
     fn supported_features(&self) -> u32 {
         0
     }
 
-    /// Returns the `Metadata` for the given file.
+    /// Returns metadata for the path, or an error if it cannot be accessed.
     ///
-    /// [`Metadata`]: ./trait.Metadata.html
+    /// [`Metadata`]: crate::storage::Metadata
     async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<Self::Metadata>;
 
-    /// Returns the MD5 hash for the given file.
+    /// Returns the lowercase hexadecimal MD5 digest for the file at `path`.
     ///
     /// Whether or not you want to implement the md5 method yourself,
     /// or you want to let your StorageBackend make use of the below
     /// default implementation, you must still explicitly enable the
-    /// feature via the
-    /// [supported_features](crate::storage::StorageBackend::supported_features)
-    /// method.
+    /// `FEATURE_SITEMD5` via [`supported_features`](Self::supported_features).
     ///
-    /// When implementing, use the lower case 2-digit hexadecimal
-    /// format (like the output of the `md5sum` command)
+    /// Return the 32-character lowercase hexadecimal digest, as printed by `md5sum`.
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<String>
     where
         P: AsRef<Path> + Send + Debug,
@@ -232,12 +236,13 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         Ok(format!("{:x}", md5sum.finalize()))
     }
 
-    /// Returns the list of files in the given directory.
+    /// Returns the entries in the directory at `path`.
     async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<Vec<Fileinfo<std::path::PathBuf, Self::Metadata>>>
     where
         <Self as StorageBackend<User>>::Metadata: Metadata;
 
-    /// Returns some bytes that make up a directory listing that can immediately be sent to the client.
+    /// Formats the directory entries using the long-listing format produced by [`Fileinfo`], with
+    /// each entry followed by CRLF.
     #[allow(clippy::type_complexity)]
     async fn list_fmt<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, Error>
     where
@@ -256,7 +261,7 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         Ok(std::io::Cursor::new(file_infos))
     }
 
-    /// Returns directory listing as a vec of strings used for multi line response in the control channel.
+    /// Returns each directory entry formatted using [`Fileinfo`].
     async fn list_vec<P>(&self, user: &User, path: P) -> std::result::Result<Vec<String>, Error>
     where
         P: AsRef<Path> + Send + Debug,
@@ -268,8 +273,8 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         Ok(out)
     }
 
-    /// Returns some bytes that make up a NLST directory listing (only the basename) that can
-    /// immediately be sent to the client.
+    /// Returns an `NLST` listing containing only each entry's basename, with entries separated by
+    /// CRLF. Storage errors are converted to a generic I/O error.
     #[allow(clippy::type_complexity)]
     async fn nlst<P>(&self, user: &User, path: P) -> std::result::Result<std::io::Cursor<Vec<u8>>, std::io::Error>
     where
@@ -292,10 +297,9 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         Ok(std::io::Cursor::new(file_infos))
     }
 
-    /// Gets the content of the given FTP file from offset start_pos file by copying it to the output writer.
-    /// The starting position will only be greater than zero if the storage back-end implementation
-    /// advertises to support partial reads through the supported_features method i.e. the result
-    /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
+    /// Copies the file contents beginning at `start_pos` into `output` and returns the number of
+    /// bytes copied. A nonzero offset is used for FTP `REST` only when this backend advertises
+    /// [`FEATURE_RESTART`].
     async fn get_into<'a, P, W: ?Sized>(&self, user: &User, path: P, start_pos: u64, output: &'a mut W) -> Result<u64>
     where
         W: tokio::io::AsyncWrite + Unpin + Sync + Send,
@@ -305,13 +309,13 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         Ok(tokio::io::copy(&mut reader, output).await.map_err(Error::from)?)
     }
 
-    /// Returns the content of the given file from offset start_pos.
-    /// The starting position will only be greater than zero if the storage back-end implementation
-    /// advertises to support partial reads through the supported_features method i.e. the result
-    /// from supported_features yield 1 if a logical and operation is applied with FEATURE_RESTART.
+    /// Returns a reader for the file contents beginning at `start_pos`. A nonzero offset is used
+    /// for FTP `REST` only when this backend advertises [`FEATURE_RESTART`].
     async fn get<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P, start_pos: u64) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>>;
 
-    /// Writes bytes from the given reader to the specified path starting at offset start_pos in the file
+    /// Writes all bytes from `input` to `path`, beginning at `start_pos`, and returns the number of
+    /// bytes written. For FTP `REST` uploads, honor nonzero offsets when advertising
+    /// [`FEATURE_RESTART`].
     async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         user: &User,
@@ -320,19 +324,19 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
         start_pos: u64,
     ) -> Result<u64>;
 
-    /// Deletes the file at the given path.
+    /// Deletes the file at `path`.
     async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
-    /// Creates the given directory.
+    /// Creates a directory at `path`.
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
-    /// Renames the given file to the given new filename.
+    /// Renames the entry at `from` to `to`.
     async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &User, from: P, to: P) -> Result<()>;
 
-    /// Deletes the given directory.
+    /// Deletes the directory at `path`.
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 
-    /// Changes the working directory to the given path.
+    /// Checks whether `path` can be used as the user's working directory.
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &User, path: P) -> Result<()>;
 }
 
