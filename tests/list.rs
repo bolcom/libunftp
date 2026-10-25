@@ -49,6 +49,52 @@ async fn test_list_directory_with_spaces() {
     let list_output = String::from_utf8_lossy(&data_buf);
     assert!(list_output.contains("nested_target"), "LIST output must contain nested_target: {}", list_output);
 
+    // Use an isolated directory so stale entries cannot satisfy these checks.
+    let root = format!("test_list_whitespace_{}", uuid::Uuid::new_v4());
+    send_to_server(&format!("MKD {root}\r\n"), &stream).await;
+    assert!(read_from_server(&mut buffer, &stream).await.starts_with("257 "));
+    send_to_server(&format!("CWD {root}\r\n"), &stream).await;
+    assert!(read_from_server(&mut buffer, &stream).await.starts_with("250 "));
+
+    let paths = [" leading", "\u{a0}leading", "\u{2003}leading", "-leading"];
+    // Windows disallows tabs in filenames and normalizes trailing spaces.
+    #[cfg(unix)]
+    let paths = [paths.as_slice(), &["\tleading", "trailing ", " "]].concat();
+
+    for path in paths {
+        send_to_server(&format!("MKD {path}\r\n"), &stream).await;
+        assert!(read_from_server(&mut buffer, &stream).await.starts_with("257 "));
+        send_to_server(&format!("MKD {path}/marker\r\n"), &stream).await;
+        assert!(read_from_server(&mut buffer, &stream).await.starts_with("257 "));
+
+        for prefix in ["", "-la ", "-la -x ", "-- ", "-la -- "] {
+            // A leading dash needs the explicit end-of-options delimiter.
+            if path.starts_with('-') && !prefix.ends_with("-- ") {
+                continue;
+            }
+            send_to_server("PASV\r\n", &stream).await;
+            let addr = parse_pasv(read_from_server(&mut buffer, &stream).await).unwrap();
+            send_to_server(&format!("LIST {prefix}{path}\r\n"), &stream).await;
+            assert_eq!(read_from_server(&mut buffer, &stream).await, "150 Sending directory list\r\n");
+            let mut data_stream = tcp_pasv_connect(addr).await.unwrap();
+            let mut data = Vec::new();
+            data_stream.read_to_end(&mut data).await.unwrap();
+            drop(data_stream);
+            assert_eq!(read_from_server(&mut buffer, &stream).await, "226 Listed the directory\r\n");
+            let listing = String::from_utf8_lossy(&data);
+            assert!(listing.contains("marker"), "LIST {prefix}{path:?}: {listing}");
+        }
+
+        send_to_server(&format!("RMD {path}/marker\r\n"), &stream).await;
+        assert!(read_from_server(&mut buffer, &stream).await.starts_with("250 "));
+        send_to_server(&format!("RMD {path}\r\n"), &stream).await;
+        assert!(read_from_server(&mut buffer, &stream).await.starts_with("250 "));
+    }
+    send_to_server("CDUP\r\n", &stream).await;
+    assert!(read_from_server(&mut buffer, &stream).await.starts_with("250 "));
+    send_to_server(&format!("RMD {root}\r\n"), &stream).await;
+    assert!(read_from_server(&mut buffer, &stream).await.starts_with("250 "));
+
     common::finalize().await;
 }
 

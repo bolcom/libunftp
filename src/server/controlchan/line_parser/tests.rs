@@ -259,7 +259,7 @@ fn parse_list() {
         },
         Test {
             input: "LIST   \r\n",
-            expected_path: None,
+            expected_path: Some("  "),
         },
     ];
 
@@ -272,6 +272,49 @@ fn parse_list() {
             })
         );
     }
+}
+
+#[test]
+fn parse_list_preserves_pathname_whitespace() {
+    for prefix in ["LIST ", "LIST -la ", "LIST -la -x ", "LIST -- ", "LIST -la -- "] {
+        for path in [
+            " folder",
+            "  folder",
+            "folder ",
+            " folder ",
+            "\tfolder",
+            "\u{a0}folder",
+            "\u{2003}folder",
+            " ",
+            "\t",
+        ] {
+            let input = format!("{prefix}{path}\r\n");
+            assert_eq!(
+                parse(input.clone()),
+                Ok(Command::List {
+                    options: None,
+                    path: Some(path.to_string())
+                }),
+                "input: {input:?}"
+            );
+        }
+        // CR in a pathname is encoded as CR NUL on the control connection.
+        let input = format!("{prefix}\r\0folder\r\n");
+        assert_eq!(
+            parse(input.clone()),
+            Ok(Command::List {
+                options: None,
+                path: Some("\rfolder".to_string())
+            })
+        );
+    }
+    assert_eq!(
+        parse("LIST --  -folder\r\n"),
+        Ok(Command::List {
+            options: None,
+            path: Some(" -folder".to_string())
+        })
+    );
 }
 
 #[test]

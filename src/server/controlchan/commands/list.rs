@@ -1,4 +1,6 @@
-//! The `LIST` command
+//! The [RFC 959 List (`LIST`) command](https://www.rfc-editor.org/rfc/rfc959#section-4.1.3).
+//!
+//! Pathname whitespace follows [RFC 3659 section 2.2](https://www.rfc-editor.org/rfc/rfc3659#section-2.2).
 //
 // This command causes a list to be sent from the server to the
 // passive DTP.  If the pathname specifies a directory or other
