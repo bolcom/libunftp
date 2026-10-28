@@ -233,7 +233,7 @@ pub trait StorageBackend<User: UserDetail>: Send + Sync + Debug {
             md5sum.update(&buffer[0..n]);
         }
 
-        Ok(format!("{:x}", md5sum.finalize()))
+        Ok(md5sum.finalize().iter().map(|byte| format!("{byte:02x}")).collect())
     }
 
     /// Returns the entries in the directory at `path`.
