@@ -2,11 +2,25 @@
 
 ### Unreleased
 
+- [#592](https://github.com/bolcom/libunftp/pull/592) Require patched `rustls-webpki` 0.103.16 or later
+  in the REST authenticator and GCS backend. These backend releases are pending.
+- [#601](https://github.com/bolcom/libunftp/pull/601) Upgrade `base64` to 0.23.1 for the JSON-file
+  authenticator and GCS backend, and the filesystem backend's test dependencies to `nix` 0.31.3
+  and `rstest` 0.28.0. These backend releases are pending.
+
+- [#601](https://github.com/bolcom/libunftp/pull/601) Upgrade `unftp-core`'s `md-5` dependency to 0.11.0 while preserving
+  the default storage implementation's 32-character lowercase hexadecimal MD5 output.
+- [#595](https://github.com/bolcom/libunftp/pull/595) Clarify authentication and storage contracts,
+  correct rustdoc links, and improve the README in `unftp-core`. Public trait signatures are unchanged.
+  The core release is pending.
+
+### libunftp 0.24.0
+
 - [#583](https://github.com/bolcom/libunftp/pull/583) Document custom `SITE` commands in the README,
   list `unftp-site-hash` as an extension, and recommend the `unftp-site-*` prefix for extension crates.
 - [#592](https://github.com/bolcom/libunftp/pull/592) Require patched `rustls-webpki` 0.103.16 or later in
-  libunftp, the REST authenticator, and the GCS backend to reject compromised eMudhra intermediate
-  CA keys ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382)).
+  libunftp to reject compromised eMudhra intermediate CA keys
+  ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382)).
 - [#582](https://github.com/bolcom/libunftp/pull/582) End a PROXY protocol header read with an
   unexpected EOF error when the peer closes before sending a complete header, avoiding an endless
   read loop.
@@ -17,6 +31,10 @@
   handle paths rooted at the user's FTP root rather than raw command arguments. These paths are
   not backend filesystem paths or object URLs, and are not canonicalized. Delete, rename, and
   directory events already use this convention.
+- [#578](https://github.com/bolcom/libunftp/pull/578) and
+  [#594](https://github.com/bolcom/libunftp/pull/594) Preserve leading, embedded, and trailing
+  whitespace in `LIST` pathnames, including after options and `--`.
+- [#601](https://github.com/bolcom/libunftp/pull/601) Upgrade `nix` to 0.31.3.
 
 ### libunftp 0.23.1
 

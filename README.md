@@ -78,9 +78,9 @@ To use a specific provider, enable the corresponding feature in your `Cargo.toml
 
 ```toml
 [dependencies]
-libunftp = { version = "0.23.1", features = ["ring"] }  # Use ring
+libunftp = { version = "0.24.0", features = ["ring"] }  # Use ring
 # or
-libunftp = { version = "0.23.1", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
+libunftp = { version = "0.24.0", features = ["aws_lc_rs"] }  # Use aws-lc-rs (default)
 ```
 
 The default provider is `aws-lc-rs` for backward compatibility. Choose the provider that best fits your needs:
@@ -104,14 +104,14 @@ need:
 
 ```toml
 [dependencies]
-libunftp = { version = "0.23.1", default-features = false, features = ["aws_lc_rs"] }
+libunftp = { version = "0.24.0", default-features = false, features = ["aws_lc_rs"] }
 ```
 
 Or enable all features explicitly:
 
 ```toml
 [dependencies]
-libunftp = { version = "0.23.1", features = ["all"] }
+libunftp = { version = "0.24.0", features = ["all"] }
 ```
 
 ## Prerequisites
@@ -132,7 +132,7 @@ add. Here we choose the [file system back-end](https://crates.io/crates/unftp-sb
 
 ```toml
 [dependencies]
-libunftp = "0.23.1"
+libunftp = "0.24.0"
 unftp-sbe-fs = "0.4.0"
 tokio = { version = "1", features = ["full"] }
 ```
