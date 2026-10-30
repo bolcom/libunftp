@@ -19,7 +19,13 @@
 * Update CHANGELOG.md for all the crates affected. Link entries to associated merged pull requests
   where available using `[#123](https://github.com/bolcom/libunftp/pull/123)`; verify associations
   against GitHub metadata or commit history.
-* Prepare release notes for the GitHub release page
+* Prepare release notes for the GitHub release page. Do not start with a
+  markdown heading (GitHub already shows the release name as a heading).
+  Start the notes with:
+
+  ```text
+  Changes in this release:
+  ```
 * Make a new commit (don't push) indicating the crate name and version number e.g.
   > Release libunftp version x.y.x
 

@@ -306,6 +306,13 @@ For a release:
 - Run `make pr-prep`.
 - Use release commits naming the crate and version.
 - Tags use `{component}-{version}`, for example `libunftp-0.23.0`.
+- GitHub release notes must not start with a markdown heading such as
+  `# unftp-sbe-gcs`. GitHub already displays the release name as a heading,
+  so a heading in the notes produces a double title. Start the notes with:
+
+  ```text
+  Changes in this release:
+  ```
 
 Do not publish crates or create tags unless explicitly requested.
 
