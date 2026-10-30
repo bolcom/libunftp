@@ -2,8 +2,6 @@
 
 ### Unreleased
 
-- [#592](https://github.com/bolcom/libunftp/pull/592) Require patched `rustls-webpki` 0.103.16 or later
-  in the REST authenticator. This backend release is pending.
 - [#601](https://github.com/bolcom/libunftp/pull/601) Upgrade `base64` to 0.23.1 for the JSON-file
   authenticator, and the filesystem backend's test dependencies to `nix` 0.31.3
   and `rstest` 0.28.0. These backend releases are pending.
@@ -13,6 +11,13 @@
 - [#595](https://github.com/bolcom/libunftp/pull/595) Clarify authentication and storage contracts,
   correct rustdoc links, and improve the README in `unftp-core`. Public trait signatures are unchanged.
   The core release is pending.
+
+### unftp-auth-rest v0.3.1
+
+- [#592](https://github.com/bolcom/libunftp/pull/592) Require patched `rustls-webpki` 0.103.16 or later
+  to reject compromised eMudhra intermediate CA keys
+  ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382)).
+- Upgrade dependencies, including `regex` 1.13.1.
 
 ### unftp-sbe-gcs v0.3.1
 
