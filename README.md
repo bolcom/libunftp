@@ -1,8 +1,8 @@
-# [libunftp](https://github.com/bolcom/libunftp)
+# [libunftp](https://github.com/Cloudinvoke/libunftp)
 
 [![Crate Version](https://img.shields.io/crates/v/libunftp.svg)](https://crates.io/crates/libunftp)
 [![API Docs](https://docs.rs/libunftp/badge.svg)](https://docs.rs/libunftp)
-[![Build Status](https://github.com/bolcom/libunftp/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/bolcom/libunftp/actions/workflows/rust.yml)
+[![Build Status](https://github.com/Cloudinvoke/libunftp/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/Cloudinvoke/libunftp/actions/workflows/rust.yml)
 [![Crate License](https://img.shields.io/crates/l/libunftp.svg)](https://crates.io/crates/libunftp)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
@@ -10,10 +10,11 @@ When you need to FTP, but don't want to.
 
 ![logo](logo.png)
 
-[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP**](https://github.com/bolcom/unFTP)
+[**Website**](https://unftp.rs) | [**API Docs**](https://docs.rs/libunftp) | [**unFTP**](https://github.com/Cloudinvoke/unFTP)
 
-The libunftp library drives [unFTP](https://github.com/bolcom/unFTP). It's an extensible, async, cloud orientated FTP(S)
-server implementation in [Rust](https://rust-lang.org) brought to you by the [bol.com techlab](https://techlab.bol.com).
+The libunftp library drives [unFTP](https://github.com/Cloudinvoke/unFTP). It's an extensible, async, cloud orientated FTP(S)
+server implementation in [Rust](https://rust-lang.org), maintained under [CloudInvoke](https://github.com/Cloudinvoke)
+by [Hannes de Jager](https://github.com/hannesdejager) and [Rob klein Gunnewiek](https://github.com/robklg).
 
 Because of its plug-able authentication (e.g. PAM, JSON File, Generic REST) and storage
 backends (e.g. local filesystem, [Google Cloud Storage](https://cloud.google.com/storage)) it's
@@ -167,13 +168,13 @@ For more help refer to:
 
 - the [examples](./examples) directory.
 - the [API Documentation](https://docs.rs/libunftp).
-- [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
+- [unFTP server](https://github.com/Cloudinvoke/unFTP), a server built on top of libunftp.
 - this [blog post](https://blog.abstractinvoke.com/05-07-unftp.html) about libunftp and unFTP.
 
 ## Getting help and staying informed
 
 Support is given on a best effort basis. You are welcome to engage us
-on [the discussions page](https://github.com/bolcom/libunftp/discussions)
+on [the discussions page](https://github.com/Cloudinvoke/libunftp/discussions)
 or create a Github issue.
 
 You can also follow news and talk to us on [Telegram](https://t.me/unftp)

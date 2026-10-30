@@ -2,7 +2,7 @@
 
 ## Repository overview
 
-The GitHub repository is [bolcom/libunftp](https://github.com/bolcom/libunftp).
+The GitHub repository is [Cloudinvoke/libunftp](https://github.com/Cloudinvoke/libunftp).
 
 This repository is a Rust Cargo workspace for libunftp, an asynchronous and extensible FTP(S) server library.
 
@@ -301,7 +301,7 @@ For a release:
 - Search for old version strings, including `html_root_url` and documentation examples.
 - Update the relevant changelog entries.
 - When updating changelogs or release notes, look up the associated merged GitHub pull requests
-  (PRs/MRs) and link entries to them where available, following the existing `[#123](https://github.com/bolcom/libunftp/pull/123)` style.
+  (PRs/MRs) and link entries to them where available, following the existing `[#123](https://github.com/Cloudinvoke/libunftp/pull/123)` style.
   Verify the association using GitHub metadata or commit history; do not invent PR numbers.
 - Run `make pr-prep`.
 - Use release commits naming the crate and version.

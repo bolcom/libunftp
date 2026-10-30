@@ -5,7 +5,7 @@
 [![Crate License](https://img.shields.io/crates/l/unftp-auth-jsonfile.svg)](https://crates.io/crates/unftp-auth-jsonfile)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
-An authenticator back-end for [libunftp](https://github.com/bolcom/libunftp) that authenticates against a JSON file.
+An authenticator back-end for [libunftp](https://github.com/Cloudinvoke/libunftp) that authenticates against a JSON file.
 
 ## License
 

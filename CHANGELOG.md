@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- Move libunftp and unFTP from bol.com to [CloudInvoke](https://github.com/Cloudinvoke).
+  The GitHub repository is now [Cloudinvoke/libunftp](https://github.com/Cloudinvoke/libunftp).
 - [#601](https://github.com/bolcom/libunftp/pull/601) Upgrade `base64` to 0.23.1 for the JSON-file
   authenticator, and the filesystem backend's test dependencies to `nix` 0.31.3
   and `rstest` 0.28.0. These backend releases are pending.

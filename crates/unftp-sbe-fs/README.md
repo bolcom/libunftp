@@ -6,7 +6,7 @@
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
 This unftp-sbe-fs crate allows you to use a regular Filesystem with
-[libunftp](https://github.com/bolcom/libunftp) and work like a regular
+[libunftp](https://github.com/Cloudinvoke/libunftp) and work like a regular
 FTP server.
 
 ## Getting started
@@ -56,12 +56,12 @@ For more help refer to:
 
 - the [examples](./examples) directory.
 - the [API Documentation](https://docs.rs/unftp-sbe-fs/latest/unftp_sbe_fs/).
-- [unFTP server](https://github.com/bolcom/unFTP), a server from the bol.com techlab that is built on top of libunftp.
+- [unFTP server](https://github.com/Cloudinvoke/unFTP), a server built on top of libunftp.
 
 ## Getting help and staying informed
 
 Support is given on a best effort basis. You are welcome to engage us
-on [the discussions page](https://github.com/bolcom/libunftp/discussions)
+on [the discussions page](https://github.com/Cloudinvoke/libunftp/discussions)
 or create a Github issue.
 
 You can also follow news and talk to us on [Telegram](https://t.me/unftp)

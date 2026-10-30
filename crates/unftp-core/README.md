@@ -7,17 +7,17 @@
 
 When you need to FTP, but don't want to.
 
-![unFTP logo](https://raw.githubusercontent.com/bolcom/libunftp/master/logo.png)
+![unFTP logo](https://raw.githubusercontent.com/Cloudinvoke/libunftp/master/logo.png)
 
 [**Website**](https://unftp.rs) | [**API docs**](https://docs.rs/unftp-core) |
-[**libunftp**](https://github.com/bolcom/libunftp) | [**unFTP server**](https://github.com/bolcom/unFTP)
+[**libunftp**](https://github.com/Cloudinvoke/libunftp) | [**unFTP server**](https://github.com/Cloudinvoke/unFTP)
 
 This crate contains the core traits and types for [unFTP](https://unftp.rs/) backends (extensions).
 
 ## About the wider unFTP project
 
 unFTP is an open-source, cloud-focused FTP and FTPS server project. It is an FTP server, not an SFTP server. You can run
-the standalone [unFTP server](https://github.com/bolcom/unFTP), embed the [libunftp library](https://github.com/bolcom/libunftp) in your application and add existing extensions or create your own extensions. Its pluggable authentication, storage, user-detail providers and other extensions let you connect the server to the systems your application uses.
+the standalone [unFTP server](https://github.com/Cloudinvoke/unFTP), embed the [libunftp library](https://github.com/Cloudinvoke/libunftp) in your application and add existing extensions or create your own extensions. Its pluggable authentication, storage, user-detail providers and other extensions let you connect the server to the systems your application uses.
 
 ## About `unftp-core`
 

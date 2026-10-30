@@ -23,7 +23,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
     let matches = Command::new("Example for using libunftp with Google Cloud Storage backend with optionally enabling TLS")
         .about("An FTP server that uses Google Cloud Storage as a backend")
-        .author("The bol.com unFTP team")
+        .author("The CloudInvoke unFTP team")
         .arg(
             Arg::new(BUCKET_NAME)
                 .short('b')
