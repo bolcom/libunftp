@@ -19,8 +19,8 @@ use crate::gcs_client::HttpClientEmpty;
 // When is using the IP better?
 const METADATA_HOST: &str = "metadata.google.internal";
 
-// `github.com/bolcom/libunftp v{package_version}`
-const USER_AGENT: &str = concat!("github.com/bolcom/libunftp v", env!("CARGO_PKG_VERSION"));
+// `github.com/Cloudinvoke/libunftp v{package_version}`
+const USER_AGENT: &str = concat!("github.com/Cloudinvoke/libunftp v", env!("CARGO_PKG_VERSION"));
 
 pub(super) async fn request_token(service: Option<String>, client: HttpClientEmpty) -> Result<TokenResponse, Error> {
     // Does same as curl -s -HMetadata-Flavor:Google http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token

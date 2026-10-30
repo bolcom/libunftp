@@ -5,7 +5,7 @@
 [![Crate License](https://img.shields.io/crates/l/unftp-auth-rest.svg)](https://crates.io/crates/unftp-auth-rest)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
-An authenticator back-end for [libunftp](https://github.com/bolcom/libunftp) that consumes an HTTP API to 
+An authenticator back-end for [libunftp](https://github.com/Cloudinvoke/libunftp) that consumes an HTTP API to 
 authenticate. Please refer to the documentation and the examples directory for usage instructions.
 
 ## License

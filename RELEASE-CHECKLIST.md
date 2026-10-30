@@ -17,7 +17,7 @@
   of leading, embedded, and trailing whitespace, including paths following LIST options and `--`.
 * Before releasing libunftp itself, run unFTP while pointing to the new version of libunftp
 * Update CHANGELOG.md for all the crates affected. Link entries to associated merged pull requests
-  where available using `[#123](https://github.com/bolcom/libunftp/pull/123)`; verify associations
+  where available using `[#123](https://github.com/Cloudinvoke/libunftp/pull/123)`; verify associations
   against GitHub metadata or commit history.
 * Prepare release notes for the GitHub release page. Do not start with a
   markdown heading (GitHub already shows the release name as a heading).

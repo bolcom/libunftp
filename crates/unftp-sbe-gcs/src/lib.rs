@@ -1,6 +1,6 @@
 #![allow(clippy::unnecessary_wraps)]
 
-//! An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files
+//! An storage back-end for [libunftp](https://github.com/Cloudinvoke/libunftp) that let you store files
 //! in [Google Cloud Storage](https://cloud.google.com/storage).
 //!
 //! # Usage

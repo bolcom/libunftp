@@ -5,7 +5,7 @@
 [![Crate License](https://img.shields.io/crates/l/unftp-sbe-gcs.svg)](https://crates.io/crates/unftp-sbe-gcs)
 [![Follow on Telegram](https://img.shields.io/badge/Follow%20on-Telegram-brightgreen.svg)](https://t.me/unftp)
 
-An storage back-end for [libunftp](https://github.com/bolcom/libunftp) that let you store files
+An storage back-end for [libunftp](https://github.com/Cloudinvoke/libunftp) that let you store files
 in [Google Cloud Storage](https://cloud.google.com/storage).
 Please refer to the documentation and the examples directory for usage instructions.
 
@@ -47,7 +47,7 @@ the [libunftp API documentation](https://docs.rs/libunftp/latest/libunftp/).
 ## Getting help and staying informed
 
 Support is given on a best effort basis. You are welcome to engage us
-on [Github the discussions page](https://github.com/bolcom/libunftp/discussions)
+on [Github the discussions page](https://github.com/Cloudinvoke/libunftp/discussions)
 or create a Github issue.
 
 You can also follow news and talk to us on [Telegram](https://t.me/unftp)

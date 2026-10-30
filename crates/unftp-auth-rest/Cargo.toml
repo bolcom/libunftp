@@ -13,8 +13,8 @@ license = "Apache-2.0"
 keywords = ["libunftp", "ftp", "ftps", "auth", "rest"]
 categories = ["network-programming"]
 documentation = "https://docs.rs/unftp-auth-rest"
-homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-auth-rest"
-repository = "https://github.com/bolcom/libunftp/tree/hannes/crates/unftp-auth-rest"
+homepage = "https://github.com/Cloudinvoke/libunftp/tree/master/crates/unftp-auth-rest"
+repository = "https://github.com/Cloudinvoke/libunftp/tree/master/crates/unftp-auth-rest"
 readme = "README.md"
 
 [dependencies]

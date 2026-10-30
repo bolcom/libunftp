@@ -14,8 +14,8 @@ license = "Apache-2.0"
 keywords = ["libunftp", "unftp", "ftp", "ftps", "filesystem"]
 categories = ["network-programming"]
 documentation = "https://docs.rs/unftp-sbe-fs"
-homepage = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-fs"
-repository = "https://github.com/bolcom/libunftp/tree/master/crates/unftp-sbe-fs"
+homepage = "https://github.com/Cloudinvoke/libunftp/tree/master/crates/unftp-sbe-fs"
+repository = "https://github.com/Cloudinvoke/libunftp/tree/master/crates/unftp-sbe-fs"
 readme = "README.md"
 
 [dependencies]
